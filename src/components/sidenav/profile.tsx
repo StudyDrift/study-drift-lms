@@ -1,4 +1,7 @@
+"use client"
 import { selectUser } from "@/redux/slices/auth.slice"
+import { ArrowLeftStartOnRectangleIcon } from "@heroicons/react/16/solid"
+import { CogIcon, UserIcon } from "@heroicons/react/24/solid"
 import {
   Accordion,
   AccordionBody,
@@ -7,8 +10,8 @@ import {
   ListItemPrefix,
   Typography,
 } from "@material-tailwind/react"
-import { ChevronDownIcon, List } from "lucide-react"
-import router from "next/router"
+import { ChevronDownIcon } from "lucide-react"
+import Link from "next/link"
 import { useSelector } from "react-redux"
 
 interface Props {
@@ -23,6 +26,24 @@ export const SideNavProfile = ({
   listItemClassName,
 }: Props) => {
   const user = useSelector(selectUser)
+
+  const profileItems = [
+    {
+      name: "Profile",
+      icon: <UserIcon className="h-5 w-5" />,
+      href: "/profile",
+    },
+    {
+      name: "Settings",
+      icon: <CogIcon className="h-5 w-5" />,
+      href: "/profile/settings",
+    },
+    {
+      name: "Logout",
+      icon: <ArrowLeftStartOnRectangleIcon className="h-5 w-5" />,
+      href: "/api/auth/logout",
+    },
+  ]
 
   return (
     <Accordion open={isOpen}>
@@ -50,22 +71,16 @@ export const SideNavProfile = ({
         />
       </ListItem>
       <AccordionBody className="py-1">
-        <List className="p-0">
-          <ListItem
-            className={`px-16 ${listItemClassName}`}
-            onClick={() => router.push("/profile")}
-            ripple={false}
-          >
-            My Profile
-          </ListItem>
-          <ListItem
-            className={`px-16 ${listItemClassName}`}
-            onClick={() => router.push("/profile/settings")}
-            ripple={false}
-          >
-            Settings
-          </ListItem>
-        </List>
+        {profileItems.map((item, index) => (
+          <Link key={index} href={item.href}>
+            <ListItem className={listItemClassName} ripple={false}>
+              <ListItemPrefix>{item.icon}</ListItemPrefix>
+              <Typography className="mr-auto font-normal text-inherit">
+                {item.name}
+              </Typography>
+            </ListItem>
+          </Link>
+        ))}
       </AccordionBody>
     </Accordion>
   )

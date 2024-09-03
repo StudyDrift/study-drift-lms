@@ -12,7 +12,7 @@ import {
   ListCheckIcon,
   School2Icon,
 } from "lucide-react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 interface Props {
   isOpen: boolean
@@ -21,28 +21,26 @@ interface Props {
 }
 
 export const SideNavApps = ({ isOpen, onToggle, listItemClassName }: Props) => {
-  const router = useRouter()
-
   const appMenuItems = [
     {
       name: "Dashboard",
       icon: <LayoutDashboardIcon className="h-5 w-5" />,
-      onClick: () => router.push("/"),
+      href: "/",
     },
     {
       name: "Courses",
       icon: <School2Icon className="h-5 w-5" />,
-      onClick: () => router.push("/courses"),
+      href: "/courses",
     },
     {
       name: "Calendar",
       icon: <Calendar className="h-5 w-5" />,
-      onClick: () => router.push("/calendar"),
+      href: "/calendar",
     },
     {
       name: "Assignments",
       icon: <ListCheckIcon className="h-5 w-5" />,
-      onClick: () => router.push("/assignments"),
+      href: "/assignments",
     },
   ]
 
@@ -67,17 +65,14 @@ export const SideNavApps = ({ isOpen, onToggle, listItemClassName }: Props) => {
       </ListItem>
       <AccordionBody>
         {appMenuItems.map((item, index) => (
-          <ListItem
-            key={index}
-            onClick={item.onClick}
-            className={listItemClassName}
-            ripple={false}
-          >
-            <ListItemPrefix>{item.icon}</ListItemPrefix>
-            <Typography className="mr-auto font-normal text-inherit">
-              {item.name}
-            </Typography>
-          </ListItem>
+          <Link key={index} href={item.href}>
+            <ListItem className={listItemClassName} ripple={false}>
+              <ListItemPrefix>{item.icon}</ListItemPrefix>
+              <Typography className="mr-auto font-normal text-inherit">
+                {item.name}
+              </Typography>
+            </ListItem>
+          </Link>
         ))}
       </AccordionBody>
     </Accordion>

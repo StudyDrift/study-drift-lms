@@ -1,5 +1,6 @@
 "use client"
 import { RootPage } from "@/components/root-page"
+import { PERMISSION_COURSES_CREATE } from "@/models/permissions/courses.permissions"
 import { useCreateCourseMutation } from "@/redux/services/course.api"
 import { useCreateOutcomesMutation } from "@/redux/services/outcome.api"
 import {
@@ -55,7 +56,7 @@ export default function Page() {
   }
 
   return (
-    <RootPage title="Create Course">
+    <RootPage title="Create Course" permission={PERMISSION_COURSES_CREATE}>
       <div className="flex justify-center items-center h-full">
         <Card color="transparent" shadow={false}>
           <div className="max-w-screen-lg">

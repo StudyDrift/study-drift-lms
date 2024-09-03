@@ -50,7 +50,7 @@ export const createToken = async (user: User) => {
     .setIssuedAt()
     .setIssuer("studydrift.com")
     .setAudience("studydrift.com")
-    .setExpirationTime("2h")
+    .setExpirationTime("12h")
     .sign(secret)
 
   return token

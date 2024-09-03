@@ -6,7 +6,7 @@ import {
   Typography,
 } from "@material-tailwind/react"
 import { ChevronDownIcon } from "lucide-react"
-import router from "next/router"
+import Link from "next/link"
 
 interface Props {
   isOpen: boolean
@@ -43,19 +43,20 @@ export const SideNavCourses = ({
       </ListItem>
       <AccordionBody>
         {(courses ?? []).map((item, index) => (
-          <ListItem
-            key={index}
-            onClick={() => router.push(`/courses/${item.id}`)}
-            className={listItemClassName + " flex flex-col"}
-            ripple={false}
-          >
-            <Typography className="mr-auto font-normal text-inherit text-xs text-gray-500">
-              {item.code}
-            </Typography>
-            <Typography className="mr-auto font-normal text-inherit">
-              {item.name}
-            </Typography>
-          </ListItem>
+          <Link key={index} href={`/courses/${item.id}`}>
+            <ListItem
+              key={index}
+              className={listItemClassName + " flex flex-col"}
+              ripple={false}
+            >
+              <Typography className="mr-auto font-normal text-inherit text-xs text-gray-500">
+                {item.code}
+              </Typography>
+              <Typography className="mr-auto font-normal text-inherit">
+                {item.name}
+              </Typography>
+            </ListItem>
+          </Link>
         ))}
       </AccordionBody>
     </Accordion>

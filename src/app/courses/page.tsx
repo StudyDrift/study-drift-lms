@@ -1,6 +1,8 @@
 "use client"
+import { Restrict } from "@/components/permission/restrict"
 import { RootPage } from "@/components/root-page"
-import { Button } from "@/components/ui/button"
+import { PERMISSION_COURSES_CREATE } from "@/models/permissions/courses.permissions"
+import { Button } from "@material-tailwind/react"
 import { useRouter } from "next/navigation"
 
 export default function Page() {
@@ -10,12 +12,12 @@ export default function Page() {
     <RootPage
       title="Courses"
       actions={[
-        <Button
-          key="create-course"
-          onClick={() => router.push("/courses/create")}
-        >
-          Create Course
-        </Button>,
+        <Restrict key="create-course" permission={PERMISSION_COURSES_CREATE}>
+          <Button onClick={() => router.push("/courses/create")}>
+            Create Course
+          </Button>
+          ,
+        </Restrict>,
       ]}
     >
       <p>hello</p>

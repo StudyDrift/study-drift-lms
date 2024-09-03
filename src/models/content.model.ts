@@ -8,8 +8,10 @@ export interface ContentModule {
 
   outcomeIds: string[]
   children?: ContentItem[]
-  sectionId: string
+  courseId: string
 }
+
+export type CreateContentModulePayload = Omit<ContentModule, "id">
 
 export interface ContentItem {
   id: string
