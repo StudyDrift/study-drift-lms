@@ -2,6 +2,7 @@ import { CreateOutcomePayload } from "@/models/outcome.model"
 import {
   createOutcome,
   createOutcomes,
+  getByIds as getOutcomesByIds,
 } from "@/server/services/outcome.service"
 import { success, toJson } from "@/server/services/request.service"
 import { NextRequest } from "next/server"
@@ -16,4 +17,10 @@ export const POST = async (req: NextRequest) => {
     const outcome = await createOutcome(body)
     return success([outcome])
   }
+}
+
+export const GET = async (req: NextRequest) => {
+  const outcomeIds = req.nextUrl.searchParams.getAll("outcomeIds")
+  const outcomes = await getOutcomesByIds(outcomeIds)
+  return success(outcomes)
 }

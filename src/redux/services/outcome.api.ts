@@ -11,7 +11,18 @@ export const outcomeApi = api.injectEndpoints({
       }),
       invalidatesTags: ["Outcomes"],
     }),
+    getOutcomesByIds: build.query<Outcome[], string[]>({
+      query: (outcomeIds) => ({
+        url: "outcome",
+        method: "GET",
+        params: {
+          outcomeIds: outcomeIds.join(","),
+        },
+      }),
+      providesTags: ["Outcomes"],
+    }),
   }),
 })
 
-export const { useCreateOutcomesMutation } = outcomeApi
+export const { useCreateOutcomesMutation, useGetOutcomesByIdsQuery } =
+  outcomeApi

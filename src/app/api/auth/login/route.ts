@@ -20,7 +20,7 @@ export const POST = async (req: NextRequest) => {
 
     res.cookies.set("auth", token, {
       path: "/",
-      expires: new Date(Date.now() + 1000 * 60 * 60),
+      expires: new Date(Date.now() + 1000 * 60 * 60 * 12),
       secure: true,
       httpOnly: true,
     })

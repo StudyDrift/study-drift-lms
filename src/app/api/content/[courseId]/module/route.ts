@@ -21,7 +21,7 @@ export const POST = async (req: NextRequest) => {
 }
 
 export const GET = async (req: NextRequest) => {
-  const courseId = req.nextUrl.pathname.split("/").slice(3)
+  const courseId = req.nextUrl.pathname.split("/")[3]
   if (!courseId) return failure("Missing course id")
   const contentModules = await getContentModulesByCourseId(courseId + "")
   return success(contentModules)
