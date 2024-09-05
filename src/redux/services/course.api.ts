@@ -5,7 +5,7 @@ export const courseApi = api.injectEndpoints({
   endpoints: (build) => ({
     getMyCourses: build.query<Course[], void>({
       query: () => ({
-        url: "course",
+        url: "courses",
         method: "GET",
       }),
       providesTags: ["Courses"],
@@ -13,7 +13,7 @@ export const courseApi = api.injectEndpoints({
 
     getCourseById: build.query<Course, string>({
       query: (id) => ({
-        url: `course/${id}`,
+        url: `courses/${id}`,
         method: "GET",
       }),
       providesTags: ["Course"],
@@ -21,7 +21,7 @@ export const courseApi = api.injectEndpoints({
 
     createCourse: build.mutation<Course, CourseCreatePayload>({
       query: (body) => ({
-        url: "course",
+        url: "courses",
         method: "POST",
         body,
       }),

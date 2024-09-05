@@ -33,22 +33,26 @@ export const enrollUser = async (
 
 export const getBySectionId = async (sectionId: string) => {
   const collection = await getEnrollmentCollection()
-  return await collection.find({ sectionId }).toArray()
+  return await collection
+    .find({ sectionId }, { projection: { _id: 0 } })
+    .toArray()
 }
 
 export const getByCourseId = async (courseId: string) => {
   const collection = await getEnrollmentCollection()
-  return await collection.find({ courseId }).toArray()
+  return await collection
+    .find({ courseId }, { projection: { _id: 0 } })
+    .toArray()
 }
 
 export const getByUserId = async (userId: string) => {
   const collection = await getEnrollmentCollection()
-  return await collection.find({ userId }).toArray()
+  return await collection.find({ userId }, { projection: { _id: 0 } }).toArray()
 }
 
 export const getById = async (id: string) => {
   const collection = await getEnrollmentCollection()
-  return await collection.findOne({ id })
+  return await collection.findOne({ id }, { projection: { _id: 0 } })
 }
 
 export const updateEnrollment = async (

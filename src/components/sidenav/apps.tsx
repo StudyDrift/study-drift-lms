@@ -1,3 +1,6 @@
+import { useCheckPermission } from "@/hooks/use-restrictions.hook"
+import { PERMISSION_APPS_SETTINGS_VIEW } from "@/models/permissions/app.permission"
+import { LockClosedIcon } from "@heroicons/react/24/outline"
 import {
   Accordion,
   AccordionBody,
@@ -5,6 +8,7 @@ import {
   ListItemPrefix,
   Typography,
 } from "@material-tailwind/react"
+import { GearIcon } from "@radix-ui/react-icons"
 import {
   Calendar,
   ChevronDownIcon,
@@ -13,6 +17,7 @@ import {
   School2Icon,
 } from "lucide-react"
 import Link from "next/link"
+import { useState } from "react"
 
 interface Props {
   isOpen: boolean
@@ -21,26 +26,45 @@ interface Props {
 }
 
 export const SideNavApps = ({ isOpen, onToggle, listItemClassName }: Props) => {
+  const canSeeSettings = useCheckPermission(PERMISSION_APPS_SETTINGS_VIEW)
+  const [open, setOpen] = useState("")
+
   const appMenuItems = [
     {
       name: "Dashboard",
       icon: <LayoutDashboardIcon className="h-5 w-5" />,
       href: "/",
+      isVisible: true,
     },
     {
       name: "Courses",
       icon: <School2Icon className="h-5 w-5" />,
       href: "/courses",
+      isVisible: true,
     },
     {
       name: "Calendar",
       icon: <Calendar className="h-5 w-5" />,
       href: "/calendar",
+      isVisible: true,
     },
     {
       name: "Assignments",
       icon: <ListCheckIcon className="h-5 w-5" />,
       href: "/assignments",
+      isVisible: true,
+    },
+    {
+      name: "System Settings",
+      icon: <GearIcon className="h-5 w-5" />,
+      isVisible: canSeeSettings,
+      children: [
+        {
+          name: "Roles & Permissions",
+          icon: <LockClosedIcon className="h-5 w-5" />,
+          href: "/system/roles-and-permissions",
+        },
+      ],
     },
   ]
 
@@ -64,16 +88,53 @@ export const SideNavApps = ({ isOpen, onToggle, listItemClassName }: Props) => {
         />
       </ListItem>
       <AccordionBody>
-        {appMenuItems.map((item, index) => (
-          <Link key={index} href={item.href}>
-            <ListItem className={listItemClassName} ripple={false}>
-              <ListItemPrefix>{item.icon}</ListItemPrefix>
-              <Typography className="mr-auto font-normal text-inherit">
-                {item.name}
-              </Typography>
-            </ListItem>
-          </Link>
-        ))}
+        {appMenuItems
+          .filter((x) => x.isVisible)
+          .map((item, index) =>
+            item.href ? (
+              <Link key={item.name + index} href={item.href}>
+                <ListItem className={listItemClassName} ripple={false}>
+                  <ListItemPrefix>{item.icon}</ListItemPrefix>
+                  <Typography className="mr-auto font-normal text-inherit">
+                    {item.name}
+                  </Typography>
+                </ListItem>
+              </Link>
+            ) : (
+              <Accordion open={open === item.name} key={item.name + index}>
+                <ListItem
+                  selected={open === item.name}
+                  data-selected={open === item.name}
+                  onClick={() => setOpen(open === item.name ? "" : item.name)}
+                  ripple={false}
+                  className="px-3 py-2 select-none hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900"
+                >
+                  <ListItemPrefix>{item.icon}</ListItemPrefix>
+                  <Typography className="mr-auto font-normal text-inherit">
+                    {item.name}
+                  </Typography>
+                  <ChevronDownIcon
+                    strokeWidth={3}
+                    className={`ml-auto h-4 w-4 text-gray-500 transition-transform ${
+                      open === item.name ? "rotate-180" : ""
+                    }`}
+                  />
+                </ListItem>
+                <AccordionBody>
+                  {item.children?.map((child, idx) => (
+                    <Link key={child.name + idx} href={child.href}>
+                      <ListItem className={listItemClassName} ripple={false}>
+                        <ListItemPrefix>{child.icon}</ListItemPrefix>
+                        <Typography className="mr-auto font-normal text-inherit">
+                          {child.name}
+                        </Typography>
+                      </ListItem>
+                    </Link>
+                  ))}
+                </AccordionBody>
+              </Accordion>
+            )
+          )}
       </AccordionBody>
     </Accordion>
   )

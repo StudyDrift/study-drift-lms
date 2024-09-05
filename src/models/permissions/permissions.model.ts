@@ -1,3 +1,15 @@
+/**
+ * Another Proposal:
+ *   Permission:
+ *     {service}:{resource}:{action}
+ *   Role:
+ *     Instructor
+ *     Scope: course
+ *     id: {courseId}
+ */
+
+export type Permission = `${string}:${string}:${string}` | `${string}:${string}`
+
 export enum PermissionAction {
   Create = "Create",
   Read = "Read",
@@ -7,14 +19,24 @@ export enum PermissionAction {
 }
 
 export interface PermissionOptions {
-  app: string
+  service: string
   resource?: string
   action: PermissionAction
 }
 
-export const generatePermission = (options: PermissionOptions): Permission => {
-  const { app, resource, action } = options
-  return `${app}:${resource ? `:${resource}` : ""}:${action}`
+export interface Role {
+  name: string
+  description: string
+  scope?: string
+  permissions: Permission[]
 }
 
-export type Permission = `${string}:${string}:${string}` | `${string}:${string}`
+export const generatePermission = (options: PermissionOptions): Permission => {
+  const { service, resource, action } = options
+  return `${service || ""}:${resource || ""}:${action || ""}`
+}
+
+export const getRoleParts = (permission: Permission) => {
+  const [service, resource, action] = permission.split(":")
+  return { service, resource, action }
+}

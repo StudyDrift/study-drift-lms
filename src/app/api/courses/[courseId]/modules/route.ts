@@ -1,8 +1,9 @@
 import { CreateContentModulePayload } from "@/models/content.model"
+import { getContentItemsByModuleIds } from "@/server/services/content-item.service"
 import {
   createContentModule,
   getContentModulesByCourseId,
-} from "@/server/services/content.service"
+} from "@/server/services/module.service"
 import {
   failure,
   getUserId,
@@ -24,5 +25,13 @@ export const GET = async (req: NextRequest) => {
   const courseId = req.nextUrl.pathname.split("/")[3]
   if (!courseId) return failure("Missing course id")
   const contentModules = await getContentModulesByCourseId(courseId + "")
+  const contentItems = await getContentItemsByModuleIds(
+    contentModules.map((m) => m.id)
+  )
+
+  contentModules.forEach((m) => {
+    m.children = contentItems.filter((i) => i.contentModuleId === m.id)
+  })
+
   return success(contentModules)
 }

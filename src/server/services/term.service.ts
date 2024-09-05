@@ -13,21 +13,26 @@ export const createTerm = async (term: Omit<Term, "id">) => {
 
 export const getByIds = async (ids: string[]) => {
   const collection = await getTermCollection()
-  return await collection.find({ id: { $in: ids } }).toArray()
+  return await collection
+    .find({ id: { $in: ids } }, { projection: { _id: 0 } })
+    .toArray()
 }
 
 export const getById = async (id: string) => {
   const collection = await getTermCollection()
-  return await collection.findOne({ id })
+  return await collection.findOne({ id }, { projection: { _id: 0 } })
 }
 
 export const getByDateRange = async (start: string, end: string) => {
   const collection = await getTermCollection()
   return await collection
-    .find({
-      dates: {
-        $and: [{ start: { $lte: start } }, { end: { $gte: end } }],
+    .find(
+      {
+        dates: {
+          $and: [{ start: { $lte: start } }, { end: { $gte: end } }],
+        },
       },
-    })
+      { projection: { _id: 0 } }
+    )
     .toArray()
 }

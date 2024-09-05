@@ -70,7 +70,7 @@ export default function Page() {
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading && <Spinner />} Login
+                  {isLoading && <Spinner className="w-4 h-4 mr-2" />} Login
                 </Button>
               </div>
             </form>

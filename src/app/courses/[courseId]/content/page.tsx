@@ -1,38 +1,54 @@
 "use client"
+import { ContentModuleRow } from "@/components/course-content/content-module"
 import { CreateModuleDialog } from "@/components/dialogs/create-module.dialog"
-import { Restrict } from "@/components/permission/restrict"
+import { SortableList } from "@/components/dnd/sortable-list"
+import { Restrict, RestrictElse } from "@/components/permission/restrict"
 import { RootPage } from "@/components/root-page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCourseData } from "@/hooks/use-course-data.hooks"
-import { PERMISSION_COURSE_CONTENT_CREATE } from "@/models/permissions/course.permission"
-import { useGetCourseContentQuery } from "@/redux/services/content.api"
+import { ContentModule } from "@/models/content.model"
 import {
-  Accordion,
-  AccordionBody,
-  Button,
-  Card,
-  List,
-  ListItem,
-  Typography,
-} from "@material-tailwind/react"
-import { ChevronDownIcon, PlusIcon } from "lucide-react"
+  PERMISSION_COURSE_CONTENT_CREATE,
+  PERMISSION_COURSE_CONTENT_UPDATE,
+} from "@/models/permissions/course.permission"
+import {
+  useGetCourseContentQuery,
+  useSetModuleOrderMutation,
+} from "@/redux/services/content.api"
+import { Button } from "@material-tailwind/react"
+import { PlusIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 
 export default function Page() {
   const [createModuleOpen, setCreateModuleOpen] = useState(false)
+  const [modulesOpen, setModulesOpen] = useState<string[]>([])
+
   const { course } = useCourseData()
-  const { data: contentModules, isLoading: isContentLoading } =
+  const { data: contentModulesData, isLoading: isContentLoading } =
     useGetCourseContentQuery(course?.id + "", {
       skip: !course,
     })
 
-  const [modulesOpen, setModulesOpen] = useState<string[]>([])
+  const [contentModules, setContentModules] = useState<ContentModule[]>(
+    contentModulesData || []
+  )
+
+  const [setOrder] = useSetModuleOrderMutation()
 
   useEffect(() => {
-    if (contentModules) {
-      setModulesOpen(contentModules.map((m) => m.id))
+    if (contentModulesData) {
+      if (modulesOpen.length === 0) {
+        setModulesOpen(contentModulesData.map((m) => m.id))
+      }
+
+      setContentModules(contentModulesData)
     }
-  }, [contentModules])
+  }, [contentModulesData, modulesOpen])
+
+  const handleModuleOrderChange = async (items: ContentModule[]) => {
+    setContentModules(items)
+    await setOrder({ courseId: course!.id, order: items.map((m) => m.id) })
+  }
 
   return (
     <RootPage
@@ -56,60 +72,49 @@ export default function Page() {
         onClose={() => setCreateModuleOpen(false)}
       />
 
-      {isContentLoading && <Skeleton className="h-8 w-full" />}
+      {isContentLoading && <Skeleton className="h-8 w-full mt-8" />}
       <div className="flex flex-col gap-4 mt-6">
-        {contentModules?.map((item) => (
-          <Accordion key={item.id} open={modulesOpen.includes(item.id)}>
-            <ListItem
-              selected={modulesOpen.includes(item.id)}
-              data-selected={modulesOpen.includes(item.id)}
-              onClick={() => {
+        <Restrict permission={PERMISSION_COURSE_CONTENT_UPDATE}>
+          <SortableList
+            id={"main"}
+            items={contentModules || []}
+            onChange={handleModuleOrderChange}
+            renderItem={(item) => (
+              <SortableList.Item id={item.id} key={item.id}>
+                <ContentModuleRow
+                  key={item.id}
+                  item={item}
+                  isOpen={modulesOpen.includes(item.id)}
+                  onToggle={() => {
+                    if (modulesOpen.includes(item.id)) {
+                      setModulesOpen(modulesOpen.filter((id) => id !== item.id))
+                    } else {
+                      setModulesOpen([...modulesOpen, item.id])
+                    }
+                  }}
+                  dragHandle={<SortableList.DragHandle />}
+                />
+              </SortableList.Item>
+            )}
+          />
+        </Restrict>
+        <RestrictElse permission={PERMISSION_COURSE_CONTENT_UPDATE}>
+          {contentModules.map((item) => (
+            <ContentModuleRow
+              key={item.id}
+              item={item}
+              isOpen={modulesOpen.includes(item.id)}
+              onToggle={() => {
                 if (modulesOpen.includes(item.id)) {
                   setModulesOpen(modulesOpen.filter((id) => id !== item.id))
                 } else {
                   setModulesOpen([...modulesOpen, item.id])
                 }
               }}
-              className={
-                "px-3 py-2 select-courses hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900 bg-white rounded-lg shadow-md " +
-                (modulesOpen.includes(item.id) ? "rounded-b-none" : "")
-              }
-              ripple={false}
-            >
-              <Typography className="mr-auto font-normal text-inherit">
-                {item.name}
-              </Typography>
-              <ChevronDownIcon
-                strokeWidth={3}
-                className={`ml-auto h-4 w-4 text-gray-500 transition-transform ${
-                  modulesOpen.includes(item.id) ? "rotate-180" : ""
-                }`}
-              />
-            </ListItem>
-            <AccordionBody className="p-0 rounded-t-none mb-1">
-              <Card className="p-1 rounded-t-none">
-                <List>
-                  <ListItem onClick={() => null}>{item.name}</ListItem>
-                </List>
-              </Card>
-            </AccordionBody>
-          </Accordion>
-        ))}
+            />
+          ))}
+        </RestrictElse>
       </div>
-
-      {/* <SortableList
-            id={"main"}
-            items={items}
-            onChange={handleModuleOrderChange}
-            renderItem={(item) => (
-              <SortableList.Item id={item.id} key={item.id}>
-                <ContentModuleRow
-                  item={item}
-                  dragHandle={<SortableList.DragHandle />}
-                />
-              </SortableList.Item>
-            )}
-          /> */}
     </RootPage>
   )
 }

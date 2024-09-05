@@ -5,6 +5,7 @@ export interface ContentModule {
   name: string
   description: string
   meta: Record<string, any>
+  order?: number
 
   outcomeIds: string[]
   children?: ContentItem[]
@@ -12,6 +13,10 @@ export interface ContentModule {
 }
 
 export type CreateContentModulePayload = Omit<ContentModule, "id">
+export type UpdateContentModulePayload = Omit<
+  ContentModule,
+  "id" | "children" | "courseId"
+>
 
 export interface ContentItem {
   id: string
@@ -20,14 +25,19 @@ export interface ContentItem {
   body: string
   meta: Record<string, any>
   settings: ContentItemSettings
+  order?: number
 
   contentTypeId: string
   contentModuleId: string
+  courseId: string
 }
+
+export type CreateContentItemPayload = Omit<ContentItem, "id">
 
 export interface ContentItemSettings {
   disableBanner?: boolean
   dates: CommonDates
+  isPublished?: boolean
 }
 
 export interface ContentType {

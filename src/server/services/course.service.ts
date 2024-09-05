@@ -48,17 +48,19 @@ export const createCourse = async (
 
 export const getCourseById = async (id: string) => {
   const collection = await getCourseCollection()
-  return await collection.findOne({ id })
+  return await collection.findOne({ id }, { projection: { _id: 0 } })
 }
 
 export const getCourseByIds = async (ids: string[]) => {
   const collection = await getCourseCollection()
-  return await collection.find({ id: { $in: ids } }).toArray()
+  return await collection
+    .find({ id: { $in: ids } }, { projection: { _id: 0 } })
+    .toArray()
 }
 
 export const getCourseByCode = async (code: string) => {
   const collection = await getCourseCollection()
-  return await collection.findOne({ code })
+  return await collection.findOne({ code }, { projection: { _id: 0 } })
 }
 
 export const updateCourse = async (

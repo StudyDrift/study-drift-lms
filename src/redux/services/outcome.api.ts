@@ -5,7 +5,7 @@ export const outcomeApi = api.injectEndpoints({
   endpoints: (build) => ({
     createOutcomes: build.mutation<Outcome[], CreateOutcomePayload[]>({
       query: (body) => ({
-        url: "outcome",
+        url: "outcomes",
         method: "POST",
         body,
       }),
@@ -13,7 +13,7 @@ export const outcomeApi = api.injectEndpoints({
     }),
     getOutcomesByIds: build.query<Outcome[], string[]>({
       query: (outcomeIds) => ({
-        url: "outcome",
+        url: "outcomes",
         method: "GET",
         params: {
           outcomeIds: outcomeIds.join(","),

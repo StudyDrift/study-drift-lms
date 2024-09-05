@@ -9,3 +9,8 @@ export const Restrict = ({ children, permission }: Props) => {
   if (!permission) return null
   return <>{children}</>
 }
+
+export const RestrictElse = ({ children, permission }: Props) => {
+  if (!permission) return <>{children}</>
+  return null
+}

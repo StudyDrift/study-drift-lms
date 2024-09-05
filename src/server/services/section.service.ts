@@ -33,17 +33,21 @@ export const createSection = async (
 
 export const getSectionById = async (id: string) => {
   const collection = await getSectionCollection()
-  return await collection.findOne({ id })
+  return await collection.findOne({ id }, { projection: { _id: 0 } })
 }
 
 export const getSectionByIds = async (ids: string[]) => {
   const collection = await getSectionCollection()
-  return await collection.find({ id: { $in: ids } }).toArray()
+  return await collection
+    .find({ id: { $in: ids } }, { projection: { _id: 0 } })
+    .toArray()
 }
 
 export const getSectionsByCourseId = async (courseId: string) => {
   const collection = await getSectionCollection()
-  return await collection.find({ courseId }).toArray()
+  return await collection
+    .find({ courseId }, { projection: { _id: 0 } })
+    .toArray()
 }
 
 export const updateSection = async (

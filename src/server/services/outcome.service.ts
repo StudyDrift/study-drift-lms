@@ -27,12 +27,14 @@ export const createOutcome = async (outcome: CreateOutcomePayload) => {
 
 export const getById = async (id: string) => {
   const collection = await getOutcomeCollection()
-  return await collection.findOne({ id })
+  return await collection.findOne({ id }, { projection: { _id: 0 } })
 }
 
 export const getByIds = async (ids: string[]) => {
   const collection = await getOutcomeCollection()
-  return await collection.find({ id: { $in: ids } }).toArray()
+  return await collection
+    .find({ id: { $in: ids } }, { projection: { _id: 0 } })
+    .toArray()
 }
 
 export const updateOutcome = async (id: string, payload: Partial<Outcome>) => {

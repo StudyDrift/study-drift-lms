@@ -26,12 +26,12 @@ export const provisionUser = async (
 
 export const getUser = async (id: string) => {
   const collection = await getUserCollection()
-  return await collection.findOne({ id })
+  return await collection.findOne({ id }, { projection: { _id: 0 } })
 }
 
 export const getUserByEmail = async (email: string) => {
   const collection = await getUserCollection()
-  return await collection.findOne({ email })
+  return await collection.findOne({ email }, { projection: { _id: 0 } })
 }
 
 export const searchUsers = async (query: string) => {
@@ -43,7 +43,9 @@ export const searchUsers = async (query: string) => {
 
   const collection = await getUserCollection()
 
-  return collection.find({ $text: { $search: query } }).toArray()
+  return collection
+    .find({ $text: { $search: query } }, { projection: { _id: 0 } })
+    .toArray()
 }
 
 export const updateUser = async (id: string, payload: Partial<User>) => {
