@@ -3,6 +3,7 @@ import {
   ContentModule,
   CreateContentItemPayload,
   CreateContentModulePayload,
+  UpdateContentItemPayload,
 } from "@/models/content.model"
 import { api } from "./api"
 
@@ -110,6 +111,21 @@ export const contentApi = api.injectEndpoints({
       }),
       providesTags: ["ContentItem"],
     }),
+    updateContentItem: build.mutation<
+      ContentItem,
+      {
+        id: string
+        contentItem: UpdateContentItemPayload
+        courseId: string
+      }
+    >({
+      query: (body) => ({
+        url: `courses/${body.courseId}/content-items/${body.id}`,
+        method: "PATCH",
+        body: body.contentItem,
+      }),
+      invalidatesTags: ["ContentItem"],
+    }),
   }),
 })
 
@@ -124,4 +140,5 @@ export const {
   useDeleteContentModuleMutation,
   useUpdateModuleMutation,
   useGetContentItemByIdQuery,
+  useUpdateContentItemMutation,
 } = contentApi

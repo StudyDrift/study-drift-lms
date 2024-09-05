@@ -114,3 +114,86 @@
     opacity: 1;
   }
 }
+
+.prose h1 {
+  @apply text-4xl;
+}
+
+.prose h2 {
+  @apply text-3xl;
+}
+
+.prose h3 {
+  @apply text-2xl;
+}
+
+.prose h4 {
+  @apply text-xl;
+}
+
+.prose h5 {
+  @apply text-lg;
+}
+
+.prose h6 {
+  @apply text-base;
+}
+
+.prose blockquote {
+  @apply italic;
+
+  @apply border-l-4;
+  @apply pl-4;
+  @apply my-4;
+}
+
+.prose ul {
+  @apply list-disc;
+  @apply pl-8;
+}
+
+.prose ol {
+  @apply list-decimal;
+  @apply pl-8;
+}
+
+.prose table {
+  @apply w-auto;
+  @apply my-4;
+  @apply border-collapse;
+  @apply border;
+  @apply rounded;
+}
+
+.prose th {
+  @apply border;
+  @apply text-left;
+}
+
+.prose td {
+  @apply border;
+}
+
+.prose th,
+.prose td {
+  @apply py-2 px-4;
+}
+
+.prose code {
+  @apply bg-gray-100;
+}
+
+.prose p {
+  @apply my-3;
+}
+
+.prose img {
+  @apply rounded-xl;
+}
+
+.prose li[role="checkbox"]::before {
+  margin-top: 8px;
+}
+.prose li[role="checkbox"]::after {
+  margin-top: 8px;
+}

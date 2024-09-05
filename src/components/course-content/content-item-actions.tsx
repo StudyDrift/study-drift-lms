@@ -18,6 +18,7 @@ import {
   MenuList,
 } from "@material-tailwind/react"
 import { EllipsisVerticalIcon } from "lucide-react"
+import Link from "next/link"
 import { useState } from "react"
 import { AreYouSureDialog } from "../dialogs/are-you-sure.dialog"
 import { Restrict } from "../permission/restrict"
@@ -60,9 +61,11 @@ export const ContentItemActions = ({ item }: Props) => {
           <MenuItem className="flex flex-row gap-2">
             <RocketLaunchIcon className="h-4 w-4" /> Publish
           </MenuItem>
-          <MenuItem className="flex flex-row gap-2">
-            <PencilIcon className="h-4 w-4" /> Edit
-          </MenuItem>
+          <Link href={`/courses/${item.courseId}/content/${item.id}/edit`}>
+            <MenuItem className="flex flex-row gap-2">
+              <PencilIcon className="h-4 w-4" /> Edit
+            </MenuItem>
+          </Link>
           {canDelete && (
             <MenuItem
               onClick={() => setIsDeleteOpen(true)}

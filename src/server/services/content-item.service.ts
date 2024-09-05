@@ -1,4 +1,8 @@
-import { ContentItem, CreateContentItemPayload } from "@/models/content.model"
+import {
+  ContentItem,
+  CreateContentItemPayload,
+  UpdateContentItemPayload,
+} from "@/models/content.model"
 import { nanoid } from "nanoid"
 import { createAudit, getAuditDate } from "./audit.service"
 import { getCollection } from "./database.service"
@@ -111,4 +115,23 @@ export const deleteContentItem = async (id: string, userId: string) => {
 export const getContentItemById = async (id: string) => {
   const collection = await getCollection<ContentItem>("contentItems")
   return collection.findOne({ id }, { projection: { _id: 0 } })
+}
+
+export const updateContentItem = async (
+  itemId: string,
+  item: UpdateContentItemPayload,
+  userId: string
+) => {
+  const collection = await getCollection<ContentItem>("contentItems")
+
+  await collection.updateOne({ id: itemId }, { $set: item })
+
+  await createAudit({
+    userId,
+    resourceType: "contentItem",
+    resourceId: itemId,
+    action: "update",
+    date: getAuditDate(),
+    meta: item,
+  })
 }

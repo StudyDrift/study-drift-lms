@@ -33,6 +33,10 @@ export interface ContentItem {
 }
 
 export type CreateContentItemPayload = Omit<ContentItem, "id">
+export type UpdateContentItemPayload = Omit<
+  ContentItem,
+  "id" | "courseId" | "contentModuleId"
+>
 
 export interface ContentItemSettings {
   disableBanner?: boolean
