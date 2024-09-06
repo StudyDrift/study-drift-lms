@@ -82,7 +82,7 @@ export default function Page() {
       ]}
     >
       {isLoading && <Skeleton className="w-full h-10 mt-8" />}
-      {contentItem && (
+      {!isLoading && isSet.current && contentItem && (
         <div className="flex flex-col gap-2 mt-8">
           <Input
             label="Name"

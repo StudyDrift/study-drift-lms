@@ -1,7 +1,11 @@
 import { SortableList } from "@/components/dnd/sortable-list"
 import InitializedMDXEditor from "@/components/editor/InitializedMDXEditor"
 import { ContentItem } from "@/models/content.model"
-import { QuizQuestion } from "@/models/quiz.model"
+import {
+  FillInTheBlankQuizQuestion,
+  MultipleChoiceQuizQuestion,
+  QuizQuestion,
+} from "@/models/quiz.model"
 import { TrashIcon } from "@heroicons/react/24/solid"
 import {
   Button,
@@ -14,6 +18,8 @@ import {
 import { MDXEditorMethods } from "@mdxeditor/editor"
 import { nanoid } from "nanoid"
 import { useEffect, useRef, useState } from "react"
+import { QuizFillInTheBlank } from "./fill-in-the-blank"
+import { QuizMultipleChoice } from "./multiple-choice"
 
 interface Props {
   item: ContentItem
@@ -22,12 +28,13 @@ interface Props {
 
 const QUESTION_TYPES = [
   { name: "Multiple Choice", value: "multiple-choice" },
-  { name: "True/False", value: "true-false" },
   { name: "Fill In The Blank", value: "fill-in-the-blank" },
 ]
 
 export const ContentTypeQuiz = ({ item, onChange }: Props) => {
-  const [questions, setQuestions] = useState<QuizQuestion[]>([])
+  const [questions, setQuestions] = useState<QuizQuestion[]>(
+    item.meta?.questions || []
+  )
 
   const handleAddQuestion = () => {
     setQuestions([
@@ -37,37 +44,99 @@ export const ContentTypeQuiz = ({ item, onChange }: Props) => {
         type: "multiple-choice",
         content: "This is an example question",
         choices: [
-          { id: nanoid(), content: "Choice 1", isCorrect: false },
-          { id: nanoid(), content: "Choice 2", isCorrect: false },
-          { id: nanoid(), content: "Choice 3", isCorrect: false },
-          { id: nanoid(), content: "Choice 4", isCorrect: false },
+          { id: nanoid(), content: "", isCorrect: false },
+          { id: nanoid(), content: "", isCorrect: false },
+          { id: nanoid(), content: "", isCorrect: true },
+          { id: nanoid(), content: "", isCorrect: false },
         ],
-      },
+      } as MultipleChoiceQuizQuestion,
     ])
+
+    onChange({
+      ...item,
+      meta: {
+        questions: questions,
+      },
+    })
   }
 
   const handleOrderChange = (items: QuizQuestion[]) => {
     setQuestions(items)
-    // onChange({
-    //   ...item,
-    //   body: JSON.stringify(items),
-    // })
+    onChange({
+      ...item,
+      meta: {
+        questions: questions,
+      },
+    })
   }
 
   const handleQuestionChange = (
     question: QuizQuestion,
     key: string,
-    value: string
+    value: any
   ) => {
     const find = questions.find((q) => q.id === question.id)
     const index = questions.indexOf(find!)
-    ;(question as any)[key] = value
-    questions[index] = question
-    setQuestions([...questions])
+    const newQuestion = { ...question }
+    ;(newQuestion as any)[key] = value
+
+    const newQuestions = [...questions]
+    newQuestions[index] = newQuestion
+    setQuestions([...newQuestions])
+
+    onChange({
+      ...item,
+      meta: {
+        questions: newQuestions,
+      },
+    })
   }
 
   const handleQuestionRemoval = (question: QuizQuestion) => {
     setQuestions(questions.filter((q) => q.id !== question.id))
+
+    onChange({
+      ...item,
+      meta: {
+        questions: questions,
+      },
+    })
+  }
+
+  const handleQuestionTypeChange = (question: QuizQuestion, type: string) => {
+    const newQuestion = { ...question, type: type } as QuizQuestion
+
+    switch (type) {
+      case "multiple-choice":
+        ;(newQuestion as MultipleChoiceQuizQuestion).choices = []
+        break
+      case "fill-in-the-blank":
+        ;(newQuestion as FillInTheBlankQuizQuestion).settings = {
+          multiLine: false,
+        }
+        break
+    }
+
+    handleQuestionChange(newQuestion, "type", newQuestion.type)
+  }
+
+  const getQuestionType = (question: QuizQuestion) => {
+    switch (question.type) {
+      case "multiple-choice":
+        return (
+          <QuizMultipleChoice
+            question={question as MultipleChoiceQuizQuestion}
+            onChange={(q) => handleQuestionChange(q, "choices", q.choices)}
+          />
+        )
+      case "fill-in-the-blank":
+        return (
+          <QuizFillInTheBlank
+            question={question as FillInTheBlankQuizQuestion}
+            onChange={(q) => handleQuestionChange(q, "settings", q.settings)}
+          />
+        )
+    }
   }
 
   return (
@@ -94,9 +163,7 @@ export const ContentTypeQuiz = ({ item, onChange }: Props) => {
               <Select
                 label="Question Type"
                 value={q.type}
-                onChange={(e) => {
-                  handleQuestionChange(q, "type", e ?? "multiple-choice")
-                }}
+                onChange={(e) => handleQuestionTypeChange(q, e + "")}
               >
                 {QUESTION_TYPES.map((t) => (
                   <Option key={t.value} value={t.value} onClick={() => {}}>
@@ -106,7 +173,7 @@ export const ContentTypeQuiz = ({ item, onChange }: Props) => {
               </Select>
               <div className="mt-4">
                 <Typography variant="h6">Question Content</Typography>
-                <div className="border border-gray-200 rounded-xl">
+                <div className="border border-gray-300 rounded-xl">
                   <QuestionContentEditor
                     content={q.content}
                     onChange={(content) =>
@@ -115,6 +182,7 @@ export const ContentTypeQuiz = ({ item, onChange }: Props) => {
                   />
                 </div>
               </div>
+              <div className="mt-4">{getQuestionType(q)}</div>
             </Card>
           </SortableList.Item>
         )}
