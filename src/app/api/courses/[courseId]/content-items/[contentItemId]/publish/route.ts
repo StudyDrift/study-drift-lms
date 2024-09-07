@@ -1,3 +1,4 @@
+import { RequestParams } from "@/models/request.model"
 import { publishContentItem } from "@/server/services/content-item.service"
 import {
   failure,
@@ -8,12 +9,15 @@ import {
 } from "@/server/services/request.service"
 import { NextRequest } from "next/server"
 
-export const PATCH = async (req: NextRequest) => {
+export const PATCH = async (
+  req: NextRequest,
+  { params }: RequestParams<{ courseId: string; contentItemId: string }>
+) => {
   const body = await toJson<{ isPublished: boolean }>(req)
   if (!body) return failure("Missing body")
   const userId = getUserId(req)
   if (!userId) return unauthorized()
-  const contentItemId = req.nextUrl.pathname.split("/")[5]
+  const contentItemId = params.contentItemId
   if (!contentItemId) return failure("Missing content item id")
   await publishContentItem(contentItemId, body.isPublished, userId)
 

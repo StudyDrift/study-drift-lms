@@ -1,4 +1,5 @@
 import { CreateContentModulePayload } from "@/models/content.model"
+import { RequestParams } from "@/models/request.model"
 import { getContentItemsByModuleIds } from "@/server/services/content-item.service"
 import {
   createContentModule,
@@ -21,8 +22,11 @@ export const POST = async (req: NextRequest) => {
   return success(contentModule)
 }
 
-export const GET = async (req: NextRequest) => {
-  const courseId = req.nextUrl.pathname.split("/")[3]
+export const GET = async (
+  req: NextRequest,
+  { params }: RequestParams<{ courseId: string }>
+) => {
+  const courseId = params.courseId
   if (!courseId) return failure("Missing course id")
   const contentModules = await getContentModulesByCourseId(courseId + "")
   const contentItems = await getContentItemsByModuleIds(

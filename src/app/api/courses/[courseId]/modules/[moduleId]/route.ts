@@ -1,4 +1,5 @@
 import { UpdateContentModulePayload } from "@/models/content.model"
+import { RequestParams } from "@/models/request.model"
 import {
   deleteModule,
   getModuleById,
@@ -12,8 +13,11 @@ import {
 } from "@/server/services/request.service"
 import { NextRequest } from "next/server"
 
-export const DELETE = async (req: NextRequest) => {
-  const courseId = req.nextUrl.pathname.split("/")[3]
+export const DELETE = async (
+  req: NextRequest,
+  { params }: RequestParams<{ courseId: string }>
+) => {
+  const courseId = params.courseId
   if (!courseId) return failure("Missing course id")
 
   const contentModuleId = req.nextUrl.pathname.split("/")[5]
@@ -26,8 +30,11 @@ export const DELETE = async (req: NextRequest) => {
   return success({ message: "Module deleted" })
 }
 
-export const PATCH = async (req: NextRequest) => {
-  const courseId = req.nextUrl.pathname.split("/")[3]
+export const PATCH = async (
+  req: NextRequest,
+  { params }: RequestParams<{ courseId: string }>
+) => {
+  const courseId = params.courseId
   if (!courseId) return failure("Missing course id")
 
   const contentModuleId = req.nextUrl.pathname.split("/")[5]
