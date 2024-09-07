@@ -44,10 +44,10 @@ export const ContentModuleRow = ({
   const { data: contentTypes } = useGetAllContentTypesQuery(courseId)
 
   useEffect(() => {
-    if (item.children?.length !== children.length) {
+    if (JSON.stringify(item.children ?? []) !== JSON.stringify(children)) {
       setChildren(item.children || [])
     }
-  }, [item.children, children.length])
+  }, [item.children, children])
 
   const handleItemOrderChange = async (items: ContentItem[]) => {
     setChildren(items)
@@ -101,7 +101,7 @@ export const ContentModuleRow = ({
                     className="py-1 my-1 hover:underline"
                     ripple={false}
                   >
-                    <ListItemPrefix>
+                    <ListItemPrefix className="ml-4">
                       <SortableList.DragHandle />
                     </ListItemPrefix>
 
@@ -109,7 +109,7 @@ export const ContentModuleRow = ({
                       href={`/courses/${item.courseId}/content/${child.id}`}
                       className="flex flex-row items-center gap-3"
                     >
-                      <ListItemPrefix>
+                      <ListItemPrefix className="mr-1">
                         {getContentTypeIcon(child.contentTypeId)}
                       </ListItemPrefix>
                       {child.name}

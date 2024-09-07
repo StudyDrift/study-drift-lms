@@ -2,17 +2,32 @@
 import { useAuth } from "@/hooks/use-auth.hook"
 import { store } from "@/redux/store"
 import { usePathname } from "next/navigation"
+import { HotkeysProvider } from "react-hotkeys-hook"
 import { Provider } from "react-redux"
+import { CommandPallete } from "../command-pallete"
 import { Spinner } from "../loaders/spinner"
 import { SideNav } from "../sidenav"
 
 export const Providers = ({ children }: { children: React.ReactNode }) => {
   return (
     <Provider store={store}>
-      <AuthProvider>
-        <SideNavProvider>{children}</SideNavProvider>
-      </AuthProvider>
+      <HotkeysProvider initiallyActiveScopes={["global"]}>
+        <AuthProvider>
+          <SideNavProvider>
+            <CommandsProvider>{children}</CommandsProvider>
+          </SideNavProvider>
+        </AuthProvider>
+      </HotkeysProvider>
     </Provider>
+  )
+}
+
+const CommandsProvider = ({ children }: { children: React.ReactNode }) => {
+  return (
+    <>
+      <CommandPallete />
+      {children}
+    </>
   )
 }
 

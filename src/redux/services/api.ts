@@ -48,6 +48,8 @@ export const api = createApi({
     "Roles",
     "ContentTypes",
     "ContentItem",
+    "AppSettings",
+    "Commands",
   ],
   /**
    * This api has endpoints injected in adjacent files,

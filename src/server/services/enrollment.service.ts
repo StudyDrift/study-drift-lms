@@ -73,6 +73,17 @@ export const updateEnrollment = async (
   })
 }
 
+export const getEnrollmentByUserAndCourse = async (
+  userId: string,
+  courseId: string
+) => {
+  const collection = await getEnrollmentCollection()
+  return await collection.findOne(
+    { userId, courseId },
+    { projection: { _id: 0 } }
+  )
+}
+
 export const deleteEnrollment = async (id: string, userId: string) => {
   const collection = await getEnrollmentCollection()
   await collection.deleteOne({ id })

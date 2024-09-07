@@ -20,7 +20,8 @@ export const POST = async (req: NextRequest) => {
 }
 
 export const GET = async (req: NextRequest) => {
-  const outcomeIds = req.nextUrl.searchParams.getAll("outcomeIds")
+  const outcomeIds =
+    req.nextUrl.searchParams.get("outcomeIds")?.split(",") || []
   const outcomes = await getOutcomesByIds(outcomeIds)
   return success(outcomes)
 }

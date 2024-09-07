@@ -1,4 +1,5 @@
 "use client"
+import { ScopedCommand } from "@/components/command-pallete/scoped-command"
 import { ContentTypeViewers } from "@/components/content-types/viewers"
 import { Restrict } from "@/components/permission/restrict"
 import { RootPage } from "@/components/root-page"
@@ -28,11 +29,21 @@ export default function Page() {
       title={contentItem?.name}
       actions={[
         <Restrict permission={PERMISSION_COURSE_CONTENT_UPDATE} key="edit">
-          <Link href={path + "/edit"}>
-            <Button className="flex items-center gap-2">
-              <PencilIcon className="w-4 h-4" /> Edit
-            </Button>
-          </Link>
+          <ScopedCommand
+            command={{
+              id: "Edit Page",
+              name: "Edit Page",
+              group: "Page Actions",
+              actionType: "link",
+              action: path + "/edit",
+            }}
+          >
+            <Link href={path + "/edit"}>
+              <Button className="flex items-center gap-2">
+                <PencilIcon className="w-4 h-4" /> Edit
+              </Button>
+            </Link>
+          </ScopedCommand>
         </Restrict>,
       ]}
     >

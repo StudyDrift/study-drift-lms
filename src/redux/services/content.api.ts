@@ -124,7 +124,7 @@ export const contentApi = api.injectEndpoints({
         method: "PATCH",
         body: body.contentItem,
       }),
-      invalidatesTags: ["ContentItem"],
+      invalidatesTags: ["ContentItem", "Content"],
     }),
   }),
 })

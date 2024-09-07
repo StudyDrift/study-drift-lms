@@ -135,3 +135,8 @@ export const updateContentItem = async (
     meta: item,
   })
 }
+
+export const getContentItemsByCourseId = async (courseId: string) => {
+  const collection = await getCollection<ContentItem>("contentItems")
+  return collection.find({ courseId }).sort({ order: 1 }).toArray()
+}

@@ -1,4 +1,5 @@
 "use client"
+import { ScopedCommand } from "@/components/command-pallete/scoped-command"
 import { ContentModuleRow } from "@/components/course-content/content-module"
 import { CreateModuleDialog } from "@/components/dialogs/create-module.dialog"
 import { SortableList } from "@/components/dnd/sortable-list"
@@ -17,7 +18,7 @@ import {
 } from "@/redux/services/content.api"
 import { Button } from "@material-tailwind/react"
 import { PlusIcon } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 export default function Page() {
   const [createModuleOpen, setCreateModuleOpen] = useState(false)
@@ -35,15 +36,24 @@ export default function Page() {
 
   const [setOrder] = useSetModuleOrderMutation()
 
+  const previousModules = useRef<ContentModule[]>([])
+
   useEffect(() => {
-    if (contentModulesData) {
+    if (
+      !isContentLoading &&
+      contentModulesData &&
+      JSON.stringify(contentModulesData) !==
+        JSON.stringify(previousModules.current)
+    ) {
       if (modulesOpen.length === 0) {
         setModulesOpen(contentModulesData.map((m) => m.id))
       }
 
       setContentModules(contentModulesData)
+
+      previousModules.current = contentModulesData
     }
-  }, [contentModulesData, modulesOpen])
+  }, [contentModulesData, modulesOpen, isContentLoading])
 
   const handleModuleOrderChange = async (items: ContentModule[]) => {
     setContentModules(items)
@@ -58,12 +68,24 @@ export default function Page() {
           key="create-module"
           permission={PERMISSION_COURSE_CONTENT_CREATE}
         >
-          <Button
-            className="flex flex-row gap-2 items-center justify-center"
-            onClick={() => setCreateModuleOpen(true)}
+          <ScopedCommand
+            command={{
+              id: "create-module",
+              name: "Create Module",
+              group: "Page Actions",
+              actionType: "callback",
+              action: () => {
+                setCreateModuleOpen(true)
+              },
+            }}
           >
-            <PlusIcon className="h-4 w-4" /> Module
-          </Button>
+            <Button
+              className="flex flex-row gap-2 items-center justify-center"
+              onClick={() => setCreateModuleOpen(true)}
+            >
+              <PlusIcon className="h-4 w-4" /> Module
+            </Button>
+          </ScopedCommand>
         </Restrict>,
       ]}
     >
@@ -82,7 +104,6 @@ export default function Page() {
             renderItem={(item) => (
               <SortableList.Item id={item.id} key={item.id}>
                 <ContentModuleRow
-                  key={item.id}
                   item={item}
                   isOpen={modulesOpen.includes(item.id)}
                   onToggle={() => {

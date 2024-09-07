@@ -16,6 +16,7 @@ export const provisionUser = async (
     ...payload,
     id: nanoid(),
     meta: {},
+    role: "Student",
   }
 
   const collection = await getUserCollection()
@@ -27,6 +28,11 @@ export const provisionUser = async (
 export const getUser = async (id: string) => {
   const collection = await getUserCollection()
   return await collection.findOne({ id }, { projection: { _id: 0 } })
+}
+
+export const getUserRole = async (id: string) => {
+  const collection = await getUserCollection()
+  return await collection.findOne({ id }, { projection: { _id: 0, role: 1 } })
 }
 
 export const getUserByEmail = async (email: string) => {

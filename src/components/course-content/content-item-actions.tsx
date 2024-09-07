@@ -17,10 +17,12 @@ import {
   MenuItem,
   MenuList,
 } from "@material-tailwind/react"
+import { SwitchIcon } from "@radix-ui/react-icons"
 import { EllipsisVerticalIcon } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
 import { AreYouSureDialog } from "../dialogs/are-you-sure.dialog"
+import { ChangeContentItemTypeDialog } from "../dialogs/change-content-item-type.dialog"
 import { Restrict } from "../permission/restrict"
 
 interface Props {
@@ -29,6 +31,7 @@ interface Props {
 
 export const ContentItemActions = ({ item }: Props) => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [isChangeTypeOpen, setIsChangeTypeOpen] = useState(false)
   const [deleteItem, { isLoading: isDeleting }] = useDeleteContentItemMutation()
 
   const canDelete = useCheckPermission(PERMISSION_COURSE_CONTENT_DELETE)
@@ -51,6 +54,11 @@ export const ContentItemActions = ({ item }: Props) => {
       >
         Are you sure that you want to delete {item.name}?
       </AreYouSureDialog>
+      <ChangeContentItemTypeDialog
+        item={item}
+        isOpen={isChangeTypeOpen}
+        onClose={() => setIsChangeTypeOpen(false)}
+      />
       <Menu placement="bottom-end">
         <MenuHandler>
           <IconButton ripple={false} variant="text" size="sm">
@@ -66,6 +74,12 @@ export const ContentItemActions = ({ item }: Props) => {
               <PencilIcon className="h-4 w-4" /> Edit
             </MenuItem>
           </Link>
+          <MenuItem
+            className="flex flex-row gap-2"
+            onClick={() => setIsChangeTypeOpen(true)}
+          >
+            <SwitchIcon className="h-4 w-4" /> Change Type
+          </MenuItem>
           {canDelete && (
             <MenuItem
               onClick={() => setIsDeleteOpen(true)}

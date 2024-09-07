@@ -73,7 +73,7 @@ export function SortableList<T extends BaseItem>({
         ))}
       </SortableContext>
       <SortableOverlay>
-        {activeItem ? renderItem(activeItem) : null}
+        {activeItem ? renderItem(activeItem, -1) : null}
       </SortableOverlay>
     </DndContext>
   )

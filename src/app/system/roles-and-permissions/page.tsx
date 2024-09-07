@@ -46,7 +46,7 @@ export default function Page() {
     <RootPage
       title="System - Roles and Permissions"
       actions={[
-        <Link href={"/system/roles-and-permissions/add-role"}>
+        <Link href={"/system/roles-and-permissions/add-role"} key="add-role">
           <Button>Add Role</Button>
         </Link>,
       ]}

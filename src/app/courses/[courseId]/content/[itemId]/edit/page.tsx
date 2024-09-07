@@ -1,4 +1,5 @@
 "use client"
+import { ScopedCommand } from "@/components/command-pallete/scoped-command"
 import { ContentTypeEditors } from "@/components/content-types/editors"
 import { RootPage } from "@/components/root-page"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -66,19 +67,42 @@ export default function Page() {
       title={`Edit ${contentItem?.name || ""}`}
       actions={[
         <Link href={path + "/.."} key="preview">
-          <Button className="flex items-center gap-2" variant="outlined">
-            <EyeIcon className="w-4 h-4" /> Preview
-          </Button>
+          <ScopedCommand
+            command={{
+              id: "preview",
+              name: "Preview",
+              group: "Page Actions",
+              actionType: "link",
+              action: path + "/..",
+            }}
+          >
+            <Button className="flex items-center gap-2" variant="outlined">
+              <EyeIcon className="w-4 h-4" /> Preview
+            </Button>
+          </ScopedCommand>
         </Link>,
-        <Button
-          color="blue"
-          className="flex items-center gap-2"
+        <ScopedCommand
           key="publish"
-          onClick={handlePublish}
-          loading={isUpdating}
+          command={{
+            id: "publish",
+            name: "Publish",
+            group: "Page Actions",
+            actionType: "callback",
+            action: () => {
+              handlePublish()
+            },
+          }}
         >
-          <RocketLaunchIcon className="w-4 h-4" /> Publish
-        </Button>,
+          <Button
+            color="blue"
+            className="flex items-center gap-2"
+            onClick={handlePublish}
+            loading={isUpdating}
+          >
+            <RocketLaunchIcon className="w-4 h-4" /> Publish
+          </Button>
+          ,
+        </ScopedCommand>,
       ]}
     >
       {isLoading && <Skeleton className="w-full h-10 mt-8" />}

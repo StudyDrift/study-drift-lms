@@ -5,4 +5,5 @@ export interface User {
   email: string
   imgUrl?: string
   meta: Record<string, any>
+  role: string
 }
