@@ -3,6 +3,7 @@ import { ScopedCommand } from "@/components/command-pallete/scoped-command"
 import { CreateAnnouncementDialog } from "@/components/dialogs/create-announcement.dialog"
 import { Restrict } from "@/components/permission/restrict"
 import { RootPage } from "@/components/root-page"
+import { Announcement } from "@/models/announcement.model"
 import { PERMISSION_COURSE_ANNOUNCEMENTS_CREATE } from "@/models/permissions/course.permission"
 import {
   useGetCourseAnnouncementsQuery,
@@ -34,17 +35,19 @@ export default function Page() {
 
   const [openedAnnouncement, setOpenedAnnouncement] = useState<string>("")
 
-  const handleToggle = async (announcementId: string) => {
-    if (openedAnnouncement === announcementId) {
+  const handleToggle = async (announcement: Announcement) => {
+    if (openedAnnouncement === announcement.id) {
       setOpenedAnnouncement("")
     } else {
-      setOpenedAnnouncement(announcementId)
+      setOpenedAnnouncement(announcement.id)
     }
 
-    await setViewed({
-      announcementId,
-      courseId,
-    })
+    if (!announcement.isViewed) {
+      await setViewed({
+        announcementId: announcement.id,
+        courseId,
+      })
+    }
   }
 
   return (
@@ -85,7 +88,7 @@ export default function Page() {
               key={announcement.id}
             >
               <AccordionHeader
-                onClick={() => handleToggle(announcement.id)}
+                onClick={() => handleToggle(announcement)}
                 className="flex flex-row gap-4 items-center justify-between"
               >
                 <Typography
