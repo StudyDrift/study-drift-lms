@@ -26,7 +26,7 @@ export const CommandPallete = () => {
   const { toggleScope } = useHotkeysContext()
   const { courseId } = useParams<{ courseId?: string }>()
 
-  const { data: commands, isLoading } = useGetCommandsQuery({
+  const { data: commands } = useGetCommandsQuery({
     courseId,
   })
 
@@ -88,7 +88,11 @@ export const CommandPallete = () => {
             </span>
           )}
           <CommandInput
-            placeholder="Press 'Tab' for actions"
+            placeholder={
+              isActionMode
+                ? "Press 'Tab' for everything"
+                : "Press 'Tab' for actions"
+            }
             autoFocus
             onKeyDown={(e) => {
               if (e.key === "Escape") toggle()

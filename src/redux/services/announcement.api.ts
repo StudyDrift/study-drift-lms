@@ -24,8 +24,39 @@ export const announcementApi = api.injectEndpoints({
         invalidatesTags: ["Announcements"],
       }
     ),
+
+    setViewAnnouncement: build.mutation<
+      void,
+      { announcementId: string; courseId: string }
+    >({
+      query: ({ announcementId, courseId }) => ({
+        url:
+          "courses/" +
+          courseId +
+          "/announcements/" +
+          announcementId +
+          "/viewed",
+        method: "POST",
+      }),
+      invalidatesTags: ["Announcements", "UnreadAnnouncementsCount"],
+    }),
+
+    getUnreadAnnouncementCount: build.query<number, string>({
+      query: (courseId) => ({
+        url: "courses/" + courseId + "/announcements/unread",
+        method: "GET",
+        params: {
+          onlyCount: "true",
+        },
+      }),
+      providesTags: ["UnreadAnnouncementsCount"],
+    }),
   }),
 })
 
-export const { useGetCourseAnnouncementsQuery, useCreateAnnouncementMutation } =
-  announcementApi
+export const {
+  useGetCourseAnnouncementsQuery,
+  useCreateAnnouncementMutation,
+  useSetViewAnnouncementMutation,
+  useGetUnreadAnnouncementCountQuery,
+} = announcementApi

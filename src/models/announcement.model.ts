@@ -5,6 +5,8 @@ export interface Announcement {
   title: string
   content: string
   dates: Omit<CommonDates, "start" | "end">
+  viewedByIds: string[]
+  isViewed: boolean
 
   postedById: string
   courseId: string

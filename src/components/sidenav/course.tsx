@@ -4,6 +4,7 @@ import {
   PERMISSION_COURSE_GRADEBOOK_VIEW,
   PERMISSION_COURSE_SETTINGS_VIEW,
 } from "@/models/permissions/course.permission"
+import { useGetUnreadAnnouncementCountQuery } from "@/redux/services/announcement.api"
 import {
   ChatBubbleLeftIcon,
   CogIcon,
@@ -12,8 +13,10 @@ import {
 import {
   Accordion,
   AccordionBody,
+  Chip,
   ListItem,
   ListItemPrefix,
+  ListItemSuffix,
   Typography,
 } from "@material-tailwind/react"
 import { LetterCaseCapitalizeIcon } from "@radix-ui/react-icons"
@@ -24,6 +27,7 @@ import {
   StampIcon,
 } from "lucide-react"
 import Link from "next/link"
+import { useParams } from "next/navigation"
 import { useEffect, useRef } from "react"
 
 interface Props {
@@ -40,9 +44,14 @@ export const SideNavCourse = ({
   onForceOpen,
 }: Props) => {
   const { course, isLoading: isCourseLoading } = useCourseData()
+  const { courseId } = useParams<{ courseId: string }>()
   const isOpened = useRef("")
   const canSeeGradeBook = useCheckPermission(PERMISSION_COURSE_GRADEBOOK_VIEW)
   const canSeeSettings = useCheckPermission(PERMISSION_COURSE_SETTINGS_VIEW)
+
+  const { data: unreadCount } = useGetUnreadAnnouncementCountQuery(courseId, {
+    skip: !courseId,
+  })
 
   const courseMenuItems = [
     {
@@ -56,6 +65,7 @@ export const SideNavCourse = ({
       icon: <ChatBubbleLeftIcon className="h-5 w-5" />,
       href: `/courses/${course?.id}/announcements`,
       isVisible: true,
+      badge: unreadCount === 0 ? undefined : unreadCount,
     },
     {
       name: "Syllabus",
@@ -128,6 +138,17 @@ export const SideNavCourse = ({
                 <Typography className="mr-auto font-normal text-inherit">
                   {item.name}
                 </Typography>
+                {item.badge && (
+                  <ListItemSuffix>
+                    <Chip
+                      value={item.badge}
+                      variant="ghost"
+                      color="red"
+                      size="sm"
+                      className="rounded-full"
+                    />
+                  </ListItemSuffix>
+                )}
               </ListItem>
             </Link>
           ))}

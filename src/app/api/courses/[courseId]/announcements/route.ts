@@ -29,6 +29,6 @@ export const GET = async (
 ) => {
   const userId = getUserId(req)
   if (!userId) return unauthorized()
-  const announcements = await getCourseAnnouncements(params.courseId)
+  const announcements = await getCourseAnnouncements(params.courseId, userId)
   return success(announcements)
 }

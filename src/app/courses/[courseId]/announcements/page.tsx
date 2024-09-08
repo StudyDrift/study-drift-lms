@@ -4,7 +4,10 @@ import { CreateAnnouncementDialog } from "@/components/dialogs/create-announceme
 import { Restrict } from "@/components/permission/restrict"
 import { RootPage } from "@/components/root-page"
 import { PERMISSION_COURSE_ANNOUNCEMENTS_CREATE } from "@/models/permissions/course.permission"
-import { useGetCourseAnnouncementsQuery } from "@/redux/services/announcement.api"
+import {
+  useGetCourseAnnouncementsQuery,
+  useSetViewAnnouncementMutation,
+} from "@/redux/services/announcement.api"
 import {
   Accordion,
   AccordionBody,
@@ -27,7 +30,22 @@ export default function Page() {
       skip: !courseId,
     })
 
+  const [setViewed] = useSetViewAnnouncementMutation()
+
   const [openedAnnouncement, setOpenedAnnouncement] = useState<string>("")
+
+  const handleToggle = async (announcementId: string) => {
+    if (openedAnnouncement === announcementId) {
+      setOpenedAnnouncement("")
+    } else {
+      setOpenedAnnouncement(announcementId)
+    }
+
+    await setViewed({
+      announcementId,
+      courseId,
+    })
+  }
 
   return (
     <RootPage
@@ -67,16 +85,22 @@ export default function Page() {
               key={announcement.id}
             >
               <AccordionHeader
-                onClick={() => {
-                  if (openedAnnouncement === announcement.id) {
-                    setOpenedAnnouncement("")
-                  } else {
-                    setOpenedAnnouncement(announcement.id)
-                  }
-                }}
+                onClick={() => handleToggle(announcement.id)}
                 className="flex flex-row gap-4 items-center justify-between"
               >
-                <Typography variant="h5" className="m-0 flex-1">
+                <Typography
+                  variant="h5"
+                  className="m-0 flex-1 relative flex flex-row items-center gap-2"
+                >
+                  {!announcement.isViewed && (
+                    <span className="relative flex h-3 w-3">
+                      <span
+                        className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"
+                        style={{ animationDuration: "2s" }}
+                      ></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                    </span>
+                  )}
                   {announcement.title}
                 </Typography>
                 <Typography variant="small" className="m-0">
