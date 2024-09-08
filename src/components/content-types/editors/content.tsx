@@ -24,6 +24,7 @@ export const ContentTypeContent = ({ item, onChange }: Props) => {
         onChange={(body) => onChange({ ...item, body })}
         contentEditableClassName="prose"
         placeholder="Start typing here..."
+        className="min-h-96"
       />
     </Card>
   )

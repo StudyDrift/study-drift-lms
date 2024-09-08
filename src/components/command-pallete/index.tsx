@@ -22,6 +22,7 @@ import {
 
 export const CommandPallete = () => {
   const [isOpen, setIsOpen] = useState(false)
+  const [isActionMode, setIsActionMode] = useState(false)
   const { toggleScope } = useHotkeysContext()
   const { courseId } = useParams<{ courseId?: string }>()
 
@@ -31,8 +32,17 @@ export const CommandPallete = () => {
 
   const scopedCommands = useSelector(selectScopedCommands)
 
+  const allCommands = [...(commands || []), ...scopedCommands]
+  const filteredCommands = allCommands.filter((c) => {
+    if (isActionMode) {
+      return c.actionType === "callback"
+    }
+
+    return true
+  })
+
   const availableCommands =
-    [...(commands || []), ...scopedCommands].reduce((acc, command) => {
+    filteredCommands.reduce((acc, command) => {
       if (!acc[command.group]) {
         acc[command.group] = []
       }
@@ -43,6 +53,7 @@ export const CommandPallete = () => {
   const toggle = () => {
     setIsOpen(!isOpen)
     toggleScope("commands")
+    setIsActionMode(false)
   }
 
   useHotkeys("meta+k", () => toggle(), { scopes: ["global"] })
@@ -65,14 +76,30 @@ export const CommandPallete = () => {
   return (
     <OutsideClickClose onClose={toggle}>
       <div className="absolute flex w-screen justify-center mt-20 z-[9999]">
-        <Command className="rounded-lg border shadow-2xl min-w-[450px] max-w-[600px]">
+        <Command
+          className={
+            "rounded-lg border shadow-2xl min-w-[450px] max-w-[600px] relative" +
+            (isActionMode ? " animate-quick-pulse" : "")
+          }
+        >
+          {isActionMode && (
+            <span className="rounded-lg bg-green-700 text-white px-3 py-0.5 absolute top-[12px] left-9 text-sm">
+              Actions
+            </span>
+          )}
           <CommandInput
-            placeholder="Type a command or search..."
+            placeholder="Press 'Tab' for actions"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === "Escape") toggle()
+              if (e.key === "Tab") {
+                e.preventDefault()
+                setIsActionMode(!isActionMode)
+              }
             }}
-            className="rounded-t-lg text-md py-6"
+            className={
+              "rounded-t-lg text-md py-6 " + (isActionMode ? "pl-20" : "")
+            }
           />
           <CommandList>
             <CommandEmpty>No results found.</CommandEmpty>

@@ -12,7 +12,7 @@ import {
 import { EyeIcon, RocketLaunchIcon } from "@heroicons/react/24/solid"
 import { Button, Input, Textarea } from "@material-tailwind/react"
 import Link from "next/link"
-import { useParams, usePathname } from "next/navigation"
+import { useParams, usePathname, useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 
 export default function Page() {
@@ -20,6 +20,7 @@ export default function Page() {
   const [description, setDescription] = useState("")
   const [body, setBody] = useState("")
   const [meta, setMeta] = useState<Record<string, any>>({})
+  const router = useRouter()
 
   const { courseId, itemId } = useParams<{ courseId: string; itemId: string }>()
   const path = usePathname()
@@ -70,10 +71,12 @@ export default function Page() {
           <ScopedCommand
             command={{
               id: "preview",
-              name: "Preview",
+              name: "Preview Page",
               group: "Page Actions",
-              actionType: "link",
-              action: path + "/..",
+              actionType: "callback",
+              action: () => {
+                router.push(path + "/..")
+              },
             }}
           >
             <Button className="flex items-center gap-2" variant="outlined">
@@ -85,7 +88,7 @@ export default function Page() {
           key="publish"
           command={{
             id: "publish",
-            name: "Publish",
+            name: "Publish Page",
             group: "Page Actions",
             actionType: "callback",
             action: () => {

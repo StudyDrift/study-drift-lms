@@ -197,3 +197,27 @@
 .prose li[role="checkbox"]::after {
   margin-top: 8px;
 }
+
+.animate-quick-pulse {
+  animation: pulse 300ms cubic-bezier(0.4, 0, 0.6, 1);
+  @apply transition-colors;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    @apply shadow-gray-800;
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 25px 75px -20px rgb(56 142 60 / 0.7);
+    @apply shadow-green-300;
+  }
+}
+
+/* Fixes mdx editor dropdowns */
+[class*="popupContainer"] {
+  z-index: 99999 !important;
+}

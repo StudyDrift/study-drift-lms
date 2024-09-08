@@ -12,6 +12,9 @@ export const commandApi = api.injectEndpoints({
         },
       }),
       providesTags: ["Commands"],
+      extraOptions: {
+        maxRetries: 1,
+      },
     }),
   }),
 })

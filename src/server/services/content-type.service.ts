@@ -11,6 +11,13 @@ const DEFAULT_CONTENT_TYPES: ContentType[] = [
     meta: {},
   },
   {
+    id: "heading",
+    name: "Heading",
+    description: "Heading",
+    icon: "DocumentIcon",
+    meta: {},
+  },
+  {
     id: "link",
     name: "Link",
     description: "Link to an external application",

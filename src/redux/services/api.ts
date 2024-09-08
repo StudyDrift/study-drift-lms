@@ -50,6 +50,7 @@ export const api = createApi({
     "ContentItem",
     "AppSettings",
     "Commands",
+    "Announcements",
   ],
   /**
    * This api has endpoints injected in adjacent files,

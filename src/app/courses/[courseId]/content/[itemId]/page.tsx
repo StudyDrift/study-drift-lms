@@ -9,11 +9,12 @@ import { useGetContentItemByIdQuery } from "@/redux/services/content.api"
 import { PencilIcon } from "@heroicons/react/24/solid"
 import { Button, Typography } from "@material-tailwind/react"
 import Link from "next/link"
-import { useParams, usePathname } from "next/navigation"
+import { useParams, usePathname, useRouter } from "next/navigation"
 
 export default function Page() {
   const { courseId, itemId } = useParams<{ courseId: string; itemId: string }>()
   const path = usePathname()
+  const router = useRouter()
   const { data: contentItem, isLoading } = useGetContentItemByIdQuery(
     {
       contentItemId: itemId as string,
@@ -34,8 +35,10 @@ export default function Page() {
               id: "Edit Page",
               name: "Edit Page",
               group: "Page Actions",
-              actionType: "link",
-              action: path + "/edit",
+              actionType: "callback",
+              action: () => {
+                router.push(path + "/edit")
+              },
             }}
           >
             <Link href={path + "/edit"}>
