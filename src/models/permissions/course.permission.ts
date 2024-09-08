@@ -43,3 +43,9 @@ export const PERMISSION_COURSE_ANNOUNCEMENTS_CREATE = generatePermission({
   resource: Resources.Announcements,
   action: PermissionAction.Create,
 })
+
+export const PERMISSION_COURSE_ANNOUNCEMENTS_DELETE = generatePermission({
+  service: APP,
+  resource: Resources.Announcements,
+  action: PermissionAction.Delete,
+})

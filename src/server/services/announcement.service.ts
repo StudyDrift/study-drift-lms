@@ -36,6 +36,7 @@ export const createAnnouncement = async (
     id: nanoid(),
     postedById: userId,
     courseId,
+    viewedByIds: [],
   }
   const collection = await getCollection<Announcement>("announcements")
   await collection.insertOne(newAnnouncement)
@@ -75,4 +76,9 @@ export const getUnreadAnnouncements = async (
     })
     .project({ _id: 0 })
     .toArray()
+}
+
+export const deleteAnnouncement = async (courseId: string, id: string) => {
+  const collection = await getCollection<Announcement>("announcements")
+  await collection.deleteOne({ id, courseId })
 }

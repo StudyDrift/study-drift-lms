@@ -4,8 +4,12 @@ import { CreateAnnouncementDialog } from "@/components/dialogs/create-announceme
 import { Restrict } from "@/components/permission/restrict"
 import { RootPage } from "@/components/root-page"
 import { Announcement } from "@/models/announcement.model"
-import { PERMISSION_COURSE_ANNOUNCEMENTS_CREATE } from "@/models/permissions/course.permission"
 import {
+  PERMISSION_COURSE_ANNOUNCEMENTS_CREATE,
+  PERMISSION_COURSE_ANNOUNCEMENTS_DELETE,
+} from "@/models/permissions/course.permission"
+import {
+  useDeleteAnnouncementMutation,
   useGetCourseAnnouncementsQuery,
   useSetViewAnnouncementMutation,
 } from "@/redux/services/announcement.api"
@@ -32,6 +36,8 @@ export default function Page() {
     })
 
   const [setViewed] = useSetViewAnnouncementMutation()
+  const [deleteAnnouncement, { isLoading: isDeleting }] =
+    useDeleteAnnouncementMutation()
 
   const [openedAnnouncement, setOpenedAnnouncement] = useState<string>("")
 
@@ -120,6 +126,20 @@ export default function Page() {
                 >
                   {announcement.content}
                 </Markdown>
+                <Restrict permission={PERMISSION_COURSE_ANNOUNCEMENTS_DELETE}>
+                  <div className="flex justify-end flex-row gap-2 mt-4">
+                    <Button
+                      color="red"
+                      variant="text"
+                      loading={isDeleting}
+                      onClick={() =>
+                        deleteAnnouncement({ id: announcement.id, courseId })
+                      }
+                    >
+                      Delete Announcement
+                    </Button>
+                  </div>
+                </Restrict>
               </AccordionBody>
             </Accordion>
           </Card>

@@ -21,7 +21,7 @@ export const announcementApi = api.injectEndpoints({
           method: "POST",
           body,
         }),
-        invalidatesTags: ["Announcements"],
+        invalidatesTags: ["Announcements", "UnreadAnnouncementsCount"],
       }
     ),
 
@@ -51,6 +51,14 @@ export const announcementApi = api.injectEndpoints({
       }),
       providesTags: ["UnreadAnnouncementsCount"],
     }),
+
+    deleteAnnouncement: build.mutation<void, { courseId: string; id: string }>({
+      query: ({ courseId, id }) => ({
+        url: "courses/" + courseId + "/announcements/" + id,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Announcements", "UnreadAnnouncementsCount"],
+    }),
   }),
 })
 
@@ -59,4 +67,5 @@ export const {
   useCreateAnnouncementMutation,
   useSetViewAnnouncementMutation,
   useGetUnreadAnnouncementCountQuery,
+  useDeleteAnnouncementMutation,
 } = announcementApi
