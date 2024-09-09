@@ -16,6 +16,8 @@ export const ContentTypeEditors = ({ item, onChange }: Props) => {
       return <ContentTypeLink item={item} onChange={onChange} />
     case "quiz":
       return <ContentTypeQuiz item={item} onChange={onChange} />
+    case "heading":
+      return null
     default:
       return <p>TODO: {item.contentTypeId}</p>
   }

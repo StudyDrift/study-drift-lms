@@ -59,3 +59,10 @@ export const updateUser = async (id: string, payload: Partial<User>) => {
 
   await collection.updateOne({ id }, { $set: payload })
 }
+
+export const getUsersByIds = async (ids: string[]) => {
+  const collection = await getUserCollection()
+  return await collection
+    .find({ id: { $in: ids } }, { projection: { _id: 0 } })
+    .toArray()
+}

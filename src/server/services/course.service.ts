@@ -3,7 +3,7 @@ import { EnrollmentRole } from "@/models/enrollment.model"
 import { nanoid } from "@reduxjs/toolkit"
 import { createAudit, getAuditDate } from "./audit.service"
 import { getCollection } from "./database.service"
-import { enrollUser } from "./enrollment.service"
+import { enrollUserByUserId } from "./enrollment.service"
 
 const getCourseCollection = async () => {
   return await getCollection<Course>("courses")
@@ -30,7 +30,7 @@ export const createCourse = async (
     meta: newCourse,
   })
 
-  await enrollUser(
+  await enrollUserByUserId(
     {
       userId,
       courseId: newCourse.id,

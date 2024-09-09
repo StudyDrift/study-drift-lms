@@ -7,9 +7,10 @@ import { Restrict } from "../permission/restrict"
 
 interface Props {
   moduleId: string
+  itemCount: number
 }
 
-export const AddNewContent = ({ moduleId }: Props) => {
+export const AddNewContent = ({ moduleId, itemCount }: Props) => {
   const [addItemOpen, setAddItemOpen] = useState(false)
 
   return (
@@ -26,6 +27,7 @@ export const AddNewContent = ({ moduleId }: Props) => {
         isOpen={addItemOpen}
         onClose={() => setAddItemOpen(false)}
         moduleId={moduleId}
+        itemCount={itemCount}
       />
     </Restrict>
   )

@@ -15,6 +15,8 @@ export const ContentTypeViewers = ({ item }: Props) => {
       return <ContentTypeLink item={item} />
     case "quiz":
       return <ContentTypeQuiz item={item} />
+    case "heading":
+      return null
     default:
       return <p>TODO: {item.contentTypeId}</p>
   }

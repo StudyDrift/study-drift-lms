@@ -20,12 +20,14 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   moduleId: string
+  itemCount: number
 }
 
 export const CreateContentItemDialog = ({
   isOpen,
   onClose,
   moduleId,
+  itemCount,
 }: Props) => {
   const { courseId } = useParams<{ courseId: string }>()
   const [name, setName] = useState("")
@@ -50,6 +52,7 @@ export const CreateContentItemDialog = ({
       settings: {
         dates: {},
       },
+      order: itemCount,
 
       contentTypeId: contentType,
       courseId,

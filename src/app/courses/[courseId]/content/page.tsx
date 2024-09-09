@@ -15,8 +15,15 @@ import {
   useGetCourseContentQuery,
   useSetModuleOrderMutation,
 } from "@/redux/services/content.api"
-import { Button } from "@material-tailwind/react"
-import { PlusIcon } from "lucide-react"
+import {
+  Button,
+  IconButton,
+  Menu,
+  MenuHandler,
+  MenuItem,
+  MenuList,
+} from "@material-tailwind/react"
+import { MenuIcon, PlusIcon } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 export default function Page() {
@@ -59,6 +66,14 @@ export default function Page() {
     await setOrder({ courseId: course!.id, order: items.map((m) => m.id) })
   }
 
+  const toggleCollapseAll = () => {
+    if (modulesOpen.length === contentModules.length) {
+      setModulesOpen([])
+    } else {
+      setModulesOpen(contentModules.map((m) => m.id))
+    }
+  }
+
   return (
     <RootPage
       title="Content"
@@ -85,6 +100,40 @@ export default function Page() {
             >
               <PlusIcon className="h-4 w-4" /> Module
             </Button>
+          </ScopedCommand>
+        </Restrict>,
+        <Restrict
+          key="more-options"
+          permission={PERMISSION_COURSE_CONTENT_UPDATE}
+        >
+          <ScopedCommand
+            command={{
+              id: "toggle-collapse-all",
+              name:
+                modulesOpen.length === contentModules.length
+                  ? "Collapse All"
+                  : "Expand All",
+              group: "Page Actions",
+              actionType: "callback",
+              action: () => {
+                toggleCollapseAll()
+              },
+            }}
+          >
+            <Menu placement="bottom-end">
+              <MenuHandler>
+                <IconButton variant="text" ripple={false}>
+                  <MenuIcon className="h-4 w-4" />
+                </IconButton>
+              </MenuHandler>
+              <MenuList>
+                <MenuItem onClick={toggleCollapseAll}>
+                  {modulesOpen.length === contentModules.length
+                    ? "Collapse All"
+                    : "Expand All"}
+                </MenuItem>
+              </MenuList>
+            </Menu>
           </ScopedCommand>
         </Restrict>,
       ]}

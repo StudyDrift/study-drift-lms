@@ -14,7 +14,7 @@ const DEFAULT_CONTENT_TYPES: ContentType[] = [
     id: "heading",
     name: "Heading",
     description: "Heading",
-    icon: "DocumentIcon",
+    icon: "HeadingIcon",
     meta: {},
   },
   {
@@ -29,6 +29,13 @@ const DEFAULT_CONTENT_TYPES: ContentType[] = [
     name: "Quiz",
     description: "Quiz",
     icon: "QuestionMarkIcon",
+    meta: {},
+  },
+  {
+    id: "assignment",
+    name: "Assignment",
+    description: "Assignment",
+    icon: "ListCheckIcon",
     meta: {},
   },
 ]

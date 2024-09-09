@@ -22,7 +22,7 @@ export const RootPage = ({
   useRestrictions(permission)
 
   return (
-    <div className="bg-gray-100/60">
+    <div className="bg-gray-100/60 pb-24">
       <main className="pl-[21rem] py-4 pr-4 flex-1 w-screen">
         {title && (
           <div className="flex justify-between flex-row w-full">

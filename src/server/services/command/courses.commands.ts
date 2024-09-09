@@ -1,6 +1,7 @@
 import { Command, CommandContextOption } from "@/models/command.model"
 import { ContentItem, ContentType } from "@/models/content.model"
 import {
+  PERMISSION_COURSE_ENROLLMENTS_VIEW,
   PERMISSION_COURSE_GRADEBOOK_VIEW,
   PERMISSION_COURSE_SETTINGS_VIEW,
 } from "@/models/permissions/course.permission"
@@ -81,20 +82,23 @@ export const getCoursesCommands = async (
     const contentTypes = (await getAllContentTypes()) as ContentType[]
 
     commands.push(
-      ...contentItems.map((item) => ({
-        id: item.id,
-        name: item.name,
-        group: "Course Content",
-        actionType: "link",
-        action: `/courses/${courseId}/content/${item.id}`,
-        icon:
-          contentTypes.find((x) => x.id === item.contentTypeId)?.icon ||
-          "DocumentIcon",
-      }))
+      ...contentItems.map(
+        (item) =>
+          ({
+            id: item.id,
+            name: item.name,
+            group: "Course Content",
+            actionType: "link",
+            action: `/courses/${courseId}/content/${item.id}`,
+            icon:
+              contentTypes.find((x) => x.id === item.contentTypeId)?.icon ||
+              "DocumentIcon",
+          } as Command)
+      )
     )
 
     commands.push(
-      ...[
+      ...([
         {
           id: courseId + "-course-home",
           name: "Course Home",
@@ -145,6 +149,15 @@ export const getCoursesCommands = async (
           permission: PERMISSION_COURSE_GRADEBOOK_VIEW,
         },
         {
+          id: courseId + "-enrollments",
+          name: "Enrollments",
+          group: "Course",
+          actionType: "link",
+          action: `/courses/${courseId}/enrollments`,
+          icon: "UsersIcon",
+          permission: PERMISSION_COURSE_ENROLLMENTS_VIEW,
+        },
+        {
           id: courseId + "-course-settings",
           name: "Course Settings",
           group: "Course",
@@ -153,7 +166,7 @@ export const getCoursesCommands = async (
           icon: "CogIcon",
           permission: PERMISSION_COURSE_SETTINGS_VIEW,
         },
-      ]
+      ] as Command[])
     )
   }
 

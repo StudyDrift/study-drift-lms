@@ -44,8 +44,20 @@ export const ContentModuleRow = ({
   const { data: contentTypes } = useGetAllContentTypesQuery(courseId)
 
   useEffect(() => {
-    if (JSON.stringify(item.children ?? []) !== JSON.stringify(children)) {
+    if (item.children?.length !== children?.length) {
       setChildren(item.children || [])
+    }
+
+    // Check if the icons are different
+    const newChildren = [...children]
+    for (const child of newChildren) {
+      if (
+        child.contentTypeId !==
+        item.children?.find((c) => c.id === child.id)?.contentTypeId
+      ) {
+        setChildren(item.children || [])
+        break
+      }
     }
   }, [item.children, children])
 
@@ -61,6 +73,10 @@ export const ContentModuleRow = ({
     const contentType = contentTypes?.find((c) => c.id === contentTypeId)
     const Icon = getIcon(contentType?.icon)
     return <Icon className="h-4 w-4" />
+  }
+
+  const isHeading = (item: ContentItem) => {
+    return item.contentTypeId === "heading"
   }
 
   return (
@@ -98,24 +114,39 @@ export const ContentModuleRow = ({
               renderItem={(child) => (
                 <SortableList.Item id={child.id} key={child.id}>
                   <ListItem
-                    className="py-1 my-1 hover:underline"
+                    className={
+                      "py-1 my-1 hover:underline " +
+                      (isHeading(child)
+                        ? "-ml-1 hover:no-underline hover:bg-transparent active:bg-transparent focus:bg-transparent"
+                        : "")
+                    }
                     ripple={false}
                   >
-                    <ListItemPrefix className="ml-4">
+                    <ListItemPrefix
+                      className={"ml-4 " + (isHeading(child) ? "ml-0" : "")}
+                    >
                       <SortableList.DragHandle />
                     </ListItemPrefix>
 
-                    <Link
-                      href={`/courses/${item.courseId}/content/${child.id}`}
-                      className="flex flex-row items-center gap-3"
-                    >
-                      <ListItemPrefix className="mr-1">
-                        {getContentTypeIcon(child.contentTypeId)}
-                      </ListItemPrefix>
-                      {child.name}
-                    </Link>
+                    {isHeading(child) ? (
+                      <Typography variant="h4">{child.name}</Typography>
+                    ) : (
+                      <Link
+                        href={`/courses/${item.courseId}/content/${child.id}`}
+                        className="flex flex-row items-center gap-3"
+                      >
+                        <ListItemPrefix className="mr-1">
+                          {getContentTypeIcon(child.contentTypeId)}
+                        </ListItemPrefix>
+                        {child.name}
+                      </Link>
+                    )}
 
-                    <ListItemSuffix className="flex flex-row">
+                    <ListItemSuffix
+                      className={
+                        "flex flex-row" + (isHeading(child) ? " -mr-1" : "")
+                      }
+                    >
                       <PublishContentItem
                         contentItemId={child.id}
                         courseId={item.courseId}
@@ -127,7 +158,7 @@ export const ContentModuleRow = ({
                 </SortableList.Item>
               )}
             />
-            <AddNewContent moduleId={item.id} />
+            <AddNewContent moduleId={item.id} itemCount={children.length} />
           </Restrict>
 
           <RestrictElse permission={PERMISSION_COURSE_CONTENT_UPDATE}>

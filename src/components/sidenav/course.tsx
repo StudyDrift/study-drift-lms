@@ -10,8 +10,8 @@ import {
   ChatBubbleLeftIcon,
   CogIcon,
   HomeIcon,
+  UsersIcon,
 } from "@heroicons/react/24/outline"
-import { UsersIcon } from "@heroicons/react/24/solid"
 import {
   Accordion,
   AccordionBody,

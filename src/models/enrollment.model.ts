@@ -1,4 +1,5 @@
 import { CommonDates } from "./dates.model"
+import { User } from "./user.model"
 
 // An instance of a sections, progress, and outcome achievements
 export interface Enrollment {
@@ -9,6 +10,8 @@ export interface Enrollment {
   role: EnrollmentRole
   meta: Record<string, any>
   dates: Pick<CommonDates, "start" | "end">
+
+  user?: Pick<User, "id" | "first" | "last" | "email">
 }
 
 export enum EnrollmentRole {

@@ -3,6 +3,7 @@ import {
   CogIcon,
   DocumentIcon,
   LinkIcon,
+  UsersIcon,
 } from "@heroicons/react/24/solid"
 import {
   LetterCaseCapitalizeIcon,
@@ -11,6 +12,7 @@ import {
 } from "@radix-ui/react-icons"
 import {
   Calendar,
+  HeadingIcon,
   HomeIcon,
   LayoutDashboardIcon,
   ListCheckIcon,
@@ -34,6 +36,8 @@ export const AvailableIcons = {
   NotebookIcon,
   LetterCaseCapitalizeIcon,
   CogIcon,
+  UsersIcon,
+  HeadingIcon,
 }
 
 export const getIcon = (name?: string) => {

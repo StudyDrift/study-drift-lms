@@ -20,7 +20,11 @@ export default function RootLayout({
   return (
     <React.StrictMode>
       <html lang="en" suppressHydrationWarning>
-        <body className={inter.className + " flex h-screen w-screen flex-row"}>
+        <body
+          className={
+            inter.className + " flex h-screen w-screen flex-row bg-gray-100/60"
+          }
+        >
           <Providers>{children}</Providers>
         </body>
       </html>

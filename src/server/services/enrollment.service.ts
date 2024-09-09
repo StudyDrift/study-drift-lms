@@ -7,7 +7,7 @@ const getEnrollmentCollection = async () => {
   return await getCollection<Enrollment>("enrollments")
 }
 
-export const enrollUser = async (
+export const enrollUserByUserId = async (
   enrollment: EnrollmentCreatePayload,
   userId: string
 ) => {
