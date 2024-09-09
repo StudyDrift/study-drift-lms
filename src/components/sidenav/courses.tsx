@@ -27,7 +27,7 @@ export const SideNavCourses = ({
         selected={isOpen}
         data-selected={isOpen}
         onClick={onToggle}
-        className="px-3 py-2 select-courses hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900"
+        className="px-3 py-2 select-courses hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900 select-none"
         ripple={false}
         disabled={isCoursesLoading}
       >
@@ -46,7 +46,7 @@ export const SideNavCourses = ({
           <Link key={index} href={`/courses/${item.id}`}>
             <ListItem
               key={index}
-              className={listItemClassName + " flex flex-col"}
+              className={listItemClassName + " flex flex-col select-none"}
               ripple={false}
             >
               <Typography className="mr-auto font-normal text-inherit text-xs text-gray-500">

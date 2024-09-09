@@ -38,7 +38,7 @@ export const getBySectionId = async (sectionId: string) => {
     .toArray()
 }
 
-export const getByCourseId = async (courseId: string) => {
+export const getEnrollmentsByCourseId = async (courseId: string) => {
   const collection = await getEnrollmentCollection()
   return await collection
     .find({ courseId }, { projection: { _id: 0 } })

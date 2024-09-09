@@ -7,7 +7,14 @@ export const rolesApi = api.injectEndpoints({
       query: () => "roles",
       providesTags: ["Roles"],
     }),
+    getCourseRoles: build.query<Role[], string>({
+      query: (courseId) => ({
+        url: `courses/${courseId}/roles`,
+        method: "GET",
+      }),
+      providesTags: ["Roles"],
+    }),
   }),
 })
 
-export const { useGetAllRolesQuery } = rolesApi
+export const { useGetAllRolesQuery, useGetCourseRolesQuery } = rolesApi

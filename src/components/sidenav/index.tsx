@@ -19,7 +19,7 @@ export const SideNav = () => {
   }
 
   const LIST_ITEM_STYLES =
-    "select-none hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900 px-3 py-2"
+    "select-none hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900 px-3 py-2 select-none"
 
   return (
     <Card className="h-[calc(100vh-1rem)] w-full max-w-[20rem] mx-auto p-1 shadow-md fixed mt-[0.5rem]">

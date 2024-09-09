@@ -59,6 +59,7 @@ export default function Page() {
   return (
     <RootPage
       title="Announcements"
+      isLoading={isAnnouncementsLoading}
       actions={[
         <Restrict
           permission={PERMISSION_COURSE_ANNOUNCEMENTS_CREATE}

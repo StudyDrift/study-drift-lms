@@ -51,6 +51,7 @@ export default function Page() {
   return (
     <RootPage
       title="Edit Syllabus"
+      isLoading={isSyllabusLoading}
       actions={[
         <ScopedCommand
           key="preview"
@@ -65,7 +66,9 @@ export default function Page() {
           }}
         >
           <Link href={`/courses/${courseId}/syllabus`}>
-            <Button variant="outlined">Preview</Button>
+            <Button ripple={false} variant="outlined">
+              Preview
+            </Button>
           </Link>
         </ScopedCommand>,
         <ScopedCommand
@@ -84,6 +87,7 @@ export default function Page() {
             color="blue"
             onClick={handlePublish}
             loading={isSyllabusUpdating}
+            ripple={false}
           >
             Publish
           </Button>

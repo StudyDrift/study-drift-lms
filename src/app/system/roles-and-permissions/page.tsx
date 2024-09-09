@@ -45,6 +45,7 @@ export default function Page() {
   return (
     <RootPage
       title="System - Roles and Permissions"
+      isLoading={isLoadingRoles}
       actions={[
         <Link href={"/system/roles-and-permissions/add-role"} key="add-role">
           <Button>Add Role</Button>

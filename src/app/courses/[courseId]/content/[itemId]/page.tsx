@@ -3,7 +3,6 @@ import { ScopedCommand } from "@/components/command-pallete/scoped-command"
 import { ContentTypeViewers } from "@/components/content-types/viewers"
 import { Restrict } from "@/components/permission/restrict"
 import { RootPage } from "@/components/root-page"
-import { Skeleton } from "@/components/ui/skeleton"
 import { PERMISSION_COURSE_CONTENT_UPDATE } from "@/models/permissions/course.permission"
 import { useGetContentItemByIdQuery } from "@/redux/services/content.api"
 import { PencilIcon } from "@heroicons/react/24/solid"
@@ -28,6 +27,7 @@ export default function Page() {
   return (
     <RootPage
       title={contentItem?.name}
+      isLoading={isLoading}
       actions={[
         <Restrict permission={PERMISSION_COURSE_CONTENT_UPDATE} key="edit">
           <ScopedCommand
@@ -50,7 +50,6 @@ export default function Page() {
         </Restrict>,
       ]}
     >
-      {isLoading && <Skeleton className="w-full h-10 mt-8" />}
       {contentItem && (
         <div className="flex flex-col gap-4 mt-8">
           <Typography className="w-full">{contentItem.description}</Typography>

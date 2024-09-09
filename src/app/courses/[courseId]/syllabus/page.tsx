@@ -20,6 +20,7 @@ export default function Page() {
   return (
     <RootPage
       title="Syllabus"
+      isLoading={isSyllabusLoading}
       actions={[
         <ScopedCommand
           key="edit"
@@ -34,7 +35,7 @@ export default function Page() {
           }}
         >
           <Link href={`/courses/${courseId}/syllabus/edit`}>
-            <Button>Edit</Button>
+            <Button ripple={false}>Edit</Button>
           </Link>
         </ScopedCommand>,
       ]}

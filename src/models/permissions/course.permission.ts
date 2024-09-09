@@ -8,6 +8,7 @@ enum Resources {
   Announcements = "announcements",
   Outcomes = "outcomes",
   Syllabus = "syllabus",
+  Enrollments = "enrollments",
 }
 
 export const PERMISSION_COURSE_GRADEBOOK_VIEW = generatePermission({
@@ -62,4 +63,22 @@ export const PERMISSION_COURSE_SYLLABUS_UPDATE = generatePermission({
   service: APP,
   resource: Resources.Syllabus,
   action: PermissionAction.Update,
+})
+
+export const PERMISSION_COURSE_ENROLLMENTS_VIEW = generatePermission({
+  service: APP,
+  resource: Resources.Enrollments,
+  action: PermissionAction.View,
+})
+
+export const PERMISSION_COURSE_ENROLLMENTS_CREATE = generatePermission({
+  service: APP,
+  resource: Resources.Enrollments,
+  action: PermissionAction.Create,
+})
+
+export const PERMISSION_COURSE_ENROLLMENTS_DELETE = generatePermission({
+  service: APP,
+  resource: Resources.Enrollments,
+  action: PermissionAction.Delete,
 })

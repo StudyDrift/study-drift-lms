@@ -2,7 +2,6 @@
 import { ScopedCommand } from "@/components/command-pallete/scoped-command"
 import { ContentTypeEditors } from "@/components/content-types/editors"
 import { RootPage } from "@/components/root-page"
-import { Skeleton } from "@/components/ui/skeleton"
 import { UpdateContentItemPayload } from "@/models/content.model"
 import { PERMISSION_COURSE_CONTENT_UPDATE } from "@/models/permissions/course.permission"
 import {
@@ -66,6 +65,7 @@ export default function Page() {
     <RootPage
       permission={PERMISSION_COURSE_CONTENT_UPDATE}
       title={`Edit ${contentItem?.name || ""}`}
+      isLoading={isLoading}
       actions={[
         <Link href={path + "/.."} key="preview">
           <ScopedCommand
@@ -108,7 +108,6 @@ export default function Page() {
         </ScopedCommand>,
       ]}
     >
-      {isLoading && <Skeleton className="w-full h-10 mt-8" />}
       {!isLoading && isSet.current && contentItem && (
         <div className="flex flex-col gap-2 mt-8">
           <Input

@@ -5,7 +5,6 @@ import { CreateModuleDialog } from "@/components/dialogs/create-module.dialog"
 import { SortableList } from "@/components/dnd/sortable-list"
 import { Restrict, RestrictElse } from "@/components/permission/restrict"
 import { RootPage } from "@/components/root-page"
-import { Skeleton } from "@/components/ui/skeleton"
 import { useCourseData } from "@/hooks/use-course-data.hooks"
 import { ContentModule } from "@/models/content.model"
 import {
@@ -63,6 +62,7 @@ export default function Page() {
   return (
     <RootPage
       title="Content"
+      isLoading={isContentLoading}
       actions={[
         <Restrict
           key="create-module"
@@ -94,7 +94,6 @@ export default function Page() {
         onClose={() => setCreateModuleOpen(false)}
       />
 
-      {isContentLoading && <Skeleton className="h-8 w-full mt-8" />}
       <div className="flex flex-col gap-4 mt-6">
         <Restrict permission={PERMISSION_COURSE_CONTENT_UPDATE}>
           <SortableList

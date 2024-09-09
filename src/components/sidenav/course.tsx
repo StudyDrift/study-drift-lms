@@ -1,6 +1,7 @@
 import { useCourseData } from "@/hooks/use-course-data.hooks"
 import { useCheckPermission } from "@/hooks/use-restrictions.hook"
 import {
+  PERMISSION_COURSE_ENROLLMENTS_VIEW,
   PERMISSION_COURSE_GRADEBOOK_VIEW,
   PERMISSION_COURSE_SETTINGS_VIEW,
 } from "@/models/permissions/course.permission"
@@ -10,6 +11,7 @@ import {
   CogIcon,
   HomeIcon,
 } from "@heroicons/react/24/outline"
+import { UsersIcon } from "@heroicons/react/24/solid"
 import {
   Accordion,
   AccordionBody,
@@ -48,6 +50,9 @@ export const SideNavCourse = ({
   const isOpened = useRef("")
   const canSeeGradeBook = useCheckPermission(PERMISSION_COURSE_GRADEBOOK_VIEW)
   const canSeeSettings = useCheckPermission(PERMISSION_COURSE_SETTINGS_VIEW)
+  const canSeeEnrollments = useCheckPermission(
+    PERMISSION_COURSE_ENROLLMENTS_VIEW
+  )
 
   const { data: unreadCount } = useGetUnreadAnnouncementCountQuery(courseId, {
     skip: !courseId,
@@ -92,6 +97,12 @@ export const SideNavCourse = ({
       isVisible: canSeeGradeBook,
     },
     {
+      name: "Enrollments",
+      icon: <UsersIcon className="h-5 w-5" />,
+      href: `/courses/${course?.id}/enrollments`,
+      isVisible: canSeeEnrollments,
+    },
+    {
       name: "Course Settings",
       icon: <CogIcon className="h-5 w-5" />,
       href: `/courses/${course?.id}/settings`,
@@ -114,7 +125,7 @@ export const SideNavCourse = ({
         selected={isOpen}
         data-selected={isOpen}
         onClick={() => onToggle()}
-        className="px-3 py-2 select-courses hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900"
+        className="px-3 py-2 select-courses hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900 select-none"
         ripple={false}
         disabled={isCourseLoading}
       >

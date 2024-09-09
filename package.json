@@ -25,6 +25,7 @@
     "@radix-ui/react-scroll-area": "^1.1.0",
     "@radix-ui/react-slot": "^1.1.0",
     "@reduxjs/toolkit": "^2.2.7",
+    "@tanstack/react-table": "^8.20.5",
     "bcrypt": "^5.1.1",
     "cache-manager": "^5.7.6",
     "class-variance-authority": "^0.7.0",
