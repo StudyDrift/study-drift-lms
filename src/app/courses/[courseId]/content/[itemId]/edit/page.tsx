@@ -79,9 +79,11 @@ export default function Page() {
               },
             }}
           >
-            <Button className="flex items-center gap-2" variant="outlined">
-              <EyeIcon className="w-4 h-4" /> Preview
-            </Button>
+            <div>
+              <Button className="flex items-center gap-2" variant="outlined">
+                <EyeIcon className="w-4 h-4" /> Preview
+              </Button>
+            </div>
           </ScopedCommand>
         </Link>,
         <ScopedCommand
@@ -96,15 +98,16 @@ export default function Page() {
             },
           }}
         >
-          <Button
-            color="blue"
-            className="flex items-center gap-2"
-            onClick={handlePublish}
-            loading={isUpdating}
-          >
-            <RocketLaunchIcon className="w-4 h-4" /> Publish
-          </Button>
-          ,
+          <div>
+            <Button
+              color="blue"
+              className="flex items-center gap-2"
+              onClick={handlePublish}
+              loading={isUpdating}
+            >
+              <RocketLaunchIcon className="w-4 h-4" /> Publish
+            </Button>
+          </div>
         </ScopedCommand>,
       ]}
     >

@@ -53,7 +53,8 @@ export const ContentModuleRow = ({
     for (const child of newChildren) {
       if (
         child.contentTypeId !==
-        item.children?.find((c) => c.id === child.id)?.contentTypeId
+          item.children?.find((c) => c.id === child.id)?.contentTypeId ||
+        child.name !== item.children?.find((c) => c.id === child.id)?.name
       ) {
         setChildren(item.children || [])
         break
