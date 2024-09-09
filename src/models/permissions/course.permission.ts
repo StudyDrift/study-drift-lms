@@ -7,6 +7,7 @@ enum Resources {
   Content = "content",
   Announcements = "announcements",
   Outcomes = "outcomes",
+  Syllabus = "syllabus",
 }
 
 export const PERMISSION_COURSE_GRADEBOOK_VIEW = generatePermission({
@@ -55,4 +56,10 @@ export const PERMISSION_COURSE_OUTCOMES_CREATE = generatePermission({
   service: APP,
   resource: Resources.Outcomes,
   action: PermissionAction.Create,
+})
+
+export const PERMISSION_COURSE_SYLLABUS_UPDATE = generatePermission({
+  service: APP,
+  resource: Resources.Syllabus,
+  action: PermissionAction.Update,
 })

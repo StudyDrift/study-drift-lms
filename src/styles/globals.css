@@ -116,27 +116,27 @@
 }
 
 .prose h1 {
-  @apply text-4xl;
+  @apply text-4xl mb-2;
 }
 
 .prose h2 {
-  @apply text-3xl;
+  @apply text-3xl mb-2;
 }
 
 .prose h3 {
-  @apply text-2xl;
+  @apply text-2xl mb-2;
 }
 
 .prose h4 {
-  @apply text-xl;
+  @apply text-xl mb-2;
 }
 
 .prose h5 {
-  @apply text-lg;
+  @apply text-lg mb-2;
 }
 
 .prose h6 {
-  @apply text-base;
+  @apply text-base mb-2;
 }
 
 .prose blockquote {
