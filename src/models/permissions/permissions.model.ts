@@ -1,13 +1,3 @@
-/**
- * Another Proposal:
- *   Permission:
- *     {service}:{resource}:{action}
- *   Role:
- *     Instructor
- *     Scope: course
- *     id: {courseId}
- */
-
 export type Permission = `${string}:${string}:${string}` | `${string}:${string}`
 
 export enum PermissionAction {

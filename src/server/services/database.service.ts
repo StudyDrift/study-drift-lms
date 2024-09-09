@@ -1,4 +1,4 @@
-import { Db, MongoClient, MongoClientOptions } from "mongodb"
+import { Db, MongoClient, MongoClientOptions, ProfilingLevel } from "mongodb"
 import { getEnv } from "../utils/env"
 
 let db: Db | null = null
@@ -17,6 +17,7 @@ const createDb = async () => {
 
   const client = new MongoClient(uri, options)
   db = (await client.connect()).db(getEnv("DATABASE_NAME", true))
+  db.setProfilingLevel(ProfilingLevel.all)
 }
 
 export async function getCollection<T extends Object>(name: string) {

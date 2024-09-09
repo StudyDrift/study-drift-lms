@@ -1,5 +1,6 @@
 import { Permission } from "@/models/permissions/permissions.model"
-import { redirect } from "next/navigation"
+import { useGetAllPermissionsQuery } from "@/redux/services/permission.api"
+import { redirect, useParams } from "next/navigation"
 
 export const useRestrictions = (permission?: Permission) => {
   if (!permission) return null
@@ -12,11 +13,24 @@ export const useRestrictions = (permission?: Permission) => {
 }
 
 export const useCheckPermission = (permission?: Permission) => {
-  if (!permission) return true
-  return true
+  const { courseId } = useParams<{ courseId?: string }>()
+  const { data: permissions, isLoading } = useGetAllPermissionsQuery({
+    courseId,
+  })
+
+  const permissionGranted = permissions?.some((p) => p === permission)
+
+  return permissionGranted && !isLoading
 }
 
 export const useCheckPermissions = (permissions: Permission[]) => {
-  if (permissions.length === 0) return true
-  return true
+  const { courseId } = useParams<{ courseId?: string }>()
+  const { data: userPermissions, isLoading } = useGetAllPermissionsQuery({
+    courseId,
+  })
+
+  return (
+    permissions.every((p) => userPermissions?.some((p2) => p === p2)) &&
+    !isLoading
+  )
 }

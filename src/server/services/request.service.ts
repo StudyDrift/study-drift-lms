@@ -1,5 +1,8 @@
 import { getClaimsFromToken } from "@/lib/jwt"
+import { Permission } from "@/models/permissions/permissions.model"
+import { RequestParams } from "@/models/request.model"
 import { NextRequest, NextResponse } from "next/server"
+import { getUserPermissions } from "./permission.service"
 
 export function toJson<T>(req: NextRequest) {
   return req.json() as Promise<T>
@@ -26,4 +29,28 @@ export const getUserId = (req: NextRequest) => {
   const claims = getClaimsFromToken(token!)
 
   return claims?.user.id
+}
+
+type Callback = (req: NextRequest, params: RequestParams<any>) => any
+
+export const withPermission = (permission: Permission, callback: Callback) => {
+  return async (
+    req: NextRequest,
+    requestParams: RequestParams<{ courseId: string }> = {
+      params: { courseId: "" },
+    }
+  ) => {
+    const userId = getUserId(req)
+    if (!userId) return unauthorized()
+
+    const userPermissions = await getUserPermissions(userId, {
+      courseId: requestParams.params?.courseId,
+    })
+
+    if (userPermissions.includes(permission)) {
+      return callback(req, requestParams)
+    }
+
+    return unauthorized()
+  }
 }

@@ -6,10 +6,13 @@ import {
   PERMISSION_COURSE_CONTENT_CREATE,
   PERMISSION_COURSE_CONTENT_UPDATE,
   PERMISSION_COURSE_GRADEBOOK_VIEW,
+  PERMISSION_COURSE_OUTCOMES_CREATE,
   PERMISSION_COURSE_SETTINGS_VIEW,
 } from "@/models/permissions/course.permission"
 import { PERMISSION_COURSES_CREATE } from "@/models/permissions/courses.permissions"
+import { PERMISSION_GLOBAL_ALL_ROLES_VIEW } from "@/models/permissions/global.permission"
 import { Role } from "@/models/permissions/permissions.model"
+import { getCacheItem, setCacheItem } from "./cache.service"
 import { getCollection } from "./database.service"
 import { getEnrollmentByUserAndCourse } from "./enrollment.service"
 import { getUserRole } from "./user.service"
@@ -21,11 +24,13 @@ const INSTRUCTOR_PERMISSIONS = [
   PERMISSION_COURSE_SETTINGS_VIEW,
   PERMISSION_COURSE_ANNOUNCEMENTS_CREATE,
   PERMISSION_COURSE_ANNOUNCEMENTS_DELETE,
+  PERMISSION_COURSE_OUTCOMES_CREATE,
 ]
 
 const ADMIN_PERMISSIONS = [
   PERMISSION_APPS_SETTINGS_VIEW,
   PERMISSION_COURSES_CREATE,
+  PERMISSION_GLOBAL_ALL_ROLES_VIEW,
   ...INSTRUCTOR_PERMISSIONS,
 ]
 
@@ -98,10 +103,11 @@ export const getAllRoles = async () => {
 }
 
 export const getRoles = async (
-  roles: Array<{ role: string; scope: string }>
+  roles: Array<{ name: string; scope: string }>
 ) => {
   const collection = await getCollection<Role>("roles")
 
+  // Find by role and scope
   return collection.find({ $or: roles }, { projection: { _id: 0 } }).toArray()
 }
 
@@ -109,9 +115,14 @@ export const getUserPermissions = async (
   userId: string,
   options: CommandContextOption
 ) => {
+  const cacheKey = `permissions:${userId}:${options.courseId}`
+  const cache = await getCacheItem<Role[]>(cacheKey)
+
+  if (cache) return cache.flatMap((role) => role.permissions)
+
   const user = await getUserRole(userId)
 
-  const roleParams = [{ role: user?.role ?? "Student", scope: "*" }]
+  const roleParams = [{ name: user?.role ?? "Student", scope: "*" }]
 
   if (options.courseId) {
     const enrollment = await getEnrollmentByUserAndCourse(
@@ -120,11 +131,13 @@ export const getUserPermissions = async (
     )
 
     if (enrollment) {
-      roleParams.push({ role: enrollment.role, scope: "course" })
+      roleParams.push({ name: enrollment.role, scope: "course" })
     }
   }
 
   const roles = await getRoles(roleParams)
+
+  await setCacheItem(cacheKey, roles, 1000 * 60)
 
   return roles.flatMap((role) => role.permissions)
 }

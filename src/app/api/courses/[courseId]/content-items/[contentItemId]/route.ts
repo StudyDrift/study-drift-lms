@@ -1,4 +1,8 @@
 import { UpdateContentItemPayload } from "@/models/content.model"
+import {
+  PERMISSION_COURSE_CONTENT_DELETE,
+  PERMISSION_COURSE_CONTENT_UPDATE,
+} from "@/models/permissions/course.permission"
 import { RequestParams } from "@/models/request.model"
 import {
   deleteContentItem,
@@ -10,6 +14,7 @@ import {
   getUserId,
   success,
   unauthorized,
+  withPermission,
 } from "@/server/services/request.service"
 import { NextRequest } from "next/server"
 
@@ -24,34 +29,40 @@ export const GET = async (
   return success(item)
 }
 
-export const DELETE = async (
-  req: NextRequest,
-  { params }: RequestParams<{ courseId: string; contentItemId: string }>
-) => {
-  const userId = getUserId(req)
-  if (!userId) return unauthorized()
-  const contentItemId = params.contentItemId
-  if (!contentItemId) return failure("Missing content item id")
+export const DELETE = withPermission(
+  PERMISSION_COURSE_CONTENT_DELETE,
+  async (
+    req: NextRequest,
+    { params }: RequestParams<{ courseId: string; contentItemId: string }>
+  ) => {
+    const userId = getUserId(req)
+    if (!userId) return unauthorized()
+    const contentItemId = params.contentItemId
+    if (!contentItemId) return failure("Missing content item id")
 
-  await deleteContentItem(contentItemId, userId)
-  return success({ message: "Content item deleted" })
-}
+    await deleteContentItem(contentItemId, userId)
+    return success({ message: "Content item deleted" })
+  }
+)
 
-export const PATCH = async (
-  req: NextRequest,
-  { params }: RequestParams<{ courseId: string; contentItemId: string }>
-) => {
-  const userId = getUserId(req)
-  if (!userId) return unauthorized()
-  const contentItemId = params.contentItemId
-  if (!contentItemId) return failure("Missing content item id")
+export const PATCH = withPermission(
+  PERMISSION_COURSE_CONTENT_UPDATE,
+  async (
+    req: NextRequest,
+    { params }: RequestParams<{ courseId: string; contentItemId: string }>
+  ) => {
+    const userId = getUserId(req)
+    if (!userId) return unauthorized()
+    const contentItemId = params.contentItemId
+    if (!contentItemId) return failure("Missing content item id")
 
-  const body = (await req.json()) as UpdateContentItemPayload
-  if (!body) return failure("Missing body")
+    const body = (await req.json()) as UpdateContentItemPayload
+    if (!body) return failure("Missing body")
 
-  await updateContentItem(contentItemId, body, userId)
+    await updateContentItem(contentItemId, body, userId)
 
-  const item = await getContentItemById(contentItemId)
+    const item = await getContentItemById(contentItemId)
 
-  return success(item)
-}
+    return success(item)
+  }
+)

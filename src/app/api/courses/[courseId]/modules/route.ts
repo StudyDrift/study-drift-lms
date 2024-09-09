@@ -1,4 +1,5 @@
 import { CreateContentModulePayload } from "@/models/content.model"
+import { PERMISSION_COURSE_CONTENT_CREATE } from "@/models/permissions/course.permission"
 import { RequestParams } from "@/models/request.model"
 import { getContentItemsByModuleIds } from "@/server/services/content-item.service"
 import {
@@ -11,16 +12,20 @@ import {
   success,
   toJson,
   unauthorized,
+  withPermission,
 } from "@/server/services/request.service"
 import { NextRequest } from "next/server"
 
-export const POST = async (req: NextRequest) => {
-  const body = await toJson<CreateContentModulePayload>(req)
-  const userId = getUserId(req)
-  if (!userId) return unauthorized()
-  const contentModule = await createContentModule(body, userId)
-  return success(contentModule)
-}
+export const POST = withPermission(
+  PERMISSION_COURSE_CONTENT_CREATE,
+  async (req: NextRequest) => {
+    const body = await toJson<CreateContentModulePayload>(req)
+    const userId = getUserId(req)
+    if (!userId) return unauthorized()
+    const contentModule = await createContentModule(body, userId)
+    return success(contentModule)
+  }
+)
 
 export const GET = async (
   req: NextRequest,

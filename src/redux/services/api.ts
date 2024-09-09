@@ -52,6 +52,7 @@ export const api = createApi({
     "Commands",
     "Announcements",
     "UnreadAnnouncementsCount",
+    "Permissions",
   ],
   /**
    * This api has endpoints injected in adjacent files,
