@@ -18,13 +18,16 @@ export const SideNav = () => {
     else setOpen(open === value ? "" : value)
   }
 
-  const LIST_ITEM_STYLES =
-    "select-none hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900 px-3 py-2 select-none"
+  const BASE_LIST_ITEM_STYLES = "select-none px-3 py-2"
+  const LIGHT_LIST_ITEM_STYLES = `hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900`
+  const DARK_LIST_ITEM_STYLES = `dark:text-white/90 dark:hover:bg-gray-700 dark:focus:bg-gray-700 dark:active:bg-gray-700 dark:hover:text-white dark:focus:text-white dark:active:text-white dark:data-[selected=true]:text-white`
+
+  const LIST_ITEM_STYLES = `${BASE_LIST_ITEM_STYLES} ${LIGHT_LIST_ITEM_STYLES} ${DARK_LIST_ITEM_STYLES}`
 
   return (
-    <Card className="h-[calc(100vh-1rem)] w-full max-w-[20rem] mx-auto p-1 shadow-md fixed mt-[0.5rem]">
+    <Card className="h-screen w-full max-w-[20rem] mx-auto p-1 shadow-md fixed bg-white dark:bg-gray-900 rounded-tl-none rounded-bl-none">
       <div className="mb-2 flex items-center gap-4 py-2 px-3">
-        <Typography color="blue-gray" className="text-lg font-bold">
+        <Typography className="text-lg font-bold text-blue-gray-900 dark:text-white">
           Study Drift
         </Typography>
       </div>

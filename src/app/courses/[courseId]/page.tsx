@@ -1,13 +1,7 @@
 "use client"
-import { RootPage } from "@/components/root-page"
-import { useCourseData } from "@/hooks/use-course-data.hooks"
+import { redirect, useParams } from "next/navigation"
 
 export default function Page() {
-  const { course, isLoading: isCourseLoading } = useCourseData()
-
-  return (
-    <RootPage title="Course" isLoading={isCourseLoading}>
-      Welcome to the course
-    </RootPage>
-  )
+  const { courseId } = useParams<{ courseId: string }>()
+  return redirect(`/courses/${courseId}/home`)
 }

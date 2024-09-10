@@ -74,7 +74,7 @@ export const SideNavApps = ({ isOpen, onToggle, listItemClassName }: Props) => {
         selected={isOpen}
         data-selected={isOpen}
         onClick={onToggle}
-        className="px-3 py-2 select-none hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900"
+        className={listItemClassName}
         ripple={false}
       >
         <Typography className="mr-auto font-normal text-inherit">
@@ -107,7 +107,7 @@ export const SideNavApps = ({ isOpen, onToggle, listItemClassName }: Props) => {
                   data-selected={open === item.name}
                   onClick={() => setOpen(open === item.name ? "" : item.name)}
                   ripple={false}
-                  className="px-3 py-2 select-none hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900"
+                  className={listItemClassName}
                 >
                   <ListItemPrefix>{item.icon}</ListItemPrefix>
                   <Typography className="mr-auto font-normal text-inherit">

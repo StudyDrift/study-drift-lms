@@ -1,5 +1,6 @@
 import type { Config } from "tailwindcss"
 const withMT = require("@material-tailwind/react/utils/withMT")
+const plugin = require("tailwindcss/plugin")
 
 const config: Config = withMT({
   darkMode: ["class"],
@@ -85,8 +86,8 @@ const config: Config = withMT({
         },
       },
       animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
+        "accordion-down": "accordion-down 0.2s cubic-bezier(0.4, 0, 0.6, 1)",
+        "accordion-up": "accordion-up 0.2s cubic-bezier(0.4, 0, 0.6, 1)",
       },
     },
   },

@@ -51,7 +51,7 @@ export const SideNavProfile = ({
         selected={isOpen}
         data-selected={isOpen}
         onClick={onToggle}
-        className="px-3 py-2 select-none hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900"
+        className={listItemClassName}
         ripple={false}
       >
         <ListItemPrefix>

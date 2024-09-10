@@ -74,7 +74,6 @@ export default function Page() {
               <Button>Create Course</Button>
             </Link>
           </ScopedCommand>
-          ,
         </Restrict>,
       ]}
     >

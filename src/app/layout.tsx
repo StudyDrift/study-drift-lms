@@ -22,7 +22,8 @@ export default function RootLayout({
       <html lang="en" suppressHydrationWarning>
         <body
           className={
-            inter.className + " flex h-screen w-screen flex-row bg-gray-100/60"
+            inter.className +
+            " flex h-screen w-screen flex-row bg-gray-100/60 dark:bg-gray-900/70"
           }
         >
           <Providers>{children}</Providers>

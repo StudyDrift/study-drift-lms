@@ -55,6 +55,7 @@ export const api = createApi({
     "Permissions",
     "Syllabus",
     "Enrollments",
+    "UserSettings",
   ],
   /**
    * This api has endpoints injected in adjacent files,

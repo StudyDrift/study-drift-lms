@@ -3,6 +3,7 @@ import { useRestrictions } from "@/hooks/use-restrictions.hook"
 import { Permission } from "@/models/permissions/permissions.model"
 import { Typography } from "@material-tailwind/react"
 import React, { PropsWithChildren } from "react"
+import { ScrollArea } from "../ui/scroll-area"
 import { Skeleton } from "../ui/skeleton"
 
 interface PageProps extends PropsWithChildren {
@@ -22,7 +23,7 @@ export const RootPage = ({
   useRestrictions(permission)
 
   return (
-    <div className="bg-gray-100/60 pb-24">
+    <div className="bg-gray-100/60 pb-24 dark:bg-gray-900/70">
       <main className="pl-[21rem] py-4 pr-4 flex-1 w-screen">
         {title && (
           <div className="flex justify-between flex-row w-full">
@@ -32,7 +33,9 @@ export const RootPage = ({
             <div className="flex gap-2">{actions}</div>
           </div>
         )}
-        {!isLoading && children}
+        <ScrollArea>
+          <div className="mb-16">{!isLoading && children}</div>
+        </ScrollArea>
         {isLoading && (
           <div className="flex flex-col gap-2 mt-4">
             <Skeleton className="w-1/3 h-3" />
