@@ -49,6 +49,7 @@ export default function Page() {
                     required
                     onChange={(e) => setEmail(e.target.value)}
                     value={email}
+                    autoFocus
                   />
                 </div>
                 <div className="grid gap-2">

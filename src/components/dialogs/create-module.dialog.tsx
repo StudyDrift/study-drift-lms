@@ -61,8 +61,8 @@ export const CreateModuleDialog = ({ isOpen, onClose }: Props) => {
   return (
     <Dialog open={isOpen} handler={onClose}>
       <DialogHeader>Create Module</DialogHeader>
-      <ScrollArea>
-        <DialogBody>
+      <DialogBody>
+        <ScrollArea>
           <Typography variant="small" color="gray" className="mb-4">
             A module is a way to segment content items and activities. Settings,
             such as dates, visibility, and outcomes can be applied to the
@@ -119,20 +119,16 @@ export const CreateModuleDialog = ({ isOpen, onClose }: Props) => {
               </ListItem>
             ))}
           </List>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="text" color="red" onClick={onClose} className="mr-1">
-            <span>Cancel</span>
-          </Button>
-          <Button
-            color="green"
-            onClick={handleSubmit}
-            loading={isCreatingModule}
-          >
-            <span>Confirm</span>
-          </Button>
-        </DialogFooter>
-      </ScrollArea>
+        </ScrollArea>
+      </DialogBody>
+      <DialogFooter>
+        <Button variant="text" color="red" onClick={onClose} className="mr-1">
+          <span>Cancel</span>
+        </Button>
+        <Button color="green" onClick={handleSubmit} loading={isCreatingModule}>
+          <span>Confirm</span>
+        </Button>
+      </DialogFooter>
     </Dialog>
   )
 }

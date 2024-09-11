@@ -23,7 +23,7 @@ export default function RootLayout({
         <body
           className={
             inter.className +
-            " flex h-screen w-screen flex-row bg-gray-100/60 dark:bg-gray-900/70"
+            " flex h-screen w-screen flex-row bg-gray-100/60 dark:bg-gray-900/75"
           }
         >
           <Providers>{children}</Providers>

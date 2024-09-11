@@ -17,7 +17,7 @@ export const AddNewContent = ({ moduleId, itemCount }: Props) => {
     <Restrict permission={PERMISSION_COURSE_CONTENT_CREATE}>
       <ListItem
         onClick={() => setAddItemOpen(true)}
-        className="flex flex-row gap-2 items-center justify-center bg-gray-200 text-gray-900 rounded-md p-2"
+        className="flex flex-row gap-2 items-center justify-center rounded-md p-2 bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-300"
         ripple={false}
       >
         <PlusIcon className="h-4 w-4 mr-2" />

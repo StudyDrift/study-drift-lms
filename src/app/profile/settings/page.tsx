@@ -52,7 +52,7 @@ export default function Page() {
         </Button>,
       ]}
     >
-      <Card className="max-w-2xl mt-4">
+      <Card className="max-w-2xl mt-4 mb-20">
         <CardBody>
           <Typography variant="h5" className="mb-4">
             Display Settings

@@ -31,6 +31,13 @@ interface Props {
   dragHandle?: React.ReactNode
 }
 
+const LIST_ITEM_DARK =
+  "dark:hover:bg-gray-700 dark:focus:bg-gray-700 dark:active:bg-gray-700 dark:hover:text-gray-300 dark:focus:text-gray-300 dark:active:text-gray-300 dark:bg-gray-800 dark:data-[selected=true]:text-gray-300"
+const LIST_ITEM_LIGHT =
+  "hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900 bg-white"
+const LIST_ITEM_BASE_STYLES = `px-3 py-2 select-courses rounded-lg shadow-md`
+const LIST_ITEM_STYLES = `${LIST_ITEM_BASE_STYLES} ${LIST_ITEM_LIGHT} ${LIST_ITEM_DARK}`
+
 export const ContentModuleRow = ({
   item,
   isOpen,
@@ -86,10 +93,7 @@ export const ContentModuleRow = ({
         selected={isOpen}
         data-selected={isOpen}
         onClick={onToggle}
-        className={
-          "px-3 py-2 select-courses hover:bg-gray-100 focus:bg-gray-100 active:bg-gray-100 hover:text-gray-900 focus:text-gray-900 active:text-gray-900 data-[selected=true]:text-gray-900 bg-white rounded-lg shadow-md " +
-          (isOpen ? "rounded-b-none" : "")
-        }
+        className={LIST_ITEM_STYLES + (isOpen ? " rounded-b-none" : "")}
         ripple={false}
       >
         <Typography className="mr-auto font-normal text-inherit flex flex-row items-center gap-3">
