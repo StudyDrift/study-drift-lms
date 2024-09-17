@@ -1,13 +1,12 @@
 "use client"
 import { ScopedCommand } from "@/components/command-pallete/scoped-command"
-import InitializedMDXEditor from "@/components/editor/InitializedMDXEditor"
+import { Editor } from "@/components/editor"
 import { RootPage } from "@/components/root-page"
 import {
   useGetSyllabusByCourseIdQuery,
   useUpdateSyllabusMutation,
 } from "@/redux/services/syllabus.api"
-import { Button, Card } from "@material-tailwind/react"
-import { MDXEditorMethods } from "@mdxeditor/editor"
+import { Button } from "@material-tailwind/react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
@@ -24,12 +23,6 @@ export default function Page() {
     useUpdateSyllabusMutation()
 
   const [body, setBody] = useState<string>(syllabus?.body || "")
-
-  const editor = useRef<MDXEditorMethods>(null)
-
-  useEffect(() => {
-    editor.current?.setMarkdown(syllabus?.body || "")
-  }, [syllabus])
 
   const isSet = useRef(false)
 
@@ -94,16 +87,11 @@ export default function Page() {
         </ScopedCommand>,
       ]}
     >
-      <Card className="min-h-screen mt-8">
-        <InitializedMDXEditor
-          editorRef={editor}
-          markdown={syllabus?.body || ""}
-          onChange={(body) => setBody(body)}
-          contentEditableClassName="prose"
-          placeholder="Start typing here..."
-          className="min-h-screen"
-        />
-      </Card>
+      <Editor
+        className="min-h-screen mt-8"
+        value={body}
+        onChange={(body) => setBody(body)}
+      />
     </RootPage>
   )
 }

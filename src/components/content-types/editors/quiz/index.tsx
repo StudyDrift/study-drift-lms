@@ -1,5 +1,5 @@
 import { SortableList } from "@/components/dnd/sortable-list"
-import InitializedMDXEditor from "@/components/editor/InitializedMDXEditor"
+import { Editor } from "@/components/editor"
 import { ContentItem } from "@/models/content.model"
 import {
   FillInTheBlankQuizQuestion,
@@ -15,9 +15,8 @@ import {
   Select,
   Typography,
 } from "@material-tailwind/react"
-import { MDXEditorMethods } from "@mdxeditor/editor"
 import { nanoid } from "nanoid"
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { QuizFillInTheBlank } from "./fill-in-the-blank"
 import { QuizMultipleChoice } from "./multiple-choice"
 
@@ -174,8 +173,8 @@ export const ContentTypeQuiz = ({ item, onChange }: Props) => {
               <div className="mt-4">
                 <Typography variant="h6">Question Content</Typography>
                 <div className="border border-gray-300 rounded-xl">
-                  <QuestionContentEditor
-                    content={q.content}
+                  <Editor
+                    value={q.content}
                     onChange={(content) =>
                       handleQuestionChange(q, "content", content)
                     }
@@ -197,29 +196,5 @@ export const ContentTypeQuiz = ({ item, onChange }: Props) => {
         Add Question
       </Button>
     </div>
-  )
-}
-
-const QuestionContentEditor = ({
-  content,
-  onChange,
-}: {
-  content: string
-  onChange: (content: string) => void
-}) => {
-  const editor = useRef<MDXEditorMethods>(null)
-
-  useEffect(() => {
-    editor.current?.setMarkdown(content || "")
-  }, [content])
-
-  return (
-    <InitializedMDXEditor
-      editorRef={editor}
-      markdown={content || ""}
-      onChange={(body) => onChange(body)}
-      contentEditableClassName="prose"
-      placeholder="Start typing here..."
-    />
   )
 }

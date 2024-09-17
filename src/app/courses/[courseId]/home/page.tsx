@@ -2,21 +2,25 @@
 import { ScopedCommand } from "@/components/command-pallete/scoped-command"
 import { Restrict } from "@/components/permission/restrict"
 import { RootPage } from "@/components/root-page"
-import { useCourseData } from "@/hooks/use-course-data.hooks"
 import { PERMISSION_COURSE_CONTENT_UPDATE } from "@/models/permissions/course.permission"
-import { Button } from "@material-tailwind/react"
+import { useGetCourseHomeQuery } from "@/redux/services/course-home.api"
+import { Button, Card, CardBody } from "@material-tailwind/react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
+import Markdown from "react-markdown"
+import rehypeRaw from "rehype-raw"
+import remarkGfm from "remark-gfm"
 
 export default function Page() {
-  const { course, isLoading: isCourseLoading } = useCourseData()
   const { courseId } = useParams<{ courseId: string }>()
+  const { data: courseHome, isLoading: isCourseHomeLoading } =
+    useGetCourseHomeQuery(courseId)
   const router = useRouter()
 
   return (
     <RootPage
       title="Course"
-      isLoading={isCourseLoading}
+      isLoading={isCourseHomeLoading}
       actions={[
         <Restrict permission={PERMISSION_COURSE_CONTENT_UPDATE} key="edit">
           <ScopedCommand
@@ -37,7 +41,17 @@ export default function Page() {
         </Restrict>,
       ]}
     >
-      Welcome to the course
+      <Card className="mt-8">
+        <CardBody>
+          <Markdown
+            className="prose"
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeRaw]}
+          >
+            {courseHome?.body}
+          </Markdown>
+        </CardBody>
+      </Card>
     </RootPage>
   )
 }

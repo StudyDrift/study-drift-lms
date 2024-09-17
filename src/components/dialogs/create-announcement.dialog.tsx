@@ -2,7 +2,6 @@ import { cn } from "@/lib/utils"
 import { useCreateAnnouncementMutation } from "@/redux/services/announcement.api"
 import {
   Button,
-  Card,
   Dialog,
   DialogBody,
   DialogFooter,
@@ -10,12 +9,11 @@ import {
   Input,
   Typography,
 } from "@material-tailwind/react"
-import { MDXEditorMethods } from "@mdxeditor/editor"
 import { format } from "date-fns"
 import { CalendarIcon } from "lucide-react"
 import { useParams } from "next/navigation"
-import { useRef, useState } from "react"
-import InitializedMDXEditor from "../editor/InitializedMDXEditor"
+import { useState } from "react"
+import { Editor } from "../editor"
 import { Calendar } from "../ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { ScrollArea } from "../ui/scroll-area"
@@ -26,7 +24,6 @@ interface Props {
 }
 
 export const CreateAnnouncementDialog = ({ isOpen, onClose }: Props) => {
-  const editor = useRef<MDXEditorMethods>(null)
   const { courseId } = useParams<{ courseId: string }>()
   const [content, setContent] = useState("")
   const [title, setTitle] = useState("")
@@ -77,7 +74,6 @@ export const CreateAnnouncementDialog = ({ isOpen, onClose }: Props) => {
       },
     })
 
-    editor.current?.setMarkdown("")
     setTitle("")
     setContent("")
     setVisibilityStartDate(undefined)
@@ -104,16 +100,11 @@ export const CreateAnnouncementDialog = ({ isOpen, onClose }: Props) => {
               autoFocus
             />
           </div>
-          <Card className="min-h-60">
-            <InitializedMDXEditor
-              editorRef={editor}
-              markdown={content}
-              onChange={(body) => setContent(body)}
-              contentEditableClassName="prose"
-              placeholder="Start typing here..."
-              className="min-h-60"
-            />
-          </Card>
+          <Editor
+            className="min-h-60"
+            value={content}
+            onChange={(body) => setContent(body)}
+          />
           <div className="mt-4 flex flex-row gap-4">
             <div className="flex flex-col gap-4 ">
               <Typography variant="h6">Visibility Start Date</Typography>

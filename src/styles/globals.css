@@ -221,3 +221,7 @@
 [class*="popupContainer"] {
   z-index: 99999 !important;
 }
+
+.mdxeditor-diff-source-wrapper {
+  flex: 1;
+}

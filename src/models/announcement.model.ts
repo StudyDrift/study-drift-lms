@@ -14,4 +14,7 @@ export interface Announcement {
   meta: Record<string, any>
 }
 
-export type CreateAnnouncementPayload = Omit<Announcement, "id" | "postedById">
+export type CreateAnnouncementPayload = Omit<
+  Announcement,
+  "id" | "postedById" | "viewedByIds" | "isViewed"
+>
