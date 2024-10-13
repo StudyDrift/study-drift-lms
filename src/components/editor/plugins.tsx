@@ -134,7 +134,7 @@ export const ALL_PLUGINS = [
   toolbarPlugin({ toolbarContents: () => <KitchenSinkToolbar /> }),
   listsPlugin(),
   quotePlugin(),
-  headingsPlugin({ allowedHeadingLevels: [1, 2, 3] }),
+  headingsPlugin({ allowedHeadingLevels: [1, 2, 3, 4, 5, 6] }),
   linkPlugin(),
   linkDialogPlugin(),
   imagePlugin({
