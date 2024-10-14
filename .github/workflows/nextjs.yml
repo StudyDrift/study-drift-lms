@@ -12,6 +12,19 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+  # Pull requests
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+      - "**/README.md"
+      - "**/LICENSE"
+      - "**/SECURITY.md"
+      - "**/.gitignore"
+      - "**/resources/**"
+      - "**/.github/ISSUE_TEMPLATE/**"
+      - "**/website/**"
+
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
