@@ -1,12 +1,16 @@
 import { useCommand } from "@/hooks/use-command"
 import { Command as CommandModel } from "@/models/command.model"
 import { useGetCommandsQuery } from "@/redux/services/command.api"
-import { selectScopedCommands } from "@/redux/slices/commands.slice"
+import {
+  selectIsCommandsVisible,
+  selectScopedCommands,
+  setIsCommandsVisible,
+} from "@/redux/slices/commands.slice"
 import { PackageIcon } from "lucide-react"
 import { useParams } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useHotkeys, useHotkeysContext } from "react-hotkeys-hook"
-import { useSelector } from "react-redux"
+import { useDispatch, useSelector } from "react-redux"
 import OutsideClickClose from "../events/outside-click"
 import { getIcon } from "../icons"
 import {
@@ -25,12 +29,20 @@ export const CommandPallete = () => {
   const [isActionMode, setIsActionMode] = useState(false)
   const { toggleScope } = useHotkeysContext()
   const { courseId } = useParams<{ courseId?: string }>()
+  const dispatch = useDispatch()
 
   const { data: commands } = useGetCommandsQuery({
     courseId,
   })
 
   const scopedCommands = useSelector(selectScopedCommands)
+  const isVisible = useSelector(selectIsCommandsVisible)
+
+  useEffect(() => {
+    if (isVisible) {
+      toggle()
+    }
+  }, [isVisible])
 
   const allCommands = [...(commands || []), ...scopedCommands]
   const filteredCommands = allCommands.filter((c) => {
@@ -54,6 +66,10 @@ export const CommandPallete = () => {
     setIsOpen(!isOpen)
     toggleScope("commands")
     setIsActionMode(false)
+
+    if (!isOpen) {
+      dispatch(setIsCommandsVisible(false))
+    }
   }
 
   useHotkeys("meta+k", () => toggle(), { scopes: ["global"] })
