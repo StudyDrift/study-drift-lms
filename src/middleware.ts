@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { validateToken } from "./lib/jwt"
 
-const WHITELIST = ["/api/auth/login", "/api/auth/register", "/api/auth/token"]
+const WHITELIST = [
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/token",
+  "/api/versions",
+]
 
 export async function middleware(req: NextRequest, res: NextResponse) {
   if (

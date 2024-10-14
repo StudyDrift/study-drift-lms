@@ -45,6 +45,12 @@
    MONGODB_URI=<your_mongodb_connection_string>
    ```
 
+   We do provide a docker-compose.yml file for convenience with the mongo image.
+
+   ```bash
+   docker-compose up -d
+   ```
+
 4. Run the development server:
 
    ```bash
