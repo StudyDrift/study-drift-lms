@@ -130,7 +130,7 @@ export const SideNavCourse = ({
         disabled={isCourseLoading}
       >
         <Typography className="mr-auto font-normal text-inherit">
-          {course.code}
+          {course.name}
         </Typography>
         <ChevronDownIcon
           strokeWidth={3}

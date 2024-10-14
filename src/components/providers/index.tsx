@@ -1,6 +1,7 @@
 "use client"
 import { useAuth } from "@/hooks/use-auth.hook"
 import { useColorScheme } from "@/hooks/use-color-scheme.hook"
+import { useIsInstall } from "@/hooks/use-install.hook"
 import { THEMES } from "@/lib/theme"
 import { ColorScheme } from "@/models/user-settings.model"
 import { store } from "@/redux/store"
@@ -13,6 +14,10 @@ import { Spinner } from "../loaders/spinner"
 import { SideNav } from "../sidenav"
 
 export const Providers = ({ children }: { children: React.ReactNode }) => {
+  const isInstall = useIsInstall()
+
+  if (isInstall) return <>{children}</>
+
   return (
     <Provider store={store}>
       <HotkeysProvider initiallyActiveScopes={["global"]}>

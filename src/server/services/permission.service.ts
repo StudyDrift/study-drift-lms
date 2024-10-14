@@ -46,7 +46,7 @@ const ADMIN_PERMISSIONS = [
 
 const STUDENT_PERMISSIONS = [PERMISSION_COURSE_GRADEBOOK_VIEW]
 
-const initPermissions = async () => {
+export const initPermissions = async () => {
   const collection = await getCollection<Role>("roles")
 
   await collection.updateOne(

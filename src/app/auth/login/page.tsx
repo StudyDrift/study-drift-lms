@@ -5,16 +5,17 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useInstallHook } from "@/hooks/use-install.hook"
 import { useLoginMutation } from "@/redux/services/auth.api"
 import { Spinner } from "@material-tailwind/react"
-import { useRouter } from "next/navigation"
 import React, { useState } from "react"
 
 export default function Page() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [login, { isLoading }] = useLoginMutation()
-  const router = useRouter()
+
+  useInstallHook()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
