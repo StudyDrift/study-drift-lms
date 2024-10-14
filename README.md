@@ -1,3 +1,30 @@
+<!-- TEXT_SECTION:header:START -->
+<p align="center">
+  <a href="https://linear.app" target="_blank" rel="noopener noreferrer">
+    <img width="150" src="public/logo-trimmed.svg" alt="Linear logo">
+  </a> 
+</p>
+<h1 align="center">
+  Study Drift
+</h1>
+<h3 align="center">
+  Learn by Learning & Teach by Teaching
+</h3>
+<p align="center">
+  Study Drift streamlines the process of course creation, quiz generation, and content management, enabling educators and learners to get to the content as quickly as possible
+</p>
+<p align="center">
+  <a href="/LICENSE">
+    <img src="https://img.shields.io/badge/license-AGPL_3.0-blue" alt="Study Drift is released under the AGPL 3.0 license." />
+  </a>
+  <a href="https://github.com/StudyDrift/study-drift-lms/actions/workflows/nextjs.yml">
+    <img src="https://github.com/StudyDrift/study-drift-lms/actions/workflows/nextjs.yml/badge.svg" alt="Build github action status." />
+  </a>
+</p>
+<!-- TEXT_SECTION:header:END -->
+
+<br/>
+
 # Study Drift LMS
 
 **Study Drift LMS** is an open-source Learning Management System (LMS) built for modern education. Designed with AI integration at its core, it aims to streamline the process of course creation, quiz generation, and content management, enabling educators and learners to get to the content as quickly as possible.
