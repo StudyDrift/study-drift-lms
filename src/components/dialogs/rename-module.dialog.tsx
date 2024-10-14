@@ -37,7 +37,7 @@ export const RenameModuleDialog = ({ isOpen, onClose, item }: Props) => {
 
   return (
     <Dialog open={isOpen} handler={onClose}>
-      <DialogHeader>Rename "{item.name}"</DialogHeader>
+      <DialogHeader>Rename &quot;{item.name}&quot;</DialogHeader>
       <DialogBody>
         <form onSubmit={handleSubmit}>
           <Input
