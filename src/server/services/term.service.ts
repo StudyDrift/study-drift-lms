@@ -1,14 +1,20 @@
 import { Term } from "@/models/term.model"
-import { nanoid } from "@reduxjs/toolkit"
+import { nanoid } from "nanoid"
 import { getCollection } from "./database.service"
 
 const getTermCollection = async () => {
   return await getCollection<Term>("terms")
 }
 
-export const createTerm = async (term: Omit<Term, "id">) => {
+export const createTerm = async (payload: Omit<Term, "id">) => {
+  const term = {
+    ...payload,
+    id: nanoid(),
+  }
   const collection = await getTermCollection()
-  return await collection.insertOne({ ...term, id: nanoid() })
+  await collection.insertOne(term)
+
+  return term
 }
 
 export const getByIds = async (ids: string[]) => {

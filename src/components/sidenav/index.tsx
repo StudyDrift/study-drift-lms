@@ -1,9 +1,11 @@
 "use client"
 import { useGetAppVersionQuery } from "@/redux/services/app.api"
+import { setIsCommandsVisible } from "@/redux/slices/commands.slice"
 import { Card, List, Typography } from "@material-tailwind/react"
 import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
+import { useDispatch } from "react-redux"
 import { ScrollArea } from "../ui/scroll-area"
 import { SideNavApps } from "./apps"
 import { SideNavBottom } from "./bottom"
@@ -14,6 +16,7 @@ import { SideNavProfile } from "./profile"
 export const SideNav = () => {
   const [open, setOpen] = useState("apps")
   const { data: appVersion } = useGetAppVersionQuery()
+  const dispatch = useDispatch()
 
   const handleOpen = (value: any, force?: boolean) => {
     if (force) setOpen(value)
@@ -26,6 +29,10 @@ export const SideNav = () => {
 
   const LIST_ITEM_STYLES = `${BASE_LIST_ITEM_STYLES} ${LIGHT_LIST_ITEM_STYLES} ${DARK_LIST_ITEM_STYLES}`
 
+  const handleSearch = () => {
+    dispatch(setIsCommandsVisible(true))
+  }
+
   return (
     <Card className="h-screen w-full max-w-[20rem] mx-auto p-1 shadow-md fixed bg-white dark:bg-gray-900 rounded-tl-none rounded-bl-none">
       <div className="mb-2 flex items-center gap-4 py-2 px-3">
@@ -37,6 +44,12 @@ export const SideNav = () => {
             </Typography>
           </div>
         </Link>
+      </div>
+      <div
+        onClick={handleSearch}
+        className="py-2 px-3 border border-gray-200 rounded-lg flex justify-start items-center font-medium text-xs text-gray-500 hover:text-gray-700 cursor-pointer hover:border-gray-300"
+      >
+        Search & Commands (cmd+k or ctrl+k)
       </div>
       <hr className="my-2 border-gray-200" />
       <ScrollArea>
