@@ -57,8 +57,8 @@ export const ContentModuleActions = ({ item }: Props) => {
         isConfirmLoading={isDeleting}
       >
         <Typography variant="h6">
-          Are you sure that you want to delete "{item.name}" along with the
-          following content items? This action cannot be undone.
+          Are you sure that you want to delete &quot;{item.name}&quot; along
+          with the following content items? This action cannot be undone.
         </Typography>
         <List>
           {item.children?.map((i) => (

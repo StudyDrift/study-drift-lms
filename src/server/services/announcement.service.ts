@@ -37,6 +37,9 @@ export const createAnnouncement = async (
     postedById: userId,
     courseId,
     viewedByIds: [],
+    dates: {},
+    isViewed: false,
+    meta: {},
   }
   const collection = await getCollection<Announcement>("announcements")
   await collection.insertOne(newAnnouncement)

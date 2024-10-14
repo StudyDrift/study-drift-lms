@@ -16,6 +16,7 @@ interface Props {
 type Callback = () => void
 
 export const ScopedCommand = ({ children, command }: Props) => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const newCommand = { ...command }
   const dispatch = useDispatch()
   const commandSet = useRef("")

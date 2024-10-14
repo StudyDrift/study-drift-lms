@@ -15,7 +15,7 @@ import { ColumnDef } from "@tanstack/react-table"
 import { useParams } from "next/navigation"
 import { useState } from "react"
 
-export const columns: ColumnDef<Enrollment>[] = [
+const columns: ColumnDef<Enrollment>[] = [
   {
     accessorKey: "role",
     header: ({ column }) => <DataTableSortHeader column={column} name="Role" />,
