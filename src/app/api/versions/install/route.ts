@@ -2,7 +2,7 @@ import { InstallAppPayload } from "@/models/version.model"
 import { createPasswordAuthRecord } from "@/server/services/auth/password.auth.service"
 import { installApp } from "@/server/services/install.service"
 import { failure, success, toJson } from "@/server/services/request.service"
-import { provisionUser } from "@/server/services/user.service"
+import { provisionUser, setUserRole } from "@/server/services/user.service"
 import { NextRequest } from "next/server"
 
 export const POST = async (req: NextRequest) => {
@@ -26,6 +26,8 @@ export const POST = async (req: NextRequest) => {
     password: body.password,
     email: body.email,
   })
+
+  await setUserRole(user.id, "Global Admin")
 
   const version = await installApp(user)
 
