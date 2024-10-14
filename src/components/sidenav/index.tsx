@@ -1,6 +1,7 @@
 "use client"
 import { useGetAppVersionQuery } from "@/redux/services/app.api"
 import { Card, List, Typography } from "@material-tailwind/react"
+import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
 import { ScrollArea } from "../ui/scroll-area"
@@ -29,9 +30,12 @@ export const SideNav = () => {
     <Card className="h-screen w-full max-w-[20rem] mx-auto p-1 shadow-md fixed bg-white dark:bg-gray-900 rounded-tl-none rounded-bl-none">
       <div className="mb-2 flex items-center gap-4 py-2 px-3">
         <Link href="/">
-          <Typography className="text-lg font-bold text-blue-gray-900 dark:text-white">
-            Study Drift
-          </Typography>
+          <div className="flex gap-2 items-center">
+            <Image src="/logo-trimmed.svg" width={64} height={64} alt="logo" />
+            <Typography className="text-3xl font-bold text-blue-gray-900 dark:text-white ml-2">
+              Study Drift
+            </Typography>
+          </div>
         </Link>
       </div>
       <hr className="my-2 border-gray-200" />
