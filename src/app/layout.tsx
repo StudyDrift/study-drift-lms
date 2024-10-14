@@ -20,6 +20,13 @@ export default function RootLayout({
   return (
     <React.StrictMode>
       <html lang="en" suppressHydrationWarning>
+        <head>
+          <link rel="icon" type="image/png" href="/favicons/favicon-48x48.png" sizes="48x48" />
+          <link rel="icon" type="image/svg+xml" href="/favicons/favicon.svg" />
+          <link rel="shortcut icon" href="/favicons/favicon.ico" />
+          <link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-touch-icon.png" />
+          <link rel="manifest" href="/favicons/site.webmanifest" />
+        </head>
         <body
           className={
             inter.className +
