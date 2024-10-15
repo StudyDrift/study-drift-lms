@@ -35,9 +35,7 @@ export const GenerateAIModulesDialog = ({ isOpen, onClose }: Props) => {
   const { courseId } = useParams<{ courseId: string }>()
 
   const [response, setResponse] = useState("")
-  const [prompt, setPrompt] = useState(
-    "I am teaching a course about javascript in the web browser"
-  )
+  const [prompt, setPrompt] = useState("")
   const [getChatCompletion, { isLoading: isGenerating }] =
     useGetCompletionMutation()
 
