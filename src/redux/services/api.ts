@@ -58,6 +58,7 @@ export const api = createApi({
     "UserSettings",
     "CourseHome",
     "Version",
+    "ChatSession",
   ],
   /**
    * This api has endpoints injected in adjacent files,

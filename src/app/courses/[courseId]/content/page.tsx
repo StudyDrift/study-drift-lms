@@ -1,6 +1,7 @@
 "use client"
 import { ScopedCommand } from "@/components/command-pallete/scoped-command"
 import { ContentModuleRow } from "@/components/course-content/content-module"
+import { GenerateAIModulesDialog } from "@/components/dialogs/ai-modules-generate.dialog"
 import { CreateModuleDialog } from "@/components/dialogs/create-module.dialog"
 import { SortableList } from "@/components/dnd/sortable-list"
 import { Restrict, RestrictElse } from "@/components/permission/restrict"
@@ -8,6 +9,7 @@ import { RootPage } from "@/components/root-page"
 import { useCourseData } from "@/hooks/use-course-data.hooks"
 import { ContentModule } from "@/models/content.model"
 import {
+  PERMISSION_COURSE_AI_CREATE,
   PERMISSION_COURSE_CONTENT_CREATE,
   PERMISSION_COURSE_CONTENT_UPDATE,
 } from "@/models/permissions/course.permission"
@@ -15,6 +17,7 @@ import {
   useGetCourseContentQuery,
   useSetModuleOrderMutation,
 } from "@/redux/services/content.api"
+import { BoltIcon } from "@heroicons/react/24/solid"
 import {
   Button,
   IconButton,
@@ -29,6 +32,7 @@ import { useEffect, useRef, useState } from "react"
 export default function Page() {
   const [createModuleOpen, setCreateModuleOpen] = useState(false)
   const [modulesOpen, setModulesOpen] = useState<string[]>([])
+  const [aiGenerateModulesIsOpen, setAiGenerateModulesIsOpen] = useState(false)
 
   const { course } = useCourseData()
   const { data: contentModulesData, isLoading: isContentLoading } =
@@ -79,6 +83,26 @@ export default function Page() {
       title="Content"
       isLoading={isContentLoading}
       actions={[
+        <Restrict key="ai-content" permission={PERMISSION_COURSE_AI_CREATE}>
+          <ScopedCommand
+            command={{
+              id: "ai-content",
+              name: "Create AI Content",
+              group: "Page Actions",
+              actionType: "callback",
+              action: () => {
+                setCreateModuleOpen(true)
+              },
+            }}
+          >
+            <Button
+              className="flex flex-row gap-2 items-center justify-center bg-gradient-to-r from-amber-500 to-pink-500 text-black"
+              onClick={() => setAiGenerateModulesIsOpen(true)}
+            >
+              <BoltIcon className="h-4 w-4" /> AI Generate
+            </Button>
+          </ScopedCommand>
+        </Restrict>,
         <Restrict
           key="create-module"
           permission={PERMISSION_COURSE_CONTENT_CREATE}
@@ -141,6 +165,11 @@ export default function Page() {
       <CreateModuleDialog
         isOpen={createModuleOpen}
         onClose={() => setCreateModuleOpen(false)}
+      />
+
+      <GenerateAIModulesDialog
+        isOpen={aiGenerateModulesIsOpen}
+        onClose={() => setAiGenerateModulesIsOpen(false)}
       />
 
       <div className="flex flex-col gap-4 mt-6">
