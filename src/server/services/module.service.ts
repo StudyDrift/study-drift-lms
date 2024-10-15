@@ -30,7 +30,9 @@ export const createContentModule = async (
     meta: contentModule,
   })
 
-  return await collection.insertOne(contentModule)
+  await collection.insertOne(contentModule)
+
+  return contentModule
 }
 
 export const updateModuleOrder = async (
