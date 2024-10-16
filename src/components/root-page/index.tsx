@@ -27,7 +27,7 @@ export const RootPage = ({
       <main className="pl-[21rem] py-4 pr-4 flex-1 w-screen">
         {title && (
           <div className="flex justify-between flex-row w-full">
-            <Typography variant="h3" className="flex-1">
+            <Typography variant="h4" className="flex-1">
               {title}
             </Typography>
             <div className="flex gap-2">{actions}</div>
