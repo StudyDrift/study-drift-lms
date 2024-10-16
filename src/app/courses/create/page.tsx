@@ -144,6 +144,9 @@ export default function Page() {
                   className="mt-6"
                   loading={isCreatingOutcomes || isCreatingCourse}
                   type="submit"
+                  disabled={
+                    outcomes.length === 0 || !outcomes[0] || !name || !code
+                  }
                 >
                   Create Course
                 </Button>

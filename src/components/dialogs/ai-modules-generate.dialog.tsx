@@ -17,7 +17,6 @@ import {
 import { nanoid } from "nanoid"
 import { useParams } from "next/navigation"
 import { useRef, useState } from "react"
-import Markdown from "react-markdown"
 import { ScrollArea } from "../ui/scroll-area"
 
 interface Props {
@@ -28,11 +27,13 @@ interface Props {
 export const GenerateAIModulesDialog = ({ isOpen, onClose }: Props) => {
   const session = useRef<ChatSession>({
     id: nanoid(),
-    context: "Course Content",
+    context: "Course Structure",
     messages: [],
   })
 
   const { courseId } = useParams<{ courseId: string }>()
+
+  const [parsedResponse, setParsedResponse] = useState<any>()
 
   const [response, setResponse] = useState("")
   const [prompt, setPrompt] = useState("")
@@ -52,9 +53,17 @@ export const GenerateAIModulesDialog = ({ isOpen, onClose }: Props) => {
     if (completion && !completion.error) {
       session.current = completion.data
 
-      setResponse(
+      const res =
         session.current.messages[session.current.messages.length - 1].content
-      )
+
+      setResponse(res)
+
+      try {
+        setParsedResponse(JSON.parse(res))
+      } catch (error) {
+        // FIXME: Handle error
+        console.error(error)
+      }
     }
   }
 
@@ -135,9 +144,22 @@ export const GenerateAIModulesDialog = ({ isOpen, onClose }: Props) => {
             and click create. Putting in the syllabus is also a great way to
             generate better content.
           </Typography>
-          <Markdown className="prose">
-            {"```json\n" + response + "\n```"}
-          </Markdown>
+          {parsedResponse && (
+            <div className="prose mb-4">
+              <ol>
+                {parsedResponse.modules.map((m: any, i: number) => (
+                  <li key={i}>
+                    {m.moduleName}
+                    <ol>
+                      {m.contentItems.map((c: any, j: number) => (
+                        <li key={j}>{c.name}</li>
+                      ))}
+                    </ol>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
           <Textarea
             label="Prompt"
             value={prompt}
