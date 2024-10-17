@@ -11,7 +11,7 @@
   Learn by Learning & Teach by Teaching
 </h3>
 <p align="center">
-  Study Drift streamlines the process of course creation, quiz generation, and content management, enabling educators and learners to get to the content as quickly as possible
+  Study Drift uses AI to streamlines the process of course creation, quiz generation, and content management, enabling educators and learners to get to the content as quickly as possible
 </p>
 <p align="center">
   <a href="/LICENSE">
@@ -60,16 +60,16 @@
    cd study-drift-lms
    ```
 
-2. Install dependencies:
+1. Install dependencies:
 
    ```bash
    npm install
    ```
 
-3. Set up your MongoDB connection string in `.env` file:
+1. Set up your MongoDB connection string in `.env.local` file:
 
    ```bash
-   MONGODB_URI=<your_mongodb_connection_string>
+   cp .env.example .env.local
    ```
 
    We do provide a docker-compose.yml file for convenience with the mongo image.
@@ -78,13 +78,13 @@
    docker-compose up -d
    ```
 
-4. Run the development server:
+1. Run the development server:
 
    ```bash
    npm run dev
    ```
 
-5. Open [http://localhost:3000](http://localhost:3000) to view the app in your browser.
+1. Open [http://localhost:3000](http://localhost:3000) to view the app in your browser.
 
 ## Contributing
 

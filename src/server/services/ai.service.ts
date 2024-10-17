@@ -22,19 +22,24 @@ const getClient = () => {
   })
 }
 
-export const getSystemPrompt = async (name?: string) => {
-  if (!name) {
+export const getSystemPrompt = async (key?: string) => {
+  if (!key) {
     return {} as SystemPrompt
   }
 
   const collection = await getCollection<SystemPrompt>("systemPrompts")
 
-  return collection.findOne({ name }) as unknown as SystemPrompt
+  return collection.findOne({ key }) as unknown as SystemPrompt
 }
 
-export const createSystemPrompt = async (name: string, content: string) => {
+export const createSystemPrompt = async (
+  name: string,
+  content: string,
+  key: string,
+  isJson: boolean
+) => {
   const collection = await getCollection<SystemPrompt>("systemPrompts")
-  await collection.insertOne({ name, content, id: nanoid() })
+  await collection.insertOne({ name, content, id: nanoid(), key, isJson })
 }
 
 export const getCompletion = async (
@@ -49,7 +54,7 @@ export const getCompletion = async (
     model,
     stream: false,
     temperature: 0.7,
-    response_format: { type: "json_object" },
+    response_format: systemPrompt.isJson ? { type: "json_object" } : undefined,
     messages: [
       {
         role: "system",

@@ -11,7 +11,7 @@ import "prismjs/components/prism-ruby"
 import "prismjs/components/prism-tsx"
 import "prismjs/components/prism-typescript"
 import "prismjs/components/prism-xml-doc"
-import "prismjs/themes/prism-okaidia.css"
+import "prismjs/themes/prism-tomorrow.css"
 import { useEffect } from "react"
 
 export default function PrismLoader() {

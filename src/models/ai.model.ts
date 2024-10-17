@@ -11,6 +11,8 @@ export interface ChatSession {
 
 export interface SystemPrompt {
   id: string
+  key: string
+  isJson: boolean
   name: string
   content: string
 }
