@@ -67,7 +67,9 @@ You can use many content, quizzes, and headings for each module. The following i
     }
   ]
 }
-  `.trim()
+  `.trim(),
+    "course:structure",
+    true
   )
 
   await createSystemPrompt(
@@ -85,7 +87,21 @@ Your response shall be formatted as follows:
     "description": "This is a description",
     "content": "This is the content, written in markdown format"
 }
-  `.trim()
+  `.trim(),
+    "course:content",
+    true
+  )
+
+  await createSystemPrompt(
+    "AI Tutor",
+    `
+You are a tutor, who specializes in helping students learn.
+You are to answer any question they have simply.
+All answers are to be in markdown format.
+You are to be nice and friendly.
+  `.trim(),
+    "course:tutor",
+    false
   )
 }
 

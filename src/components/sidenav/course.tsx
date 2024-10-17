@@ -12,6 +12,7 @@ import {
   HomeIcon,
   UsersIcon,
 } from "@heroicons/react/24/outline"
+import { BoltIcon } from "@heroicons/react/24/solid"
 import {
   Accordion,
   AccordionBody,
@@ -82,6 +83,12 @@ export const SideNavCourse = ({
       name: "Content",
       icon: <NotebookIcon className="h-5 w-5" />,
       href: `/courses/${course?.id}/content`,
+      isVisible: true,
+    },
+    {
+      name: "AI Tutor",
+      icon: <BoltIcon className="h-5 w-5" />,
+      href: `/courses/${course?.id}/ai-tutor`,
       isVisible: true,
     },
     {

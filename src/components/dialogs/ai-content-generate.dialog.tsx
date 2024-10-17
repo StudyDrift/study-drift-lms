@@ -31,7 +31,7 @@ export const GenerateAIContentDialog = ({
 }: Props) => {
   const session = useRef<ChatSession>({
     id: nanoid(),
-    context: "Course Content",
+    context: "course:content",
     messages: [],
   })
 

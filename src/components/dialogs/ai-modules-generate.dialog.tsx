@@ -27,7 +27,7 @@ interface Props {
 export const GenerateAIModulesDialog = ({ isOpen, onClose }: Props) => {
   const session = useRef<ChatSession>({
     id: nanoid(),
-    context: "Course Structure",
+    context: "course:structure",
     messages: [],
   })
 
