@@ -12,6 +12,9 @@ export const userSettingsApi = api.injectEndpoints({
         method: "GET",
       }),
       providesTags: ["UserSettings"],
+      extraOptions: {
+        maxRetries: 1,
+      },
     }),
 
     updateUserSettings: build.mutation<UserSettings, UpdateUserSettingsPayload>(

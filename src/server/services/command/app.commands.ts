@@ -29,14 +29,6 @@ export const APPS: Command[] = [
   },
   {
     id: nanoid(),
-    name: "Assignments",
-    group: "Apps",
-    actionType: "link",
-    action: "/assignments",
-    icon: "ListCheckIcon",
-  },
-  {
-    id: nanoid(),
     name: "Roles & Permissions",
     group: "System Settings",
     actionType: "link",

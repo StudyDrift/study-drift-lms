@@ -20,18 +20,22 @@ export const loginPasswordAuth = async (payload: PasswordAuth) => {
   const collection = await passwordAuthCollection()
   const user = await collection.findOne({
     email: payload.email,
-    password: await hashPassword(payload.password),
   })
 
   if (!user) {
     return false
   }
 
-  return true
+  return await checkPassword(payload.password, user.password)
+}
+
+const checkPassword = async (password: string, dbPassword: string) => {
+  return await bcrypt.compare(password, dbPassword)
 }
 
 const hashPassword = async (password: string) => {
-  return await bcrypt.hash(password, 10)
+  const salt = await bcrypt.genSaltSync(10)
+  return await bcrypt.hash(password, salt)
 }
 
 export const createToken = async (user: User) => {

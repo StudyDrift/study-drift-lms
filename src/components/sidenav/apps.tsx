@@ -13,8 +13,7 @@ import {
   Calendar,
   ChevronDownIcon,
   LayoutDashboardIcon,
-  ListCheckIcon,
-  School2Icon,
+  School2Icon
 } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
@@ -46,12 +45,6 @@ export const SideNavApps = ({ isOpen, onToggle, listItemClassName }: Props) => {
       name: "Calendar",
       icon: <Calendar className="h-5 w-5" />,
       href: "/calendar",
-      isVisible: true,
-    },
-    {
-      name: "Assignments",
-      icon: <ListCheckIcon className="h-5 w-5" />,
-      href: "/assignments",
       isVisible: true,
     },
     {

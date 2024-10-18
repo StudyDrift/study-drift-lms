@@ -132,6 +132,14 @@ export const getCoursesCommands = async (
           icon: "NotebookIcon",
         },
         {
+          id: courseId + "-ai-tutor",
+          name: "AI Tutor",
+          group: "Course",
+          actionType: "link",
+          action: `/courses/${courseId}/ai-tutor`,
+          icon: "BoltIcon",
+        },
+        {
           id: courseId + "-assignments",
           name: "Assignments",
           group: "Course",
