@@ -8,6 +8,9 @@ export const authApi = api.injectEndpoints({
         method: "POST",
         body,
       }),
+      extraOptions: {
+        maxRetries: 1,
+      },
     }),
     signup: build.mutation<any, any>({
       query: (body) => ({

@@ -7,20 +7,32 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useInstallHook } from "@/hooks/use-install.hook"
 import { useLoginMutation } from "@/redux/services/auth.api"
-import { Spinner } from "@material-tailwind/react"
+import { Spinner, Typography } from "@material-tailwind/react"
 import React, { useState } from "react"
 
 export default function Page() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [login, { isLoading }] = useLoginMutation()
+  const [hasError, setHasError] = useState(false)
 
   useInstallHook()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    await login({ email, password })
+    try {
+      const results = await login({ email, password })
+
+      if (results.error) {
+        setHasError(true)
+        console.log(results.error)
+        return
+      }
+    } catch (error) {
+      setHasError(true)
+      return
+    }
 
     setEmail("")
     setPassword("")
@@ -71,7 +83,16 @@ export default function Page() {
                     value={password}
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                {hasError && (
+                  <Typography variant="small" className="text-red-500">
+                    Invalid email or password
+                  </Typography>
+                )}
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isLoading && !hasError}
+                >
                   {isLoading && <Spinner className="w-4 h-4 mr-2" />} Login
                 </Button>
               </div>

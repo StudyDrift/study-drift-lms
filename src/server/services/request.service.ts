@@ -54,3 +54,7 @@ export const withPermission = (permission: Permission, callback: Callback) => {
     return unauthorized()
   }
 }
+
+export const getIPAddress = (req: NextRequest) => {
+  return req.headers.get("x-forwarded-for") || req.ip
+}

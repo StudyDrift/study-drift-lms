@@ -1,4 +1,5 @@
 import {
+  BoltIcon,
   ChatBubbleLeftIcon,
   CogIcon,
   DocumentIcon,
@@ -38,6 +39,7 @@ export const AvailableIcons = {
   CogIcon,
   UsersIcon,
   HeadingIcon,
+  BoltIcon
 }
 
 export const getIcon = (name?: string) => {
