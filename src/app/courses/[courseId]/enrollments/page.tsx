@@ -62,7 +62,7 @@ export default function Page() {
               group: "Page Actions",
               actionType: "callback",
               action: () => {
-                console.log("create enrollment")
+                setShowEnrollUserDialog(true)
               },
             }}
           >

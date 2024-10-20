@@ -8,7 +8,7 @@ import {
 } from "@/redux/slices/commands.slice"
 import { PackageIcon } from "lucide-react"
 import { useParams } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useHotkeys, useHotkeysContext } from "react-hotkeys-hook"
 import { useDispatch, useSelector } from "react-redux"
 import OutsideClickClose from "../events/outside-click"
@@ -38,11 +38,21 @@ export const CommandPallete = () => {
   const scopedCommands = useSelector(selectScopedCommands)
   const isVisible = useSelector(selectIsCommandsVisible)
 
+  const toggle = useCallback(() => {
+    setIsOpen(!isOpen)
+    toggleScope("commands")
+    setIsActionMode(false)
+
+    if (!isOpen) {
+      dispatch(setIsCommandsVisible(false))
+    }
+  }, [dispatch, isOpen, setIsOpen, toggleScope])
+
   useEffect(() => {
     if (isVisible) {
       toggle()
     }
-  }, [isVisible])
+  }, [isVisible, toggle])
 
   const allCommands = [...(commands || []), ...scopedCommands]
   const filteredCommands = allCommands.filter((c) => {
@@ -61,16 +71,6 @@ export const CommandPallete = () => {
       acc[command.group].push(command)
       return acc
     }, {} as { [key: string]: CommandModel[] }) || {}
-
-  const toggle = () => {
-    setIsOpen(!isOpen)
-    toggleScope("commands")
-    setIsActionMode(false)
-
-    if (!isOpen) {
-      dispatch(setIsCommandsVisible(false))
-    }
-  }
 
   useHotkeys("meta+k", () => toggle(), { scopes: ["global"] })
   useHotkeys("ctrl+k", () => toggle(), { scopes: ["global"] })
@@ -130,6 +130,7 @@ export const CommandPallete = () => {
                   {value.map((command, commandIndex) => (
                     <CommandItem
                       key={key + i + command.name + commandIndex}
+                      className="cursor-pointer"
                       onSelect={() => {
                         setIsOpen(false)
                         toggle()
