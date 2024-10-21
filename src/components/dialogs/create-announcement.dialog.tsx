@@ -134,7 +134,7 @@ export const CreateAnnouncementDialog = ({ isOpen, onClose }: Props) => {
                       console.log(date)
                       setVisibilityStartDate(date)
                     }}
-                    initialFocus
+                    autoFocus
                   />
                 </PopoverContent>
               </Popover>
@@ -171,7 +171,7 @@ export const CreateAnnouncementDialog = ({ isOpen, onClose }: Props) => {
                     mode="single"
                     selected={visibilityEndDate}
                     onSelect={(date) => setVisibilityEndDate(date)}
-                    initialFocus
+                    autoFocus
                   />
                 </PopoverContent>
               </Popover>

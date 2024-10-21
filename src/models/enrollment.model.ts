@@ -15,10 +15,10 @@ export interface Enrollment {
 }
 
 export enum EnrollmentRole {
-  student = "student",
-  teacher = "teacher",
-  admin = "admin",
-  owner = "owner",
+  student = "Student",
+  teacher = "Teacher",
+  admin = "Admin",
+  owner = "Owner",
 }
 
 export type EnrollmentCreatePayload = Omit<Enrollment, "id">

@@ -4,11 +4,12 @@ import { useColorScheme } from "@/hooks/use-color-scheme.hook"
 import { useIsInstall } from "@/hooks/use-install.hook"
 import { THEMES } from "@/lib/theme"
 import { ColorScheme } from "@/models/user-settings.model"
+import { selectToken } from "@/redux/slices/auth.slice"
 import { store } from "@/redux/store"
 import { ThemeProvider } from "@material-tailwind/react"
 import { usePathname } from "next/navigation"
 import { HotkeysProvider } from "react-hotkeys-hook"
-import { Provider } from "react-redux"
+import { Provider, useSelector } from "react-redux"
 import { CommandPallete } from "../command-pallete"
 import { Spinner } from "../loaders/spinner"
 import { SideNav } from "../sidenav"
@@ -34,6 +35,10 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
 }
 
 const CommandsProvider = ({ children }: { children: React.ReactNode }) => {
+  const token = useSelector(selectToken)
+
+  if (!token) return <>{children}</>
+
   return (
     <>
       <CommandPallete />
@@ -73,7 +78,8 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 }
 
 export const CustomThemeProvider = ({ children }: { children: any }) => {
-  const scheme = useColorScheme()
+  const token = useSelector(selectToken)
+  const scheme = useColorScheme(!token)
 
   return (
     <ThemeProvider value={THEMES[scheme || ColorScheme.Light]}>

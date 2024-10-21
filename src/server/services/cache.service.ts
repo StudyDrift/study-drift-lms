@@ -1,20 +1,17 @@
-import { caching, MemoryCache } from "cache-manager"
-import { logService } from "./log.service"
+import { createCache } from "cache-manager"
+import { CacheableMemory } from "cacheable"
+import { Keyv } from "keyv"
 
-let cache: MemoryCache | undefined
+const cache = createCache({
+  stores: [
+    //  High performance in-memory cache with LRU and TTL
+    new Keyv({
+      store: new CacheableMemory({ ttl: 60000, lruSize: 5000 }),
+    }),
+  ],
+})
 
 export const getCacheItem = async <T>(key: string) => {
-  if (!cache) {
-    try {
-      cache = await caching("memory", {
-        max: 1000,
-        ttl: 60 * 60 * 1000 /*milliseconds*/,
-      })
-    } catch (err) {
-      logService.error("Error initializing cache", err)
-    }
-  }
-
   return await cache!.get<T>(key)
 }
 
