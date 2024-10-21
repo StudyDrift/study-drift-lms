@@ -17,6 +17,7 @@ export const provisionUser = async (
     id: nanoid(),
     meta: {},
     role: "Student",
+    baseRole: "Student",
   }
 
   const collection = await getUserCollection()
@@ -33,6 +34,17 @@ export const getUser = async (id: string) => {
 export const getUserRole = async (id: string) => {
   const collection = await getUserCollection()
   return await collection.findOne({ id }, { projection: { _id: 0, role: 1 } })
+}
+
+export const assumeRole = async (id: string, role: string) => {
+  const collection = await getUserCollection()
+  const user = await collection.findOne({ id }, { projection: { _id: 0 } })
+
+  if (!user) {
+    throw new Error("User not found")
+  }
+
+  await collection.updateOne({ id }, { $set: { role, baseRole: user.role } })
 }
 
 export const setUserRole = async (id: string, role: string) => {

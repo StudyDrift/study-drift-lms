@@ -10,6 +10,7 @@ enum Resources {
   Syllabus = "syllabus",
   Enrollments = "enrollments",
   AI = "ai",
+  Impersonate = "impersonate",
 }
 
 export const PERMISSION_COURSE_GRADEBOOK_VIEW = generatePermission({
@@ -88,4 +89,10 @@ export const PERMISSION_COURSE_AI_CREATE = generatePermission({
   service: APP,
   resource: Resources.AI,
   action: PermissionAction.Create,
+})
+
+export const PERMISSION_COURSE_IMPERSONATE_VIEW = generatePermission({
+  service: APP,
+  resource: Resources.Impersonate,
+  action: PermissionAction.View,
 })

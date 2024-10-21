@@ -1,22 +1,34 @@
-import { PasswordAuth } from "@/models/auth.model"
+import { PERMISSION_COURSE_IMPERSONATE_VIEW } from "@/models/permissions/course.permission"
+import { createToken } from "@/server/services/auth/password.auth.service"
 import {
-  createToken,
-  loginPasswordAuth,
-} from "@/server/services/auth/password.auth.service"
-import { failure, success, toJson } from "@/server/services/request.service"
-import { getUserByEmail } from "@/server/services/user.service"
+  failure,
+  getUserId,
+  redirect,
+  withPermission,
+} from "@/server/services/request.service"
+import { getUser } from "@/server/services/user.service"
 import { NextRequest } from "next/server"
 
-export const POST = async (req: NextRequest) => {
-  const body = await toJson<Omit<PasswordAuth, "id">>(req)
-  const isSuccessful = await loginPasswordAuth(body)
-  if (isSuccessful) {
-    const user = await getUserByEmail(body.email)
+export const GET = withPermission(
+  PERMISSION_COURSE_IMPERSONATE_VIEW,
+  async (req: NextRequest) => {
+    const role = req.nextUrl.searchParams.get("role")
+    const callback =
+      req.nextUrl.origin + req.nextUrl.searchParams.get("callback")
+
+    const userId = getUserId(req)
+    if (!userId) return failure("User not found")
+
+    const user = await getUser(userId)
 
     if (!user) return failure("User not found")
 
+    user.role = role ?? "student"
+
     const token = await createToken(user!)
-    const res = success({ user, token })
+    const res = redirect(callback)
+
+    res.headers.set("location", callback ?? "/")
 
     res.cookies.set("auth", token, {
       path: "/",
@@ -26,7 +38,5 @@ export const POST = async (req: NextRequest) => {
     })
 
     return res
-  } else {
-    return failure(isSuccessful)
   }
-}
+)

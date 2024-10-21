@@ -20,6 +20,10 @@ export const unauthorized = () => {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 }
 
+export const redirect = (url: string) => {
+  return NextResponse.redirect(url)
+}
+
 export const getUserId = (req: NextRequest) => {
   let token = req.cookies.get("auth")?.value
   if (!token) {

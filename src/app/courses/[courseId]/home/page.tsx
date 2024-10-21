@@ -2,7 +2,10 @@
 import { ScopedCommand } from "@/components/command-pallete/scoped-command"
 import { Restrict } from "@/components/permission/restrict"
 import { RootPage } from "@/components/root-page"
-import { PERMISSION_COURSE_CONTENT_UPDATE } from "@/models/permissions/course.permission"
+import {
+  PERMISSION_COURSE_CONTENT_UPDATE,
+  PERMISSION_COURSE_IMPERSONATE_VIEW,
+} from "@/models/permissions/course.permission"
 import { useGetCourseHomeQuery } from "@/redux/services/course-home.api"
 import { Button, Card, CardBody } from "@material-tailwind/react"
 import Link from "next/link"
@@ -22,6 +25,28 @@ export default function Page() {
       title="Course"
       isLoading={isCourseHomeLoading}
       actions={[
+        <Restrict
+          permission={PERMISSION_COURSE_IMPERSONATE_VIEW}
+          key="impersonate"
+        >
+          <ScopedCommand
+            command={{
+              id: "impersonate",
+              name: "Impersonate",
+              group: "Course Actions",
+              actionType: "callback",
+              action: () => {
+                window.location.href = `/api/auth/assume?callback=/courses/${courseId}/home&role=student`
+              },
+            }}
+          >
+            <a
+              href={`/api/auth/assume?callback=/courses/${courseId}/home&role=student`}
+            >
+              <Button variant="outlined">View as Student</Button>
+            </a>
+          </ScopedCommand>
+        </Restrict>,
         <Restrict permission={PERMISSION_COURSE_CONTENT_UPDATE} key="edit">
           <ScopedCommand
             command={{

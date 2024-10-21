@@ -6,4 +6,5 @@ export interface User {
   imgUrl?: string
   meta: Record<string, any>
   role: string
+  baseRole: string
 }
