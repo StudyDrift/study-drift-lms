@@ -56,7 +56,7 @@ export interface ContentItemInstance {
   id: string
   isComplete: boolean
   score?: number
-  dates: Pick<CommonDates, "start" | "end">
+  dates: Pick<CommonDates, "start" | "end" | "due">
 
   outcomeAchievements?: Record<string, number>
 

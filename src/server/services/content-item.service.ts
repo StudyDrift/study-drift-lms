@@ -140,3 +140,11 @@ export const getContentItemsByCourseId = async (courseId: string) => {
   const collection = await getCollection<ContentItem>("contentItems")
   return collection.find({ courseId }).sort({ order: 1 }).toArray()
 }
+
+export const getContentItemWithDueDate = async (courseId: string) => {
+  const collection = await getCollection<ContentItem>("contentItems")
+  return collection
+    .find({ courseId, "settings.dueDate": { $exists: true } })
+    .sort({ order: 1 })
+    .toArray()
+}
