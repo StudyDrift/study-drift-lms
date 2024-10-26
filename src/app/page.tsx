@@ -3,9 +3,14 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
 export default function Page() {
-  if (!cookies().get("auth")) {
-    return redirect("/auth/login")
+  async function handleLogin() {
+    const cookiesContainer = await cookies()
+    if (!cookiesContainer.get("auth")) {
+      return redirect("/auth/login")
+    }
   }
+
+  handleLogin()
 
   return (
     <RootPage>
