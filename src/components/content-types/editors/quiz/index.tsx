@@ -140,6 +140,10 @@ export const ContentTypeQuiz = ({ item, onChange }: Props) => {
 
   return (
     <div className="w-full flex flex-col gap-5">
+      <Editor
+        value={item.body}
+        onChange={(content) => onChange({ ...item, body: content })}
+      />
       <Typography variant="h5">Questions</Typography>
       <SortableList
         id={item.id + "-questions"}

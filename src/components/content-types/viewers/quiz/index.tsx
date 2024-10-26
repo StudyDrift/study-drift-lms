@@ -39,6 +39,14 @@ export const ContentTypeQuiz = ({ item }: Props) => {
 
   return (
     <div className="flex flex-col gap-4">
+      Test
+      <Markdown
+        className="prose"
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
+      >
+        {item.body}
+      </Markdown>
       {questions.map((q: QuizQuestion, i: number) => (
         <Card key={q.id}>
           <Typography variant="small" className="mt-3 ml-3">
