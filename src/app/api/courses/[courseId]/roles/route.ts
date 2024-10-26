@@ -14,11 +14,8 @@ export const GET = withPermission(
   async (req, { params }: RequestParams<{ courseId: string }>) => {
     const userId = getUserId(req)
     if (!userId) return unauthorized()
-
-    const enrollment = await getEnrollmentByUserAndCourse(
-      userId,
-      params.courseId
-    )
+    const { courseId } = await params
+    const enrollment = await getEnrollmentByUserAndCourse(userId, courseId)
 
     if (!enrollment) return success([])
 

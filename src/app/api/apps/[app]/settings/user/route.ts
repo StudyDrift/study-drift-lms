@@ -15,7 +15,7 @@ export const GET = async (
   req: NextRequest,
   { params }: RequestParams<{ app: string }>
 ) => {
-  const app = params.app
+  const { app } = await params
   const userId = getUserId(req)
   if (!userId) return unauthorized()
   const settings = await getAppsUserSettings(userId, app)
@@ -26,7 +26,7 @@ export const PATCH = async (
   req: NextRequest,
   { params }: RequestParams<{ app: string }>
 ) => {
-  const app = params.app
+  const { app } = await params
   const userId = getUserId(req)
   if (!userId) return unauthorized()
   const settings = await getAppsUserSettings(userId, app)

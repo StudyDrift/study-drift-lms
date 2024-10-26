@@ -18,7 +18,8 @@ export const GET = async (
   req: NextRequest,
   { params }: RequestParams<{ courseId: string }>
 ) => {
-  const syllabus = await getSyllabusByCourseId(params.courseId)
+  const { courseId } = await params
+  const syllabus = await getSyllabusByCourseId(courseId)
   return success(syllabus)
 }
 
@@ -28,10 +29,11 @@ export const PATCH = withPermission(
     const userId = getUserId(req)
     if (!userId) return unauthorized()
     const payload = await toJson<UpdateSyllabusPayload>(req)
+    const { courseId } = await params
     const syllabus = await updateSyllabus(
       {
         ...payload,
-        courseId: params.courseId,
+        courseId,
       },
       userId
     )

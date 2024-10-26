@@ -21,7 +21,7 @@ export const PATCH = withPermission(
     if (!body) return failure("Missing body")
     const userId = getUserId(req)
     if (!userId) return unauthorized()
-    const contentItemId = params.contentItemId
+    const { contentItemId } = await params
     if (!contentItemId) return failure("Missing content item id")
     await publishContentItem(contentItemId, body.isPublished, userId)
 

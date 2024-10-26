@@ -1,3 +1,3 @@
 export interface RequestParams<T extends Object> {
-  params: T
+  params: Promise<T>
 }

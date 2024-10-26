@@ -19,7 +19,7 @@ export const GET = async (
   req: NextRequest,
   { params }: RequestParams<{ courseId: string }>
 ) => {
-  const courseId = params.courseId
+  const { courseId } = await params
   const home = await getCourseHome(courseId)
   return success(home)
 }
@@ -30,7 +30,7 @@ export const POST = withPermission(
     const body = await toJson<UpdateCourseHomePayload>(req)
     const userId = getUserId(req)
     if (!userId) return unauthorized()
-    const courseId = params.courseId
+    const { courseId } = await params
     if (!courseId) return failure("Missing course id")
     await updateCourseHome(courseId, body, userId)
     return success({ success: true })

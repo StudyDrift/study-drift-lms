@@ -31,20 +31,21 @@ export const getUserId = (req: NextRequest) => {
   return claims?.user.id
 }
 
-type Callback = (req: NextRequest, params: RequestParams<any>) => any
+type Callback = (req: NextRequest, params: RequestParams<any>) => Promise<any>
 
 export const withPermission = (permission: Permission, callback: Callback) => {
   return async (
     req: NextRequest,
-    requestParams: RequestParams<{ courseId: string }> = {
-      params: { courseId: "" },
-    }
+    requestParams: RequestParams<{ courseId: string }>
   ) => {
     const userId = getUserId(req)
     if (!userId) return unauthorized()
 
+    const p = await requestParams.params
+    const courseId = p ? p.courseId || "" : ""
+
     const userPermissions = await getUserPermissions(userId, {
-      courseId: requestParams.params?.courseId,
+      courseId: courseId,
     })
 
     if (userPermissions.includes(permission)) {
@@ -56,5 +57,5 @@ export const withPermission = (permission: Permission, callback: Callback) => {
 }
 
 export const getIPAddress = (req: NextRequest) => {
-  return req.headers.get("x-forwarded-for") || req.ip
+  return req.headers.get("x-forwarded-for")
 }

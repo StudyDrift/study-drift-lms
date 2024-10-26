@@ -21,7 +21,7 @@ import { NextRequest } from "next/server"
 export const DELETE = withPermission(
   PERMISSION_COURSE_CONTENT_DELETE,
   async (req: NextRequest, { params }: RequestParams<{ courseId: string }>) => {
-    const courseId = params.courseId
+    const { courseId } = await params
     if (!courseId) return failure("Missing course id")
 
     const contentModuleId = req.nextUrl.pathname.split("/")[5]
@@ -38,7 +38,7 @@ export const DELETE = withPermission(
 export const PATCH = withPermission(
   PERMISSION_COURSE_CONTENT_UPDATE,
   async (req: NextRequest, { params }: RequestParams<{ courseId: string }>) => {
-    const courseId = params.courseId
+    const { courseId } = await params
     if (!courseId) return failure("Missing course id")
 
     const contentModuleId = req.nextUrl.pathname.split("/")[5]

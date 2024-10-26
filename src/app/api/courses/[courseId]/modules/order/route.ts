@@ -13,7 +13,7 @@ export const PATCH = withPermission(
   PERMISSION_COURSE_CONTENT_UPDATE,
   async (req: NextRequest, { params }: RequestParams<{ courseId: string }>) => {
     const body = await toJson<string[]>(req)
-    const courseId = params.courseId
+    const { courseId } = await params
     if (!courseId) return failure("Missing course id")
     await updateModuleOrder(courseId, body)
     return success({ success: true })
