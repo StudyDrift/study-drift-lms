@@ -22,7 +22,7 @@ export const GET = async (
   req: NextRequest,
   { params }: RequestParams<{ courseId: string; contentItemId: string }>
 ) => {
-  const contentItemId = params.contentItemId
+  const { contentItemId } = await params
   if (!contentItemId) return failure("Missing content item id")
 
   const item = await getContentItemById(contentItemId)
@@ -37,7 +37,7 @@ export const DELETE = withPermission(
   ) => {
     const userId = getUserId(req)
     if (!userId) return unauthorized()
-    const contentItemId = params.contentItemId
+    const { contentItemId } = await params
     if (!contentItemId) return failure("Missing content item id")
 
     await deleteContentItem(contentItemId, userId)
@@ -53,7 +53,7 @@ export const PATCH = withPermission(
   ) => {
     const userId = getUserId(req)
     if (!userId) return unauthorized()
-    const contentItemId = params.contentItemId
+    const { contentItemId } = await params
     if (!contentItemId) return failure("Missing content item id")
 
     const body = (await req.json()) as UpdateContentItemPayload

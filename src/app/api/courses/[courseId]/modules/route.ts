@@ -31,7 +31,7 @@ export const GET = async (
   req: NextRequest,
   { params }: RequestParams<{ courseId: string }>
 ) => {
-  const courseId = params.courseId
+  const { courseId } = await params
   if (!courseId) return failure("Missing course id")
   const contentModules = await getContentModulesByCourseId(courseId + "")
   const contentItems = await getContentItemsByModuleIds(

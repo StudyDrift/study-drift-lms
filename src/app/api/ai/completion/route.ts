@@ -1,5 +1,6 @@
 import { ChatSession } from "@/models/ai.model"
 import { PERMISSION_COURSE_AI_CREATE } from "@/models/permissions/course.permission"
+import { RequestParams } from "@/models/request.model"
 import { getCompletion, updateSession } from "@/server/services/ai.service"
 import {
   failure,
@@ -11,7 +12,7 @@ import { NextRequest } from "next/server"
 
 export const POST = withPermission(
   PERMISSION_COURSE_AI_CREATE,
-  async (req: NextRequest) => {
+  async (req: NextRequest, { params }: RequestParams<any>) => {
     const session = await toJson<ChatSession>(req)
 
     const completion = await getCompletion(session.messages, session.context)

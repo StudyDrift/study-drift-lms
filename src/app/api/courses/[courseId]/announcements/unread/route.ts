@@ -15,12 +15,8 @@ export const GET = async (
   if (!userId) return unauthorized()
 
   const onlyCount = req.nextUrl.searchParams.get("onlyCount") === "true"
-
-  const announcments = await getUnreadAnnouncements(
-    params.courseId,
-    userId,
-    onlyCount
-  )
+  const { courseId } = await params
+  const announcments = await getUnreadAnnouncements(courseId, userId, onlyCount)
 
   return success(announcments)
 }

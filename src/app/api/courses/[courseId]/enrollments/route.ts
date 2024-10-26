@@ -6,7 +6,8 @@ import { getUsersByIds } from "@/server/services/user.service"
 export const GET = withPermission(
   PERMISSION_COURSE_ENROLLMENTS_VIEW,
   async (req, { params }) => {
-    const enrollments = await getEnrollmentsByCourseId(params.courseId)
+    const { courseId } = await params
+    const enrollments = await getEnrollmentsByCourseId(courseId)
     const users = await getUsersByIds(enrollments.map((e) => e.userId))
 
     enrollments.forEach((e) => {

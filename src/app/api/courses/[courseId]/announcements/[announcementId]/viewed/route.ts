@@ -13,6 +13,7 @@ export const POST = async (
 ) => {
   const userId = getUserId(req)
   if (!userId) return unauthorized()
-  await setViewAnnouncement(params.announcementId, userId)
+  const { announcementId } = await params
+  await setViewAnnouncement(announcementId, userId)
   return success({ success: true })
 }

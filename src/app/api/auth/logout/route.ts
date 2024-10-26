@@ -1,8 +1,9 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 
-export const GET = async (req: NextRequest, res: NextResponse) => {
-  cookies().delete("auth")
+export const GET = async (req: NextRequest) => {
+  const cookiesContainer = await cookies()
+  cookiesContainer.delete("auth")
   return redirect("/auth/login")
 }

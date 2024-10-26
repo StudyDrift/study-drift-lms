@@ -7,7 +7,8 @@ export const GET = async (
   req: NextRequest,
   { params }: RequestParams<{ courseId: string }>
 ) => {
-  const course = await getCourseById(params.courseId)
+  const { courseId } = await params
+  const course = await getCourseById(courseId)
 
   return success(course)
 }

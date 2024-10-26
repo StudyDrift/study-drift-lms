@@ -20,7 +20,8 @@ export const POST = withPermission(
     const body = await toJson<CreateAnnouncementPayload>(req)
     const userId = getUserId(req)
     if (!userId) return unauthorized()
-    const announcement = await createAnnouncement(body, userId, params.courseId)
+    const { courseId } = await params
+    const announcement = await createAnnouncement(body, userId, courseId)
     return success(announcement)
   }
 )
@@ -31,6 +32,7 @@ export const GET = async (
 ) => {
   const userId = getUserId(req)
   if (!userId) return unauthorized()
-  const announcements = await getCourseAnnouncements(params.courseId, userId)
+  const { courseId } = await params
+  const announcements = await getCourseAnnouncements(courseId, userId)
   return success(announcements)
 }

@@ -17,7 +17,8 @@ export const DELETE = withPermission(
   ) => {
     const userId = getUserId(req)
     if (!userId) return unauthorized()
-    await deleteAnnouncement(params.courseId, params.announcementId)
+    const { courseId, announcementId } = await params
+    await deleteAnnouncement(courseId, announcementId)
     return success({ message: "Announcement deleted" })
   }
 )
