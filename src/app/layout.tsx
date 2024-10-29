@@ -35,7 +35,8 @@ export default function RootLayout({
             href="/favicons/apple-touch-icon.png"
           />
           <link rel="manifest" href="/favicons/site.webmanifest" />
-          <GoogleAnalytics gaId="G-0ZL2CH253Y" />
+          <GoogleAnalytics gaId="G-TSB5GYV094" />
+          {/* <GoogleAnalytics gaId="G-0ZL2CH253Y" /> */}
         </head>
         <body
           className={
