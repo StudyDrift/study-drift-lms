@@ -84,6 +84,8 @@
    npm run dev
    ```
 
+1. If you wish to use the in-memory mock mongo database in development, add `IS_MOCK=true` to your `.env.local` file and run the server again.
+
 1. Open [http://localhost:3000](http://localhost:3000) to view the app in your browser.
 
 ## Contributing
