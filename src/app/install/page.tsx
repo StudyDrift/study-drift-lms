@@ -33,7 +33,6 @@ export default function Page() {
     })
 
     if (response.ok) {
-      const { version } = await response.json()
       window.location.href = "/"
     }
   }

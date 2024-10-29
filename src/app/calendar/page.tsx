@@ -15,6 +15,7 @@ export default function Page() {
       <CalendarSelector
         selectedDay={selectedDay}
         onSelectedDayChange={setSelectedDay}
+        events={events}
       />
     </RootPage>
   )

@@ -38,6 +38,7 @@
     "keyv": "^5.1.2",
     "lucide-react": "^0.453.0",
     "mongodb": "^6.10.0",
+    "mongodb-memory-server": "^10.1.2",
     "nanoid": "^5.0.7",
     "next": "15.0.1",
     "next-auth": "^4.24.10",

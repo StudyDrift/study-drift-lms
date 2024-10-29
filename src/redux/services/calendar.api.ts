@@ -1,9 +1,9 @@
-import { CalendarEvent } from "@/models/calendar.model"
+import { CalendarEventsResponse } from "@/models/calendar.model"
 import { api } from "./api"
 
 export const calendarApi = api.injectEndpoints({
   endpoints: (build) => ({
-    getCalendarEvents: build.query<CalendarEvent[], void>({
+    getCalendarEvents: build.query<CalendarEventsResponse, void>({
       query: () => "calendar/events",
       providesTags: ["Events"],
     }),

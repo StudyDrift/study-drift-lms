@@ -13,6 +13,10 @@ const endpoint = process.env.AZURE_OPENAI_ENDPOINT || ""
 const model = process.env.AZURE_OPENAI_MODEL || ""
 
 const getClient = () => {
+  if (!key || !endpoint || !model) {
+    return undefined
+  }
+
   const apiVersion = "2024-05-01-preview"
   return new AzureOpenAI({
     apiKey: key,
@@ -47,6 +51,10 @@ export const getCompletion = async (
   systemPromptName?: string
 ) => {
   const client = getClient()
+
+  if (!client) {
+    return "AI is not currently enabled"
+  }
 
   const systemPrompt = await getSystemPrompt(systemPromptName)
 
