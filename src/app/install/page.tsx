@@ -8,34 +8,50 @@ import {
   CardFooter,
   Typography,
 } from "@material-tailwind/react"
-import { useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { useCallback, useEffect, useState } from "react"
 
 export default function Page() {
+  const searchParams = useSearchParams()
+  const isMock = searchParams.get("mock") === "1"
   const [first, setFirst] = useState("")
   const [last, setLast] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault()
 
-    const response = await fetch("/api/versions/install", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        first: first,
-        last: last,
-        email: email,
-        password: password,
-      }),
-    })
+      const response = await fetch("/api/versions/install", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          first: first,
+          last: last,
+          email: email,
+          password: password,
+        }),
+      })
 
-    if (response.ok) {
-      window.location.href = "/"
+      if (response.ok) {
+        window.location.href = "/"
+      }
+    },
+    [first, last, email, password]
+  )
+
+  useEffect(() => {
+    if (isMock) {
+      setFirst("Mock")
+      setLast("User")
+      setEmail("admin@example.com")
+      setPassword("password")
+      handleSubmit({ preventDefault: () => {} } as React.FormEvent)
     }
-  }
+  }, [isMock, setFirst, setLast, setEmail, setPassword, handleSubmit])
 
   return (
     <section className="w-screen h-screen flex flex-col items-center mt-12">

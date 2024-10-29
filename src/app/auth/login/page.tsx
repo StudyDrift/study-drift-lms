@@ -7,14 +7,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useInstallHook } from "@/hooks/use-install.hook"
 import { useLoginMutation } from "@/redux/services/auth.api"
+import { useGetGlobalAppVersionQuery } from "@/redux/services/versions.api"
 import { Spinner, Typography } from "@material-tailwind/react"
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 
 export default function Page() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [login, { isLoading }] = useLoginMutation()
   const [hasError, setHasError] = useState(false)
+
+  const { data, isLoading: isGlobalLoading } = useGetGlobalAppVersionQuery()
 
   useInstallHook()
 
@@ -39,6 +42,13 @@ export default function Page() {
 
     window.location.href = "/"
   }
+
+  useEffect(() => {
+    if (!isGlobalLoading && data?.isInstalled && data?.isMock) {
+      setEmail("admin@example.com")
+      setPassword("password")
+    }
+  }, [isGlobalLoading, data])
 
   return (
     <section className="w-screen h-screen flex items-center">

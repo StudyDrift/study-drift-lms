@@ -6,8 +6,9 @@ export const useInstallHook = () => {
   const { data, isLoading, isSuccess } = useGetGlobalAppVersionQuery()
 
   useEffect(() => {
-    if (!isLoading && isSuccess && !data) {
-      window.location.href = "/install"
+    if (!isLoading && isSuccess && (!data || !data.isInstalled)) {
+      console.log("here")
+      window.location.href = `/install?mock=${data.isMock ? "1" : "0"}`
     }
   }, [isLoading, isSuccess, data])
 }
