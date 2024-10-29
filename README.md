@@ -17,9 +17,15 @@
   <a href="/LICENSE">
     <img src="https://img.shields.io/badge/license-AGPL_3.0-blue" alt="Study Drift is released under the AGPL 3.0 license." />
   </a>
-  <a href="https://github.com/StudyDrift/study-drift-lms/actions/workflows/nextjs.yml">
-    <img src="https://github.com/StudyDrift/study-drift-lms/actions/workflows/nextjs.yml/badge.svg" alt="Build github action status." />
+  <a href="https://github.com/StudyDrift/study-drift-lms/actions/workflows/build.yml">
+    <img src="https://github.com/StudyDrift/study-drift-lms/actions/workflows/build.yml/badge.svg" alt="Build github action status." />
   </a>
+  <a href="https://github.com/StudyDrift/study-drift-lms/actions/workflows/demo-release.yml">
+    <img src="https://github.com/StudyDrift/study-drift-lms/actions/workflows/demo-release.yml/badge.svg" alt="Demo release github action status." />
+  </a>
+</p>
+<p align="center">
+  <a href="https://ambitious-wave-0d94edc10.5.azurestaticapps.net">Live Demo</a>
 </p>
 <!-- TEXT_SECTION:header:END -->
 
