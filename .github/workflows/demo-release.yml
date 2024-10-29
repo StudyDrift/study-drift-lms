@@ -1,4 +1,4 @@
-name: School Sifter CI/CD
+name: Demo Release
 
 on:
   push:
