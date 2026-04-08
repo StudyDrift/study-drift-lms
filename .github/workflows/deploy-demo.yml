@@ -1,0 +1,159 @@
+# Deploy Demo: provision/update the DigitalOcean droplet with Terraform, sync this repo,
+# run docker-compose.deploy.yml on the droplet, then verify /health.
+#
+# Required repository secrets:
+#   DIGITALOCEAN_TOKEN   — DigitalOcean API token (write)
+#   DEMO_SSH_PUBLIC_KEY  — SSH public key registered on the droplet (must pair with private key)
+#   DEMO_SSH_PRIVATE_KEY — SSH private key for root@<droplet-ip>
+#   DEMO_POSTGRES_PASSWORD — Postgres password for the deploy stack
+#   DEMO_JWT_SECRET      — JWT signing secret for the API
+#
+# Terraform state is stored as a workflow artifact (terraform-state). If the artifact is missing
+# (first run or expiry), Terraform may try to create a new droplet while an old one still exists;
+# in that case destroy the old droplet in the DO console or restore a state artifact.
+
+name: Deploy Demo
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_INPUT: "false"
+  TF_VAR_ssh_public_key: ${{ secrets.DEMO_SSH_PUBLIC_KEY }}
+
+jobs:
+  deploy:
+    name: Deploy Demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Terraform state artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-state
+          path: iac/demo/
+        continue-on-error: true
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: iac/demo
+        run: terraform init
+
+      - name: Terraform apply
+        working-directory: iac/demo
+        run: terraform apply -auto-approve
+
+      - name: Terraform output (droplet IP)
+        id: droplet
+        working-directory: iac/demo
+        run: echo "ip=$(terraform output -raw droplet_public_ipv4)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Terraform state artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-state
+          path: iac/demo/terraform.tfstate
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.DEMO_SSH_PRIVATE_KEY }}" > ~/.ssh/demo_ed25519
+          chmod 600 ~/.ssh/demo_ed25519
+
+      - name: Wait for SSH
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+        run: |
+          for i in $(seq 1 36); do
+            if ssh -i ~/.ssh/demo_ed25519 \
+              -o ConnectTimeout=10 \
+              -o StrictHostKeyChecking=accept-new \
+              -o BatchMode=yes \
+              "root@${DROPLET_IP}" \
+              "docker --version" 2>/dev/null; then
+              echo "SSH and Docker are ready."
+              exit 0
+            fi
+            echo "Waiting for droplet SSH/Docker (attempt $i)..."
+            sleep 10
+          done
+          echo "Timed out waiting for SSH/Docker."
+          exit 1
+
+      - name: Rsync repository to droplet
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+        run: |
+          rsync -az \
+            --delete \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            --exclude 'target' \
+            --exclude 'dist' \
+            --exclude '.terraform' \
+            --exclude 'terraform.tfstate' \
+            --exclude '.cursor' \
+            --exclude 'coverage' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            -e "ssh -i $HOME/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new" \
+            ./ "root@${DROPLET_IP}:/opt/lextures/"
+
+      - name: Write .env on droplet
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+          DEMO_POSTGRES_PASSWORD: ${{ secrets.DEMO_POSTGRES_PASSWORD }}
+          DEMO_JWT_SECRET: ${{ secrets.DEMO_JWT_SECRET }}
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          {
+            echo "POSTGRES_PASSWORD=${DEMO_POSTGRES_PASSWORD}"
+            echo "JWT_SECRET=${DEMO_JWT_SECRET}"
+            echo "VITE_API_URL=http://${DROPLET_IP}"
+          } > "$tmp"
+          scp -i ~/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new \
+            "$tmp" "root@${DROPLET_IP}:/opt/lextures/.env"
+          shred -u "$tmp" 2>/dev/null || rm -f "$tmp"
+
+      - name: Build and start stack
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+        run: |
+          ssh -i ~/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new \
+            "root@${DROPLET_IP}" \
+            "cd /opt/lextures && docker compose -f docker-compose.deploy.yml --env-file .env up -d --build"
+
+      - name: Wait for /health
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 15 "http://${DROPLET_IP}/health" >/dev/null; then
+              echo "Application health check passed."
+              exit 0
+            fi
+            echo "Waiting for HTTP /health (attempt $i)..."
+            sleep 10
+          done
+          echo "Health check failed after timeout."
+          exit 1

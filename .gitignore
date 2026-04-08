@@ -35,3 +35,11 @@ target/
 *.swp
 *.swo
 *~
+
+# Terraform (iac/demo)
+iac/demo/.terraform/
+iac/demo/*.tfstate
+iac/demo/*.tfstate.*
+iac/demo/*.tfvars
+iac/demo/crash.log
+iac/demo/override.tf

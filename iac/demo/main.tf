@@ -1,25 +1,53 @@
-locals {
-  compose_yaml = templatefile("${path.module}/templates/docker-compose.tftpl", {
-    ghcr_image_prefix = var.ghcr_image_prefix
-  })
+# Authenticate with DIGITALOCEAN_TOKEN (set in CI and locally).
+provider "digitalocean" {}
+
+resource "digitalocean_ssh_key" "demo" {
+  name       = "${var.droplet_name}-ssh"
+  public_key = var.ssh_public_key
 }
 
 resource "digitalocean_droplet" "demo" {
-  name   = var.droplet_name
-  region = var.region
-  size   = var.droplet_size
-  image  = var.droplet_image
+  name     = var.droplet_name
+  region   = var.region
+  size     = var.droplet_size
+  image    = var.droplet_image
+  ssh_keys = [digitalocean_ssh_key.demo.id]
+  tags     = ["lextures", "demo"]
 
-  ssh_keys = var.ssh_key_ids
-  ipv6     = var.ipv6
-  tags     = var.tags
+  user_data = file("${path.module}/cloud-init.yaml")
+}
 
-  monitoring = true
+resource "digitalocean_firewall" "demo" {
+  name = "${var.droplet_name}-fw"
 
-  user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    compose_yaml       = local.compose_yaml
-    postgres_password  = var.postgres_password
-    jwt_secret         = var.jwt_secret
-    openrouter_api_key = var.openrouter_api_key
-  })
+  droplet_ids = [digitalocean_droplet.demo.id]
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "22"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "80"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  outbound_rule {
+    protocol              = "tcp"
+    port_range            = "1-65535"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  outbound_rule {
+    protocol              = "udp"
+    port_range            = "1-65535"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  outbound_rule {
+    protocol              = "icmp"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
 }
