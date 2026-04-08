@@ -1,0 +1,35 @@
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-plugin
+
+write_files:
+  - path: /opt/lextures/docker-compose.yml
+    permissions: "0644"
+    content: |
+${indent(6, compose_yaml)}
+  - path: /opt/lextures/.env
+    permissions: "0600"
+    content: |
+      POSTGRES_PASSWORD=${postgres_password}
+      JWT_SECRET=${jwt_secret}
+      OPENROUTER_API_KEY=${openrouter_api_key}
+  - path: /opt/lextures/boot.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      cd /opt/lextures
+      for _ in $(seq 1 90); do
+        if docker compose pull && docker compose up -d; then
+          exit 0
+        fi
+        sleep 20
+      done
+      exit 1
+
+runcmd:
+  - systemctl enable docker
+  - systemctl start docker
+  - /opt/lextures/boot.sh

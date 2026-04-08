@@ -10,9 +10,14 @@
 #     invite your user to that org. Alternatively set `organization` in the `cloud` block in versions.tf.
 #
 # GitHub Actions: set repository secrets DIGITALOCEAN_TOKEN, TF_TOKEN, TF_CLOUD_ORGANIZATION (same rules).
+# Also set POSTGRES_PASSWORD, JWT_SECRET, and optionally OPENROUTER_API_KEY — used as TF_VAR_* for Droplet
+# cloud-init (no SSH). If Terraform Cloud uses remote execution, define the same as sensitive workspace
+# variables (postgres_password, jwt_secret, openrouter_api_key, ghcr_image_prefix) or switch execution
+# mode to Local so CI can pass TF_VAR_* from GitHub.
 #
 # Remote state uses workspace "lextures-demo" (create it in Terraform Cloud or let the first run create it).
-# Set variable ssh_key_ids (list) in the workspace or via TF_VAR_ssh_key_ids for the DigitalOcean provider.
+# Optional: ssh_key_ids (list) for Droplet console SSH; can be [].
+# Required: ghcr_image_prefix (e.g. ghcr.io/yourgithubuser, all lowercase), postgres_password, jwt_secret.
 #
 # ── DigitalOcean API 401 "Unable to authenticate you" during apply ───────────────────────────────
 # If Terraform Cloud runs apply in REMOTE mode (default), the run executes on HashiCorp's runners — it does
@@ -23,9 +28,13 @@
 #      value = your DO personal access token (API → Tokens in DigitalOcean).
 # Also verify the token is not expired and has scope to create Droplets (Write).
 
-# region       = "nyc1"
-# droplet_name = "lextures-demo"
-# droplet_size = "s-1vcpu-1gb"
-# ssh_key_ids  = ["12345678"]
-# tags         = ["lextures", "demo"]
-# ipv6         = true
+# region             = "nyc1"
+# droplet_name       = "lextures-demo"
+# droplet_size       = "s-1vcpu-1gb"
+# ssh_key_ids        = []
+# ghcr_image_prefix  = "ghcr.io/yourgithubuser"
+# postgres_password  = "change-me"
+# jwt_secret         = "change-me"
+# openrouter_api_key = ""
+# tags               = ["lextures", "demo"]
+# ipv6               = true

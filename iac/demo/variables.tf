@@ -24,8 +24,32 @@ variable "droplet_image" {
 
 variable "ssh_key_ids" {
   type        = list(string)
-  description = "SSH public key IDs or fingerprints already uploaded to your DigitalOcean account (https://cloud.digitalocean.com/account/security)."
+  description = "Optional. SSH public key IDs on your DigitalOcean account for console access. Leave empty if you do not want keys on the Droplet (DigitalOcean can email a root password instead)."
   default     = []
+}
+
+variable "ghcr_image_prefix" {
+  type        = string
+  description = "Lowercase GHCR image prefix without a trailing slash, e.g. ghcr.io/mygithubuser (must match images pushed by CI)."
+}
+
+variable "postgres_password" {
+  type        = string
+  sensitive   = true
+  description = "Postgres password for the demo stack (written to the Droplet .env by cloud-init)."
+}
+
+variable "jwt_secret" {
+  type        = string
+  sensitive   = true
+  description = "JWT signing secret for the API (written to the Droplet .env by cloud-init)."
+}
+
+variable "openrouter_api_key" {
+  type        = string
+  sensitive   = true
+  description = "Optional OpenRouter API key; use empty string to disable."
+  default     = ""
 }
 
 variable "tags" {

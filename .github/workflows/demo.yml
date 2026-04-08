@@ -1,6 +1,7 @@
-# CI: Rust + web lint/test/build, Docker image build (deploy compose).
+# CI: Rust + web lint/test/build, Docker image build (validates deploy compose).
 # IaC: Terraform Cloud remote state; plan on PR, apply on main / workflow_dispatch.
-# Deploy: rsync to DigitalOcean Droplet + docker compose (requires matching SSH key on the Droplet).
+# Deploy: build images with production VITE_API_URL, push to GHCR; Droplet runs cloud-init + Watchtower
+# (no SSH/rsync from CI). Repository needs packages: write (GITHUB_TOKEN).
 #
 # GitHub secrets (repository):
 #   TF_TOKEN                    — Terraform Cloud API token (https://app.terraform.io/app/settings/tokens)
@@ -8,13 +9,16 @@
 #   DIGITALOCEAN_TOKEN          — DigitalOcean API token (https://cloud.digitalocean.com/account/api/tokens)
 #                                 Only used if Terraform Cloud workspace execution mode is Local; if Remote,
 #                                 also set DIGITALOCEAN_TOKEN as a sensitive variable on the TFC workspace.
-#   SSH_PRIVATE_KEY             — Full private key (multiline PEM or OpenSSH). Paste entire file including
-#                                 BEGIN/END lines. Must pair with a public key in Terraform ssh_key_ids / DO account.
-#   POSTGRES_PASSWORD           — DB password for docker-compose.deploy.yml
-#   JWT_SECRET                  — Server JWT signing secret
+#   POSTGRES_PASSWORD           — DB password (TF_VAR for Droplet .env + image build env)
+#   JWT_SECRET                  — Server JWT signing secret (TF_VAR for Droplet .env)
 #   OPENROUTER_API_KEY          — Optional; omit or leave empty to disable AI features
 #
-# Terraform Cloud workspace "lextures-demo" must exist or be creatable; set variable ssh_key_ids (list) there.
+# After the first successful push, open each GHCR package (lextures-server, lextures-web) and set visibility
+# to **public** so the Droplet can pull without registry credentials.
+#
+# Terraform Cloud workspace "lextures-demo": set optional ssh_key_ids (can be []). With remote execution,
+# define postgres_password, jwt_secret, openrouter_api_key, ghcr_image_prefix in the workspace or use
+# Local execution so GitHub passes TF_VAR_* from secrets.
 
 name: Demo
 
@@ -27,6 +31,10 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
 
 env:
   TF_IN_AUTOMATION: true
@@ -71,12 +79,12 @@ jobs:
         working-directory: clients/web
         run: npm run build
 
-      - name: Docker package (deploy compose)
+      - name: Docker package (validate compose build)
         env:
           VITE_API_URL: http://127.0.0.1:8080
           POSTGRES_PASSWORD: ci-local-only
           JWT_SECRET: ci-local-only-not-for-production
-        run: docker compose -f docker-compose.deploy.yml build
+        run: docker compose -p lextures -f docker-compose.deploy.yml build
 
   terraform:
     name: Terraform
@@ -85,16 +93,31 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       droplet_ip: ${{ steps.droplet.outputs.droplet_ip }}
+      ghcr_prefix: ${{ steps.ghcr_export.outputs.ghcr_prefix }}
     env:
       TF_TOKEN: ${{ secrets.TF_TOKEN }}
       TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
       DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      TF_VAR_postgres_password: ${{ secrets.POSTGRES_PASSWORD }}
+      TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+      TF_VAR_openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
     defaults:
       run:
         working-directory: iac/demo
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: GHCR image prefix for Terraform
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "TF_VAR_ghcr_image_prefix=ghcr.io/${OWNER}" >> "$GITHUB_ENV"
+
+      - name: Export GHCR prefix for later jobs
+        id: ghcr_export
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "ghcr_prefix=ghcr.io/${OWNER}" >> "$GITHUB_OUTPUT"
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -124,7 +147,7 @@ jobs:
           fi
 
   deploy:
-    name: Deploy to droplet
+    name: Push images to GHCR
     needs: [ci, terraform]
     if: >
       github.ref == 'refs/heads/main' &&
@@ -133,54 +156,27 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DROPLET_IP: ${{ needs.terraform.outputs.droplet_ip }}
+      GHCR_PREFIX: ${{ needs.terraform.outputs.ghcr_prefix }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
-      # Multiline keys must not be inlined with ${{ }} in echo — use env + strip CRLF or OpenSSH fails with "error in libcrypto".
-      - name: Install SSH key
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$DROPLET_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rsync repository
+      - name: Build and push container images
+        env:
+          VITE_API_URL: http://${{ needs.terraform.outputs.droplet_ip }}:8080
         run: |
-          rsync -avz \
-            --delete \
-            --exclude node_modules \
-            --exclude target \
-            --exclude .git \
-            --exclude .terraform \
-            --exclude .env \
-            -e "ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes" \
-            ./ "ubuntu@${DROPLET_IP}:~/lextures/"
-
-      - name: Write remote .env
-        run: |
-          VITE_API_URL="http://${DROPLET_IP}:8080"
-          export VITE_API_URL
-          {
-            echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
-            echo "JWT_SECRET=${JWT_SECRET}"
-            echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}"
-            echo "VITE_API_URL=${VITE_API_URL}"
-          } > .env.remote
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes .env.remote "ubuntu@${DROPLET_IP}:~/lextures/.env"
-
-      - name: Install Docker and start stack
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes "ubuntu@${DROPLET_IP}" bash -s << 'REMOTE'
           set -euo pipefail
-          if ! command -v docker >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y docker.io docker-compose-plugin
-          fi
-          cd ~/lextures
-          sudo docker compose -f docker-compose.deploy.yml --env-file .env up -d --build
-          REMOTE
+          docker compose -p lextures -f docker-compose.deploy.yml build
+          docker tag lextures-server "${GHCR_PREFIX}/lextures-server:latest"
+          docker tag lextures-web "${GHCR_PREFIX}/lextures-web:latest"
+          docker push "${GHCR_PREFIX}/lextures-server:latest"
+          docker push "${GHCR_PREFIX}/lextures-web:latest"
