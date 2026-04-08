@@ -135,6 +135,9 @@ jobs:
               exit 0
             fi
             echo "  ... Docker daemon not ready yet ($i/80) - cloud-init may still be installing"
+            if [ "$((i % 10))" -eq 0 ]; then
+              "${SSH_BASE[@]}" "${SSH_USER}@${DROPLET_IP}" "echo -n '  [hint] cloud-init: '; cloud-init status 2>/dev/null | head -1; command -v docker >/dev/null && echo '  [hint] docker CLI: installed' || echo '  [hint] docker CLI: not yet (get.docker.com not run)'" 2>/dev/null || true
+            fi
             sleep 15
           done
 

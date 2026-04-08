@@ -1,6 +1,7 @@
 #cloud-config
+# package_upgrade runs before runcmd and can take 30+ minutes on small droplets, delaying Docker.
 package_update: true
-package_upgrade: true
+package_upgrade: false
 
 packages:
   - curl
