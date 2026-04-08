@@ -1,7 +1,7 @@
 <!-- TEXT_SECTION:header:START -->
 <p align="center">
   <a href="https://linear.app" target="_blank" rel="noopener noreferrer">
-    <img width="150" src="public/logo-trimmed.svg" alt="Linear logo">
+    <img width="150" src="clients/web/public/logo-trimmed.svg" alt="Linear logo">
   </a> 
 </p>
 <h1 align="center">
