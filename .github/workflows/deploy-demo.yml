@@ -72,25 +72,74 @@ jobs:
           chmod 700 ~/.ssh
           terraform output -raw ssh_private_key_openssh > ~/.ssh/demo_ed25519
           chmod 600 ~/.ssh/demo_ed25519
+          test -s ~/.ssh/demo_ed25519
+          head -1 ~/.ssh/demo_ed25519 | grep -q '^-----BEGIN OPENSSH PRIVATE KEY-----'
 
-      - name: Wait for SSH
+      - name: Wait for SSH and Docker
         env:
           DROPLET_IP: ${{ steps.droplet.outputs.ip }}
         run: |
-          for i in $(seq 1 36); do
-            if ssh -i ~/.ssh/demo_ed25519 \
-              -o ConnectTimeout=10 \
+          set -euo pipefail
+          KEY="$HOME/.ssh/demo_ed25519"
+          SSH_BASE=(
+            ssh
+            -i "$KEY"
+            -o ConnectTimeout=25
+            -o ConnectionAttempts=3
+            -o StrictHostKeyChecking=accept-new
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o ServerAliveInterval=30
+            -o ServerAliveCountMax=3
+          )
+
+          # DigitalOcean Ubuntu images accept this key for root when ssh_keys are set on the droplet.
+          SSH_USER=root
+
+          echo "Waiting for TCP 22 on ${DROPLET_IP}..."
+          for i in $(seq 1 90); do
+            if timeout 5 bash -c "echo >/dev/tcp/${DROPLET_IP}/22" 2>/dev/null; then
+              echo "Port 22 is open."
+              break
+            fi
+            echo "  ... port 22 not open yet ($i/90)"
+            sleep 5
+          done
+          timeout 5 bash -c "echo >/dev/tcp/${DROPLET_IP}/22" 2>/dev/null || { echo "Timed out waiting for port 22."; exit 1; }
+
+          echo "Waiting for SSH (${SSH_USER}@${DROPLET_IP})..."
+          for i in $(seq 1 60); do
+            if "${SSH_BASE[@]}" "${SSH_USER}@${DROPLET_IP}" "echo ssh_ok" 2>/dev/null; then
+              echo "SSH authentication OK."
+              break
+            fi
+            echo "  ... SSH not ready yet ($i/60)"
+            sleep 5
+          done
+          if ! "${SSH_BASE[@]}" "${SSH_USER}@${DROPLET_IP}" "echo ssh_ok" 2>/dev/null; then
+            echo "SSH never succeeded. Last lines of ssh -v (look for Permission denied / timeout):"
+            ssh -v -i "$KEY" \
+              -o ConnectTimeout=25 \
               -o StrictHostKeyChecking=accept-new \
               -o BatchMode=yes \
-              "root@${DROPLET_IP}" \
-              "docker --version" 2>/dev/null; then
-              echo "SSH and Docker are ready."
+              -o IdentitiesOnly=yes \
+              "${SSH_USER}@${DROPLET_IP}" "true" 2>&1 | tail -40 || true
+            exit 1
+          fi
+
+          # get.docker.com in cloud-init can take many minutes on small droplets; SSH works before Docker is installed.
+          echo "Waiting for Docker (cloud-init runcmd)..."
+          for i in $(seq 1 80); do
+            if "${SSH_BASE[@]}" "${SSH_USER}@${DROPLET_IP}" "command -v docker >/dev/null 2>&1 && docker --version" 2>/dev/null; then
+              echo "Docker is installed and reachable."
               exit 0
             fi
-            echo "Waiting for droplet SSH/Docker (attempt $i)..."
-            sleep 10
+            echo "  ... Docker not ready yet ($i/80) - cloud-init may still be installing"
+            sleep 15
           done
-          echo "Timed out waiting for SSH/Docker."
+
+          echo "Timed out waiting for Docker. Remote diagnostics:"
+          "${SSH_BASE[@]}" "${SSH_USER}@${DROPLET_IP}" "cloud-init status 2>/dev/null || true; command -v docker || true; ls -la /usr/bin/docker 2>/dev/null || true; tail -80 /var/log/cloud-init-output.log 2>/dev/null || true" 2>&1 || true
           exit 1
 
       - name: Rsync repository to droplet
