@@ -1,6 +1,9 @@
 #cloud-config
-# Docker is installed via explicit apt in runcmd (more reliable than the packages module alone).
-# After changing this file, recreate the Droplet (or taint + apply) so cloud-init runs again.
+# Docker: installed via https://get.docker.com (docker-ce + compose plugin). More reliable than
+# docker.io from Ubuntu alone (universe / mirror issues on first boot).
+#
+# user_data runs ONLY on first boot. To apply changes: destroy + recreate the Droplet, or
+#   terraform apply -replace='digitalocean_droplet.demo'
 package_update: true
 
 write_files:
@@ -29,12 +32,16 @@ ${indent(6, compose_yaml)}
       exit 1
 
 runcmd:
-  # Install Docker Engine + Compose v2 (plugin). Requires universe on Ubuntu; apt-get pulls deps.
   - |
     set -euo pipefail
+    exec >> /var/log/lextures-docker-install.log 2>&1
+    echo "=== lextures docker install $(date -Is) ==="
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    apt-get install -y docker.io docker-compose-plugin
+    apt-get install -y ca-certificates curl
+    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+    sh /tmp/get-docker.sh
+    rm -f /tmp/get-docker.sh
     systemctl enable --now docker
     for _ in $(seq 1 60); do
       if docker info >/dev/null 2>&1; then
@@ -42,5 +49,5 @@ runcmd:
       fi
       sleep 2
     done
-    docker info >/dev/null 2>&1
+    docker info
   - /opt/lextures/boot.sh
