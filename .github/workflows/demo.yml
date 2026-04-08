@@ -8,7 +8,8 @@
 #   DIGITALOCEAN_TOKEN          — DigitalOcean API token (https://cloud.digitalocean.com/account/api/tokens)
 #                                 Only used if Terraform Cloud workspace execution mode is Local; if Remote,
 #                                 also set DIGITALOCEAN_TOKEN as a sensitive variable on the TFC workspace.
-#   SSH_PRIVATE_KEY             — Private key matching a public key added to the Droplet (ssh_key_ids in Terraform Cloud / tfvars)
+#   SSH_PRIVATE_KEY             — Full private key (multiline PEM or OpenSSH). Paste entire file including
+#                                 BEGIN/END lines. Must pair with a public key in Terraform ssh_key_ids / DO account.
 #   POSTGRES_PASSWORD           — DB password for docker-compose.deploy.yml
 #   JWT_SECRET                  — Server JWT signing secret
 #   OPENROUTER_API_KEY          — Optional; omit or leave empty to disable AI features
@@ -135,13 +136,16 @@ jobs:
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
+      # Multiline keys must not be inlined with ${{ }} in echo — use env + strip CRLF or OpenSSH fails with "error in libcrypto".
       - name: Install SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 700 ~/.ssh
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$DROPLET_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
 
@@ -154,7 +158,7 @@ jobs:
             --exclude .git \
             --exclude .terraform \
             --exclude .env \
-            -e "ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=accept-new" \
+            -e "ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes" \
             ./ "ubuntu@${DROPLET_IP}:~/lextures/"
 
       - name: Write remote .env
@@ -167,11 +171,11 @@ jobs:
             echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}"
             echo "VITE_API_URL=${VITE_API_URL}"
           } > .env.remote
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new .env.remote "ubuntu@${DROPLET_IP}:~/lextures/.env"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes .env.remote "ubuntu@${DROPLET_IP}:~/lextures/.env"
 
       - name: Install Docker and start stack
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "ubuntu@${DROPLET_IP}" bash -s << 'REMOTE'
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes "ubuntu@${DROPLET_IP}" bash -s << 'REMOTE'
           set -euo pipefail
           if ! command -v docker >/dev/null 2>&1; then
             sudo apt-get update -qq
