@@ -1,8 +1,7 @@
 #cloud-config
+# Docker is installed via explicit apt in runcmd (more reliable than the packages module alone).
+# After changing this file, recreate the Droplet (or taint + apply) so cloud-init runs again.
 package_update: true
-packages:
-  - docker.io
-  - docker-compose-plugin
 
 write_files:
   - path: /opt/lextures/docker-compose.yml
@@ -30,6 +29,18 @@ ${indent(6, compose_yaml)}
       exit 1
 
 runcmd:
-  - systemctl enable docker
-  - systemctl start docker
+  # Install Docker Engine + Compose v2 (plugin). Requires universe on Ubuntu; apt-get pulls deps.
+  - |
+    set -euo pipefail
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y
+    apt-get install -y docker.io docker-compose-plugin
+    systemctl enable --now docker
+    for _ in $(seq 1 60); do
+      if docker info >/dev/null 2>&1; then
+        break
+      fi
+      sleep 2
+    done
+    docker info >/dev/null 2>&1
   - /opt/lextures/boot.sh
