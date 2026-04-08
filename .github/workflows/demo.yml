@@ -202,7 +202,6 @@ jobs:
   verify-host:
     name: Verify droplet (ping + HTTP)
     needs: [deploy, terraform]
-    if: success() && needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     env:
       DROPLET_IP: ${{ needs.terraform.outputs.droplet_ip }}
