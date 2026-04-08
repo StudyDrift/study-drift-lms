@@ -20,9 +20,9 @@ variable "region" {
 }
 
 variable "droplet_size" {
-  description = "Droplet size slug (e.g. s-1vcpu-1gb)."
+  description = "DigitalOcean Basic droplet slug. s-1vcpu-2gb = 1 vCPU, 2 GB RAM, 50 GB SSD, 2 TB transfer."
   type        = string
-  default     = "s-1vcpu-1gb"
+  default     = "s-1vcpu-2gb"
 }
 
 variable "droplet_image" {
