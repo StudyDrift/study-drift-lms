@@ -1,0 +1,37 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment (keep tracked examples)
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies & frontend build (clients/web — Vite, React, Vitest)
+node_modules/
+dist/
+.vite/
+.eslintcache
+*.tsbuildinfo
+
+# Test & coverage (Vitest)
+coverage/
+
+# Rust (Axum server)
+target/
+**/*.rs.bk
+
+# IDE / editors
+.idea/
+*.swp
+*.swo
+*~

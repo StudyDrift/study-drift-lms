@@ -1,0 +1,17 @@
+# Development image: cargo-watch recompiles and restarts the server when sources change.
+FROM rust:1-bookworm
+
+RUN cargo install cargo-watch
+
+WORKDIR /app
+
+# Warm the dependency cache (real sources come from the bind mount at runtime).
+COPY Cargo.toml Cargo.lock ./
+COPY migrations ./migrations
+RUN mkdir -p src && printf 'fn main() {}\n' > src/main.rs && cargo build && rm -rf src
+
+ENV RUST_LOG=debug
+EXPOSE 8080
+
+# --poll: reliable file events when the project is bind-mounted (e.g. Docker Desktop on macOS).
+CMD ["cargo", "watch", "-q", "-x", "run", "--poll"]

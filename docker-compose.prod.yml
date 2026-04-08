@@ -1,0 +1,7 @@
+# Production-style web: nginx serving the Vite build.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+
+services:
+  web:
+    ports:
+      - "3000:80"

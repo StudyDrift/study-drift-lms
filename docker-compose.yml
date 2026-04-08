@@ -1,0 +1,82 @@
+# Web does not expose ports here so dev/prod overrides do not merge duplicate port mappings.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build   # Vite HMR :5173 + cargo-watch
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build    # nginx :3000
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: studydrift
+      POSTGRES_PASSWORD: studydrift
+      POSTGRES_DB: studydrift
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studydrift -d studydrift"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: studydrift
+      MONGO_INITDB_ROOT_PASSWORD: studydrift
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "-u",
+          "studydrift",
+          "-p",
+          "studydrift",
+          "--authenticationDatabase",
+          "admin",
+          "--quiet",
+          "--eval",
+          "db.adminCommand('ping')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      RUST_LOG: info
+      # sslmode=disable avoids TLS negotiation issues with the local Postgres container.
+      DATABASE_URL: postgres://studydrift:studydrift@postgres:5432/studydrift?sslmode=disable
+      MONGODB_URI: mongodb://studydrift:studydrift@mongo:27017/?authSource=admin
+      JWT_SECRET: change-me-in-production-use-a-long-random-string
+      RUN_MIGRATIONS: "true"
+      OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./clients/web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8080
+    depends_on:
+      - server
+
+volumes:
+  postgres_data:
+  mongo_data:

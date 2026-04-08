@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@keyframes sidenav-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.sidenav-course-items > * {
+  animation: sidenav-item-in 0.28s cubic-bezier(0.33, 1, 0.68, 1) backwards;
+}
+.sidenav-course-items > *:nth-child(1) {
+  animation-delay: 0.02s;
+}
+.sidenav-course-items > *:nth-child(2) {
+  animation-delay: 0.06s;
+}
+.sidenav-course-items > *:nth-child(3) {
+  animation-delay: 0.1s;
+}
+.sidenav-course-items > *:nth-child(4) {
+  animation-delay: 0.14s;
+}
+.sidenav-course-items > *:nth-child(5) {
+  animation-delay: 0.18s;
+}
+.sidenav-course-items > *:nth-child(6) {
+  animation-delay: 0.22s;
+}
+.sidenav-course-items > *:nth-child(7) {
+  animation-delay: 0.26s;
+}
+.sidenav-course-items > *:nth-child(8) {
+  animation-delay: 0.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidenav-course-items > * {
+    animation: none;
+  }
+}
+
+body {
+  @apply min-h-screen antialiased text-slate-900 bg-slate-50;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Course markdown (syllabus, modules): bounded width is set per theme; min-w-0 avoids flex overflow. */
+.syllabus-md {
+  @apply min-w-0;
+}
+
+/* TipTap placeholder (ProseMirror decorations) */
+.tiptap p.is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: rgb(148 163 184);
+  pointer-events: none;
+  height: 0;
+}

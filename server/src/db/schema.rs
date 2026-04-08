@@ -1,0 +1,17 @@
+//! Qualified PostgreSQL identifiers for tables moved out of `public`.
+//! The `user` schema must be double-quoted in SQL (`USER` is reserved).
+
+pub const USERS: &str = r#""user".users"#;
+pub const PERMISSIONS: &str = r#""user".permissions"#;
+pub const APP_ROLES: &str = r#""user".app_roles"#;
+pub const RBAC_ROLE_PERMISSIONS: &str = r#""user".rbac_role_permissions"#;
+pub const USER_APP_ROLES: &str = r#""user".user_app_roles"#;
+pub const USER_AI_SETTINGS: &str = r#""user".user_ai_settings"#;
+pub const COURSES: &str = "course.courses";
+pub const COURSE_ENROLLMENTS: &str = "course.course_enrollments";
+pub const COURSE_STRUCTURE_ITEMS: &str = "course.course_structure_items";
+pub const MODULE_CONTENT_PAGES: &str = "course.module_content_pages";
+pub const MODULE_ASSIGNMENTS: &str = "course.module_assignments";
+pub const COURSE_SYLLABUS: &str = "course.course_syllabus";
+pub const USER_COURSE_GRANTS: &str = "course.user_course_grants";
+pub const ASSIGNMENT_GROUPS: &str = "course.assignment_groups";

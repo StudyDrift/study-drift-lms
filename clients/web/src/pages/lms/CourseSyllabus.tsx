@@ -1,0 +1,198 @@
+import { useCallback, useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { Pencil } from 'lucide-react'
+import { SyllabusBlockEditor } from '../../components/syllabus/SyllabusBlockEditor'
+import { SyllabusMarkdownView } from '../../components/syllabus/SyllabusMarkdownView'
+import { usePermissions } from '../../context/PermissionsContext'
+import {
+  fetchCourse,
+  fetchCourseSyllabus,
+  patchCourseSyllabus,
+  type SyllabusSection,
+} from '../../lib/coursesApi'
+import { type ResolvedMarkdownTheme, resolveMarkdownTheme } from '../../lib/markdownTheme'
+import { permCourseItemCreate } from '../../lib/rbacApi'
+import { LmsPage } from './LmsPage'
+
+function newLocalId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function cloneSections(sections: SyllabusSection[]): SyllabusSection[] {
+  return sections.map((s) => ({ ...s }))
+}
+
+export default function CourseSyllabus() {
+  const { courseCode } = useParams<{ courseCode: string }>()
+  const { allows, loading: permLoading } = usePermissions()
+
+  const [sections, setSections] = useState<SyllabusSection[]>([])
+  const [draft, setDraft] = useState<SyllabusSection[]>([])
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [mdTheme, setMdTheme] = useState<ResolvedMarkdownTheme>(() =>
+    resolveMarkdownTheme('classic', null),
+  )
+
+  const canEdit = Boolean(
+    courseCode && !permLoading && allows(permCourseItemCreate(courseCode)),
+  )
+
+  const load = useCallback(async () => {
+    if (!courseCode) return
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const [data, courseRow] = await Promise.all([
+        fetchCourseSyllabus(courseCode),
+        fetchCourse(courseCode),
+      ])
+      setSections(data.sections)
+      setUpdatedAt(data.updatedAt)
+      setMdTheme(resolveMarkdownTheme(courseRow.markdownThemePreset, courseRow.markdownThemeCustom))
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Could not load the syllabus.')
+      setSections([])
+      setUpdatedAt(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [courseCode])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  function beginEdit() {
+    setSaveError(null)
+    if (sections.length === 0) {
+      setDraft([{ id: newLocalId(), heading: '', markdown: '' }])
+    } else {
+      setDraft(cloneSections(sections))
+    }
+    setEditing(true)
+  }
+
+  function cancelEdit() {
+    setSaveError(null)
+    setEditing(false)
+    setDraft([])
+  }
+
+  async function save() {
+    if (!courseCode) return
+    setSaveError(null)
+    setSaving(true)
+    try {
+      const data = await patchCourseSyllabus(courseCode, { sections: draft })
+      setSections(data.sections)
+      setUpdatedAt(data.updatedAt)
+      setEditing(false)
+      setDraft([])
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Could not save the syllabus.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!courseCode) {
+    return (
+      <LmsPage title="Syllabus" description="">
+        <p className="mt-6 text-sm text-slate-500">Invalid link.</p>
+      </LmsPage>
+    )
+  }
+
+  const description =
+    updatedAt == null
+      ? `Course ${courseCode}`
+      : `Course ${courseCode} · Updated ${new Date(updatedAt).toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        })}`
+
+  return (
+    <LmsPage
+      title="Syllabus"
+      description={description}
+      actions={
+        editing ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={saving}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving}
+              className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        ) : canEdit ? (
+          <button
+            type="button"
+            onClick={beginEdit}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Pencil className="h-4 w-4" aria-hidden />
+            Edit
+          </button>
+        ) : null
+      }
+    >
+      {loadError && (
+        <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          {loadError}
+        </p>
+      )}
+      {loading && <p className="mt-8 text-sm text-slate-500">Loading syllabus…</p>}
+
+      {!loading && !loadError && !editing && (
+        <div className="mx-auto mt-8 w-full max-w-4xl min-w-0 space-y-6">
+          {sections.length === 0 && !permLoading && (
+            <p className="text-sm text-slate-500">
+              {canEdit ? (
+                <>
+                  No syllabus content yet. Select <span className="font-medium text-slate-700">Edit</span> to add
+                  sections.
+                </>
+              ) : (
+                'No syllabus has been published for this course yet.'
+              )}
+            </p>
+          )}
+          {sections.length > 0 && <SyllabusMarkdownView sections={sections} theme={mdTheme} />}
+        </div>
+      )}
+
+      {!loading && !loadError && editing && (
+        <div className="mt-6 -mx-6 md:-mx-8">
+          {saveError && (
+            <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-800 md:px-8">
+              {saveError}
+            </p>
+          )}
+          <div className="px-4 md:px-8">
+            <SyllabusBlockEditor sections={draft} onChange={setDraft} disabled={saving} />
+          </div>
+        </div>
+      )}
+    </LmsPage>
+  )
+}

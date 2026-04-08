@@ -1,0 +1,55 @@
+# Development stack: live reload without restarting containers.
+#
+# Prefer this single command (includes the base stack so Postgres + port 8080 exist):
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Or merge explicitly:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# - web: Vite dev server (HMR) → http://localhost:5173
+# - server: cargo-watch runs `cargo run` on every Rust change → http://localhost:8080
+# - postgres / mongo: from docker-compose.yml (required for DATABASE_URL)
+
+include:
+  - docker-compose.yml
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./server:/app
+      - server_target:/app/target
+      - server_cargo_registry:/usr/local/cargo/registry
+      - server_cargo_git:/usr/local/cargo/git
+    environment:
+      # Explicit so the dev override never drops the DB URL from the base compose file.
+      DATABASE_URL: postgres://studydrift:studydrift@postgres:5432/studydrift?sslmode=disable
+      RUST_LOG: debug
+      JWT_SECRET: dev-only-change-me-in-production
+      RUN_MIGRATIONS: true
+      # Set in `.env` next to this file, e.g. OPEN_ROUTER_API_KEY=sk-or-v1-...
+      OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
+
+  web:
+    build:
+      context: ./clients/web
+      dockerfile: Dockerfile.dev
+    # Source from host; node_modules is a named volume (see docker-entrypoint.dev.sh — npm ci when
+    # package.json / package-lock.json change). After adding npm dependencies, rebuild this image and
+    # restart so the entrypoint updates; if Vite still cannot resolve a package, remove the volume
+    # `web_node_modules` once (`docker volume rm …` or `docker compose down -v` if safe) then `up --build`.
+    volumes:
+      - ./clients/web:/app
+      - web_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+
+volumes:
+  server_target:
+  server_cargo_registry:
+  server_cargo_git:
+  web_node_modules:

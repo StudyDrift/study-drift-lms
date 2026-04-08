@@ -1,0 +1,12 @@
+pub mod auth;
+pub mod communication;
+pub mod course;
+pub mod course_grading;
+pub mod course_module_content;
+pub mod course_syllabus;
+pub mod course_structure;
+pub mod enrollment;
+pub mod me;
+pub mod rbac;
+pub mod search;
+pub mod settings_ai;

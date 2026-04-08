@@ -1,0 +1,8 @@
+pub mod auth;
+pub mod communication;
+pub mod courses;
+pub mod health;
+pub mod me;
+pub mod rbac;
+pub mod search;
+pub mod settings;
