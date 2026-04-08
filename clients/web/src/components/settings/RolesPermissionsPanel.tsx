@@ -243,7 +243,7 @@ export function RolesPermissionsPanel() {
               )}
               {permissions.map((p) => (
                 <PermissionRow
-                  key={p.id}
+                  key={`${p.id}::${p.description}`}
                   permission={p}
                   onSaveDescription={onSaveDescription}
                   onDelete={() => void onDeletePermission(p.id)}
@@ -1051,10 +1051,6 @@ type PermissionRowProps = {
 
 function PermissionRow({ permission, onSaveDescription, onDelete }: PermissionRowProps) {
   const [desc, setDesc] = useState(permission.description)
-
-  useEffect(() => {
-    setDesc(permission.description)
-  }, [permission.description, permission.id])
 
   return (
     <tr className="border-b border-slate-100 last:border-0">

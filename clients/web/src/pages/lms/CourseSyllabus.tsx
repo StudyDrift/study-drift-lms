@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Pencil } from 'lucide-react'
 import { SyllabusBlockEditor } from '../../components/syllabus/SyllabusBlockEditor'
 import { SyllabusMarkdownView } from '../../components/syllabus/SyllabusMarkdownView'
-import { usePermissions } from '../../context/PermissionsContext'
+import { usePermissions } from '../../context/usePermissions'
 import {
   fetchCourse,
   fetchCourseSyllabus,

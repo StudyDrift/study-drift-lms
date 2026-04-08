@@ -1,10 +1,10 @@
-import type { Content, List, ListItem, Root } from 'mdast'
+import type { Content, ListItem, Root } from 'mdast'
 
 /**
  * Canvas / LMS exports often use top-level `-` bullets and `1.` sublists without the 4-space
  * indent CommonMark requires. The parser then emits sibling <ol>, <ul>, <ol> instead of nesting.
  *
- * Remark stores ordered-list markers on {@link List} as `start`, not in the list item paragraph
+ * Remark stores ordered-list markers on list nodes as `start`, not in the list item paragraph
  * text, so merges must use `start` rather than matching "2." in plain text.
  */
 export function remarkMergeAdjacentLists() {

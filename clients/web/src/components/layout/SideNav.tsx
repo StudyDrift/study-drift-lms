@@ -18,8 +18,8 @@ import {
   User,
   Users,
 } from 'lucide-react'
-import { useInboxUnreadCount } from '../../context/InboxUnreadContext'
-import { usePermissions } from '../../context/PermissionsContext'
+import { useInboxUnreadCount } from '../../context/useInboxUnread'
+import { usePermissions } from '../../context/usePermissions'
 import { courseGradebookViewPermission } from '../../lib/coursesApi'
 import { BrandLogo } from '../BrandLogo'
 

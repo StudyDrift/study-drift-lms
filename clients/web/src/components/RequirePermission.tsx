@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { usePermissions } from '../context/PermissionsContext'
+import { usePermissions } from '../context/usePermissions'
 
 type RequirePermissionProps = {
   /** Required permission string (`scope:area:function:action`). Wildcards supported. */

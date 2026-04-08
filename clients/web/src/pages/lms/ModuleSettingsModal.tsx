@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import { X } from 'lucide-react'
 
 function isoToDatetimeLocalValue(iso: string | null): string {
@@ -28,8 +28,12 @@ type ModuleSettingsModalProps = {
   errorMessage?: string | null
 }
 
-export function ModuleSettingsModal({
-  open,
+export function ModuleSettingsModal(props: ModuleSettingsModalProps) {
+  if (!props.open) return null
+  return <ModuleSettingsModalInner {...props} />
+}
+
+function ModuleSettingsModalInner({
   initialTitle,
   initialPublished,
   initialVisibleFrom,
@@ -41,19 +45,9 @@ export function ModuleSettingsModal({
   const titleId = useId()
   const nameInputId = useId()
   const dateInputId = useId()
-  const [title, setTitle] = useState('')
-  const [published, setPublished] = useState(true)
-  const [visibleLocal, setVisibleLocal] = useState('')
-
-  useEffect(() => {
-    if (open) {
-      setTitle(initialTitle)
-      setPublished(initialPublished)
-      setVisibleLocal(isoToDatetimeLocalValue(initialVisibleFrom))
-    }
-  }, [open, initialTitle, initialPublished, initialVisibleFrom])
-
-  if (!open) return null
+  const [title, setTitle] = useState(initialTitle)
+  const [published, setPublished] = useState(initialPublished)
+  const [visibleLocal, setVisibleLocal] = useState(() => isoToDatetimeLocalValue(initialVisibleFrom))
 
   return (
     <div

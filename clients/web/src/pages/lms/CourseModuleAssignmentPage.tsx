@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Pencil } from 'lucide-react'
 import { SyllabusBlockEditor } from '../../components/syllabus/SyllabusBlockEditor'
-import { MarkdownArticleView, markdownToSectionsForEditor, sectionsToMarkdown } from '../../components/syllabus/SyllabusMarkdownView'
-import { usePermissions } from '../../context/PermissionsContext'
+import { MarkdownArticleView } from '../../components/syllabus/SyllabusMarkdownView'
+import { markdownToSectionsForEditor, sectionsToMarkdown } from '../../components/syllabus/syllabusSectionMarkdown'
+import { usePermissions } from '../../context/usePermissions'
 import {
   fetchCourse,
   fetchModuleAssignment,

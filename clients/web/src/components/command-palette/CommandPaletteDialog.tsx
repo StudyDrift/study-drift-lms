@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ArrowDown, ArrowUp, BookOpen, FileText, Search, Users, Zap } from 'lucide-react'
-import { usePermissions } from '../../context/PermissionsContext'
+import { usePermissions } from '../../context/usePermissions'
 import {
   buildSearchItems,
   filterSearchItems,

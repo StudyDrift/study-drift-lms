@@ -11,7 +11,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
-import { useMailboxRevision, useRefreshUnread } from '../../context/InboxUnreadContext'
+import { useMailboxRevision, useRefreshUnread } from '../../context/useInboxUnread'
 import {
   fetchMailboxMessages,
   patchMailbox,

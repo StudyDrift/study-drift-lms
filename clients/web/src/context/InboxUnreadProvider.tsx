@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -15,15 +13,7 @@ import {
   mailboxWebSocketUrl,
   parseMailboxWsMessage,
 } from '../lib/communicationApi'
-
-type InboxUnreadValue = {
-  unreadInboxCount: number
-  /** Incremented on each realtime mailbox event so lists can refetch. */
-  mailboxRevision: number
-  refreshUnread: () => Promise<void>
-}
-
-const InboxUnreadContext = createContext<InboxUnreadValue | null>(null)
+import { InboxUnreadContext } from './inboxUnreadContext'
 
 export function InboxUnreadProvider({ children }: { children: ReactNode }) {
   const location = useLocation()
@@ -94,16 +84,4 @@ export function InboxUnreadProvider({ children }: { children: ReactNode }) {
   )
 
   return <InboxUnreadContext.Provider value={value}>{children}</InboxUnreadContext.Provider>
-}
-
-export function useInboxUnreadCount() {
-  return useContext(InboxUnreadContext)?.unreadInboxCount ?? 0
-}
-
-export function useMailboxRevision() {
-  return useContext(InboxUnreadContext)?.mailboxRevision ?? 0
-}
-
-export function useRefreshUnread() {
-  return useContext(InboxUnreadContext)?.refreshUnread ?? (async () => {})
 }

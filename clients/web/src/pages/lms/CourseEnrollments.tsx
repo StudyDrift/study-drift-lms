@@ -2,7 +2,7 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { UserPlus, X } from 'lucide-react'
 import { LmsPage } from './LmsPage'
-import { usePermissions } from '../../context/PermissionsContext'
+import { usePermissions } from '../../context/usePermissions'
 import { authorizedFetch } from '../../lib/api'
 import { fetchCourseScopedRoles, type CourseScopedAppRole } from '../../lib/coursesApi'
 import { readApiErrorMessage } from '../../lib/errors'
@@ -61,7 +61,10 @@ export default function CourseEnrollments() {
   }, [courseCode])
 
   useEffect(() => {
-    void loadEnrollments()
+    const id = window.setTimeout(() => {
+      void loadEnrollments()
+    }, 0)
+    return () => window.clearTimeout(id)
   }, [loadEnrollments])
 
   const closeModal = useCallback(() => {
@@ -78,29 +81,33 @@ export default function CourseEnrollments() {
       return
     }
     let cancelled = false
-    setRolesLoading(true)
-    setRolesError(null)
-    void fetchCourseScopedRoles(courseCode)
-      .then((roles) => {
-        if (!cancelled) {
-          setCourseScopedRoles(roles)
-          setSelectedAppRoleId((prev) => {
-            if (prev && roles.some((r) => r.id === prev)) return prev
-            return roles[0]?.id ?? ''
-          })
-        }
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          setCourseScopedRoles([])
-          setRolesError(e instanceof Error ? e.message : 'Could not load course roles.')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setRolesLoading(false)
-      })
+    const id = window.setTimeout(() => {
+      if (cancelled) return
+      setRolesLoading(true)
+      setRolesError(null)
+      void fetchCourseScopedRoles(courseCode)
+        .then((roles) => {
+          if (!cancelled) {
+            setCourseScopedRoles(roles)
+            setSelectedAppRoleId((prev) => {
+              if (prev && roles.some((r) => r.id === prev)) return prev
+              return roles[0]?.id ?? ''
+            })
+          }
+        })
+        .catch((e: unknown) => {
+          if (!cancelled) {
+            setCourseScopedRoles([])
+            setRolesError(e instanceof Error ? e.message : 'Could not load course roles.')
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setRolesLoading(false)
+        })
+    }, 0)
     return () => {
       cancelled = true
+      window.clearTimeout(id)
     }
   }, [modalOpen, courseCode, viewerRole])
 

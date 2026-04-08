@@ -1,5 +1,5 @@
 import { Navigate, useParams } from 'react-router-dom'
-import { usePermissions } from '../../context/PermissionsContext'
+import { usePermissions } from '../../context/usePermissions'
 import { courseGradebookViewPermission } from '../../lib/coursesApi'
 import { GradebookGrid } from './gradebook/GradebookGrid'
 import { initialMockGrades, mockAssignments, mockStudents } from './gradebook/mockGradebookData'

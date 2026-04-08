@@ -1,25 +1,8 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getAccessToken } from '../lib/auth'
 import { anyGrantMatches } from '../lib/permissionMatch'
 import { fetchMyPermissionStrings } from '../lib/rbacApi'
-
-type PermissionsContextValue = {
-  permissionStrings: string[]
-  loading: boolean
-  error: string | null
-  allows: (required: string) => boolean
-  refresh: () => Promise<void>
-}
-
-const PermissionsContext = createContext<PermissionsContextValue | null>(null)
+import { PermissionsContext } from './permissionsContext'
 
 export function PermissionsProvider({ children }: { children: ReactNode }) {
   const [permissionStrings, setPermissionStrings] = useState<string[]>([])
@@ -74,19 +57,4 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   )
 
   return <PermissionsContext.Provider value={value}>{children}</PermissionsContext.Provider>
-}
-
-export function usePermissions(): PermissionsContextValue {
-  const ctx = useContext(PermissionsContext)
-  if (!ctx) {
-    throw new Error('usePermissions must be used within PermissionsProvider')
-  }
-  return ctx
-}
-
-/** Returns whether the current user is allowed `permission` (false if still loading or on error). */
-export function usePermission(permission: string): boolean {
-  const { allows, loading, error } = usePermissions()
-  if (loading || error) return false
-  return allows(permission)
 }

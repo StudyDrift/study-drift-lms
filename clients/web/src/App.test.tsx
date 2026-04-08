@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import App from './App'
-import { PermissionsProvider } from './context/PermissionsContext'
+import { PermissionsProvider } from './context/PermissionsProvider'
 import { setAccessToken } from './lib/auth'
 
 describe('App routing', () => {

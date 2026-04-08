@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { CommandPaletteProvider } from '../command-palette/CommandPaletteProvider'
-import { InboxUnreadProvider } from '../../context/InboxUnreadContext'
+import { InboxUnreadProvider } from '../../context/InboxUnreadProvider'
 import { SideNav } from './SideNav'
 import { TopBar } from './TopBar'
 

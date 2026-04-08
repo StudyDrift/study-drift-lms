@@ -27,7 +27,7 @@ import { LmsPage } from './LmsPage'
 import { ModuleNameModal } from './ModuleNameModal'
 import { ModuleSettingsModal } from './ModuleSettingsModal'
 import { RequirePermission } from '../../components/RequirePermission'
-import { usePermissions } from '../../context/PermissionsContext'
+import { usePermissions } from '../../context/usePermissions'
 import {
   createCourseModule,
   createModuleAssignment,

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import { X } from 'lucide-react'
 
 type ModuleNameModalProps = {
@@ -11,8 +11,12 @@ type ModuleNameModalProps = {
   mode?: 'module' | 'heading' | 'content_page' | 'assignment'
 }
 
-export function ModuleNameModal({
-  open,
+export function ModuleNameModal(props: ModuleNameModalProps) {
+  if (!props.open) return null
+  return <ModuleNameModalInner {...props} />
+}
+
+function ModuleNameModalInner({
   onClose,
   onSave,
   saving = false,
@@ -22,12 +26,6 @@ export function ModuleNameModal({
   const titleId = useId()
   const inputId = useId()
   const [value, setValue] = useState('')
-
-  useEffect(() => {
-    if (open) setValue('')
-  }, [open])
-
-  if (!open) return null
 
   const dialogTitle =
     mode === 'heading'
