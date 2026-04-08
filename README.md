@@ -1,3 +1,4 @@
+
 <!-- TEXT_SECTION:header:START -->
 <p align="center">
   <a href="https://linear.app" target="_blank" rel="noopener noreferrer">
@@ -46,7 +47,7 @@ Open-source learning platform for running courses end to end: structured modules
 - **Fast, typed stack**: **Rust** HTTP API (**Axum** on **Tokio**) plus a **React 19** SPA built with **Vite**, **TypeScript**, and **Tailwind CSS v4**.
 - **Data layer**: **PostgreSQL** (users, courses, and relational data via **sqlx** migrations); **MongoDB** is wired in for future document-style workloads.
 
-## Tech stack
+## Tech stack 
 
 
 | Layer             | Choices                                                                   |
