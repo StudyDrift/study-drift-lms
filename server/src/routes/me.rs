@@ -15,6 +15,7 @@ async fn get_my_permissions(
     headers: HeaderMap,
 ) -> Result<Json<MyPermissionsResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
-    let permission_strings = rbac::list_granted_permission_strings(&state.pool, user.user_id).await?;
+    let permission_strings =
+        rbac::list_granted_permission_strings(&state.pool, user.user_id).await?;
     Ok(Json(MyPermissionsResponse { permission_strings }))
 }

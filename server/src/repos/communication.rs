@@ -77,49 +77,9 @@ pub async fn list_for_user(
         Some(format!("%{pattern}%"))
     };
 
-    let rows: Vec<ListRow> = if search.is_none() {
-        sqlx::query_as::<_, ListRow>(
-            &format!(
-                r#"
-            SELECT
-              m.id AS message_id,
-              m.sender_user_id,
-              m.recipient_user_id,
-              m.subject,
-              m.body,
-              m.snippet,
-              m.has_attachment,
-              m.created_at,
-              mb.folder,
-              mb.read_at,
-              mb.starred,
-              sender.email AS sender_email,
-              sender.display_name AS sender_display_name,
-              recipient.email AS recipient_email
-            FROM communication.mailbox_entries mb
-            INNER JOIN communication.messages m ON m.id = mb.message_id
-            INNER JOIN {} sender ON sender.id = m.sender_user_id
-            LEFT JOIN {} recipient ON recipient.id = m.recipient_user_id
-            WHERE mb.user_id = $1
-            AND (
-              ($2::text = 'starred' AND mb.starred = TRUE AND mb.folder <> 'trash')
-              OR ($2::text <> 'starred' AND mb.folder = $2::text)
-            )
-            ORDER BY m.created_at DESC
-            "#,
-                schema::USERS,
-                schema::USERS
-            ),
-        )
-        .bind(user_id)
-        .bind(folder)
-        .fetch_all(pool)
-        .await?
-    } else {
-        let s = search.unwrap();
-        sqlx::query_as::<_, ListRow>(
-            &format!(
-                r#"
+    let rows: Vec<ListRow> = if let Some(s) = search {
+        sqlx::query_as::<_, ListRow>(&format!(
+            r#"
             SELECT
               m.id AS message_id,
               m.sender_user_id,
@@ -150,13 +110,48 @@ pub async fn list_for_user(
             )
             ORDER BY m.created_at DESC
             "#,
-                schema::USERS,
-                schema::USERS
-            ),
-        )
+            schema::USERS,
+            schema::USERS
+        ))
         .bind(user_id)
         .bind(folder)
         .bind(&s)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_as::<_, ListRow>(&format!(
+            r#"
+            SELECT
+              m.id AS message_id,
+              m.sender_user_id,
+              m.recipient_user_id,
+              m.subject,
+              m.body,
+              m.snippet,
+              m.has_attachment,
+              m.created_at,
+              mb.folder,
+              mb.read_at,
+              mb.starred,
+              sender.email AS sender_email,
+              sender.display_name AS sender_display_name,
+              recipient.email AS recipient_email
+            FROM communication.mailbox_entries mb
+            INNER JOIN communication.messages m ON m.id = mb.message_id
+            INNER JOIN {} sender ON sender.id = m.sender_user_id
+            LEFT JOIN {} recipient ON recipient.id = m.recipient_user_id
+            WHERE mb.user_id = $1
+            AND (
+              ($2::text = 'starred' AND mb.starred = TRUE AND mb.folder <> 'trash')
+              OR ($2::text <> 'starred' AND mb.folder = $2::text)
+            )
+            ORDER BY m.created_at DESC
+            "#,
+            schema::USERS,
+            schema::USERS
+        ))
+        .bind(user_id)
+        .bind(folder)
         .fetch_all(pool)
         .await?
     };
@@ -169,9 +164,8 @@ pub async fn get_for_user(
     user_id: Uuid,
     message_id: Uuid,
 ) -> Result<Option<MailboxMessage>, sqlx::Error> {
-    let row = sqlx::query_as::<_, ListRow>(
-        &format!(
-            r#"
+    let row = sqlx::query_as::<_, ListRow>(&format!(
+        r#"
         SELECT
           m.id AS message_id,
           m.sender_user_id,
@@ -193,10 +187,9 @@ pub async fn get_for_user(
         LEFT JOIN {} recipient ON recipient.id = m.recipient_user_id
         WHERE mb.user_id = $1 AND m.id = $2
         "#,
-            schema::USERS,
-            schema::USERS
-        ),
-    )
+        schema::USERS,
+        schema::USERS
+    ))
     .bind(user_id)
     .bind(message_id)
     .fetch_optional(pool)

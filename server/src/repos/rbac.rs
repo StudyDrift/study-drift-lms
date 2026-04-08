@@ -37,16 +37,14 @@ pub fn validate_permission_string(raw: &str) -> Result<(), String> {
 }
 
 pub async fn list_permissions(pool: &PgPool) -> Result<Vec<Permission>, sqlx::Error> {
-    sqlx::query_as::<_, Permission>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, Permission>(&format!(
+        r#"
         SELECT id, permission_string, description, created_at
         FROM {}
         ORDER BY permission_string ASC
         "#,
-            schema::PERMISSIONS
-        ),
-    )
+        schema::PERMISSIONS
+    ))
     .fetch_all(pool)
     .await
 }
@@ -56,16 +54,14 @@ pub async fn create_permission(
     permission_string: &str,
     description: &str,
 ) -> Result<Permission, sqlx::Error> {
-    sqlx::query_as::<_, Permission>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, Permission>(&format!(
+        r#"
         INSERT INTO {} (permission_string, description)
         VALUES ($1, $2)
         RETURNING id, permission_string, description, created_at
         "#,
-            schema::PERMISSIONS
-        ),
-    )
+        schema::PERMISSIONS
+    ))
     .bind(permission_string)
     .bind(description)
     .fetch_one(pool)
@@ -77,17 +73,15 @@ pub async fn patch_permission(
     id: Uuid,
     description: &str,
 ) -> Result<Option<Permission>, sqlx::Error> {
-    sqlx::query_as::<_, Permission>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, Permission>(&format!(
+        r#"
         UPDATE {}
         SET description = $2
         WHERE id = $1
         RETURNING id, permission_string, description, created_at
         "#,
-            schema::PERMISSIONS
-        ),
-    )
+        schema::PERMISSIONS
+    ))
     .bind(id)
     .bind(description)
     .fetch_optional(pool)
@@ -95,24 +89,25 @@ pub async fn patch_permission(
 }
 
 pub async fn delete_permission(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
-    let res = sqlx::query(&format!("DELETE FROM {} WHERE id = $1", schema::PERMISSIONS))
-        .bind(id)
-        .execute(pool)
-        .await?;
+    let res = sqlx::query(&format!(
+        "DELETE FROM {} WHERE id = $1",
+        schema::PERMISSIONS
+    ))
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(res.rows_affected() > 0)
 }
 
 pub async fn list_roles(pool: &PgPool) -> Result<Vec<AppRole>, sqlx::Error> {
-    sqlx::query_as::<_, AppRole>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, AppRole>(&format!(
+        r#"
         SELECT id, name, description, scope, created_at
         FROM {}
         ORDER BY name ASC
         "#,
-            schema::APP_ROLES
-        ),
-    )
+        schema::APP_ROLES
+    ))
     .fetch_all(pool)
     .await
 }
@@ -121,17 +116,15 @@ pub async fn list_roles_with_permissions(
     pool: &PgPool,
 ) -> Result<Vec<RoleWithPermissions>, sqlx::Error> {
     let roles = list_roles(pool).await?;
-    let rows = sqlx::query_as::<_, RolePermRow>(
-        &format!(
-            r#"
+    let rows = sqlx::query_as::<_, RolePermRow>(&format!(
+        r#"
         SELECT rp.role_id, p.id AS perm_id, p.permission_string, p.description, p.created_at
         FROM {} rp
         INNER JOIN {} p ON p.id = rp.permission_id
         "#,
-            schema::RBAC_ROLE_PERMISSIONS,
-            schema::PERMISSIONS
-        ),
-    )
+        schema::RBAC_ROLE_PERMISSIONS,
+        schema::PERMISSIONS
+    ))
     .fetch_all(pool)
     .await?;
 
@@ -162,16 +155,14 @@ pub async fn create_role(
     description: &str,
     scope: &str,
 ) -> Result<AppRole, sqlx::Error> {
-    sqlx::query_as::<_, AppRole>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, AppRole>(&format!(
+        r#"
         INSERT INTO {} (name, description, scope)
         VALUES ($1, $2, $3)
         RETURNING id, name, description, scope, created_at
         "#,
-            schema::APP_ROLES
-        ),
-    )
+        schema::APP_ROLES
+    ))
     .bind(name)
     .bind(description)
     .bind(scope)
@@ -186,17 +177,15 @@ pub async fn patch_role(
     description: &str,
     scope: &str,
 ) -> Result<Option<AppRole>, sqlx::Error> {
-    sqlx::query_as::<_, AppRole>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, AppRole>(&format!(
+        r#"
         UPDATE {}
         SET name = $2, description = $3, scope = $4
         WHERE id = $1
         RETURNING id, name, description, scope, created_at
         "#,
-            schema::APP_ROLES
-        ),
-    )
+        schema::APP_ROLES
+    ))
     .bind(id)
     .bind(name)
     .bind(description)
@@ -227,19 +216,17 @@ pub async fn set_role_permissions(
         "DELETE FROM {} WHERE role_id = $1",
         schema::RBAC_ROLE_PERMISSIONS
     ))
-        .bind(role_id)
-        .execute(&mut *tx)
-        .await?;
+    .bind(role_id)
+    .execute(&mut *tx)
+    .await?;
     for pid in &uniq {
-        sqlx::query(
-            &format!(
-                r#"
+        sqlx::query(&format!(
+            r#"
             INSERT INTO {} (role_id, permission_id)
             VALUES ($1, $2)
             "#,
-                schema::RBAC_ROLE_PERMISSIONS
-            ),
-        )
+            schema::RBAC_ROLE_PERMISSIONS
+        ))
         .bind(role_id)
         .bind(pid)
         .execute(&mut *tx)
@@ -253,9 +240,8 @@ pub async fn list_granted_permission_strings(
     pool: &PgPool,
     user_id: Uuid,
 ) -> Result<Vec<String>, sqlx::Error> {
-    let raw: Vec<String> = sqlx::query_scalar(
-        &format!(
-            r#"
+    let raw: Vec<String> = sqlx::query_scalar(&format!(
+        r#"
         SELECT s.permission_string FROM (
             SELECT DISTINCT p.permission_string
             FROM {} uar
@@ -268,18 +254,18 @@ pub async fn list_granted_permission_strings(
             WHERE g.user_id = $1
         ) AS s
         "#,
-            schema::USER_APP_ROLES,
-            schema::RBAC_ROLE_PERMISSIONS,
-            schema::PERMISSIONS,
-            schema::USER_COURSE_GRANTS,
-        ),
-    )
+        schema::USER_APP_ROLES,
+        schema::RBAC_ROLE_PERMISSIONS,
+        schema::PERMISSIONS,
+        schema::USER_COURSE_GRANTS,
+    ))
     .bind(user_id)
     .bind(user_id)
     .fetch_all(pool)
     .await?;
 
-    let staff_course_codes = enrollment::list_course_codes_where_user_is_staff(pool, user_id).await?;
+    let staff_course_codes =
+        enrollment::list_course_codes_where_user_is_staff(pool, user_id).await?;
 
     let mut out: BTreeSet<String> = BTreeSet::new();
     for s in raw {
@@ -315,22 +301,20 @@ pub async fn assign_user_role_by_name(
         "SELECT id FROM {} WHERE name = $1",
         schema::APP_ROLES
     ))
-        .bind(role_name)
-        .fetch_optional(pool)
-        .await?;
+    .bind(role_name)
+    .fetch_optional(pool)
+    .await?;
     let Some(role_id) = role_id else {
         return Ok(());
     };
-    sqlx::query(
-        &format!(
-            r#"
+    sqlx::query(&format!(
+        r#"
         INSERT INTO {} (user_id, role_id)
         VALUES ($1, $2)
         ON CONFLICT (user_id, role_id) DO NOTHING
         "#,
-            schema::USER_APP_ROLES
-        ),
-    )
+        schema::USER_APP_ROLES
+    ))
     .bind(user_id)
     .bind(role_id)
     .execute(pool)
@@ -343,9 +327,9 @@ pub async fn role_exists(pool: &PgPool, role_id: Uuid) -> Result<bool, sqlx::Err
         "SELECT EXISTS(SELECT 1 FROM {} WHERE id = $1)",
         schema::APP_ROLES
     ))
-        .bind(role_id)
-        .fetch_one(pool)
-        .await
+    .bind(role_id)
+    .fetch_one(pool)
+    .await
 }
 
 pub async fn user_exists(pool: &PgPool, user_id: Uuid) -> Result<bool, sqlx::Error> {
@@ -353,25 +337,26 @@ pub async fn user_exists(pool: &PgPool, user_id: Uuid) -> Result<bool, sqlx::Err
         "SELECT EXISTS(SELECT 1 FROM {} WHERE id = $1)",
         schema::USERS
     ))
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
 }
 
-pub async fn list_users_in_role(pool: &PgPool, role_id: Uuid) -> Result<Vec<UserBrief>, sqlx::Error> {
-    sqlx::query_as::<_, UserBrief>(
-        &format!(
-            r#"
+pub async fn list_users_in_role(
+    pool: &PgPool,
+    role_id: Uuid,
+) -> Result<Vec<UserBrief>, sqlx::Error> {
+    sqlx::query_as::<_, UserBrief>(&format!(
+        r#"
         SELECT u.id, u.email, u.display_name
         FROM {} u
         INNER JOIN {} uar ON uar.user_id = u.id
         WHERE uar.role_id = $1
         ORDER BY LOWER(u.email) ASC
         "#,
-            schema::USERS,
-            schema::USER_APP_ROLES
-        ),
-    )
+        schema::USERS,
+        schema::USER_APP_ROLES
+    ))
     .bind(role_id)
     .fetch_all(pool)
     .await
@@ -387,9 +372,8 @@ pub async fn list_users_eligible_for_role(
         None => "%".to_string(),
     };
 
-    sqlx::query_as::<_, UserBrief>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, UserBrief>(&format!(
+        r#"
         SELECT u.id, u.email, u.display_name
         FROM {} u
         WHERE NOT EXISTS (
@@ -404,10 +388,9 @@ pub async fn list_users_eligible_for_role(
         ORDER BY LOWER(u.email) ASC
         LIMIT 200
         "#,
-            schema::USERS,
-            schema::USER_APP_ROLES
-        ),
-    )
+        schema::USERS,
+        schema::USER_APP_ROLES
+    ))
     .bind(role_id)
     .bind(&pattern)
     .fetch_all(pool)
@@ -419,16 +402,14 @@ pub async fn add_user_to_role(
     role_id: Uuid,
     user_id: Uuid,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        &format!(
-            r#"
+    sqlx::query(&format!(
+        r#"
         INSERT INTO {} (user_id, role_id)
         VALUES ($1, $2)
         ON CONFLICT (user_id, role_id) DO NOTHING
         "#,
-            schema::USER_APP_ROLES
-        ),
-    )
+        schema::USER_APP_ROLES
+    ))
     .bind(user_id)
     .bind(role_id)
     .execute(pool)
@@ -445,10 +426,10 @@ pub async fn remove_user_from_role(
         "DELETE FROM {} WHERE user_id = $1 AND role_id = $2",
         schema::USER_APP_ROLES
     ))
-        .bind(user_id)
-        .bind(role_id)
-        .execute(pool)
-        .await?;
+    .bind(user_id)
+    .bind(role_id)
+    .execute(pool)
+    .await?;
     Ok(res.rows_affected() > 0)
 }
 
@@ -485,19 +466,17 @@ pub async fn list_permission_strings_for_role(
     pool: &PgPool,
     role_id: Uuid,
 ) -> Result<Vec<String>, sqlx::Error> {
-    sqlx::query_scalar(
-        &format!(
-            r#"
+    sqlx::query_scalar(&format!(
+        r#"
         SELECT p.permission_string
         FROM {} rp
         INNER JOIN {} p ON p.id = rp.permission_id
         WHERE rp.role_id = $1
         ORDER BY p.permission_string ASC
         "#,
-            schema::RBAC_ROLE_PERMISSIONS,
-            schema::PERMISSIONS
-        ),
-    )
+        schema::RBAC_ROLE_PERMISSIONS,
+        schema::PERMISSIONS
+    ))
     .bind(role_id)
     .fetch_all(pool)
     .await

@@ -33,15 +33,17 @@ pub struct WsAuth {
 }
 
 fn notify_mailbox(state: &AppState, user_id: Uuid) {
-    let _ = state.comm_events.send((
-        user_id,
-        r#"{"type":"mailbox_updated"}"#.to_string(),
-    ));
+    let _ = state
+        .comm_events
+        .send((user_id, r#"{"type":"mailbox_updated"}"#.to_string()));
 }
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/communication/messages", get(list_handler).post(send_handler))
+        .route(
+            "/api/v1/communication/messages",
+            get(list_handler).post(send_handler),
+        )
         .route(
             "/api/v1/communication/messages/{id}",
             get(get_handler).patch(patch_handler),
@@ -156,7 +158,10 @@ async fn ws_handler(
     State(state): State<AppState>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = state.jwt.verify(&token).map_err(|_| AppError::Unauthorized)?;
+    let user = state
+        .jwt
+        .verify(&token)
+        .map_err(|_| AppError::Unauthorized)?;
     Ok(ws.on_upgrade(move |socket| handle_ws(socket, state, user.user_id)))
 }
 

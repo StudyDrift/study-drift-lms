@@ -22,9 +22,9 @@ Rules:
 
 fn map_open_router_err(e: OpenRouterError) -> AppError {
     match e {
-        OpenRouterError::NoImageInResponse => AppError::AiGenerationFailed(
-            "The model returned an unexpected response.".into(),
-        ),
+        OpenRouterError::NoImageInResponse => {
+            AppError::AiGenerationFailed("The model returned an unexpected response.".into())
+        }
         OpenRouterError::ApiStatus(code, msg) => AppError::AiGenerationFailed(format!(
             "OpenRouter ({code}): {}",
             msg.chars().take(800).collect::<String>()
@@ -150,16 +150,12 @@ fn assistant_message_json(content: Option<String>, tool_calls: &[ToolCall]) -> V
     })
 }
 
-async fn execute_tool(
-    pool: &sqlx::PgPool,
-    course_id: Uuid,
-    name: &str,
-    arguments: &str,
-) -> String {
+async fn execute_tool(pool: &sqlx::PgPool, course_id: Uuid, name: &str, arguments: &str) -> String {
     match name {
         "create_module" => {
             let Ok(args) = serde_json::from_str::<NameArg>(arguments) else {
-                return json!({ "ok": false, "error": "Invalid JSON for create_module" }).to_string();
+                return json!({ "ok": false, "error": "Invalid JSON for create_module" })
+                    .to_string();
             };
             let title = args.name.trim();
             if title.is_empty() {
@@ -176,14 +172,20 @@ async fn execute_tool(
         }
         "create_heading" => {
             let Ok(args) = serde_json::from_str::<ModuleChildArgs>(arguments) else {
-                return json!({ "ok": false, "error": "Invalid JSON for create_heading" }).to_string();
+                return json!({ "ok": false, "error": "Invalid JSON for create_heading" })
+                    .to_string();
             };
             let title = args.name.trim();
             if title.is_empty() {
                 return json!({ "ok": false, "error": "name is required" }).to_string();
             }
-            match course_structure::insert_heading_under_module(pool, course_id, args.module_id, title)
-                .await
+            match course_structure::insert_heading_under_module(
+                pool,
+                course_id,
+                args.module_id,
+                title,
+            )
+            .await
             {
                 Ok(row) => {
                     let r: CourseStructureItemResponse = row.into();
@@ -201,7 +203,8 @@ async fn execute_tool(
         }
         "create_content_page" => {
             let Ok(args) = serde_json::from_str::<ModuleChildArgs>(arguments) else {
-                return json!({ "ok": false, "error": "Invalid JSON for create_content_page" }).to_string();
+                return json!({ "ok": false, "error": "Invalid JSON for create_content_page" })
+                    .to_string();
             };
             let title = args.name.trim();
             if title.is_empty() {
@@ -231,7 +234,8 @@ async fn execute_tool(
         }
         "reorder_structure" => {
             let Ok(args) = serde_json::from_str::<ReorderArgs>(arguments) else {
-                return json!({ "ok": false, "error": "Invalid JSON for reorder_structure" }).to_string();
+                return json!({ "ok": false, "error": "Invalid JSON for reorder_structure" })
+                    .to_string();
             };
             match course_structure::apply_module_and_child_order(
                 pool,
@@ -291,11 +295,15 @@ pub async fn run_course_structure_ai(
 
         if assistant.tool_calls.is_empty() {
             let rows = course_structure::list_for_course(pool, course_id).await?;
-            let items: Vec<CourseStructureItemResponse> = rows.into_iter().map(Into::into).collect();
+            let items: Vec<CourseStructureItemResponse> =
+                rows.into_iter().map(Into::into).collect();
             return Ok((items, assistant.content));
         }
 
-        tail.push(assistant_message_json(assistant.content, &assistant.tool_calls));
+        tail.push(assistant_message_json(
+            assistant.content,
+            &assistant.tool_calls,
+        ));
 
         for tc in &assistant.tool_calls {
             let out = execute_tool(pool, course_id, &tc.name, &tc.arguments).await;

@@ -1,8 +1,4 @@
-use axum::{
-    extract::State,
-    routing::post,
-    Json, Router,
-};
+use axum::{extract::State, routing::post, Json, Router};
 
 use crate::error::AppError;
 use crate::models::auth::{AuthResponse, LoginRequest, SignupRequest};

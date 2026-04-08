@@ -1,9 +1,3 @@
-use axum::{
-    extract::{Path, State},
-    http::HeaderMap,
-    routing::{get, patch, post, put},
-    Json, Router,
-};
 use crate::error::AppError;
 use crate::http_auth::{auth_user, require_permission};
 use crate::models::course::{
@@ -13,7 +7,6 @@ use crate::models::course::{
 use crate::models::course_grading::{
     CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
 };
-use crate::models::course_syllabus::{CourseSyllabusResponse, SyllabusSection, UpdateCourseSyllabusRequest};
 use crate::models::course_module_content::{
     CreateCourseContentPageRequest, ModuleContentPageResponse, UpdateModuleContentPageRequest,
 };
@@ -22,16 +15,17 @@ use crate::models::course_structure::{
     CourseStructureResponse, CreateCourseAssignmentRequest, CreateCourseHeadingRequest,
     CreateCourseModuleRequest, PatchCourseModuleRequest, ReorderCourseStructureRequest,
 };
-use crate::repos::course_grading::PutError;
+use crate::models::course_syllabus::{
+    CourseSyllabusResponse, SyllabusSection, UpdateCourseSyllabusRequest,
+};
 use crate::models::enrollment::{
     AddEnrollmentsRequest, AddEnrollmentsResponse, CourseEnrollmentsResponse,
 };
 use crate::models::rbac::CourseScopedRolesResponse;
-use crate::repos::user;
-use crate::services::auth;
 use crate::models::settings_ai::{GenerateCourseImageRequest, GenerateCourseImageResponse};
 use crate::repos::course;
 use crate::repos::course_grading;
+use crate::repos::course_grading::PutError;
 use crate::repos::course_grants;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
@@ -39,10 +33,18 @@ use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
 use crate::repos::rbac;
+use crate::repos::user;
 use crate::repos::user_ai_settings;
 use crate::services::ai::OpenRouterError;
+use crate::services::auth;
 use crate::services::course_structure_ai;
 use crate::state::AppState;
+use axum::{
+    extract::{Path, State},
+    http::HeaderMap,
+    routing::{get, patch, post, put},
+    Json, Router,
+};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -115,7 +117,10 @@ pub fn router() -> Router<AppState> {
             "/api/v1/courses/{course_code}/markdown-theme",
             patch(update_markdown_theme_handler),
         )
-        .route("/api/v1/courses/{course_code}", get(get_handler).put(update_handler))
+        .route(
+            "/api/v1/courses/{course_code}",
+            get(get_handler).put(update_handler),
+        )
         .route(
             "/api/v1/courses/{course_code}/grading",
             get(grading_get_handler).put(grading_put_handler),
@@ -130,9 +135,7 @@ fn parse_email_list(raw: &str) -> Vec<String> {
     use std::collections::HashSet;
     let mut seen = HashSet::new();
     let mut out = Vec::new();
-    for part in raw.split(|c: char| {
-        matches!(c, ',' | ';' | '\n' | '\r') || c.is_whitespace()
-    }) {
+    for part in raw.split(|c: char| matches!(c, ',' | ';' | '\n' | '\r') || c.is_whitespace()) {
         let e = auth::normalize_email(part);
         if e.is_empty() || !e.contains('@') {
             continue;
@@ -183,10 +186,14 @@ fn validate_syllabus_sections(sections: &[SyllabusSection]) -> Result<(), AppErr
             return Err(AppError::InvalidInput("Each section needs an id.".into()));
         }
         if s.heading.len() > MAX_SYLLABUS_HEADING_LEN {
-            return Err(AppError::InvalidInput("Section heading is too long.".into()));
+            return Err(AppError::InvalidInput(
+                "Section heading is too long.".into(),
+            ));
         }
         if s.markdown.len() > MAX_SYLLABUS_MARKDOWN_LEN {
-            return Err(AppError::InvalidInput("Section content is too long.".into()));
+            return Err(AppError::InvalidInput(
+                "Section content is too long.".into(),
+            ));
         }
     }
     Ok(())
@@ -211,7 +218,10 @@ async fn syllabus_get_handler(
         Some((s, t)) => (s, t),
         None => (Vec::new(), Utc::now()),
     };
-    Ok(Json(CourseSyllabusResponse { sections, updated_at }))
+    Ok(Json(CourseSyllabusResponse {
+        sections,
+        updated_at,
+    }))
 }
 
 async fn syllabus_patch_handler(
@@ -279,13 +289,8 @@ async fn create_handler(
         return Err(AppError::InvalidInput("Course title is required.".into()));
     }
 
-    let row = course::create_course(
-        &state.pool,
-        title,
-        req.description.trim(),
-        user.user_id,
-    )
-    .await?;
+    let row =
+        course::create_course(&state.pool, title, req.description.trim(), user.user_id).await?;
     Ok(Json(row))
 }
 
@@ -303,7 +308,8 @@ async fn structure_list_handler(
 
     let rows = course_structure::list_for_course(&state.pool, course_id).await?;
     let required = course_grants::course_item_create_permission(&course_code);
-    let can_edit_structure = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    let can_edit_structure =
+        rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
     let rows = if can_edit_structure {
         rows
     } else {
@@ -369,7 +375,10 @@ async fn course_structure_ai_handler(
         return Err(AppError::InvalidInput("Message is required.".into()));
     }
 
-    let client = state.open_router.as_ref().ok_or(AppError::AiNotConfigured)?;
+    let client = state
+        .open_router
+        .as_ref()
+        .ok_or(AppError::AiNotConfigured)?;
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
@@ -481,12 +490,13 @@ async fn create_module_heading_handler(
         return Err(AppError::NotFound);
     };
 
-    let row = course_structure::insert_heading_under_module(&state.pool, course_id, module_id, title)
-        .await
-        .map_err(|e| match e {
-            sqlx::Error::RowNotFound => AppError::NotFound,
-            _ => e.into(),
-        })?;
+    let row =
+        course_structure::insert_heading_under_module(&state.pool, course_id, module_id, title)
+            .await
+            .map_err(|e| match e {
+                sqlx::Error::RowNotFound => AppError::NotFound,
+                _ => e.into(),
+            })?;
     Ok(Json(row.into()))
 }
 
@@ -506,19 +516,22 @@ async fn create_module_assignment_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Assignment name is required.".into()));
+        return Err(AppError::InvalidInput(
+            "Assignment name is required.".into(),
+        ));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
 
-    let row = course_structure::insert_assignment_under_module(&state.pool, course_id, module_id, title)
-        .await
-        .map_err(|e| match e {
-            sqlx::Error::RowNotFound => AppError::NotFound,
-            _ => e.into(),
-        })?;
+    let row =
+        course_structure::insert_assignment_under_module(&state.pool, course_id, module_id, title)
+            .await
+            .map_err(|e| match e {
+                sqlx::Error::RowNotFound => AppError::NotFound,
+                _ => e.into(),
+            })?;
     Ok(Json(row.into()))
 }
 
@@ -545,12 +558,17 @@ async fn create_module_content_page_handler(
         return Err(AppError::NotFound);
     };
 
-    let row = course_structure::insert_content_page_under_module(&state.pool, course_id, module_id, title)
-        .await
-        .map_err(|e| match e {
-            sqlx::Error::RowNotFound => AppError::NotFound,
-            _ => e.into(),
-        })?;
+    let row = course_structure::insert_content_page_under_module(
+        &state.pool,
+        course_id,
+        module_id,
+        title,
+    )
+    .await
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => AppError::NotFound,
+        _ => e.into(),
+    })?;
     Ok(Json(row.into()))
 }
 
@@ -793,23 +811,15 @@ async fn grading_put_handler(
                 "Each assignment group needs a name.".into(),
             ));
         }
-        if !g.weight_percent.is_finite()
-            || g.weight_percent < 0.0
-            || g.weight_percent > 100.0
-        {
+        if !g.weight_percent.is_finite() || g.weight_percent < 0.0 || g.weight_percent > 100.0 {
             return Err(AppError::InvalidInput(
                 "Weights must be between 0 and 100.".into(),
             ));
         }
     }
 
-    match course_grading::put_settings(
-        &state.pool,
-        &course_code,
-        scale,
-        &req.assignment_groups,
-    )
-    .await
+    match course_grading::put_settings(&state.pool, &course_code, scale, &req.assignment_groups)
+        .await
     {
         Ok(Some(row)) => Ok(Json(row)),
         Ok(None) => Err(AppError::NotFound),
@@ -937,7 +947,8 @@ async fn add_enrollments_handler(
         return Err(AppError::NotFound);
     };
 
-    let is_creator = enrollment::user_is_course_creator(&state.pool, &course_code, user.user_id).await?;
+    let is_creator =
+        enrollment::user_is_course_creator(&state.pool, &course_code, user.user_id).await?;
 
     if req.app_role_id.is_some() && !is_creator {
         return Err(AppError::Forbidden);
@@ -971,18 +982,12 @@ async fn add_enrollments_handler(
                 already_enrolled.push(row.email);
                 continue;
             }
-            let existed_before =
-                enrollment::user_role_in_course(&state.pool, &course_code, row.id)
-                    .await?
-                    .is_some();
+            let existed_before = enrollment::user_role_in_course(&state.pool, &course_code, row.id)
+                .await?
+                .is_some();
 
-            enrollment::upsert_instructor_enrollment(
-                &state.pool,
-                &course_code,
-                course_id,
-                row.id,
-            )
-            .await?;
+            enrollment::upsert_instructor_enrollment(&state.pool, &course_code, course_id, row.id)
+                .await?;
             course_grants::apply_app_role_course_grants(
                 &state.pool,
                 row.id,
@@ -1032,7 +1037,9 @@ async fn update_markdown_theme_handler(
 
     let preset = req.preset.trim();
     if preset.is_empty() || !MARKDOWN_THEME_PRESETS.contains(&preset) {
-        return Err(AppError::InvalidInput("Unknown markdown theme preset.".into()));
+        return Err(AppError::InvalidInput(
+            "Unknown markdown theme preset.".into(),
+        ));
     }
 
     let custom_store: Option<MarkdownThemeCustom> = if preset == "custom" {
@@ -1041,14 +1048,10 @@ async fn update_markdown_theme_handler(
         None
     };
 
-    let row = course::update_markdown_theme(
-        &state.pool,
-        &course_code,
-        preset,
-        custom_store.as_ref(),
-    )
-    .await?
-    .ok_or(AppError::NotFound)?;
+    let row =
+        course::update_markdown_theme(&state.pool, &course_code, preset, custom_store.as_ref())
+            .await?
+            .ok_or(AppError::NotFound)?;
     Ok(Json(row))
 }
 
@@ -1068,14 +1071,16 @@ async fn update_handler(
 
     let row = course::update_course(
         &state.pool,
-        &course_code,
-        title,
-        req.description.trim(),
-        req.published,
-        req.starts_at,
-        req.ends_at,
-        req.visible_from,
-        req.hidden_at,
+        &course::UpdateCourse {
+            course_code: &course_code,
+            title,
+            description: req.description.trim(),
+            published: req.published,
+            starts_at: req.starts_at,
+            ends_at: req.ends_at,
+            visible_from: req.visible_from,
+            hidden_at: req.hidden_at,
+        },
     )
     .await?
     .ok_or(AppError::NotFound)?;
@@ -1162,14 +1167,9 @@ async fn set_hero_image_handler(
         }
     };
 
-    let row = course::set_hero_image_fields(
-        &state.pool,
-        &course_code,
-        &new_url,
-        new_pos.as_deref(),
-    )
-    .await?
-    .ok_or(AppError::NotFound)?;
+    let row =
+        course::set_hero_image_fields(&state.pool, &course_code, &new_url, new_pos.as_deref())
+            .await?
+            .ok_or(AppError::NotFound)?;
     Ok(Json(row))
 }
-

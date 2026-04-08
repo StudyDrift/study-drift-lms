@@ -6,18 +6,29 @@ use uuid::Uuid;
 
 use crate::db::schema;
 use crate::models::course::{CoursePublic, MarkdownThemeCustom};
-use serde_json::Value as JsonValue;
 use crate::repos::course_grants;
 use crate::repos::rbac;
+use serde_json::Value as JsonValue;
+
+/// Fields for [`update_course`].
+pub struct UpdateCourse<'a> {
+    pub course_code: &'a str,
+    pub title: &'a str,
+    pub description: &'a str,
+    pub published: bool,
+    pub starts_at: Option<DateTime<Utc>>,
+    pub ends_at: Option<DateTime<Utc>>,
+    pub visible_from: Option<DateTime<Utc>>,
+    pub hidden_at: Option<DateTime<Utc>>,
+}
 
 /// Courses the user is enrolled in (any role), including drafts.
 pub async fn list_for_enrolled_user(
     pool: &PgPool,
     user_id: Uuid,
 ) -> Result<Vec<CoursePublic>, sqlx::Error> {
-    sqlx::query_as::<_, CoursePublic>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, CoursePublic>(&format!(
+        r#"
         SELECT
             c.id,
             c.course_code,
@@ -39,10 +50,9 @@ pub async fn list_for_enrolled_user(
         INNER JOIN {} e ON e.course_id = c.id AND e.user_id = $1
         ORDER BY c.title ASC
         "#,
-            schema::COURSES,
-            schema::COURSE_ENROLLMENTS
-        ),
-    )
+        schema::COURSES,
+        schema::COURSE_ENROLLMENTS
+    ))
     .bind(user_id)
     .fetch_all(pool)
     .await
@@ -63,9 +73,8 @@ pub async fn create_course(
     for _ in 0..32 {
         let code = new_course_code();
         let mut tx = pool.begin().await?;
-        let result = sqlx::query_as::<_, CoursePublic>(
-            &format!(
-                r#"
+        let result = sqlx::query_as::<_, CoursePublic>(&format!(
+            r#"
             INSERT INTO {} (course_code, title, description, published, created_by_user_id)
             VALUES ($1, $2, $3, false, $4)
             RETURNING
@@ -86,9 +95,8 @@ pub async fn create_course(
                 created_at,
                 updated_at
             "#,
-                schema::COURSES
-            ),
-        )
+            schema::COURSES
+        ))
         .bind(&code)
         .bind(title)
         .bind(description)
@@ -127,8 +135,7 @@ pub async fn create_course(
         }
     }
 
-    Err(sqlx::Error::Io(std::io::Error::new(
-        std::io::ErrorKind::Other,
+    Err(sqlx::Error::Io(std::io::Error::other(
         "could not allocate a unique course_code",
     )))
 }
@@ -137,9 +144,8 @@ pub async fn get_by_course_code(
     pool: &PgPool,
     course_code: &str,
 ) -> Result<Option<CoursePublic>, sqlx::Error> {
-    sqlx::query_as::<_, CoursePublic>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, CoursePublic>(&format!(
+        r#"
         SELECT
             id,
             course_code,
@@ -160,9 +166,8 @@ pub async fn get_by_course_code(
         FROM {}
         WHERE course_code = $1
         "#,
-            schema::COURSES
-        ),
-    )
+        schema::COURSES
+    ))
     .bind(course_code)
     .fetch_optional(pool)
     .await
@@ -183,18 +188,10 @@ pub async fn get_id_by_course_code(
 
 pub async fn update_course(
     pool: &PgPool,
-    course_code: &str,
-    title: &str,
-    description: &str,
-    published: bool,
-    starts_at: Option<DateTime<Utc>>,
-    ends_at: Option<DateTime<Utc>>,
-    visible_from: Option<DateTime<Utc>>,
-    hidden_at: Option<DateTime<Utc>>,
+    u: &UpdateCourse<'_>,
 ) -> Result<Option<CoursePublic>, sqlx::Error> {
-    sqlx::query_as::<_, CoursePublic>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, CoursePublic>(&format!(
+        r#"
         UPDATE {}
         SET
             title = $1,
@@ -224,17 +221,16 @@ pub async fn update_course(
             created_at,
             updated_at
         "#,
-            schema::COURSES
-        ),
-    )
-    .bind(title)
-    .bind(description)
-    .bind(published)
-    .bind(starts_at)
-    .bind(ends_at)
-    .bind(visible_from)
-    .bind(hidden_at)
-    .bind(course_code)
+        schema::COURSES
+    ))
+    .bind(u.title)
+    .bind(u.description)
+    .bind(u.published)
+    .bind(u.starts_at)
+    .bind(u.ends_at)
+    .bind(u.visible_from)
+    .bind(u.hidden_at)
+    .bind(u.course_code)
     .fetch_optional(pool)
     .await
 }
@@ -245,9 +241,8 @@ pub async fn set_hero_image_fields(
     hero_image_url: &str,
     hero_image_object_position: Option<&str>,
 ) -> Result<Option<CoursePublic>, sqlx::Error> {
-    sqlx::query_as::<_, CoursePublic>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, CoursePublic>(&format!(
+        r#"
         UPDATE {}
         SET
             hero_image_url = $1,
@@ -272,9 +267,8 @@ pub async fn set_hero_image_fields(
             created_at,
             updated_at
         "#,
-            schema::COURSES
-        ),
-    )
+        schema::COURSES
+    ))
     .bind(hero_image_url)
     .bind(hero_image_object_position)
     .bind(course_code)
@@ -288,14 +282,11 @@ pub async fn update_markdown_theme(
     preset: &str,
     custom: Option<&MarkdownThemeCustom>,
 ) -> Result<Option<CoursePublic>, sqlx::Error> {
-    let custom_json: Option<JsonValue> = match custom {
-        None => None,
-        Some(c) => Some(serde_json::to_value(c).unwrap_or(JsonValue::Null)),
-    };
+    let custom_json: Option<JsonValue> =
+        custom.map(|c| serde_json::to_value(c).unwrap_or(JsonValue::Null));
 
-    sqlx::query_as::<_, CoursePublic>(
-        &format!(
-            r#"
+    sqlx::query_as::<_, CoursePublic>(&format!(
+        r#"
         UPDATE {}
         SET
             markdown_theme_preset = $1,
@@ -320,9 +311,8 @@ pub async fn update_markdown_theme(
             created_at,
             updated_at
         "#,
-            schema::COURSES
-        ),
-    )
+        schema::COURSES
+    ))
     .bind(preset)
     .bind(custom_json)
     .bind(course_code)
