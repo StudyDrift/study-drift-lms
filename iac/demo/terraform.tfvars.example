@@ -1,10 +1,27 @@
 # Copy to terraform.tfvars (do not commit secrets).
 #
 # Local Terraform: export DIGITALOCEAN_TOKEN="dop_v1_..."
-# GitHub Actions: set repository secrets DIGITALOCEAN_TOKEN, TF_TOKEN, TF_CLOUD_ORGANIZATION
 #
-# Remote state uses Terraform Cloud (workspace "lextures-demo" in versions.tf). Create the workspace,
-# set variable ssh_key_ids (list of SSH key IDs/fingerprints from DigitalOcean), then run terraform.
+# Terraform Cloud (HCP Terraform) — required for `terraform init` with the `cloud` block in versions.tf:
+#   • TF_TOKEN — user API token from https://app.terraform.io/app/settings/tokens
+#   • TF_CLOUD_ORGANIZATION — org slug only (the name in the URL: https://app.terraform.io/app/<slug>/workspaces).
+#     Must match an organization your account belongs to. Not your GitHub org name unless they are identical.
+#   • If you see "organization ... not found": fix the slug, create the org in the Terraform Cloud UI, or
+#     invite your user to that org. Alternatively set `organization` in the `cloud` block in versions.tf.
+#
+# GitHub Actions: set repository secrets DIGITALOCEAN_TOKEN, TF_TOKEN, TF_CLOUD_ORGANIZATION (same rules).
+#
+# Remote state uses workspace "lextures-demo" (create it in Terraform Cloud or let the first run create it).
+# Set variable ssh_key_ids (list) in the workspace or via TF_VAR_ssh_key_ids for the DigitalOcean provider.
+#
+# ── DigitalOcean API 401 "Unable to authenticate you" during apply ───────────────────────────────
+# If Terraform Cloud runs apply in REMOTE mode (default), the run executes on HashiCorp's runners — it does
+# NOT see DIGITALOCEAN_TOKEN from GitHub Actions. Fix ONE of:
+#   1) Terraform Cloud → workspace "lextures-demo" → Settings → General → Execution mode → Local
+#      (plan/apply then run on your machine or in CI, and GitHub secret DIGITALOCEAN_TOKEN is used), OR
+#   2) Terraform Cloud → same workspace → Variables → add variable name DIGITALOCEAN_TOKEN (sensitive),
+#      value = your DO personal access token (API → Tokens in DigitalOcean).
+# Also verify the token is not expired and has scope to create Droplets (Write).
 
 # region       = "nyc1"
 # droplet_name = "lextures-demo"

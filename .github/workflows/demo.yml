@@ -5,7 +5,9 @@
 # GitHub secrets (repository):
 #   TF_TOKEN                    — Terraform Cloud API token (https://app.terraform.io/app/settings/tokens)
 #   TF_CLOUD_ORGANIZATION       — Terraform Cloud org name (if not set in the cloud block)
-#   DIGITALOCEAN_TOKEN          — DigitalOcean API token for the provider
+#   DIGITALOCEAN_TOKEN          — DigitalOcean API token (https://cloud.digitalocean.com/account/api/tokens)
+#                                 Only used if Terraform Cloud workspace execution mode is Local; if Remote,
+#                                 also set DIGITALOCEAN_TOKEN as a sensitive variable on the TFC workspace.
 #   SSH_PRIVATE_KEY             — Private key matching a public key added to the Droplet (ssh_key_ids in Terraform Cloud / tfvars)
 #   POSTGRES_PASSWORD           — DB password for docker-compose.deploy.yml
 #   JWT_SECRET                  — Server JWT signing secret
