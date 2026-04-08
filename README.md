@@ -1,3 +1,36 @@
+<!-- TEXT_SECTION:header:START -->
+<p align="center">
+  <a href="https://linear.app" target="_blank" rel="noopener noreferrer">
+    <img width="150" src="public/logo-trimmed.svg" alt="Linear logo">
+  </a> 
+</p>
+<h1 align="center">
+  Lextures
+</h1>
+<h3 align="center">
+  Learn by Learning & Teach by Teaching
+</h3>
+<p align="center">
+  Lextures uses AI to streamlines the process of course creation, quiz generation, and content management, enabling educators and learners to get to the content as quickly as possible
+</p>
+<p align="center">
+  <a href="/LICENSE">
+    <img src="https://img.shields.io/badge/license-AGPL_3.0-blue" alt="Lextures is released under the AGPL 3.0 license." />
+  </a>
+  <a href="https://github.com/StudyDrift/study-drift-lms/actions/workflows/build.yml">
+    <img src="https://github.com/StudyDrift/study-drift-lms/actions/workflows/build.yml/badge.svg" alt="Build github action status." />
+  </a>
+  <a href="https://github.com/StudyDrift/study-drift-lms/actions/workflows/demo-release.yml">
+    <img src="https://github.com/StudyDrift/study-drift-lms/actions/workflows/demo-release.yml/badge.svg" alt="Demo release github action status." />
+  </a>
+</p>
+<p align="center">
+  <a href="https://ambitious-wave-0d94edc10.5.azurestaticapps.net">Live Demo</a>
+</p>
+<!-- TEXT_SECTION:header:END -->
+
+<br/>
+
 # Lextures
 
 **Learn by Learning & Teach by Teaching**
