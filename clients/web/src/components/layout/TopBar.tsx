@@ -1,5 +1,8 @@
-import { Search } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { ChevronDown, LogOut, Search, User } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useCommandPalette } from '../command-palette/useCommandPalette'
+import { clearAccessToken } from '../../lib/auth'
 
 function shortcutHint(): string {
   if (typeof navigator === 'undefined') return '⌘K'
@@ -7,6 +10,85 @@ function shortcutHint(): string {
   const ua = navigator.userAgent ?? ''
   const apple = /Mac|iPhone|iPad|iPod/.test(p) || /Mac OS/.test(ua)
   return apple ? '⌘K' : 'Ctrl+K'
+}
+
+function UserMenu() {
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const menuId = useId()
+
+  useEffect(() => {
+    if (!open) return
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  function signOut() {
+    setOpen(false)
+    clearAccessToken()
+    navigate('/login', { replace: true })
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        aria-label="User menu"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+      >
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700">
+          <User className="h-4 w-4" aria-hidden />
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-slate-500 transition ${open ? 'rotate-180' : ''}`}
+          aria-hidden
+        />
+      </button>
+
+      {open && (
+        <div
+          id={menuId}
+          role="menu"
+          aria-label="Account"
+          className="absolute right-0 z-50 mt-1 min-w-[11rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10"
+        >
+          <Link
+            to="/settings/account"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+          >
+            <User className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+            Profile
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={signOut}
+            className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+          >
+            <LogOut className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function TopBar() {
@@ -26,6 +108,9 @@ export function TopBar() {
             {shortcutHint()}
           </kbd>
         </button>
+      </div>
+      <div className="ml-auto shrink-0">
+        <UserMenu />
       </div>
     </header>
   )
