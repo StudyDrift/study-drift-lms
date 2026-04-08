@@ -3,7 +3,8 @@
 #
 # Required repository secrets:
 #   DIGITALOCEAN_TOKEN   — DigitalOcean API token (write)
-#   TF_TOKEN             — HCP Terraform / Terraform Cloud API token (non-interactive auth)
+#   TF_TOKEN             — HCP Terraform / Terraform Cloud API token (non-interactive auth).
+#                          Also set as TF_TOKEN_app_terraform_io so the CLI finds it for app.terraform.io.
 #   TF_CLOUD_ORGANIZATION — HCP Terraform organization name (replaces `organization` in the cloud block)
 #   DEMO_SSH_PUBLIC_KEY  — SSH public key registered on the droplet (must pair with private key)
 #   DEMO_SSH_PRIVATE_KEY — SSH private key for root@<droplet-ip>
@@ -32,7 +33,9 @@ env:
   TF_IN_AUTOMATION: true
   TF_INPUT: "false"
   TF_VAR_ssh_public_key: ${{ secrets.DEMO_SSH_PUBLIC_KEY }}
+  # HCP Terraform: hostname-specific token is what `terraform init` uses for app.terraform.io.
   TF_TOKEN: ${{ secrets.TF_TOKEN }}
+  TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN }}
   TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
 
 jobs:
