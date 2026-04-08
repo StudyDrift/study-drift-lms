@@ -8,6 +8,9 @@ packages:
 
 runcmd:
   - curl -fsSL https://get.docker.com | sh
+  - systemctl daemon-reload
   - systemctl enable docker
   - systemctl start docker
+  # Wait until the daemon is listening (socket exists); do not fail cloud-init if still slow.
+  - bash -c 'for i in $(seq 1 60); do systemctl is-active --quiet docker && test -S /var/run/docker.sock && docker info >/dev/null 2>&1 && exit 0; systemctl start docker || true; sleep 2; done; exit 0'
   - mkdir -p /opt/lextures

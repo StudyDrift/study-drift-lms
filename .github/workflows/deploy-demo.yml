@@ -127,19 +127,19 @@ jobs:
             exit 1
           fi
 
-          # get.docker.com in cloud-init can take many minutes on small droplets; SSH works before Docker is installed.
-          echo "Waiting for Docker (cloud-init runcmd)..."
+          # docker --version only checks the client; docker compose needs the daemon (docker.sock).
+          echo "Waiting for Docker daemon (docker info)..."
           for i in $(seq 1 80); do
-            if "${SSH_BASE[@]}" "${SSH_USER}@${DROPLET_IP}" "command -v docker >/dev/null 2>&1 && docker --version" 2>/dev/null; then
-              echo "Docker is installed and reachable."
+            if "${SSH_BASE[@]}" "${SSH_USER}@${DROPLET_IP}" "systemctl start docker 2>/dev/null; docker info >/dev/null 2>&1" 2>/dev/null; then
+              echo "Docker daemon is up."
               exit 0
             fi
-            echo "  ... Docker not ready yet ($i/80) - cloud-init may still be installing"
+            echo "  ... Docker daemon not ready yet ($i/80) - cloud-init may still be installing"
             sleep 15
           done
 
           echo "Timed out waiting for Docker. Remote diagnostics:"
-          "${SSH_BASE[@]}" "${SSH_USER}@${DROPLET_IP}" "cloud-init status 2>/dev/null || true; command -v docker || true; ls -la /usr/bin/docker 2>/dev/null || true; tail -80 /var/log/cloud-init-output.log 2>/dev/null || true" 2>&1 || true
+          "${SSH_BASE[@]}" "${SSH_USER}@${DROPLET_IP}" "systemctl status docker --no-pager 2>/dev/null || true; ls -la /var/run/docker.sock 2>/dev/null || true; cloud-init status 2>/dev/null || true; command -v docker || true; tail -80 /var/log/cloud-init-output.log 2>/dev/null || true" 2>&1 || true
           exit 1
 
       - name: Rsync repository to droplet
@@ -186,7 +186,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new \
             "root@${DROPLET_IP}" \
-            "cd /opt/lextures && docker compose -f docker-compose.deploy.yml --env-file .env up -d --build"
+            "systemctl start docker && docker info >/dev/null && cd /opt/lextures && docker compose -f docker-compose.deploy.yml --env-file .env up -d --build"
 
       - name: Wait for /health
         env:
