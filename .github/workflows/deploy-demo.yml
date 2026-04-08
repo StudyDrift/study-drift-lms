@@ -3,14 +3,18 @@
 #
 # Required repository secrets:
 #   DIGITALOCEAN_TOKEN   — DigitalOcean API token (write)
+#   TF_TOKEN             — HCP Terraform / Terraform Cloud API token (non-interactive auth)
+#   TF_CLOUD_ORGANIZATION — HCP Terraform organization name (replaces `organization` in the cloud block)
 #   DEMO_SSH_PUBLIC_KEY  — SSH public key registered on the droplet (must pair with private key)
 #   DEMO_SSH_PRIVATE_KEY — SSH private key for root@<droplet-ip>
 #   DEMO_POSTGRES_PASSWORD — Postgres password for the deploy stack
 #   DEMO_JWT_SECRET      — JWT signing secret for the API
+#   OPEN_ROUTER_API_KEY  — OpenRouter API key (written to the droplet as OPENROUTER_API_KEY)
 #
-# Terraform state is stored as a workflow artifact (terraform-state). If the artifact is missing
-# (first run or expiry), Terraform may try to create a new droplet while an old one still exists;
-# in that case destroy the old droplet in the DO console or restore a state artifact.
+# Terraform state lives in HCP Terraform (workspace `lextures-demo` in iac/demo/versions.tf).
+# The workspace must exist in your org. Execution mode: use Local so plan/apply run on this runner
+# with DIGITALOCEAN_TOKEN from GitHub, or use Remote and add DIGITALOCEAN_TOKEN as a sensitive
+# environment variable on that workspace in Terraform Cloud.
 
 name: Deploy Demo
 
@@ -25,6 +29,8 @@ env:
   TF_IN_AUTOMATION: true
   TF_INPUT: "false"
   TF_VAR_ssh_public_key: ${{ secrets.DEMO_SSH_PUBLIC_KEY }}
+  TF_TOKEN: ${{ secrets.TF_TOKEN }}
+  TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
 
 jobs:
   deploy:
@@ -37,13 +43,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Download Terraform state artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-state
-          path: iac/demo/
-        continue-on-error: true
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -63,14 +62,6 @@ jobs:
         id: droplet
         working-directory: iac/demo
         run: echo "ip=$(terraform output -raw droplet_public_ipv4)" >> "$GITHUB_OUTPUT"
-
-      - name: Upload Terraform state artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-state
-          path: iac/demo/terraform.tfstate
-          retention-days: 90
-          if-no-files-found: error
 
       - name: Install SSH key
         run: |
@@ -123,6 +114,7 @@ jobs:
           DROPLET_IP: ${{ steps.droplet.outputs.ip }}
           DEMO_POSTGRES_PASSWORD: ${{ secrets.DEMO_POSTGRES_PASSWORD }}
           DEMO_JWT_SECRET: ${{ secrets.DEMO_JWT_SECRET }}
+          OPEN_ROUTER_API_KEY: ${{ secrets.OPEN_ROUTER_API_KEY }}
         run: |
           set -euo pipefail
           tmp="$(mktemp)"
@@ -130,6 +122,7 @@ jobs:
             echo "POSTGRES_PASSWORD=${DEMO_POSTGRES_PASSWORD}"
             echo "JWT_SECRET=${DEMO_JWT_SECRET}"
             echo "VITE_API_URL=http://${DROPLET_IP}"
+            echo "OPENROUTER_API_KEY=${OPEN_ROUTER_API_KEY}"
           } > "$tmp"
           scp -i ~/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new \
             "$tmp" "root@${DROPLET_IP}:/opt/lextures/.env"
