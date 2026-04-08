@@ -20,6 +20,9 @@ name: Deploy Demo
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 concurrency:
   group: deploy-demo
