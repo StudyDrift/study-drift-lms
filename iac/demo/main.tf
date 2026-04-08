@@ -2,9 +2,13 @@ provider "digitalocean" {
   token = var.DIGITALOCEAN_TOKEN != "" ? var.DIGITALOCEAN_TOKEN : null
 }
 
+resource "tls_private_key" "demo" {
+  algorithm = "ED25519"
+}
+
 resource "digitalocean_ssh_key" "demo" {
   name       = "${var.droplet_name}-ssh"
-  public_key = var.ssh_public_key
+  public_key = tls_private_key.demo.public_key_openssh
 }
 
 resource "digitalocean_droplet" "demo" {
