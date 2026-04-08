@@ -212,7 +212,10 @@ jobs:
           ping -c 3 -W 5 "$DROPLET_IP"
           exit 0
 
+      # Best-effort: the droplet may not expose 80/8080 yet (Watchtower pull, first boot, or stack stopped).
+      # Failing here should not block main; check logs when you expect the demo to be up.
       - name: HTTP health (web + API)
+        continue-on-error: true
         run: |
           set -euo pipefail
           echo "Checking http://${DROPLET_IP}/health (nginx)..."
