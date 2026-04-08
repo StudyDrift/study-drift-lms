@@ -1,5 +1,6 @@
-# Authenticate with DIGITALOCEAN_TOKEN (set in CI and locally).
-provider "digitalocean" {}
+provider "digitalocean" {
+  token = var.DIGITALOCEAN_TOKEN != "" ? var.DIGITALOCEAN_TOKEN : null
+}
 
 resource "digitalocean_ssh_key" "demo" {
   name       = "${var.droplet_name}-ssh"

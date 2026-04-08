@@ -13,9 +13,14 @@
 #   OPEN_ROUTER_API_KEY  — OpenRouter API key (written to the droplet as OPENROUTER_API_KEY)
 #
 # Terraform state lives in HCP Terraform (workspace `lextures-demo` in iac/demo/versions.tf).
-# The workspace must exist in your org. Execution mode: use Local so plan/apply run on this runner
-# with DIGITALOCEAN_TOKEN from GitHub, or use Remote and add DIGITALOCEAN_TOKEN as a sensitive
-# environment variable on that workspace in Terraform Cloud.
+#
+# Execution mode (workspace Settings → General → Execution mode):
+#   • Local — plan/apply run on this runner; GitHub secrets (e.g. DEMO_SSH_PUBLIC_KEY via
+#     TF_VAR_ssh_public_key) are passed into Terraform. DIGITALOCEAN_TOKEN can stay a repo secret.
+#   • Remote — plan/apply run on Terraform Cloud agents; GitHub env is NOT available. Add workspace
+#     Terraform variables: ssh_public_key (same value as DEMO_SSH_PUBLIC_KEY) and either declare
+#     DIGITALOCEAN_TOKEN as a Terraform variable or set DIGITALOCEAN_TOKEN as a sensitive
+#     environment variable on the workspace (provider reads env when the Terraform var is empty).
 
 name: Deploy Demo
 
