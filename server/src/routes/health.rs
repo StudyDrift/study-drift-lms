@@ -19,8 +19,8 @@ pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
         "SELECT hero_image_url FROM {} LIMIT 0",
         schema::COURSES
     ))
-        .execute(&state.pool)
-        .await
+    .execute(&state.pool)
+    .await
     {
         Ok(_) => (
             StatusCode::OK,

@@ -25,8 +25,7 @@ async fn search_index_handler(
         })
         .collect();
 
-    let people =
-        enrollment::list_people_for_enrolled_courses(&state.pool, user.user_id).await?;
+    let people = enrollment::list_people_for_enrolled_courses(&state.pool, user.user_id).await?;
 
     Ok(Json(SearchIndexResponse { courses, people }))
 }

@@ -12,9 +12,9 @@ use crate::db::schema;
 use crate::error::AppError;
 use crate::http_auth::require_permission;
 use crate::models::rbac::{
-    AddRoleUserRequest, AppRole, CreatePermissionRequest, CreateRoleRequest, PatchPermissionRequest,
-    PatchRoleRequest, Permission, PermissionsListResponse, RoleWithPermissions, RoleUsersResponse,
-    RolesListResponse, SetRolePermissionsRequest,
+    AddRoleUserRequest, AppRole, CreatePermissionRequest, CreateRoleRequest,
+    PatchPermissionRequest, PatchRoleRequest, Permission, PermissionsListResponse,
+    RoleUsersResponse, RoleWithPermissions, RolesListResponse, SetRolePermissionsRequest,
 };
 use crate::repos::rbac;
 use crate::state::AppState;
@@ -30,7 +30,10 @@ struct EligibleUsersQuery {
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/settings/permissions", get(list_permissions).post(create_permission))
+        .route(
+            "/api/v1/settings/permissions",
+            get(list_permissions).post(create_permission),
+        )
         .route(
             "/api/v1/settings/permissions/{id}",
             patch(patch_permission).delete(delete_permission),
@@ -88,7 +91,9 @@ async fn create_permission(
     require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
     let permission_string = req.permission_string.trim();
     if permission_string.is_empty() {
-        return Err(AppError::InvalidInput("Permission string is required.".into()));
+        return Err(AppError::InvalidInput(
+            "Permission string is required.".into(),
+        ));
     }
     rbac::validate_permission_string(permission_string).map_err(AppError::InvalidInput)?;
     let description = req.description.trim();
@@ -214,9 +219,9 @@ async fn put_role_permissions(
         "SELECT EXISTS(SELECT 1 FROM {} WHERE id = $1)",
         schema::APP_ROLES
     ))
-        .bind(role_id)
-        .fetch_one(&state.pool)
-        .await?;
+    .bind(role_id)
+    .fetch_one(&state.pool)
+    .await?;
     if !exists {
         return Err(AppError::NotFound);
     }

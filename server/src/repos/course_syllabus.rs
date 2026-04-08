@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
 use sqlx::types::Json;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::schema;

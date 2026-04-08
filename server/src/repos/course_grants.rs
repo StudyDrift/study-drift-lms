@@ -28,10 +28,7 @@ pub fn expand_course_permission_for_course(granted: &str, course_code: &str) -> 
     }
     let area = parts[1];
     if area == "*" || area == course_code || area == COURSE_CODE_PLACEHOLDER {
-        return Some(format!(
-            "course:{}:{}:{}",
-            course_code, parts[2], parts[3]
-        ));
+        return Some(format!("course:{}:{}:{}", course_code, parts[2], parts[3]));
     }
     None
 }
@@ -85,10 +82,7 @@ mod tests {
     #[test]
     fn expand_placeholder_to_concrete_course_code() {
         assert_eq!(
-            expand_course_permission_for_course(
-                "course:<courseCode>:gradebook:view",
-                "C-ABC123"
-            ),
+            expand_course_permission_for_course("course:<courseCode>:gradebook:view", "C-ABC123"),
             Some("course:C-ABC123:gradebook:view".to_string())
         );
     }

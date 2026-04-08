@@ -8,6 +8,8 @@ use uuid::Uuid;
 
 use crate::db::schema;
 
+type CourseItemContentRow = (String, String, Option<DateTime<Utc>>, DateTime<Utc>);
+
 pub async fn insert_empty_for_item(
     tx: &mut Transaction<'_, Postgres>,
     structure_item_id: Uuid,
@@ -29,8 +31,8 @@ pub async fn get_for_course_item(
     pool: &PgPool,
     course_id: Uuid,
     item_id: Uuid,
-) -> Result<Option<(String, String, Option<DateTime<Utc>>, DateTime<Utc>)>, sqlx::Error> {
-    let row: Option<(String, String, Option<DateTime<Utc>>, DateTime<Utc>)> = sqlx::query_as(&format!(
+) -> Result<Option<CourseItemContentRow>, sqlx::Error> {
+    let row: Option<CourseItemContentRow> = sqlx::query_as(&format!(
         r#"
         SELECT c.title, m.markdown, c.due_at, m.updated_at
         FROM {} c

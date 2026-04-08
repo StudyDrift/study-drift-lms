@@ -125,10 +125,7 @@ impl OpenRouterClient {
             "stream": false,
         });
 
-        let url = format!(
-            "{}/chat/completions",
-            self.base_url.trim_end_matches('/')
-        );
+        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
 
         let res = self
             .http
@@ -162,10 +159,7 @@ impl OpenRouterClient {
 }
 
 fn is_retryable_openrouter_status(e: &OpenRouterError) -> bool {
-    matches!(
-        e,
-        OpenRouterError::ApiStatus(502 | 503 | 429, _)
-    )
+    matches!(e, OpenRouterError::ApiStatus(502 | 503 | 429, _))
 }
 
 /// OpenRouter error bodies often include `error.metadata.retry_after_seconds`.
@@ -273,7 +267,9 @@ fn modalities_summary_from_row(row: &Value) -> Option<String> {
     Some(format!("{in_s} -> {out_s}"))
 }
 
-fn parse_prompt_completion_prices_million_usd(pricing: Option<&Value>) -> (Option<f64>, Option<f64>) {
+fn parse_prompt_completion_prices_million_usd(
+    pricing: Option<&Value>,
+) -> (Option<f64>, Option<f64>) {
     let Some(p) = pricing else {
         return (None, None);
     };
@@ -369,10 +365,7 @@ impl OpenRouterClient {
             body["tool_choice"] = serde_json::json!("auto");
         }
 
-        let url = format!(
-            "{}/chat/completions",
-            self.base_url.trim_end_matches('/')
-        );
+        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
 
         let res = self
             .http

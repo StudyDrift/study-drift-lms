@@ -11,8 +11,8 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
-        let database_url = env::var("DATABASE_URL")
-            .map_err(|_| anyhow::anyhow!("DATABASE_URL is not set"))?;
+        let database_url =
+            env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL is not set"))?;
 
         let jwt_secret = env::var("JWT_SECRET").unwrap_or_else(|_| {
             tracing::warn!("JWT_SECRET is not set; using an insecure development default");

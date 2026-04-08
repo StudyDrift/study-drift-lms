@@ -13,18 +13,16 @@ pub async fn user_is_course_creator(
     course_code: &str,
     user_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    let ok = sqlx::query_scalar::<_, bool>(
-        &format!(
-            r#"
+    let ok = sqlx::query_scalar::<_, bool>(&format!(
+        r#"
         SELECT EXISTS (
             SELECT 1
             FROM {} c
             WHERE c.course_code = $1 AND c.created_by_user_id = $2
         )
         "#,
-            schema::COURSES
-        ),
-    )
+        schema::COURSES
+    ))
     .bind(course_code)
     .bind(user_id)
     .fetch_one(pool)
@@ -38,18 +36,16 @@ pub async fn user_role_in_course(
     course_code: &str,
     user_id: Uuid,
 ) -> Result<Option<String>, sqlx::Error> {
-    sqlx::query_scalar::<_, String>(
-        &format!(
-            r#"
+    sqlx::query_scalar::<_, String>(&format!(
+        r#"
         SELECT ce.role
         FROM {} ce
         INNER JOIN {} c ON c.id = ce.course_id
         WHERE c.course_code = $1 AND ce.user_id = $2
         "#,
-            schema::COURSE_ENROLLMENTS,
-            schema::COURSES
-        ),
-    )
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES
+    ))
     .bind(course_code)
     .bind(user_id)
     .fetch_optional(pool)
@@ -66,15 +62,13 @@ pub async fn upsert_instructor_enrollment(
 ) -> Result<(), sqlx::Error> {
     match user_role_in_course(pool, course_code, user_id).await? {
         None => {
-            sqlx::query(
-                &format!(
-                    r#"
+            sqlx::query(&format!(
+                r#"
                 INSERT INTO {} (course_id, user_id, role)
                 VALUES ($1, $2, 'instructor')
                 "#,
-                    schema::COURSE_ENROLLMENTS
-                ),
-            )
+                schema::COURSE_ENROLLMENTS
+            ))
             .bind(course_id)
             .bind(user_id)
             .execute(pool)
@@ -82,16 +76,14 @@ pub async fn upsert_instructor_enrollment(
         }
         Some(role) if role == "teacher" => {}
         Some(_) => {
-            sqlx::query(
-                &format!(
-                    r#"
+            sqlx::query(&format!(
+                r#"
                 UPDATE {}
                 SET role = 'instructor'
                 WHERE course_id = $1 AND user_id = $2 AND role <> 'teacher'
                 "#,
-                    schema::COURSE_ENROLLMENTS
-                ),
-            )
+                schema::COURSE_ENROLLMENTS
+            ))
             .bind(course_id)
             .bind(user_id)
             .execute(pool)
@@ -106,9 +98,8 @@ pub async fn user_has_access(
     course_code: &str,
     user_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    let ok = sqlx::query_scalar::<_, bool>(
-        &format!(
-            r#"
+    let ok = sqlx::query_scalar::<_, bool>(&format!(
+        r#"
         SELECT EXISTS (
             SELECT 1
             FROM {} ce
@@ -116,10 +107,9 @@ pub async fn user_has_access(
             WHERE c.course_code = $1 AND ce.user_id = $2
         )
         "#,
-            schema::COURSE_ENROLLMENTS,
-            schema::COURSES
-        ),
-    )
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES
+    ))
     .bind(course_code)
     .bind(user_id)
     .fetch_one(pool)
@@ -133,19 +123,17 @@ pub async fn list_course_codes_where_user_is_staff(
     pool: &PgPool,
     user_id: Uuid,
 ) -> Result<Vec<String>, sqlx::Error> {
-    sqlx::query_scalar(
-        &format!(
-            r#"
+    sqlx::query_scalar(&format!(
+        r#"
         SELECT c.course_code
         FROM {} ce
         INNER JOIN {} c ON c.id = ce.course_id
         WHERE ce.user_id = $1 AND ce.role IN ('teacher', 'instructor')
         ORDER BY c.course_code ASC
         "#,
-            schema::COURSE_ENROLLMENTS,
-            schema::COURSES
-        ),
-    )
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES
+    ))
     .bind(user_id)
     .fetch_all(pool)
     .await
@@ -155,9 +143,8 @@ pub async fn list_for_course_code(
     pool: &PgPool,
     course_code: &str,
 ) -> Result<Vec<CourseEnrollmentPublic>, sqlx::Error> {
-    let rows = sqlx::query_as::<_, CourseEnrollmentRow>(
-        &format!(
-            r#"
+    let rows = sqlx::query_as::<_, CourseEnrollmentRow>(&format!(
+        r#"
         SELECT
             ce.id,
             ce.user_id,
@@ -175,11 +162,10 @@ pub async fn list_for_course_code(
             END,
             COALESCE(NULLIF(TRIM(u.display_name), ''), u.email) ASC
         "#,
-            schema::COURSE_ENROLLMENTS,
-            schema::COURSES,
-            schema::USERS
-        ),
-    )
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES,
+        schema::USERS
+    ))
     .bind(course_code)
     .fetch_all(pool)
     .await?;
@@ -193,9 +179,8 @@ pub async fn list_people_for_enrolled_courses(
     pool: &PgPool,
     requester_user_id: Uuid,
 ) -> Result<Vec<SearchPersonItem>, sqlx::Error> {
-    let rows = sqlx::query_as::<_, SearchPersonRow>(
-        &format!(
-            r#"
+    let rows = sqlx::query_as::<_, SearchPersonRow>(&format!(
+        r#"
         SELECT
             u.id AS user_id,
             u.email,
@@ -221,12 +206,11 @@ pub async fn list_people_for_enrolled_courses(
             COALESCE(NULLIF(TRIM(u.display_name), ''), u.email) ASC
         LIMIT 2000
         "#,
-            schema::COURSE_ENROLLMENTS,
-            schema::COURSES,
-            schema::USERS,
-            schema::COURSE_ENROLLMENTS
-        ),
-    )
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES,
+        schema::USERS,
+        schema::COURSE_ENROLLMENTS
+    ))
     .bind(requester_user_id)
     .fetch_all(pool)
     .await?;
@@ -294,17 +278,15 @@ pub async fn insert_student_if_missing(
     course_id: Uuid,
     user_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    let id = sqlx::query_scalar::<_, Uuid>(
-        &format!(
-            r#"
+    let id = sqlx::query_scalar::<_, Uuid>(&format!(
+        r#"
         INSERT INTO {} (course_id, user_id, role)
         VALUES ($1, $2, 'student')
         ON CONFLICT (course_id, user_id) DO NOTHING
         RETURNING id
         "#,
-            schema::COURSE_ENROLLMENTS
-        ),
-    )
+        schema::COURSE_ENROLLMENTS
+    ))
     .bind(course_id)
     .bind(user_id)
     .fetch_optional(pool)
@@ -318,15 +300,13 @@ pub async fn insert_course_creator_teacher(
     course_id: Uuid,
     user_id: Uuid,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        &format!(
-            r#"
+    sqlx::query(&format!(
+        r#"
         INSERT INTO {} (course_id, user_id, role)
         VALUES ($1, $2, 'teacher')
         "#,
-            schema::COURSE_ENROLLMENTS
-        ),
-    )
+        schema::COURSE_ENROLLMENTS
+    ))
     .bind(course_id)
     .bind(user_id)
     .execute(tx.deref_mut())

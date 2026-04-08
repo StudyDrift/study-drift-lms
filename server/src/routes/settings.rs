@@ -15,17 +15,12 @@ use crate::repos::user_ai_settings;
 use crate::services::ai::{list_image_models, list_text_models};
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum AiModelsKind {
+    #[default]
     Image,
     Text,
-}
-
-impl Default for AiModelsKind {
-    fn default() -> Self {
-        Self::Image
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,9 +96,7 @@ async fn put_ai_handler(
     let user = auth_user(&state, &headers)?;
     let image_model_id = req.image_model_id.trim();
     if image_model_id.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Choose an image model.".into(),
-        ));
+        return Err(AppError::InvalidInput("Choose an image model.".into()));
     }
     let course_setup_model_id = req.course_setup_model_id.trim();
     if course_setup_model_id.is_empty() {

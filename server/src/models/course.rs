@@ -94,13 +94,7 @@ pub struct UpdateMarkdownThemeRequest {
 }
 
 pub const MARKDOWN_THEME_PRESETS: &[&str] = &[
-    "classic",
-    "reader",
-    "serif",
-    "contrast",
-    "night",
-    "accent",
-    "custom",
+    "classic", "reader", "serif", "contrast", "night", "accent", "custom",
 ];
 
 pub const GRADING_SCALES: &[&str] = &[

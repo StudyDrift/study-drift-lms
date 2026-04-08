@@ -74,7 +74,7 @@ fn order_structure_rows(rows: Vec<CourseStructureItemRow>) -> Vec<CourseStructur
 }
 
 fn module_visible_to_student_now(m: &CourseStructureItemRow, now: DateTime<Utc>) -> bool {
-    m.kind == "module" && m.published && m.visible_from.map_or(true, |t| t <= now)
+    m.kind == "module" && m.published && m.visible_from.is_none_or(|t| t <= now)
 }
 
 /// Drops modules (and their children) that are not yet visible to enrolled students who are not staff.
@@ -91,7 +91,7 @@ pub fn filter_structure_for_student_view(
     rows.into_iter()
         .filter(|r| {
             if r.kind == "module" && r.parent_id.is_none() {
-                module_visible_to_student_now(&r, now)
+                module_visible_to_student_now(r, now)
             } else if let Some(pid) = r.parent_id {
                 modules
                     .get(&pid)
@@ -154,9 +154,7 @@ pub async fn content_page_visible_to_student(
     .await?;
 
     Ok(row
-        .map(|(published, visible_from)| {
-            published && visible_from.map_or(true, |t| t <= now)
-        })
+        .map(|(published, visible_from)| published && visible_from.is_none_or(|t| t <= now))
         .unwrap_or(false))
 }
 
@@ -208,9 +206,7 @@ pub async fn assignment_visible_to_student(
     .await?;
 
     Ok(row
-        .map(|(published, visible_from)| {
-            published && visible_from.map_or(true, |t| t <= now)
-        })
+        .map(|(published, visible_from)| published && visible_from.is_none_or(|t| t <= now))
         .unwrap_or(false))
 }
 
