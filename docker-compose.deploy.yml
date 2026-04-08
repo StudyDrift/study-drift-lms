@@ -1,0 +1,47 @@
+# Minimal stack for a single droplet (Postgres + API + nginx web). Used by .github/workflows/demo.yml.
+#   docker compose -f docker-compose.deploy.yml --env-file .env up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: studydrift
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: studydrift
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studydrift -d studydrift"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      RUST_LOG: info
+      DATABASE_URL: postgres://studydrift:${POSTGRES_PASSWORD}@postgres:5432/studydrift?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      RUN_MIGRATIONS: "true"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  web:
+    build:
+      context: ./clients/web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:

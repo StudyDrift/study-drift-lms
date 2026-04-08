@@ -1,0 +1,177 @@
+# CI: Rust + web lint/test/build, Docker image build (deploy compose).
+# IaC: Terraform Cloud remote state; plan on PR, apply on main / workflow_dispatch.
+# Deploy: rsync to DigitalOcean Droplet + docker compose (requires matching SSH key on the Droplet).
+#
+# GitHub secrets (repository):
+#   TF_TOKEN                    — Terraform Cloud API token (https://app.terraform.io/app/settings/tokens)
+#   TF_CLOUD_ORGANIZATION       — Terraform Cloud org name (if not set in the cloud block)
+#   DIGITALOCEAN_TOKEN          — DigitalOcean API token for the provider
+#   SSH_PRIVATE_KEY             — Private key matching a public key added to the Droplet (ssh_key_ids in Terraform Cloud / tfvars)
+#   POSTGRES_PASSWORD           — DB password for docker-compose.deploy.yml
+#   JWT_SECRET                  — Server JWT signing secret
+#   OPENROUTER_API_KEY          — Optional; omit or leave empty to disable AI features
+#
+# Terraform Cloud workspace "lextures-demo" must exist or be creatable; set variable ssh_key_ids (list) there.
+
+name: Demo
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_IN_AUTOMATION: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Rust clippy
+        working-directory: server
+        run: cargo clippy
+
+      - name: Rust test
+        working-directory: server
+        run: cargo test
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Web install
+        working-directory: clients/web
+        run: npm ci
+
+      - name: Web lint
+        working-directory: clients/web
+        run: npm run lint
+
+      - name: Web test
+        working-directory: clients/web
+        run: npm run test
+
+      - name: Web build
+        working-directory: clients/web
+        run: npm run build
+
+      - name: Docker package (deploy compose)
+        env:
+          VITE_API_URL: http://127.0.0.1:8080
+          POSTGRES_PASSWORD: ci-local-only
+          JWT_SECRET: ci-local-only-not-for-production
+        run: docker compose -f docker-compose.deploy.yml build
+
+  terraform:
+    name: Terraform
+    needs: ci
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      droplet_ip: ${{ steps.droplet.outputs.droplet_ip }}
+    env:
+      TF_TOKEN: ${{ secrets.TF_TOKEN }}
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+    defaults:
+      run:
+        working-directory: iac/demo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform plan
+        if: github.event_name == 'pull_request'
+        run: terraform plan -no-color -input=false
+
+      - name: Terraform apply
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: terraform apply -auto-approve -input=false
+
+      - name: Export droplet IP
+        id: droplet
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "droplet_ip=$(terraform output -raw ipv4_address)" >> "$GITHUB_OUTPUT"
+          else
+            echo "droplet_ip=" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    name: Deploy to droplet
+    needs: [ci, terraform]
+    if: >
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      needs.terraform.outputs.droplet_ip != ''
+    runs-on: ubuntu-latest
+    env:
+      DROPLET_IP: ${{ needs.terraform.outputs.droplet_ip }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DROPLET_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Rsync repository
+        run: |
+          rsync -avz \
+            --delete \
+            --exclude node_modules \
+            --exclude target \
+            --exclude .git \
+            --exclude .terraform \
+            --exclude .env \
+            -e "ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=accept-new" \
+            ./ "ubuntu@${DROPLET_IP}:~/lextures/"
+
+      - name: Write remote .env
+        run: |
+          VITE_API_URL="http://${DROPLET_IP}:8080"
+          export VITE_API_URL
+          {
+            echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
+            echo "JWT_SECRET=${JWT_SECRET}"
+            echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}"
+            echo "VITE_API_URL=${VITE_API_URL}"
+          } > .env.remote
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new .env.remote "ubuntu@${DROPLET_IP}:~/lextures/.env"
+
+      - name: Install Docker and start stack
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "ubuntu@${DROPLET_IP}" bash -s << 'REMOTE'
+          set -euo pipefail
+          if ! command -v docker >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y docker.io docker-compose-plugin
+          fi
+          cd ~/lextures
+          sudo docker compose -f docker-compose.deploy.yml --env-file .env up -d --build
+          REMOTE

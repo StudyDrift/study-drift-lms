@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (do not commit secrets).
+#
+# Local Terraform: export DIGITALOCEAN_TOKEN="dop_v1_..."
+# GitHub Actions: set repository secrets DIGITALOCEAN_TOKEN, TF_TOKEN, TF_CLOUD_ORGANIZATION
+#
+# Remote state uses Terraform Cloud (workspace "lextures-demo" in versions.tf). Create the workspace,
+# set variable ssh_key_ids (list of SSH key IDs/fingerprints from DigitalOcean), then run terraform.
+
+# region       = "nyc1"
+# droplet_name = "lextures-demo"
+# droplet_size = "s-1vcpu-1gb"
+# ssh_key_ids  = ["12345678"]
+# tags         = ["lextures", "demo"]
+# ipv6         = true
