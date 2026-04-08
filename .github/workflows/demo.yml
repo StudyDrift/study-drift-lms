@@ -1,4 +1,5 @@
 # CI: Rust + web lint/test/build, Docker image build (validates deploy compose).
+# Rust, web, and Docker jobs run in parallel to reduce wall time.
 # IaC: Terraform Cloud remote state; plan on PR, apply on main / workflow_dispatch.
 # Deploy: build images with production VITE_API_URL, push to GHCR; Droplet runs cloud-init + Watchtower
 # (no SSH/rsync from CI). Repository needs packages: write (GITHUB_TOKEN).
@@ -40,7 +41,8 @@ env:
   TF_IN_AUTOMATION: true
 
 jobs:
-  ci:
+  rust:
+    name: Rust
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +51,10 @@ jobs:
         with:
           toolchain: stable
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+
       - name: Rust clippy
         working-directory: server
         run: cargo clippy
@@ -56,6 +62,12 @@ jobs:
       - name: Rust test
         working-directory: server
         run: cargo test
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
@@ -79,6 +91,12 @@ jobs:
         working-directory: clients/web
         run: npm run build
 
+  docker:
+    name: Docker (compose build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Docker package (validate compose build)
         env:
           VITE_API_URL: http://127.0.0.1:8080
@@ -88,7 +106,7 @@ jobs:
 
   terraform:
     name: Terraform
-    needs: ci
+    needs: [rust, web, docker]
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
@@ -148,7 +166,7 @@ jobs:
 
   deploy:
     name: Push images to GHCR
-    needs: [ci, terraform]
+    needs: [terraform]
     if: >
       github.ref == 'refs/heads/main' &&
       github.event_name != 'pull_request' &&
@@ -180,3 +198,25 @@ jobs:
           docker tag lextures-web "${GHCR_PREFIX}/lextures-web:latest"
           docker push "${GHCR_PREFIX}/lextures-server:latest"
           docker push "${GHCR_PREFIX}/lextures-web:latest"
+
+  verify-host:
+    name: Verify droplet (ping + HTTP)
+    needs: [deploy, terraform]
+    if: success() && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      DROPLET_IP: ${{ needs.terraform.outputs.droplet_ip }}
+    steps:
+      - name: ICMP ping (best-effort; may be blocked by cloud firewall)
+        run: |
+          set +e
+          ping -c 3 -W 5 "$DROPLET_IP"
+          exit 0
+
+      - name: HTTP health (web + API)
+        run: |
+          set -euo pipefail
+          echo "Checking http://${DROPLET_IP}/health (nginx)..."
+          curl -sfS --retry 12 --retry-delay 10 --retry-all-errors "http://${DROPLET_IP}/health"
+          echo "Checking http://${DROPLET_IP}:8080/health (API)..."
+          curl -sfS --retry 12 --retry-delay 10 --retry-all-errors "http://${DROPLET_IP}:8080/health"
