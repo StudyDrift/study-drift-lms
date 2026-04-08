@@ -13,7 +13,13 @@ variable "ssh_public_key" {
 
   validation {
     condition     = length(trimspace(var.ssh_public_key)) > 0
-    error_message = "ssh_public_key must be non-empty. For remote execution on Terraform Cloud, add Terraform variable ssh_public_key to the workspace. For local execution (e.g. GitHub Actions with workspace execution mode Local), set TF_VAR_ssh_public_key."
+    error_message = <<-EOT
+      ssh_public_key must be non-empty.
+
+      Remote execution: set Terraform variable ssh_public_key on the workspace to your public key (e.g. ssh-ed25519 AAAA...).
+
+      Local execution / GitHub Actions: set secret DEMO_SSH_PUBLIC_KEY (passed as TF_VAR_ssh_public_key). If the workspace still has Terraform variable ssh_public_key defined as an empty string, delete that variable or set it to the real key—an empty workspace variable overrides TF_VAR from CI.
+    EOT
   }
 }
 
