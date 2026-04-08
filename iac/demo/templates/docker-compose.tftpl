@@ -1,4 +1,5 @@
 # Rendered on the Droplet by Terraform (cloud-init). Images are built and pushed by GitHub Actions.
+# Postgres runs on this droplet only; only nginx exposes port 80 (API + WS proxied from nginx).
 # Compose reads variables from /opt/lextures/.env at runtime; use $$ in this file for literal dollar signs.
 
 services:
@@ -31,8 +32,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "8080:8080"
 
   web:
     image: ${ghcr_image_prefix}/lextures-web:latest

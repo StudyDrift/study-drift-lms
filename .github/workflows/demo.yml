@@ -99,7 +99,7 @@ jobs:
 
       - name: Docker package (validate compose build)
         env:
-          VITE_API_URL: http://127.0.0.1:8080
+          VITE_API_URL: http://127.0.0.1
           POSTGRES_PASSWORD: ci-local-only
           JWT_SECRET: ci-local-only-not-for-production
         run: docker compose -p lextures -f docker-compose.deploy.yml build
@@ -190,7 +190,7 @@ jobs:
 
       - name: Build and push container images
         env:
-          VITE_API_URL: http://${{ needs.terraform.outputs.droplet_ip }}:8080
+          VITE_API_URL: http://${{ needs.terraform.outputs.droplet_ip }}
         run: |
           set -euo pipefail
           docker compose -p lextures -f docker-compose.deploy.yml build
@@ -212,13 +212,13 @@ jobs:
           ping -c 3 -W 5 "$DROPLET_IP"
           exit 0
 
-      # Best-effort: the droplet may not expose 80/8080 yet (Watchtower pull, first boot, or stack stopped).
+      # Best-effort: stack may not be up yet (Watchtower pull, first boot). Single entry: port 80 (nginx → API).
       # Failing here should not block main; check logs when you expect the demo to be up.
-      - name: HTTP health (web + API)
+      - name: HTTP health (nginx → API on :80)
         continue-on-error: true
         run: |
           set -euo pipefail
-          echo "Checking http://${DROPLET_IP}/health (nginx)..."
+          echo "Checking http://${DROPLET_IP}/health (API via nginx)..."
           curl -sfS --retry 12 --retry-delay 10 --retry-all-errors "http://${DROPLET_IP}/health"
-          echo "Checking http://${DROPLET_IP}:8080/health (API)..."
-          curl -sfS --retry 12 --retry-delay 10 --retry-all-errors "http://${DROPLET_IP}:8080/health"
+          echo "Checking http://${DROPLET_IP}/health/ready..."
+          curl -sfS --retry 12 --retry-delay 10 --retry-all-errors "http://${DROPLET_IP}/health/ready"
