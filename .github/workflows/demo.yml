@@ -96,6 +96,9 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
+          # Writes ~/.terraform.d/credentials.tfrc.json so `terraform init` can authenticate to HCP Terraform.
+          # TF_TOKEN alone is not always sufficient for the cloud backend in CI.
+          cli_config_credentials_token: ${{ secrets.TF_TOKEN }}
 
       - name: Terraform init
         run: terraform init -input=false
