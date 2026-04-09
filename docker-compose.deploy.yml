@@ -1,11 +1,13 @@
 # Minimal stack for a single droplet: Postgres and API are co-located (no external DB).
 # nginx publishes 80 (HTTP) and 443 (HTTPS for Cloudflare Full); API and DB stay on the Docker network.
-#   LEXTURES_SERVER_IMAGE=... LEXTURES_WEB_IMAGE=... docker compose -f docker-compose.deploy.yml --env-file .env up -d
+#   Put LEXTURES_SERVER_IMAGE and LEXTURES_WEB_IMAGE in .env (CI does this) or export them before `up`.
+#   docker compose -f docker-compose.deploy.yml --env-file .env up -d
 #   VITE_API_URL should match the public origin (e.g. https://demo.lextures.com behind Cloudflare).
 
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: studydrift
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -21,6 +23,7 @@ services:
 
   server:
     image: ${LEXTURES_SERVER_IMAGE:?LEXTURES_SERVER_IMAGE is required}
+    restart: unless-stopped
     environment:
       RUST_LOG: info
       DATABASE_URL: postgres://studydrift:${POSTGRES_PASSWORD}@postgres:5432/studydrift?sslmode=disable
@@ -30,11 +33,26 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      # Image runs as USER nobody; use absolute path for curl.
+      test: ["CMD", "/usr/bin/curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 120s
 
   web:
     image: ${LEXTURES_WEB_IMAGE:?LEXTURES_WEB_IMAGE is required}
+    restart: unless-stopped
     depends_on:
-      - server
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
     ports:
       - "80:80"
       - "443:443"

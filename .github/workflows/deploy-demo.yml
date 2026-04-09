@@ -215,6 +215,8 @@ jobs:
           DEMO_POSTGRES_PASSWORD: ${{ secrets.DEMO_POSTGRES_PASSWORD }}
           DEMO_JWT_SECRET: ${{ secrets.DEMO_JWT_SECRET }}
           OPEN_ROUTER_API_KEY: ${{ secrets.OPEN_ROUTER_API_KEY }}
+          LEXTURES_SERVER_IMAGE: ${{ steps.images.outputs.server }}
+          LEXTURES_WEB_IMAGE: ${{ steps.images.outputs.web }}
         run: |
           set -euo pipefail
           # postgres:16-alpine refuses to start with an empty POSTGRES_PASSWORD (container exits 1).
@@ -224,6 +226,10 @@ jobs:
           fi
           if [ -z "${DEMO_JWT_SECRET}" ]; then
             echo "::error::GitHub secret DEMO_JWT_SECRET is empty or unset."
+            exit 1
+          fi
+          if [ -z "${LEXTURES_SERVER_IMAGE}" ] || [ -z "${LEXTURES_WEB_IMAGE}" ]; then
+            echo "::error::Image tags are empty (LEXTURES_SERVER_IMAGE / LEXTURES_WEB_IMAGE)."
             exit 1
           fi
           tmp="$(mktemp)"
@@ -254,6 +260,8 @@ jobs:
               f.write(line("JWT_SECRET", os.environ["DEMO_JWT_SECRET"]))
               f.write(line("VITE_API_URL", public_origin))
               f.write(line("OPENROUTER_API_KEY", os.environ.get("OPEN_ROUTER_API_KEY", "")))
+              f.write(line("LEXTURES_SERVER_IMAGE", os.environ["LEXTURES_SERVER_IMAGE"]))
+              f.write(line("LEXTURES_WEB_IMAGE", os.environ["LEXTURES_WEB_IMAGE"]))
           PY
           scp -i ~/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new \
             "$tmp" "root@${DROPLET_IP}:/opt/lextures/.env"
@@ -262,15 +270,14 @@ jobs:
       - name: Build and start stack
         env:
           DROPLET_IP: ${{ steps.droplet.outputs.ip }}
-          SERVER_IMAGE: ${{ steps.images.outputs.server }}
-          WEB_IMAGE: ${{ steps.images.outputs.web }}
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ github.token }}
         run: |
           # Pull immutable images built in CI so deploy avoids on-droplet Rust/Node compilation.
+          # --wait blocks until healthchecks pass (see docker-compose.deploy.yml); on failure we print ps + logs.
           ssh -i ~/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new \
             "root@${DROPLET_IP}" \
-            "set -euo pipefail; systemctl start docker && docker info >/dev/null && printf '%s' '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USERNAME}' --password-stdin && cd /opt/lextures && LEXTURES_SERVER_IMAGE='${SERVER_IMAGE}' LEXTURES_WEB_IMAGE='${WEB_IMAGE}' docker compose -f docker-compose.deploy.yml --env-file .env pull server web && LEXTURES_SERVER_IMAGE='${SERVER_IMAGE}' LEXTURES_WEB_IMAGE='${WEB_IMAGE}' docker compose -f docker-compose.deploy.yml --env-file .env up -d"
+            "set -euo pipefail; systemctl start docker && docker info >/dev/null && printf '%s' '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USERNAME}' --password-stdin && cd /opt/lextures && docker compose -f docker-compose.deploy.yml --env-file .env pull server web && docker compose -f docker-compose.deploy.yml --env-file .env up -d --wait --wait-timeout 600 || { echo '--- docker compose ps -a ---'; docker compose -f docker-compose.deploy.yml --env-file .env ps -a; echo '--- logs (postgres server web) ---'; docker compose -f docker-compose.deploy.yml --env-file .env logs --tail=200 postgres server web || true; exit 1; }"
 
       - name: Wait for /health
         env:
