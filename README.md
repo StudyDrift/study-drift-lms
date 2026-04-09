@@ -18,11 +18,8 @@
   <a href="/LICENSE">
     <img src="https://img.shields.io/badge/license-AGPL_3.0-blue" alt="Lextures is released under the AGPL 3.0 license." />
   </a>
-  <a href="https://github.com/StudyDrift/study-drift-lms/actions/workflows/build.yml">
-    <img src="https://github.com/StudyDrift/study-drift-lms/actions/workflows/build.yml/badge.svg" alt="Build github action status." />
-  </a>
-  <a href="https://github.com/StudyDrift/study-drift-lms/actions/workflows/demo-release.yml">
-    <img src="https://github.com/StudyDrift/study-drift-lms/actions/workflows/demo-release.yml/badge.svg" alt="Demo release github action status." />
+  <a href="https://github.com/StudyDrift/lextures/actions/workflows/deploy-demo.yml">
+    <img src="https://github.com/StudyDrift/lextures/actions/workflows/deploy-demo.yml/badge.svg" alt="Deploy Demo GitHub Action status." />
   </a>
 </p>
 <p align="center">
