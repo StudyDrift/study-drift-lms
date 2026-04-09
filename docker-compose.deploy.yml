@@ -1,6 +1,6 @@
 # Minimal stack for a single droplet: Postgres and API are co-located (no external DB).
 # nginx publishes 80 (HTTP) and 443 (HTTPS for Cloudflare Full); API and DB stay on the Docker network.
-#   docker compose -f docker-compose.deploy.yml --env-file .env up -d --build
+#   LEXTURES_SERVER_IMAGE=... LEXTURES_WEB_IMAGE=... docker compose -f docker-compose.deploy.yml --env-file .env up -d
 #   VITE_API_URL should match the public origin (e.g. https://demo.lextures.com behind Cloudflare).
 
 services:
@@ -20,9 +20,7 @@ services:
       retries: 5
 
   server:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
+    image: ${LEXTURES_SERVER_IMAGE:?LEXTURES_SERVER_IMAGE is required}
     environment:
       RUST_LOG: info
       DATABASE_URL: postgres://studydrift:${POSTGRES_PASSWORD}@postgres:5432/studydrift?sslmode=disable
@@ -34,11 +32,7 @@ services:
         condition: service_healthy
 
   web:
-    build:
-      context: ./clients/web
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL}
+    image: ${LEXTURES_WEB_IMAGE:?LEXTURES_WEB_IMAGE is required}
     depends_on:
       - server
     ports:

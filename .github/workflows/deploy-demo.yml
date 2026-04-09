@@ -36,6 +36,10 @@ env:
   TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN }}
   TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   deploy:
     name: Deploy Demo
@@ -47,6 +51,45 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set image tags
+        id: images
+        run: |
+          REPO_LOWER="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          echo "server=ghcr.io/${REPO_LOWER}/server-demo:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/${REPO_LOWER}/web-demo:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push server image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          file: ./server/Dockerfile
+          push: true
+          tags: ${{ steps.images.outputs.server }}
+          cache-from: type=gha,scope=deploy-demo-server
+          cache-to: type=gha,mode=max,scope=deploy-demo-server
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./clients/web
+          file: ./clients/web/Dockerfile
+          build-args: |
+            VITE_API_URL=${{ secrets.DEMO_PUBLIC_ORIGIN != '' && secrets.DEMO_PUBLIC_ORIGIN || 'https://demo.lextures.com' }}
+          push: true
+          tags: ${{ steps.images.outputs.web }}
+          cache-from: type=gha,scope=deploy-demo-web
+          cache-to: type=gha,mode=max,scope=deploy-demo-web
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -219,10 +262,15 @@ jobs:
       - name: Build and start stack
         env:
           DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+          SERVER_IMAGE: ${{ steps.images.outputs.server }}
+          WEB_IMAGE: ${{ steps.images.outputs.web }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
         run: |
+          # Pull immutable images built in CI so deploy avoids on-droplet Rust/Node compilation.
           ssh -i ~/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new \
             "root@${DROPLET_IP}" \
-            "systemctl start docker && docker info >/dev/null && cd /opt/lextures && docker compose -f docker-compose.deploy.yml --env-file .env up -d --build"
+            "set -euo pipefail; systemctl start docker && docker info >/dev/null && printf '%s' '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USERNAME}' --password-stdin && cd /opt/lextures && LEXTURES_SERVER_IMAGE='${SERVER_IMAGE}' LEXTURES_WEB_IMAGE='${WEB_IMAGE}' docker compose -f docker-compose.deploy.yml --env-file .env pull server web && LEXTURES_SERVER_IMAGE='${SERVER_IMAGE}' LEXTURES_WEB_IMAGE='${WEB_IMAGE}' docker compose -f docker-compose.deploy.yml --env-file .env up -d"
 
       - name: Wait for /health
         env:
