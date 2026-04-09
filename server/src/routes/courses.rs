@@ -22,6 +22,7 @@ use crate::models::enrollment::{
     AddEnrollmentsRequest, AddEnrollmentsResponse, CourseEnrollmentsResponse,
 };
 use crate::models::rbac::CourseScopedRolesResponse;
+use crate::models::user_audit::PostCourseContextRequest;
 use crate::models::settings_ai::{GenerateCourseImageRequest, GenerateCourseImageResponse};
 use crate::repos::course;
 use crate::repos::course_grading;
@@ -35,13 +36,14 @@ use crate::repos::enrollment;
 use crate::repos::rbac;
 use crate::repos::user;
 use crate::repos::user_ai_settings;
+use crate::repos::user_audit;
 use crate::services::ai::OpenRouterError;
 use crate::services::auth;
 use crate::services::course_structure_ai;
 use crate::state::AppState;
 use axum::{
     extract::{Path, State},
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
     routing::{get, patch, post, put},
     Json, Router,
 };
@@ -118,6 +120,10 @@ pub fn router() -> Router<AppState> {
             patch(update_markdown_theme_handler),
         )
         .route(
+            "/api/v1/courses/{course_code}/course-context",
+            post(post_course_context_handler),
+        )
+        .route(
             "/api/v1/courses/{course_code}",
             get(get_handler).put(update_handler),
         )
@@ -157,6 +163,58 @@ async fn require_course_access(
         return Err(AppError::NotFound);
     }
     Ok(())
+}
+
+/// Records LMS navigation state (`user.user_audit`). Path is named `course-context` to avoid adblock heuristics.
+async fn post_course_context_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<PostCourseContextRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    match req.kind.as_str() {
+        "course_visit" => {
+            if req.structure_item_id.is_some() {
+                return Err(AppError::InvalidInput(
+                    "course_visit must not include structureItemId.".into(),
+                ));
+            }
+            user_audit::insert(&state.pool, user.user_id, course_id, None, "course_visit").await?;
+        }
+        "content_open" | "content_leave" => {
+            let Some(sid) = req.structure_item_id else {
+                return Err(AppError::InvalidInput(
+                    "content_open and content_leave require structureItemId.".into(),
+                ));
+            };
+            if !user_audit::structure_item_is_course_content_page(&state.pool, course_id, sid).await?
+            {
+                return Err(AppError::NotFound);
+            }
+            user_audit::insert(
+                &state.pool,
+                user.user_id,
+                course_id,
+                Some(sid),
+                req.kind.as_str(),
+            )
+            .await?;
+        }
+        _ => {
+            return Err(AppError::InvalidInput(
+                "Invalid kind. Expected course_visit, content_open, or content_leave.".into(),
+            ));
+        }
+    }
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn require_course_creator(

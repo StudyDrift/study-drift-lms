@@ -296,9 +296,12 @@ export function RolesPermissionsPanel() {
           until you wire checks in code.
         </p>
 
-        <form onSubmit={(e) => void onCreateRole(e)} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1">
-            <label htmlFor="new-role-name" className="text-xs font-medium text-slate-600">
+        <form
+          onSubmit={(e) => void onCreateRole(e)}
+          className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <label htmlFor="new-role-name" className="block text-xs font-medium text-slate-600">
               New role name
             </label>
             <input
@@ -306,7 +309,7 @@ export function RolesPermissionsPanel() {
               value={newRoleName}
               onChange={(e) => setNewRoleName(e.target.value)}
               placeholder="e.g. Department admin"
-              className="mt-1 w-full max-w-md rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-indigo-500/0 transition focus:border-indigo-300 focus:ring-2"
+              className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-indigo-500/0 transition focus:border-indigo-300 focus:ring-2"
             />
           </div>
           <button

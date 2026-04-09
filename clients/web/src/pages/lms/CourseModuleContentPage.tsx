@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Pencil } from 'lucide-react'
 import { SyllabusBlockEditor } from '../../components/syllabus/SyllabusBlockEditor'
@@ -9,6 +9,7 @@ import {
   fetchCourse,
   fetchModuleContentPage,
   patchModuleContentPage,
+  postCourseContext,
   type SyllabusSection,
 } from '../../lib/coursesApi'
 import { type ResolvedMarkdownTheme, resolveMarkdownTheme } from '../../lib/markdownTheme'
@@ -58,6 +59,9 @@ export default function CourseModuleContentPage() {
     resolveMarkdownTheme('classic', null),
   )
 
+  const contentLeaveSentRef = useRef(false)
+  const contentOpenSentForRef = useRef<string | null>(null)
+
   const canEdit = Boolean(
     courseCode && itemId && !permLoading && allows(permCourseItemCreate(courseCode)),
   )
@@ -76,6 +80,14 @@ export default function CourseModuleContentPage() {
       setDueAt(data.dueAt)
       setUpdatedAt(data.updatedAt)
       setMdTheme(resolveMarkdownTheme(courseRow.markdownThemePreset, courseRow.markdownThemeCustom))
+      const openKey = `${courseCode}:${itemId}`
+      if (contentOpenSentForRef.current !== openKey) {
+        contentOpenSentForRef.current = openKey
+        void postCourseContext(courseCode, {
+          kind: 'content_open',
+          structureItemId: itemId,
+        }).catch(() => {})
+      }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load this page.')
       setTitle('')
@@ -90,6 +102,30 @@ export default function CourseModuleContentPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!courseCode || !itemId) return
+    contentLeaveSentRef.current = false
+    const sendLeave = (keepalive: boolean) => {
+      if (contentLeaveSentRef.current) return
+      contentLeaveSentRef.current = true
+      void postCourseContext(
+        courseCode,
+        { kind: 'content_leave', structureItemId: itemId },
+        { keepalive },
+      ).catch(() => {})
+    }
+    const onPageHide = () => sendLeave(true)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      window.removeEventListener('pagehide', onPageHide)
+      sendLeave(false)
+      const openKey = `${courseCode}:${itemId}`
+      if (contentOpenSentForRef.current === openKey) {
+        contentOpenSentForRef.current = null
+      }
+    }
+  }, [courseCode, itemId])
 
   function beginEdit() {
     setSaveError(null)

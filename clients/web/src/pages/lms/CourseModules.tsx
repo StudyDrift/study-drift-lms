@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   DndContext,
@@ -74,6 +74,54 @@ function buildReorderPayloadFromItems(items: CourseStructureItem[]): {
   return { moduleOrder, childOrderByModule }
 }
 
+function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; courseCode: string }) {
+  return (
+    <>
+      {child.kind === 'content_page' ? (
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-600"
+            aria-hidden
+          >
+            <FileText className="h-4 w-4" strokeWidth={2} />
+          </span>
+          <Link
+            to={`/courses/${encodeURIComponent(courseCode)}/modules/content/${encodeURIComponent(child.id)}`}
+            className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500"
+          >
+            {child.title}
+          </Link>
+        </div>
+      ) : child.kind === 'assignment' ? (
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/90 bg-amber-50 text-amber-800"
+            aria-hidden
+          >
+            <ClipboardList className="h-4 w-4" strokeWidth={2} />
+          </span>
+          <Link
+            to={`/courses/${encodeURIComponent(courseCode)}/modules/assignment/${encodeURIComponent(child.id)}`}
+            className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500"
+          >
+            {child.title}
+          </Link>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500"
+            aria-hidden
+          >
+            <Heading className="h-4 w-4" strokeWidth={2} />
+          </span>
+          <p className="min-w-0 text-xl font-bold leading-snug tracking-tight text-slate-900">{child.title}</p>
+        </div>
+      )}
+    </>
+  )
+}
+
 type SortableChildRowProps = {
   child: CourseStructureItem
   courseCode: string
@@ -108,52 +156,126 @@ function SortableChildRow({ child, courseCode, disabled, moduleId }: SortableChi
           </button>
         )}
         <div className="min-w-0 flex-1">
-          {child.kind === 'content_page' ? (
-            <div className="flex items-center gap-3">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-600"
-                aria-hidden
-              >
-                <FileText className="h-4 w-4" strokeWidth={2} />
-              </span>
-              <Link
-                to={`/courses/${encodeURIComponent(courseCode)}/modules/content/${encodeURIComponent(child.id)}`}
-                className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500"
-              >
-                {child.title}
-              </Link>
-            </div>
-          ) : child.kind === 'assignment' ? (
-            <div className="flex items-center gap-3">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/90 bg-amber-50 text-amber-800"
-                aria-hidden
-              >
-                <ClipboardList className="h-4 w-4" strokeWidth={2} />
-              </span>
-              <Link
-                to={`/courses/${encodeURIComponent(courseCode)}/modules/assignment/${encodeURIComponent(child.id)}`}
-                className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500"
-              >
-                {child.title}
-              </Link>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500"
-                aria-hidden
-              >
-                <Heading className="h-4 w-4" strokeWidth={2} />
-              </span>
-              <p className="min-w-0 text-xl font-bold leading-snug tracking-tight text-slate-900">
-                {child.title}
-              </p>
-            </div>
-          )}
+          <ChildRowContent child={child} courseCode={courseCode} />
         </div>
       </div>
     </li>
+  )
+}
+
+function StaticChildRow({ child, courseCode }: { child: CourseStructureItem; courseCode: string }) {
+  return (
+    <li className="py-3 first:pt-0">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <ChildRowContent child={child} courseCode={courseCode} />
+        </div>
+      </div>
+    </li>
+  )
+}
+
+type ModuleCardBodyProps = {
+  item: CourseStructureItem
+  courseCode: string
+  moduleChildrenById: Map<string, CourseStructureItem[]>
+  canEditModules: boolean
+  anyModalBusy: boolean
+  onModuleItemAdd: (moduleId: string, kind: ModuleItemKind) => void
+  minified: boolean
+  busyModuleId: string | null
+  onTogglePublished: (item: CourseStructureItem) => void
+  onOpenModuleSettings: (item: CourseStructureItem) => void
+  moduleDragHandle: ReactNode
+  childrenList: ReactNode | null
+}
+
+function ModuleCardBody({
+  item,
+  courseCode,
+  moduleChildrenById,
+  canEditModules,
+  anyModalBusy,
+  onModuleItemAdd,
+  minified,
+  busyModuleId,
+  onTogglePublished,
+  onOpenModuleSettings,
+  moduleDragHandle,
+  childrenList,
+}: ModuleCardBodyProps) {
+  const children = moduleChildrenById.get(item.id) ?? []
+  return (
+    <div
+      className={`w-full rounded-2xl border border-slate-200 bg-slate-50/80 shadow-sm ${
+        minified ? 'p-2.5' : 'p-4'
+      }`}
+    >
+      <div className="flex flex-wrap items-start gap-2 sm:gap-3">
+        {moduleDragHandle}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+              {!minified && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Course activities and items can be grouped under this module.
+                </p>
+              )}
+              {minified && children.length > 0 && (
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {children.length} {children.length === 1 ? 'item' : 'items'}
+                </p>
+              )}
+            </div>
+            {canEditModules && !minified && (
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:gap-2">
+                <RequirePermission permission={permCourseItemCreate(courseCode)} fallback={null}>
+                  <button
+                    type="button"
+                    onClick={() => onTogglePublished(item)}
+                    disabled={anyModalBusy || busyModuleId === item.id}
+                    title={
+                      item.published
+                        ? 'Published — visible to students when scheduled'
+                        : 'Draft — hidden from students'
+                    }
+                    aria-label={item.published ? 'Published to students' : 'Hidden from students'}
+                    aria-pressed={item.published}
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg border shadow-none transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      item.published
+                        ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                        : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                    }`}
+                  >
+                    {item.published ? (
+                      <Eye className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    ) : (
+                      <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenModuleSettings(item)}
+                    disabled={anyModalBusy}
+                    title="Module settings"
+                    aria-label="Module settings"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-none transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Settings className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  </button>
+                  <AddModuleItemMenu
+                    onAdd={(kind) => onModuleItemAdd(item.id, kind)}
+                    disabled={anyModalBusy}
+                  />
+                </RequirePermission>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      {!minified && children.length > 0 && childrenList}
+    </div>
   )
 }
 
@@ -196,15 +318,42 @@ function SortableModuleCard({
   const children = moduleChildrenById.get(item.id) ?? []
   const childIds = children.map((c) => c.id)
 
+  const childrenList =
+    !minified && children.length > 0 ? (
+      <SortableContext
+        id={`module-children-${item.id}`}
+        items={childIds}
+        strategy={verticalListSortingStrategy}
+      >
+        <ul className="mt-4 divide-y divide-slate-200/90 border-t border-slate-200/80 pt-4">
+          {children.map((child) => (
+            <SortableChildRow
+              key={child.id}
+              child={child}
+              courseCode={courseCode}
+              moduleId={item.id}
+              disabled={!canEditModules || anyModalBusy}
+            />
+          ))}
+        </ul>
+      </SortableContext>
+    ) : null
+
   return (
     <li ref={setNodeRef} style={style} className="w-full">
-      <div
-        className={`w-full rounded-2xl border border-slate-200 bg-slate-50/80 shadow-sm ${
-          minified ? 'p-2.5' : 'p-4'
-        }`}
-      >
-        <div className="flex flex-wrap items-start gap-2 sm:gap-3">
-          {canEditModules && (
+      <ModuleCardBody
+        item={item}
+        courseCode={courseCode}
+        moduleChildrenById={moduleChildrenById}
+        canEditModules={canEditModules}
+        anyModalBusy={anyModalBusy}
+        onModuleItemAdd={onModuleItemAdd}
+        minified={minified}
+        busyModuleId={busyModuleId}
+        onTogglePublished={onTogglePublished}
+        onOpenModuleSettings={onOpenModuleSettings}
+        moduleDragHandle={
+          canEditModules ? (
             <button
               type="button"
               className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing"
@@ -214,95 +363,56 @@ function SortableModuleCard({
             >
               <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                {!minified && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Course activities and items can be grouped under this module.
-                  </p>
-                )}
-                {minified && children.length > 0 && (
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {children.length} {children.length === 1 ? 'item' : 'items'}
-                  </p>
-                )}
-              </div>
-              {canEditModules && !minified && (
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:gap-2">
-                  <RequirePermission permission={permCourseItemCreate(courseCode)} fallback={null}>
-                    <button
-                      type="button"
-                      onClick={() => onTogglePublished(item)}
-                      disabled={anyModalBusy || busyModuleId === item.id}
-                      title={
-                        item.published
-                          ? 'Published — visible to students when scheduled'
-                          : 'Draft — hidden from students'
-                      }
-                      aria-label={item.published ? 'Published to students' : 'Hidden from students'}
-                      aria-pressed={item.published}
-                      className={`flex h-9 w-9 items-center justify-center rounded-lg border shadow-none transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                        item.published
-                          ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                          : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600'
-                      }`}
-                    >
-                      {item.published ? (
-                        <Eye className="h-4 w-4" strokeWidth={2} aria-hidden />
-                      ) : (
-                        <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onOpenModuleSettings(item)}
-                      disabled={anyModalBusy}
-                      title="Module settings"
-                      aria-label="Module settings"
-                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-none transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Settings className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    </button>
-                    <AddModuleItemMenu
-                      onAdd={(kind) => onModuleItemAdd(item.id, kind)}
-                      disabled={anyModalBusy}
-                    />
-                  </RequirePermission>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        {!minified && children.length > 0 && (
-          <SortableContext
-            id={`module-children-${item.id}`}
-            items={childIds}
-            strategy={verticalListSortingStrategy}
-          >
-            <ul className="mt-4 divide-y divide-slate-200/90 border-t border-slate-200/80 pt-4">
-              {children.map((child) => (
-                <SortableChildRow
-                  key={child.id}
-                  child={child}
-                  courseCode={courseCode}
-                  moduleId={item.id}
-                  disabled={!canEditModules || anyModalBusy}
-                />
-              ))}
-            </ul>
-          </SortableContext>
-        )}
-      </div>
+          ) : null
+        }
+        childrenList={childrenList}
+      />
+    </li>
+  )
+}
+
+function StaticModuleCard({
+  item,
+  courseCode,
+  moduleChildrenById,
+}: {
+  item: CourseStructureItem
+  courseCode: string
+  moduleChildrenById: Map<string, CourseStructureItem[]>
+}) {
+  const children = moduleChildrenById.get(item.id) ?? []
+  const childrenList =
+    children.length > 0 ? (
+      <ul className="mt-4 divide-y divide-slate-200/90 border-t border-slate-200/80 pt-4">
+        {children.map((child) => (
+          <StaticChildRow key={child.id} child={child} courseCode={courseCode} />
+        ))}
+      </ul>
+    ) : null
+
+  return (
+    <li className="w-full">
+      <ModuleCardBody
+        item={item}
+        courseCode={courseCode}
+        moduleChildrenById={moduleChildrenById}
+        canEditModules={false}
+        anyModalBusy={false}
+        onModuleItemAdd={() => {}}
+        minified={false}
+        busyModuleId={null}
+        onTogglePublished={() => {}}
+        onOpenModuleSettings={() => {}}
+        moduleDragHandle={null}
+        childrenList={childrenList}
+      />
     </li>
   )
 }
 
 export default function CourseModules() {
   const { courseCode } = useParams<{ courseCode: string }>()
-  const { allows } = usePermissions()
+  const { allows, loading: permissionsLoading, error: permissionsError } = usePermissions()
   const [items, setItems] = useState<CourseStructureItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -344,7 +454,14 @@ export default function CourseModules() {
   const [isDraggingModule, setIsDraggingModule] = useState(false)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 
-  const canEditModules = Boolean(courseCode && allows(permCourseItemCreate(courseCode)))
+  /** `course:<courseCode>:item:create` — structure edit, reorder, and add items (server: `course_grants::course_item_create_permission`). */
+  const itemCreatePerm = courseCode ? permCourseItemCreate(courseCode) : ''
+  const canEditModules = Boolean(
+    courseCode && !permissionsLoading && !permissionsError && allows(itemCreatePerm),
+  )
+  const showViewerOnlyHint = Boolean(
+    courseCode && !permissionsLoading && !permissionsError && !allows(itemCreatePerm),
+  )
 
   const blockingUi =
     moduleSaving ||
@@ -718,7 +835,7 @@ export default function CourseModules() {
         </p>
       )}
       {loading && <p className="mt-8 text-sm text-slate-500">Loading modules…</p>}
-      {!loading && !canEditModules && (
+      {!loading && showViewerOnlyHint && (
         <p className="mt-8 text-sm text-slate-500">
           You can view this outline, but only the course creator and assigned course teachers can add
           modules.
@@ -731,7 +848,7 @@ export default function CourseModules() {
         </p>
       )}
       {empty && !canEditModules && <p className="mt-8 text-sm text-slate-500">No modules yet.</p>}
-      {!loading && hasRows && (
+      {!loading && hasRows && canEditModules && (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -762,9 +879,9 @@ export default function CourseModules() {
                   <SortableModuleCard
                     key={item.id}
                     item={item}
-                    courseCode={courseCode}
+                    courseCode={courseCode!}
                     moduleChildrenById={moduleChildrenById}
-                    canEditModules={canEditModules}
+                    canEditModules
                     anyModalBusy={anyModalBusy}
                     onModuleItemAdd={onModuleItemAdd}
                     minified={isDraggingModule}
@@ -792,6 +909,33 @@ export default function CourseModules() {
             </DragOverlay>
           ) : null}
         </DndContext>
+      )}
+      {!loading && hasRows && !canEditModules && (
+        <>
+          {nonModuleTopLevel.length > 0 && (
+            <ul className="mt-8 flex w-full max-w-none flex-col gap-3">
+              {nonModuleTopLevel.map((item) => (
+                <li key={item.id} className="w-full">
+                  <p className="text-base font-semibold tracking-tight text-slate-900">{item.title}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+          <ul
+            className={`flex w-full max-w-none flex-col gap-3 ${nonModuleTopLevel.length > 0 ? 'mt-3' : 'mt-8'}`}
+          >
+            {sortedTopLevel
+              .filter((i) => i.kind === 'module')
+              .map((item) => (
+                <StaticModuleCard
+                  key={item.id}
+                  item={item}
+                  courseCode={courseCode!}
+                  moduleChildrenById={moduleChildrenById}
+                />
+              ))}
+          </ul>
+        </>
       )}
 
       <ModuleNameModal

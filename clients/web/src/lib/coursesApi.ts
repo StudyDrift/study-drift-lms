@@ -437,3 +437,29 @@ export async function fetchCourseScopedRoles(courseCode: string): Promise<Course
   const data = raw as { roles?: CourseScopedAppRole[] }
   return data.roles ?? []
 }
+
+/** Server: `user.user_audit` via POST `/course-context` (benign path for LMS state). */
+export type CourseContextKind = 'course_visit' | 'content_open' | 'content_leave'
+
+export async function postCourseContext(
+  courseCode: string,
+  body: { kind: CourseContextKind; structureItemId?: string },
+  options?: { keepalive?: boolean },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/course-context`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: body.kind,
+        ...(body.structureItemId != null ? { structureItemId: body.structureItemId } : {}),
+      }),
+      keepalive: options?.keepalive ?? false,
+    },
+  )
+  if (!res.ok) {
+    const raw = await res.json().catch(() => ({}))
+    throw new Error(readApiErrorMessage(raw))
+  }
+}

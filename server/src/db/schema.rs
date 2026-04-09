@@ -7,6 +7,7 @@ pub const APP_ROLES: &str = r#""user".app_roles"#;
 pub const RBAC_ROLE_PERMISSIONS: &str = r#""user".rbac_role_permissions"#;
 pub const USER_APP_ROLES: &str = r#""user".user_app_roles"#;
 pub const USER_AI_SETTINGS: &str = r#""user".user_ai_settings"#;
+pub const USER_AUDIT: &str = r#""user".user_audit"#;
 pub const COURSES: &str = "course.courses";
 pub const COURSE_ENROLLMENTS: &str = "course.course_enrollments";
 pub const COURSE_STRUCTURE_ITEMS: &str = "course.course_structure_items";

@@ -3,8 +3,8 @@ use uuid::Uuid;
 
 use crate::db::schema;
 
-pub const DEFAULT_IMAGE_MODEL_ID: &str = "google/gemini-2.5-flash-image";
-pub const DEFAULT_COURSE_SETUP_MODEL_ID: &str = "google/gemini-2.0-flash-001";
+pub const DEFAULT_IMAGE_MODEL_ID: &str = "black-forest-labs/flux.2-flex";
+pub const DEFAULT_COURSE_SETUP_MODEL_ID: &str = "arcee-ai/trinity-mini:free";
 
 pub async fn get_image_model_id(pool: &PgPool, user_id: Uuid) -> Result<String, sqlx::Error> {
     let row: Option<(String,)> = sqlx::query_as(&format!(

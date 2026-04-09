@@ -10,3 +10,4 @@ pub mod enrollment;
 pub mod rbac;
 pub mod user;
 pub mod user_ai_settings;
+pub mod user_audit;

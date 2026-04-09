@@ -10,3 +10,4 @@ pub mod me;
 pub mod rbac;
 pub mod search;
 pub mod settings_ai;
+pub mod user_audit;

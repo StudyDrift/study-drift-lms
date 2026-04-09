@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { LmsPage } from './LmsPage'
 import { authorizedFetch } from '../../lib/api'
+import { postCourseContext } from '../../lib/coursesApi'
 import { readApiErrorMessage } from '../../lib/errors'
 import type { Course } from './Courses'
 import { heroImageObjectStyle } from '../../lib/heroImagePosition'
@@ -34,7 +35,10 @@ export default function CourseDetail() {
           setError(readApiErrorMessage(raw))
           return
         }
-        if (!cancelled) setCourse(raw as Course)
+        if (!cancelled) {
+          setCourse(raw as Course)
+          void postCourseContext(courseCode, { kind: 'course_visit' }).catch(() => {})
+        }
       } catch {
         if (!cancelled) {
           setCourse(null)
