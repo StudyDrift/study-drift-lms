@@ -8,7 +8,7 @@ type ModuleNameModalProps = {
   saving?: boolean
   errorMessage?: string | null
   /** Adjusts labels only. */
-  mode?: 'module' | 'heading' | 'content_page' | 'assignment'
+  mode?: 'module' | 'heading' | 'content_page' | 'assignment' | 'quiz'
 }
 
 export function ModuleNameModal(props: ModuleNameModalProps) {
@@ -34,6 +34,8 @@ function ModuleNameModalInner({
         ? 'New content page'
         : mode === 'assignment'
           ? 'New assignment'
+          : mode === 'quiz'
+            ? 'New quiz'
           : 'New module'
   const fieldLabel =
     mode === 'heading'
@@ -42,6 +44,8 @@ function ModuleNameModalInner({
         ? 'Page name'
         : mode === 'assignment'
           ? 'Assignment name'
+          : mode === 'quiz'
+            ? 'Quiz name'
           : 'Module name'
   const placeholder =
     mode === 'heading'
@@ -50,6 +54,8 @@ function ModuleNameModalInner({
         ? 'e.g. Week 1 overview'
         : mode === 'assignment'
           ? 'e.g. Problem set 1'
+          : mode === 'quiz'
+            ? 'e.g. Week 1 check-in'
           : 'e.g. Week 1 — Introduction'
   const submitLabel =
     mode === 'heading'
@@ -58,6 +64,8 @@ function ModuleNameModalInner({
         ? 'Save page'
         : mode === 'assignment'
           ? 'Save assignment'
+          : mode === 'quiz'
+            ? 'Save quiz'
           : 'Save module'
 
   return (

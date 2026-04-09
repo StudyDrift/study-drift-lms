@@ -113,7 +113,7 @@ export function courseGradebookViewPermission(courseCode: string): string {
 export type CourseStructureItem = {
   id: string
   sortOrder: number
-  kind: 'module' | 'heading' | 'content_page' | 'assignment'
+  kind: 'module' | 'heading' | 'content_page' | 'assignment' | 'quiz'
   title: string
   /** Set when this row is nested under a module. */
   parentId: string | null
@@ -273,6 +273,73 @@ export async function createModuleContentPage(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as CourseStructureItem
+}
+
+export async function createModuleQuiz(
+  courseCode: string,
+  moduleId: string,
+  body: { title: string },
+): Promise<CourseStructureItem> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/modules/${encodeURIComponent(moduleId)}/quizzes`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as CourseStructureItem
+}
+
+export type QuizQuestion = {
+  id: string
+  prompt: string
+  questionType: 'multiple_choice' | 'fill_in_blank' | 'essay' | 'true_false' | 'short_answer'
+  choices: string[]
+  correctChoiceIndex: number | null
+  multipleAnswer: boolean
+  answerWithImage: boolean
+  required: boolean
+  points: number
+  estimatedMinutes: number
+}
+
+export type ModuleQuizPayload = {
+  itemId: string
+  title: string
+  markdown: string
+  dueAt: string | null
+  questions: QuizQuestion[]
+  updatedAt: string
+}
+
+export async function fetchModuleQuiz(courseCode: string, itemId: string): Promise<ModuleQuizPayload> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as ModuleQuizPayload
+}
+
+export async function patchModuleQuiz(
+  courseCode: string,
+  itemId: string,
+  body: { markdown?: string; dueAt?: string | null; questions?: QuizQuestion[] },
+): Promise<ModuleQuizPayload> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as ModuleQuizPayload
 }
 
 export async function fetchModuleContentPage(

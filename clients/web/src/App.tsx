@@ -9,6 +9,7 @@ import CourseCreate from './pages/lms/CourseCreate'
 import CourseDetail from './pages/lms/CourseDetail'
 import CourseModuleAssignmentPage from './pages/lms/CourseModuleAssignmentPage'
 import CourseModuleContentPage from './pages/lms/CourseModuleContentPage'
+import CourseModuleQuizPage from './pages/lms/CourseModuleQuizPage.tsx'
 import CourseModules from './pages/lms/CourseModules'
 import CourseSettings from './pages/lms/CourseSettings'
 import CourseSyllabus from './pages/lms/CourseSyllabus'
@@ -41,6 +42,7 @@ export default function App() {
             path="/courses/:courseCode/modules/assignment/:itemId"
             element={<CourseModuleAssignmentPage />}
           />
+          <Route path="/courses/:courseCode/modules/quiz/:itemId" element={<CourseModuleQuizPage />} />
           <Route path="/courses/:courseCode/calendar" element={<CourseCalendarPage />} />
           <Route path="/courses/:courseCode/gradebook" element={<CourseGradebook />} />
           <Route path="/courses/:courseCode/enrollments" element={<CourseEnrollments />} />

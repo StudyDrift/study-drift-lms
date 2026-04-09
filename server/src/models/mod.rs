@@ -3,6 +3,7 @@ pub mod communication;
 pub mod course;
 pub mod course_grading;
 pub mod course_module_content;
+pub mod course_module_quiz;
 pub mod course_structure;
 pub mod course_syllabus;
 pub mod enrollment;

@@ -7,6 +7,7 @@ use crate::db::schema;
 use crate::models::course_structure::CourseStructureItemRow;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
+use crate::repos::course_module_quizzes;
 
 pub async fn get_item_row(
     pool: &PgPool,
@@ -201,6 +202,58 @@ pub async fn assignment_visible_to_student(
         schema::COURSE_STRUCTURE_ITEMS
     ))
     .bind(assignment_id)
+    .bind(course_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row
+        .map(|(published, visible_from)| published && visible_from.is_none_or(|t| t <= now))
+        .unwrap_or(false))
+}
+
+pub async fn set_quiz_due_at(
+    pool: &PgPool,
+    course_id: Uuid,
+    item_id: Uuid,
+    due_at: Option<DateTime<Utc>>,
+) -> Result<(), sqlx::Error> {
+    let n = sqlx::query(&format!(
+        r#"
+        UPDATE {}
+        SET due_at = $3, updated_at = NOW()
+        WHERE id = $1 AND course_id = $2 AND kind = 'quiz'
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(item_id)
+    .bind(course_id)
+    .bind(due_at)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+    Ok(())
+}
+
+pub async fn quiz_visible_to_student(
+    pool: &PgPool,
+    course_id: Uuid,
+    quiz_id: Uuid,
+    now: DateTime<Utc>,
+) -> Result<bool, sqlx::Error> {
+    let row: Option<(bool, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
+        r#"
+        SELECT m.published, m.visible_from
+        FROM {} c
+        INNER JOIN {} m ON m.id = c.parent_id AND m.kind = 'module'
+        WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'quiz'
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(quiz_id)
     .bind(course_id)
     .fetch_optional(pool)
     .await?;
@@ -475,6 +528,72 @@ pub async fn insert_content_page_under_module(
     .await?;
 
     course_module_content::insert_empty_for_item(&mut tx, new_id).await?;
+
+    tx.commit().await?;
+    Ok(row)
+}
+
+/// Appends a quiz under an existing module (`kind = quiz`) and creates an empty quiz body row.
+pub async fn insert_quiz_under_module(
+    pool: &PgPool,
+    course_id: Uuid,
+    module_id: Uuid,
+    title: &str,
+) -> Result<CourseStructureItemRow, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query_scalar::<_, Uuid>(&format!(
+        "SELECT id FROM {} WHERE id = $1 FOR UPDATE",
+        schema::COURSES
+    ))
+    .bind(course_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| sqlx::Error::RowNotFound)?;
+
+    let parent_ok = sqlx::query_scalar::<_, bool>(&format!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM {}
+            WHERE id = $1 AND course_id = $2 AND kind = 'module'
+        )
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(module_id)
+    .bind(course_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    if !parent_ok {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    let new_id = Uuid::new_v4();
+
+    let row = sqlx::query_as::<_, CourseStructureItemRow>(&format!(
+        r#"
+        WITH mx AS (
+            SELECT COALESCE(MAX(sort_order), -1) AS max_ord
+            FROM {}
+            WHERE parent_id = $1
+        )
+        INSERT INTO {} (id, course_id, sort_order, kind, title, parent_id)
+        SELECT $2, $3, max_ord + 1, 'quiz', $4, $1
+        FROM mx
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, due_at, assignment_group_id, created_at, updated_at
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(module_id)
+    .bind(new_id)
+    .bind(course_id)
+    .bind(title)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    course_module_quizzes::insert_empty_for_item(&mut tx, new_id).await?;
 
     tx.commit().await?;
     Ok(row)

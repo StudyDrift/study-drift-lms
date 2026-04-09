@@ -10,6 +10,9 @@ use crate::models::course_grading::{
 use crate::models::course_module_content::{
     CreateCourseContentPageRequest, ModuleContentPageResponse, UpdateModuleContentPageRequest,
 };
+use crate::models::course_module_quiz::{
+    CreateCourseQuizRequest, ModuleQuizResponse, QuizQuestion, UpdateModuleQuizRequest,
+};
 use crate::models::course_structure::{
     CourseStructureAiRequest, CourseStructureAiResponse, CourseStructureItemResponse,
     CourseStructureResponse, CreateCourseAssignmentRequest, CreateCourseHeadingRequest,
@@ -30,6 +33,7 @@ use crate::repos::course_grading::PutError;
 use crate::repos::course_grants;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
+use crate::repos::course_module_quizzes;
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
@@ -76,12 +80,20 @@ pub fn router() -> Router<AppState> {
             post(create_module_assignment_handler),
         )
         .route(
+            "/api/v1/courses/{course_code}/structure/modules/{module_id}/quizzes",
+            post(create_module_quiz_handler),
+        )
+        .route(
             "/api/v1/courses/{course_code}/content-pages/{item_id}",
             get(module_content_page_get_handler).patch(module_content_page_patch_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/assignments/{item_id}",
             get(module_assignment_get_handler).patch(module_assignment_patch_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}",
+            get(module_quiz_get_handler).patch(module_quiz_patch_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/structure",
@@ -233,6 +245,60 @@ const MAX_SYLLABUS_SECTIONS: usize = 50;
 const MAX_SYLLABUS_HEADING_LEN: usize = 512;
 const MAX_SYLLABUS_MARKDOWN_LEN: usize = 200_000;
 const MAX_MODULE_CONTENT_MARKDOWN_LEN: usize = 200_000;
+const MAX_QUIZ_QUESTIONS: usize = 300;
+const MAX_QUIZ_PROMPT_LEN: usize = 10_000;
+const MAX_QUIZ_CHOICES_PER_QUESTION: usize = 20;
+const MAX_QUIZ_CHOICE_LEN: usize = 2_000;
+const QUIZ_QUESTION_TYPES: &[&str] = &[
+    "multiple_choice",
+    "fill_in_blank",
+    "essay",
+    "true_false",
+    "short_answer",
+];
+
+fn validate_quiz_questions(questions: &[QuizQuestion]) -> Result<(), AppError> {
+    if questions.len() > MAX_QUIZ_QUESTIONS {
+        return Err(AppError::InvalidInput(format!(
+            "Too many quiz questions (max {MAX_QUIZ_QUESTIONS})."
+        )));
+    }
+    for q in questions {
+        if q.id.trim().is_empty() {
+            return Err(AppError::InvalidInput(
+                "Each quiz question needs an id.".into(),
+            ));
+        }
+        if q.prompt.len() > MAX_QUIZ_PROMPT_LEN {
+            return Err(AppError::InvalidInput(
+                "A quiz question prompt is too long.".into(),
+            ));
+        }
+        if !QUIZ_QUESTION_TYPES.contains(&q.question_type.as_str()) {
+            return Err(AppError::InvalidInput("Unsupported quiz question type.".into()));
+        }
+        if q.choices.len() > MAX_QUIZ_CHOICES_PER_QUESTION {
+            return Err(AppError::InvalidInput(
+                "A quiz question has too many choices.".into(),
+            ));
+        }
+        for c in &q.choices {
+            if c.len() > MAX_QUIZ_CHOICE_LEN {
+                return Err(AppError::InvalidInput(
+                    "A quiz answer choice is too long.".into(),
+                ));
+            }
+        }
+        if let Some(idx) = q.correct_choice_index {
+            if idx >= q.choices.len() {
+                return Err(AppError::InvalidInput(
+                    "A quiz correct answer index is out of range.".into(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
 
 fn validate_syllabus_sections(sections: &[SyllabusSection]) -> Result<(), AppError> {
     if sections.len() > MAX_SYLLABUS_SECTIONS {
@@ -631,6 +697,38 @@ async fn create_module_content_page_handler(
     Ok(Json(row.into()))
 }
 
+async fn create_module_quiz_handler(
+    State(state): State<AppState>,
+    Path((course_code, module_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<CreateCourseQuizRequest>,
+) -> Result<Json<CourseStructureItemResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let title = req.title.trim();
+    if title.is_empty() {
+        return Err(AppError::InvalidInput("Quiz name is required.".into()));
+    }
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let row = course_structure::insert_quiz_under_module(&state.pool, course_id, module_id, title)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => AppError::NotFound,
+            _ => e.into(),
+        })?;
+    Ok(Json(row.into()))
+}
+
 async fn module_content_page_get_handler(
     State(state): State<AppState>,
     Path((course_code, item_id)): Path<(String, Uuid)>,
@@ -827,6 +925,119 @@ async fn module_assignment_patch_handler(
         title,
         markdown,
         due_at,
+        updated_at,
+    }))
+}
+
+async fn module_quiz_get_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<ModuleQuizResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    if !can_edit {
+        let visible = course_structure::quiz_visible_to_student(
+            &state.pool,
+            course_id,
+            item_id,
+            Utc::now(),
+        )
+        .await?;
+        if !visible {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    let Some((title, markdown, due_at, questions, updated_at)) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    Ok(Json(ModuleQuizResponse {
+        item_id,
+        title,
+        markdown,
+        due_at,
+        questions: questions.0,
+        updated_at,
+    }))
+}
+
+async fn module_quiz_patch_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<UpdateModuleQuizRequest>,
+) -> Result<Json<ModuleQuizResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    if let Some(markdown) = &req.markdown {
+        if markdown.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
+            return Err(AppError::InvalidInput("Content is too long.".into()));
+        }
+    }
+    if let Some(questions) = &req.questions {
+        validate_quiz_questions(questions)?;
+    }
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    if let Some(markdown) = req.markdown {
+        let updated =
+            course_module_quizzes::update_markdown(&state.pool, course_id, item_id, markdown.trim_end())
+                .await?;
+        if updated.is_none() {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    if let Some(questions) = req.questions {
+        let updated =
+            course_module_quizzes::update_questions(&state.pool, course_id, item_id, &questions)
+                .await?;
+        if updated.is_none() {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    if let Some(due_change) = req.due_at {
+        course_structure::set_quiz_due_at(&state.pool, course_id, item_id, due_change)
+            .await
+            .map_err(|e| match e {
+                sqlx::Error::RowNotFound => AppError::NotFound,
+                _ => e.into(),
+            })?;
+    }
+
+    let Some((title, markdown, due_at, questions, updated_at)) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    Ok(Json(ModuleQuizResponse {
+        item_id,
+        title,
+        markdown,
+        due_at,
+        questions: questions.0,
         updated_at,
     }))
 }

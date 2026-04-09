@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ClipboardList, Eye, EyeOff, FileText, GripVertical, Heading, Settings } from 'lucide-react'
+import { CircleHelp, ClipboardList, Eye, EyeOff, FileText, GripVertical, Heading, Settings } from 'lucide-react'
 import { AddCourseItemMenu } from './AddCourseItemMenu'
 import { AddModuleItemMenu, type ModuleItemKind } from './AddModuleItemMenu'
 import { CourseModulesAiPanel } from './CourseModulesAiPanel'
@@ -33,6 +33,7 @@ import {
   createModuleAssignment,
   createModuleContentPage,
   createModuleHeading,
+  createModuleQuiz,
   fetchCourseStructure,
   patchCourseModule,
   reorderCourseStructure,
@@ -66,7 +67,10 @@ function buildReorderPayloadFromItems(items: CourseStructureItem[]): {
       .filter(
         (i) =>
           i.parentId === m.id &&
-          (i.kind === 'heading' || i.kind === 'content_page' || i.kind === 'assignment'),
+          (i.kind === 'heading' ||
+            i.kind === 'content_page' ||
+            i.kind === 'assignment' ||
+            i.kind === 'quiz'),
       )
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((c) => c.id)
@@ -103,6 +107,21 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
           <Link
             to={`/courses/${encodeURIComponent(courseCode)}/modules/assignment/${encodeURIComponent(child.id)}`}
             className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+          >
+            {child.title}
+          </Link>
+        </div>
+      ) : child.kind === 'quiz' ? (
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700"
+            aria-hidden
+          >
+            <CircleHelp className="h-4 w-4" strokeWidth={2} />
+          </span>
+          <Link
+            to={`/courses/${encodeURIComponent(courseCode)}/modules/quiz/${encodeURIComponent(child.id)}`}
+            className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500"
           >
             {child.title}
           </Link>
@@ -443,6 +462,11 @@ export default function CourseModules() {
   const [assignmentModuleId, setAssignmentModuleId] = useState<string | null>(null)
   const [assignmentSaving, setAssignmentSaving] = useState(false)
   const [assignmentSaveError, setAssignmentSaveError] = useState<string | null>(null)
+  const [quizModalOpen, setQuizModalOpen] = useState(false)
+  const [quizModalKey, setQuizModalKey] = useState(0)
+  const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
+  const [quizSaving, setQuizSaving] = useState(false)
+  const [quizSaveError, setQuizSaveError] = useState<string | null>(null)
   const [busyModuleId, setBusyModuleId] = useState<string | null>(null)
   const [moduleActionError, setModuleActionError] = useState<string | null>(null)
   const [moduleSettingsOpen, setModuleSettingsOpen] = useState(false)
@@ -474,6 +498,8 @@ export default function CourseModules() {
     contentPageModalOpen ||
     assignmentSaving ||
     assignmentModalOpen ||
+    quizSaving ||
+    quizModalOpen ||
     moduleSettingsSaving ||
     moduleSettingsOpen
 
@@ -579,6 +605,25 @@ export default function CourseModules() {
     [courseCode, assignmentModuleId, load],
   )
 
+  const saveQuiz = useCallback(
+    async (title: string) => {
+      if (!courseCode || !quizModuleId) return
+      setQuizSaveError(null)
+      setQuizSaving(true)
+      try {
+        await createModuleQuiz(courseCode, quizModuleId, { title })
+        await load()
+        setQuizModalOpen(false)
+        setQuizModuleId(null)
+      } catch (e) {
+        setQuizSaveError(e instanceof Error ? e.message : 'Could not save quiz.')
+      } finally {
+        setQuizSaving(false)
+      }
+    },
+    [courseCode, quizModuleId, load],
+  )
+
   const openAddModule = useCallback(() => {
     if (!courseCode) return
     setModuleSaveError(null)
@@ -606,6 +651,13 @@ export default function CourseModules() {
       setAssignmentModuleId(moduleId)
       setAssignmentModalKey((k) => k + 1)
       setAssignmentModalOpen(true)
+      return
+    }
+    if (kind === 'quiz') {
+      setQuizSaveError(null)
+      setQuizModuleId(moduleId)
+      setQuizModalKey((k) => k + 1)
+      setQuizModalOpen(true)
     }
   }, [])
 
@@ -681,7 +733,10 @@ export default function CourseModules() {
     const m = new Map<string, CourseStructureItem[]>()
     for (const i of items) {
       if (
-        (i.kind === 'heading' || i.kind === 'content_page' || i.kind === 'assignment') &&
+        (i.kind === 'heading' ||
+          i.kind === 'content_page' ||
+          i.kind === 'assignment' ||
+          i.kind === 'quiz') &&
         i.parentId
       ) {
         const list = m.get(i.parentId) ?? []
@@ -909,6 +964,8 @@ export default function CourseModules() {
                     ? 'Page'
                     : activeItem.kind === 'assignment'
                       ? 'Assignment'
+                      : activeItem.kind === 'quiz'
+                        ? 'Quiz'
                       : 'Heading'}
                 </p>
               </div>
@@ -1001,6 +1058,21 @@ export default function CourseModules() {
         saving={assignmentSaving}
         errorMessage={assignmentSaveError}
         mode="assignment"
+      />
+
+      <ModuleNameModal
+        key={`quiz-${quizModalKey}`}
+        open={quizModalOpen}
+        onClose={() => {
+          if (!quizSaving) {
+            setQuizModalOpen(false)
+            setQuizModuleId(null)
+          }
+        }}
+        onSave={(title) => void saveQuiz(title)}
+        saving={quizSaving}
+        errorMessage={quizSaveError}
+        mode="quiz"
       />
 
       <ModuleSettingsModal
