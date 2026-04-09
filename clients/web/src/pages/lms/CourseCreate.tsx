@@ -2,12 +2,14 @@ import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { RequirePermission } from '../../components/RequirePermission'
+import { usePermissions } from '../../context/usePermissions'
 import { LmsPage } from './LmsPage'
 import { createCourse } from '../../lib/coursesApi'
 import { PERM_COURSE_CREATE } from '../../lib/rbacApi'
 
 export default function CourseCreate() {
   const navigate = useNavigate()
+  const { refresh } = usePermissions()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -24,6 +26,7 @@ export default function CourseCreate() {
     setError(null)
     try {
       const course = await createCourse({ title: t, description: description.trim() })
+      await refresh()
       navigate(`/courses/${encodeURIComponent(course.courseCode)}`, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create course.')
