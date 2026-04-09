@@ -29,6 +29,9 @@ services:
       DATABASE_URL: postgres://studydrift:${POSTGRES_PASSWORD}@postgres:5432/studydrift?sslmode=disable
       JWT_SECRET: ${JWT_SECRET}
       RUN_MIGRATIONS: "true"
+      # Set only if `_sqlx_migrations` lists a version not in this image (sqlx "missing in resolved migrations").
+      # Prefer: DELETE that row after verifying schema, or redeploy an image built from current main.
+      SQLX_MIGRATIONS_IGNORE_MISSING: ${SQLX_MIGRATIONS_IGNORE_MISSING:-false}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     depends_on:
       postgres:
