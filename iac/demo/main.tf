@@ -11,6 +11,12 @@ resource "digitalocean_ssh_key" "demo" {
   public_key = tls_private_key.demo.public_key_openssh
 }
 
+resource "digitalocean_volume" "postgres" {
+  region = var.region
+  name   = "${var.droplet_name}-postgres-data"
+  size   = var.demo_db_volume_size_gb
+}
+
 resource "digitalocean_droplet" "demo" {
   name     = var.droplet_name
   region   = var.region
@@ -19,7 +25,11 @@ resource "digitalocean_droplet" "demo" {
   ssh_keys = [digitalocean_ssh_key.demo.id]
   tags     = ["lextures", "demo"]
 
-  user_data = file("${path.module}/cloud-init.yaml")
+  volume_ids = [digitalocean_volume.postgres.id]
+
+  user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
+    db_volume_name = digitalocean_volume.postgres.name
+  })
 }
 
 # Stable IPv4 for DNS (A record); survives droplet rebuilds if you reattach this IP in DO.

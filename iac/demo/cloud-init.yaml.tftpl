@@ -1,0 +1,57 @@
+#cloud-config
+# package_upgrade runs before runcmd and can take 30+ minutes on small droplets, delaying Docker.
+package_update: true
+package_upgrade: false
+
+packages:
+  - curl
+  - ca-certificates
+  - e2fsprogs
+
+write_files:
+  - path: /usr/local/bin/lextures-mount-db-volume.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      VOL_DEV="/dev/disk/by-id/scsi-0DO_Volume_${db_volume_name}"
+      MNT="/mnt/lextures-db"
+
+      for _ in $(seq 1 60); do
+        if [ -e "$VOL_DEV" ]; then break; fi
+        sleep 2
+      done
+      if [ ! -e "$VOL_DEV" ]; then
+        echo "ERROR: block volume not found at $VOL_DEV" >&2
+        exit 1
+      fi
+
+      if ! blkid "$VOL_DEV" >/dev/null 2>&1; then
+        mkfs.ext4 -F -L lextures-db "$VOL_DEV"
+      fi
+
+      mkdir -p "$MNT"
+      UUID=$(blkid -s UUID -o value "$VOL_DEV")
+      if ! grep -qF "$UUID" /etc/fstab 2>/dev/null; then
+        echo "UUID=$UUID $MNT ext4 defaults,nofail 0 2" >> /etc/fstab
+      fi
+
+      if ! mountpoint -q "$MNT"; then
+        mount "$VOL_DEV" "$MNT"
+      fi
+
+      mkdir -p "$MNT/postgres"
+      chown -R 70:70 "$MNT/postgres"
+      chmod 700 "$MNT/postgres"
+
+runcmd:
+  - /usr/local/bin/lextures-mount-db-volume.sh
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl daemon-reload
+  - systemctl enable docker
+  - systemctl start docker
+  # Wait until the daemon is listening (socket exists); do not fail cloud-init if still slow.
+  - bash -c 'for i in $(seq 1 60); do systemctl is-active --quiet docker && test -S /var/run/docker.sock && docker info >/dev/null 2>&1 && exit 0; systemctl start docker || true; sleep 2; done; exit 0'
+  # If UFW is installed, allow HTTP/HTTPS so Docker-published ports are reachable (DO firewall is not enough).
+  - bash -c 'command -v ufw >/dev/null && ufw allow 80/tcp && ufw allow 443/tcp || true'
+  - mkdir -p /opt/lextures

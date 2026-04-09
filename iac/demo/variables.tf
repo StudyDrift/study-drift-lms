@@ -30,3 +30,9 @@ variable "droplet_image" {
   type        = string
   default     = "ubuntu-22-04-x64"
 }
+
+variable "demo_db_volume_size_gb" {
+  description = "Block storage size (GB) for PostgreSQL data. This volume is separate from the droplet disk so data survives droplet recreation."
+  type        = number
+  default     = 10
+}

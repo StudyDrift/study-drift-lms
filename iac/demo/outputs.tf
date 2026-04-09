@@ -3,6 +3,16 @@ output "reserved_ipv4" {
   value       = digitalocean_reserved_ip.demo.ip_address
 }
 
+output "postgres_volume_id" {
+  description = "DigitalOcean block volume ID holding PostgreSQL data (persists across droplet recreation)."
+  value       = digitalocean_volume.postgres.id
+}
+
+output "postgres_data_mount" {
+  description = "Host path used by docker-compose.deploy.yml for Postgres (bind mount from the block volume)."
+  value       = "/mnt/lextures-db/postgres"
+}
+
 output "droplet_ipv4" {
   description = "Ephemeral public IPv4 on the droplet NIC (not stable across recreates; prefer reserved_ipv4 for DNS)."
   value       = digitalocean_droplet.demo.ipv4_address

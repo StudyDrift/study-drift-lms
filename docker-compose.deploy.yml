@@ -11,7 +11,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: studydrift
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Host path is created by demo cloud-init on the attached DO block volume (/mnt/lextures-db).
+      - /mnt/lextures-db/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U studydrift -d studydrift"]
       interval: 5s
@@ -43,6 +44,3 @@ services:
     ports:
       - "80:80"
       - "443:443"
-
-volumes:
-  postgres_data:
