@@ -6,7 +6,8 @@
 #   TF_TOKEN             — HCP Terraform / Terraform Cloud API token (non-interactive auth).
 #                          Also set as TF_TOKEN_app_terraform_io so the CLI finds it for app.terraform.io.
 #   TF_CLOUD_ORGANIZATION — HCP Terraform organization name (replaces `organization` in the cloud block)
-#   DEMO_POSTGRES_PASSWORD — Postgres password for the deploy stack
+#   DEMO_POSTGRES_PASSWORD — Postgres password for the deploy stack (must be non-empty; the official
+#                            postgres image exits with code 1 if POSTGRES_PASSWORD is empty)
 #   DEMO_JWT_SECRET      — JWT signing secret for the API
 #   OPEN_ROUTER_API_KEY  — OpenRouter API key (written to the droplet as OPENROUTER_API_KEY)
 #
@@ -172,13 +173,42 @@ jobs:
           OPEN_ROUTER_API_KEY: ${{ secrets.OPEN_ROUTER_API_KEY }}
         run: |
           set -euo pipefail
+          # postgres:16-alpine refuses to start with an empty POSTGRES_PASSWORD (container exits 1).
+          if [ -z "${DEMO_POSTGRES_PASSWORD}" ]; then
+            echo "::error::GitHub secret DEMO_POSTGRES_PASSWORD is empty or unset. Set it in repo Settings → Secrets."
+            exit 1
+          fi
+          if [ -z "${DEMO_JWT_SECRET}" ]; then
+            echo "::error::GitHub secret DEMO_JWT_SECRET is empty or unset."
+            exit 1
+          fi
           tmp="$(mktemp)"
-          {
-            echo "POSTGRES_PASSWORD=${DEMO_POSTGRES_PASSWORD}"
-            echo "JWT_SECRET=${DEMO_JWT_SECRET}"
-            echo "VITE_API_URL=http://${DROPLET_IP}"
-            echo "OPENROUTER_API_KEY=${OPEN_ROUTER_API_KEY}"
-          } > "$tmp"
+          export TMP_ENV="$tmp"
+          # Quote .env values when needed (# and spaces break naive echo).
+          python3 << 'PY'
+          import os
+          import re
+          import sys
+
+          def line(key: str, value: str) -> str:
+              if value == "":
+                  return f"{key}=\n"
+              if re.search(r"[\r\n]", value):
+                  print("Multi-line secrets are not supported.", file=sys.stderr)
+                  sys.exit(1)
+              if re.search(r'[\s#"\\]', value) or value.startswith("'"):
+                  esc = value.replace("\\", "\\\\").replace('"', '\\"')
+                  return f'{key}="{esc}"\n'
+              return f"{key}={value}\n"
+
+          drop_ip = os.environ["DROPLET_IP"]
+          path = os.environ["TMP_ENV"]
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(line("POSTGRES_PASSWORD", os.environ["DEMO_POSTGRES_PASSWORD"]))
+              f.write(line("JWT_SECRET", os.environ["DEMO_JWT_SECRET"]))
+              f.write(line("VITE_API_URL", f"http://{drop_ip}"))
+              f.write(line("OPENROUTER_API_KEY", os.environ.get("OPEN_ROUTER_API_KEY", "")))
+          PY
           scp -i ~/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new \
             "$tmp" "root@${DROPLET_IP}:/opt/lextures/.env"
           shred -u "$tmp" 2>/dev/null || rm -f "$tmp"
