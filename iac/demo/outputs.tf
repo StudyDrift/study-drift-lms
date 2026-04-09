@@ -1,11 +1,16 @@
-output "droplet_public_ipv4" {
-  description = "Public IPv4 address of the demo droplet."
+output "reserved_ipv4" {
+  description = "Reserved (floating) IPv4 attached to the droplet — use this for DNS A records and VITE_API_URL."
+  value       = digitalocean_reserved_ip.demo.ip_address
+}
+
+output "droplet_ipv4" {
+  description = "Ephemeral public IPv4 on the droplet NIC (not stable across recreates; prefer reserved_ipv4 for DNS)."
   value       = digitalocean_droplet.demo.ipv4_address
 }
 
 output "ssh_root" {
-  description = "Example SSH command as root (for debugging)."
-  value       = "ssh -i <private-key-file> root@${digitalocean_droplet.demo.ipv4_address}"
+  description = "Example SSH as root via the reserved IP (works the same as the droplet ephemeral IP)."
+  value       = "ssh -i <private-key-file> root@${digitalocean_reserved_ip.demo.ip_address}"
 }
 
 output "ssh_private_key_openssh" {

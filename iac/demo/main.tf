@@ -22,6 +22,12 @@ resource "digitalocean_droplet" "demo" {
   user_data = file("${path.module}/cloud-init.yaml")
 }
 
+# Stable IPv4 for DNS (A record); survives droplet rebuilds if you reattach this IP in DO.
+resource "digitalocean_reserved_ip" "demo" {
+  region     = var.region
+  droplet_id = digitalocean_droplet.demo.id
+}
+
 resource "digitalocean_firewall" "demo" {
   name = "${var.droplet_name}-fw"
 

@@ -64,7 +64,7 @@ jobs:
       - name: Terraform output (droplet IP)
         id: droplet
         working-directory: iac/demo
-        run: echo "ip=$(terraform output -raw droplet_public_ipv4)" >> "$GITHUB_OUTPUT"
+        run: echo "ip=$(terraform output -raw reserved_ipv4)" >> "$GITHUB_OUTPUT"
 
       - name: Write SSH private key from Terraform output
         working-directory: iac/demo
