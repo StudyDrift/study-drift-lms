@@ -22,8 +22,8 @@ use crate::models::enrollment::{
     AddEnrollmentsRequest, AddEnrollmentsResponse, CourseEnrollmentsResponse,
 };
 use crate::models::rbac::CourseScopedRolesResponse;
-use crate::models::user_audit::PostCourseContextRequest;
 use crate::models::settings_ai::{GenerateCourseImageRequest, GenerateCourseImageResponse};
+use crate::models::user_audit::PostCourseContextRequest;
 use crate::repos::course;
 use crate::repos::course_grading;
 use crate::repos::course_grading::PutError;
@@ -194,7 +194,8 @@ async fn post_course_context_handler(
                     "content_open and content_leave require structureItemId.".into(),
                 ));
             };
-            if !user_audit::structure_item_is_course_content_page(&state.pool, course_id, sid).await?
+            if !user_audit::structure_item_is_course_content_page(&state.pool, course_id, sid)
+                .await?
             {
                 return Err(AppError::NotFound);
             }

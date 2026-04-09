@@ -31,7 +31,11 @@ pub struct LearningActivityQuery {
 fn parse_rfc3339(s: &str) -> Result<DateTime<Utc>, AppError> {
     chrono::DateTime::parse_from_rfc3339(s)
         .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|_| AppError::InvalidInput("Invalid `from` or `to`: use RFC 3339 (e.g. 2026-04-01T00:00:00Z).".into()))
+        .map_err(|_| {
+            AppError::InvalidInput(
+                "Invalid `from` or `to`: use RFC 3339 (e.g. 2026-04-01T00:00:00Z).".into(),
+            )
+        })
 }
 
 fn resolve_range(q: &LearningActivityQuery) -> Result<(DateTime<Utc>, DateTime<Utc>), AppError> {
@@ -74,7 +78,8 @@ async fn get_learning_activity(
     let summary = learning_activity_summary(&state.pool, from, to).await?;
     let by_day = learning_activity_by_day(&state.pool, from, to).await?;
     let by_event_kind = learning_activity_by_event_kind(&state.pool, from, to).await?;
-    let top_courses = learning_activity_top_courses(&state.pool, from, to, TOP_COURSES_LIMIT).await?;
+    let top_courses =
+        learning_activity_top_courses(&state.pool, from, to, TOP_COURSES_LIMIT).await?;
 
     Ok(Json(LearningActivityReport {
         range: DateRange { from, to },

@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import App from '../App'
+import { PermissionsProvider } from '../context/PermissionsProvider'
 import { server } from '../test/mocks/server'
 import { renderWithRouter } from '../test/render'
 import Login from './Login'
@@ -19,7 +20,9 @@ describe('Login', () => {
     const user = userEvent.setup()
     render(
       <MemoryRouter initialEntries={['/login']}>
-        <App />
+        <PermissionsProvider>
+          <App />
+        </PermissionsProvider>
       </MemoryRouter>,
     )
 
