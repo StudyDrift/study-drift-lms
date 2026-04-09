@@ -1,3 +1,4 @@
+-- Split from duplicate 033: module_quizzes + ui_theme both used version 33 (sqlx collision).
 ALTER TABLE "user".users
     ADD COLUMN IF NOT EXISTS ui_theme TEXT NOT NULL DEFAULT 'light';
 
