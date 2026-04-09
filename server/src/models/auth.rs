@@ -19,6 +19,9 @@ pub struct UserPublic {
     pub id: Uuid,
     pub email: String,
     pub display_name: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

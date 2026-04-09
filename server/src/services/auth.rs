@@ -99,6 +99,9 @@ pub async fn signup(
             id: row.id,
             email: row.email,
             display_name: row.display_name,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            avatar_url: row.avatar_url,
         },
     })
 }
@@ -125,6 +128,9 @@ pub async fn login(
             id: row.id,
             email: row.email,
             display_name: row.display_name,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            avatar_url: row.avatar_url,
         },
     })
 }

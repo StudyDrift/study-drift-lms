@@ -1,5 +1,6 @@
-import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { ImageIcon, Save, Upload, X } from 'lucide-react'
 import { ImageModelPicker } from '../../components/ImageModelPicker'
 import { RequirePermission } from '../../components/RequirePermission'
 import { RolesPermissionsPanel } from '../../components/settings/RolesPermissionsPanel'
@@ -48,6 +49,21 @@ function fallbackTextModels(): AiModelOption[] {
 
 type ModelKind = 'image' | 'text'
 
+type AccountProfile = {
+  email: string
+  displayName?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  avatarUrl?: string | null
+}
+
+function defaultAvatarPrompt(firstName: string, lastName: string): string {
+  const name = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ').trim()
+  return name
+    ? `Create a friendly profile avatar illustration for ${name}. Clean background, centered portrait framing, modern style.`
+    : 'Create a friendly profile avatar illustration with clean background, centered portrait framing, and modern style.'
+}
+
 async function fetchModelsForKind(kind: ModelKind): Promise<{
   models: AiModelOption[]
   fromApi: boolean
@@ -93,6 +109,20 @@ export default function Settings() {
   const [modelsConfigured, setModelsConfigured] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
   const [modelsRefreshing, setModelsRefreshing] = useState(false)
+
+  const [accountLoading, setAccountLoading] = useState(false)
+  const [accountSaving, setAccountSaving] = useState(false)
+  const [accountMessage, setAccountMessage] = useState<string | null>(null)
+  const [accountError, setAccountError] = useState<string | null>(null)
+  const [email, setEmail] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState('')
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null)
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false)
+  const [avatarPrompt, setAvatarPrompt] = useState('')
+  const [avatarGenStatus, setAvatarGenStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [avatarGenMessage, setAvatarGenMessage] = useState<string | null>(null)
 
   const loadModels = useCallback(async () => {
     setModelsError(null)
@@ -184,6 +214,133 @@ export default function Settings() {
       setAiError('Could not save settings.')
     } finally {
       setAiSaving(false)
+    }
+  }
+
+  const loadAccount = useCallback(async () => {
+    setAccountLoading(true)
+    setAccountError(null)
+    try {
+      const res = await authorizedFetch('/api/v1/settings/account')
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setAccountError(readApiErrorMessage(raw))
+        return
+      }
+      const data = raw as AccountProfile
+      setEmail(data.email ?? '')
+      setFirstName(data.firstName ?? '')
+      setLastName(data.lastName ?? '')
+      const currentAvatar = data.avatarUrl ?? ''
+      setAvatarUrl(currentAvatar)
+      setAvatarPreviewUrl(currentAvatar || null)
+    } catch {
+      setAccountError('Could not load account settings.')
+    } finally {
+      setAccountLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'account') return
+    void loadAccount()
+  }, [activeTab, loadAccount])
+
+  async function onAvatarUpload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setAccountError('Choose an image file.')
+      return
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setAccountError('Image file must be 3MB or smaller.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      setAvatarUrl(result)
+      setAvatarPreviewUrl(result || null)
+      setAccountError(null)
+      setAccountMessage('Image selected. Save to apply it.')
+    }
+    reader.onerror = () => {
+      setAccountError('Could not read that image file.')
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  function openGenerateAvatarModal() {
+    setAvatarPrompt(defaultAvatarPrompt(firstName, lastName))
+    setAvatarGenStatus('idle')
+    setAvatarGenMessage(null)
+    setAvatarModalOpen(true)
+  }
+
+  async function onGenerateAvatar(e: FormEvent) {
+    e.preventDefault()
+    if (!avatarPrompt.trim()) return
+    setAvatarGenStatus('loading')
+    setAvatarGenMessage(null)
+    try {
+      const res = await authorizedFetch('/api/v1/settings/account/generate-avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: avatarPrompt.trim() }),
+      })
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setAvatarGenStatus('error')
+        setAvatarGenMessage(readApiErrorMessage(raw))
+        return
+      }
+      const data = raw as { imageUrl?: string }
+      if (data.imageUrl) {
+        setAvatarUrl(data.imageUrl)
+        setAvatarPreviewUrl(data.imageUrl)
+      }
+      setAvatarGenStatus('idle')
+      setAvatarGenMessage('Avatar generated. Save account to apply it.')
+    } catch {
+      setAvatarGenStatus('error')
+      setAvatarGenMessage('Could not reach the server.')
+    }
+  }
+
+  async function onSaveAccount(e: FormEvent) {
+    e.preventDefault()
+    setAccountSaving(true)
+    setAccountMessage(null)
+    setAccountError(null)
+    try {
+      const res = await authorizedFetch('/api/v1/settings/account', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          avatarUrl: avatarUrl.trim() || null,
+        }),
+      })
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setAccountError(readApiErrorMessage(raw))
+        return
+      }
+      const data = raw as AccountProfile
+      setFirstName(data.firstName ?? '')
+      setLastName(data.lastName ?? '')
+      const nextAvatar = data.avatarUrl ?? ''
+      setAvatarUrl(nextAvatar)
+      setAvatarPreviewUrl(nextAvatar || null)
+      setAccountMessage('Saved.')
+      window.dispatchEvent(new Event('studydrift-profile-updated'))
+    } catch {
+      setAccountError('Could not save account settings.')
+    } finally {
+      setAccountSaving(false)
     }
   }
 
@@ -299,7 +456,110 @@ export default function Settings() {
         {activeTab === 'account' && (
           <div>
             <h2 className="text-base font-semibold text-slate-900">Account</h2>
-            <p className="mt-1 text-sm text-slate-500">Account settings will appear here.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Update your name and profile image shown in the app header.
+            </p>
+            {accountLoading && <p className="mt-4 text-sm text-slate-500">Loading…</p>}
+            {accountError && (
+              <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                {accountError}
+              </p>
+            )}
+            {!accountLoading && (
+              <form className="mt-6 space-y-5" onSubmit={onSaveAccount}>
+                <div>
+                  <label htmlFor="account-email" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Email
+                  </label>
+                  <input
+                    id="account-email"
+                    type="text"
+                    value={email}
+                    disabled
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500"
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">First name</span>
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      maxLength={80}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">Last name</span>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      maxLength={80}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
+                    />
+                  </label>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Profile image</label>
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+                      {avatarPreviewUrl ? (
+                        <img src={avatarPreviewUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <ImageIcon className="h-6 w-6 text-slate-400" aria-hidden />
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={openGenerateAvatarModal}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900"
+                      >
+                        <ImageIcon className="h-4 w-4" aria-hidden />
+                        Generate avatar
+                      </button>
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900">
+                        <Upload className="h-4 w-4" aria-hidden />
+                        Upload image
+                        <input type="file" accept="image/*" className="hidden" onChange={onAvatarUpload} />
+                      </label>
+                    </div>
+                  </div>
+                  <label className="mt-3 block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">Image URL</span>
+                    <input
+                      type="url"
+                      value={avatarUrl}
+                      onChange={(e) => {
+                        setAvatarUrl(e.target.value)
+                        setAvatarPreviewUrl(e.target.value.trim() || null)
+                      }}
+                      placeholder="https://example.com/avatar.png"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
+                    />
+                  </label>
+                </div>
+
+                {accountMessage && (
+                  <p className="text-sm text-emerald-700" role="status">
+                    {accountMessage}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={accountSaving}
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save className="h-4 w-4" aria-hidden />
+                  {accountSaving ? 'Saving…' : 'Save'}
+                </button>
+              </form>
+            )}
           </div>
         )}
 
@@ -331,6 +591,86 @@ export default function Settings() {
           </div>
         )}
       </div>
+
+      {avatarModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="generate-avatar-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setAvatarModalOpen(false)
+          }}
+        >
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <h3 id="generate-avatar-title" className="text-sm font-semibold text-slate-900">
+                Generate avatar
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAvatarModalOpen(false)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={onGenerateAvatar} className="grid gap-4 p-4 md:grid-cols-[1fr,240px]">
+              <div>
+                <label htmlFor="avatar-prompt" className="text-xs font-medium text-slate-600">
+                  Prompt
+                </label>
+                <textarea
+                  id="avatar-prompt"
+                  rows={6}
+                  value={avatarPrompt}
+                  onChange={(e) => setAvatarPrompt(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
+                />
+                {avatarGenMessage && (
+                  <p
+                    className={
+                      avatarGenStatus === 'error' ? 'mt-2 text-sm text-rose-700' : 'mt-2 text-sm text-emerald-700'
+                    }
+                    role="status"
+                  >
+                    {avatarGenMessage}
+                  </p>
+                )}
+                <div className="mt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAvatarModalOpen(false)}
+                    className="rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={avatarGenStatus === 'loading' || !avatarPrompt.trim()}
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {avatarGenStatus === 'loading' ? 'Generating…' : 'Generate'}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <span className="text-xs font-medium text-slate-600">Preview</span>
+                <div className="mt-1 flex h-60 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                  {avatarGenStatus === 'loading' && <span className="text-sm text-slate-500">Generating…</span>}
+                  {avatarGenStatus !== 'loading' && avatarPreviewUrl && (
+                    <img src={avatarPreviewUrl} alt="" className="h-full w-full object-contain" />
+                  )}
+                  {avatarGenStatus !== 'loading' && !avatarPreviewUrl && (
+                    <span className="text-sm text-slate-400">Generated image will appear here</span>
+                  )}
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </LmsPage>
   )
 }
