@@ -1,6 +1,6 @@
 import { courseGradebookViewPermission } from './coursesApi'
 import type { SearchCourseItem, SearchPersonItem } from './searchApi'
-import { PERM_COURSE_CREATE, PERM_RBAC_MANAGE } from './rbacApi'
+import { PERM_COURSE_CREATE, PERM_RBAC_MANAGE, PERM_REPORTS_VIEW } from './rbacApi'
 
 export type SearchGroup = 'course' | 'person' | 'page' | 'action'
 
@@ -97,6 +97,17 @@ export function buildSearchItems(
       subtitle: 'System settings',
       path: '/settings/roles',
       haystack: 'roles permissions rbac security admin page'.toLowerCase(),
+    })
+  }
+
+  if (allows(PERM_REPORTS_VIEW)) {
+    items.push({
+      id: 'page:/reports',
+      group: 'page',
+      title: 'Reports',
+      subtitle: 'Learning activity',
+      path: '/reports',
+      haystack: 'reports analytics audit activity learning page'.toLowerCase(),
     })
   }
 

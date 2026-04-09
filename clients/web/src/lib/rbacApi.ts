@@ -7,6 +7,9 @@ export const PERM_RBAC_MANAGE = 'global:app:rbac:manage' as const
 /** Create new courses (Courses page + POST /api/v1/courses). */
 export const PERM_COURSE_CREATE = 'global:app:course:create' as const
 
+/** Learning activity reports (`user.user_audit` aggregates). */
+export const PERM_REPORTS_VIEW = 'global:app:reports:view' as const
+
 /** Re-export: per-course item create (`course:<courseCode>:item:create`), merged into `/me/permissions` via course grants. */
 export { courseItemCreatePermission as permCourseItemCreate } from './coursesApi'
 

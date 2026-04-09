@@ -26,6 +26,7 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::courses::router())
         .merge(routes::settings::router())
         .merge(routes::rbac::router())
+        .merge(routes::reports::router())
         .merge(routes::communication::router())
         .layer(cors)
         .with_state(state)

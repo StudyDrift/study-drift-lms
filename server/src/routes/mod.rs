@@ -4,5 +4,6 @@ pub mod courses;
 pub mod health;
 pub mod me;
 pub mod rbac;
+pub mod reports;
 pub mod search;
 pub mod settings;

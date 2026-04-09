@@ -15,6 +15,7 @@ import CourseSyllabus from './pages/lms/CourseSyllabus'
 import Courses from './pages/lms/Courses'
 import Dashboard from './pages/lms/Dashboard'
 import Inbox from './pages/lms/Inbox'
+import Reports from './pages/lms/Reports'
 import Settings from './pages/lms/Settings'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="/courses/:courseCode/enrollments" element={<CourseEnrollments />} />
           <Route path="/courses/:courseCode" element={<CourseDetail />} />
           <Route path="/calendar" element={<Calendar />} />
+          <Route path="/reports" element={<Reports />} />
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/settings" element={<Navigate to="/settings/ai" replace />} />
           <Route path="/settings/:tab" element={<Settings />} />

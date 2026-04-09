@@ -8,6 +8,7 @@ pub mod course_syllabus;
 pub mod enrollment;
 pub mod me;
 pub mod rbac;
+pub mod reports;
 pub mod search;
 pub mod settings_ai;
 pub mod user_audit;

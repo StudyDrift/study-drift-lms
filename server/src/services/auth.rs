@@ -8,7 +8,7 @@ use sqlx::PgPool;
 use crate::error::AppError;
 use crate::jwt::JwtSigner;
 use crate::models::auth::{AuthResponse, LoginRequest, SignupRequest, UserPublic};
-use crate::repos::{rbac, user};
+use crate::repos::{communication, rbac, user};
 
 fn hash_password(raw: &str) -> Result<String, AppError> {
     let salt = SaltString::generate(&mut OsRng);
@@ -83,6 +83,14 @@ pub async fn signup(
 
     let access_token = jwt.sign(row.id, &row.email)?;
     rbac::assign_user_role_by_name(pool, row.id, "Student").await?;
+
+    if let Err(e) = communication::send_welcome_message(pool, &email).await {
+        tracing::warn!(
+            error = %e,
+            user_id = %row.id,
+            "could not create welcome inbox message"
+        );
+    }
 
     Ok(AuthResponse {
         access_token,

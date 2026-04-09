@@ -2,6 +2,12 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::schema;
+
+/// Seeded in migration `031_platform_inbox_sender.sql`; must match that row’s `id`.
+pub const PLATFORM_INBOX_SENDER_ID: Uuid = Uuid::from_bytes([
+    0xa0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x01,
+]);
 use crate::models::communication::{MailboxMessage, MailboxParty, PatchMailboxRequest};
 use crate::repos::user;
 
@@ -289,6 +295,35 @@ pub async fn send_message(
 
     tx.commit().await?;
     Ok(Some(message_id))
+}
+
+/// Welcome message for newly registered users (inbox item from the platform).
+pub async fn send_welcome_message(pool: &PgPool, recipient_email: &str) -> Result<(), sqlx::Error> {
+    const SUBJECT: &str = "Welcome to Lextures";
+    const BODY: &str = r#"We're glad you're here.
+
+Your inbox is where you'll receive messages from instructors and updates about your courses. Explore the platform—we're happy to have you.
+
+— The Lextures team"#;
+
+    match send_message(
+        pool,
+        PLATFORM_INBOX_SENDER_ID,
+        recipient_email,
+        SUBJECT,
+        BODY,
+    )
+    .await?
+    {
+        Some(_) => Ok(()),
+        None => {
+            tracing::warn!(
+                recipient_email,
+                "welcome message skipped: recipient user row not found"
+            );
+            Ok(())
+        }
+    }
 }
 
 pub async fn save_draft(

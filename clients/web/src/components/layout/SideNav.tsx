@@ -1,6 +1,7 @@
 import { matchPath, NavLink, useLocation } from 'react-router-dom'
 import {
   ArrowLeft,
+  BarChart3,
   Bell,
   BookOpen,
   Bot,
@@ -21,6 +22,7 @@ import {
 import { useInboxUnreadCount } from '../../context/useInboxUnread'
 import { usePermissions } from '../../context/usePermissions'
 import { courseGradebookViewPermission } from '../../lib/coursesApi'
+import { PERM_REPORTS_VIEW } from '../../lib/rbacApi'
 import { BrandLogo } from '../BrandLogo'
 
 const linkClass =
@@ -30,6 +32,8 @@ const activeClass = 'bg-indigo-50 text-indigo-700 shadow-sm'
 
 function MainNavLinks() {
   const unreadInboxCount = useInboxUnreadCount()
+  const { allows, loading: permLoading } = usePermissions()
+  const canViewReports = !permLoading && allows(PERM_REPORTS_VIEW)
 
   return (
     <>
@@ -55,6 +59,15 @@ function MainNavLinks() {
         <Calendar className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Calendar
       </NavLink>
+      {canViewReports && (
+        <NavLink
+          to="/reports"
+          className={({ isActive }) => `${linkClass} ${isActive ? activeClass : ''}`}
+        >
+          <BarChart3 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Reports
+        </NavLink>
+      )}
       <NavLink
         to="/inbox"
         className={({ isActive }) =>
