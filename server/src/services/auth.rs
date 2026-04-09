@@ -102,6 +102,7 @@ pub async fn signup(
             first_name: row.first_name,
             last_name: row.last_name,
             avatar_url: row.avatar_url,
+            ui_theme: row.ui_theme,
         },
     })
 }
@@ -131,6 +132,7 @@ pub async fn login(
             first_name: row.first_name,
             last_name: row.last_name,
             avatar_url: row.avatar_url,
+            ui_theme: row.ui_theme,
         },
     })
 }

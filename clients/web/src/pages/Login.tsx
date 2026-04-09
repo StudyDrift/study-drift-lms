@@ -4,6 +4,7 @@ import { BrandLogo } from '../components/BrandLogo'
 import { getAccessToken, setAccessToken } from '../lib/auth'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
+import { applyUiTheme, parseUiTheme } from '../lib/uiTheme'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -46,9 +47,10 @@ export default function Login() {
       }
       const data = raw as {
         access_token: string
-        user?: { email?: string }
+        user?: { email?: string; uiTheme?: string | null }
       }
       setAccessToken(data.access_token)
+      applyUiTheme(parseUiTheme(data.user?.uiTheme))
       navigate(from, { replace: true })
     } catch {
       setStatus('error')

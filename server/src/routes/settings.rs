@@ -112,7 +112,21 @@ fn to_profile_response(row: user::UserProfileRow) -> AccountProfileResponse {
         first_name: row.first_name,
         last_name: row.last_name,
         avatar_url: row.avatar_url,
+        ui_theme: row.ui_theme,
     }
+}
+
+fn normalize_ui_theme(s: Option<String>) -> Result<Option<String>, AppError> {
+    let Some(s) = s else {
+        return Ok(None);
+    };
+    let t = s.trim().to_lowercase();
+    if t != "light" && t != "dark" {
+        return Err(AppError::InvalidInput(
+            "Theme must be \"light\" or \"dark\".".into(),
+        ));
+    }
+    Ok(Some(t))
 }
 
 async fn get_account_handler(
@@ -135,12 +149,14 @@ async fn patch_account_handler(
     let first_name = normalize_name(req.first_name, "First name")?;
     let last_name = normalize_name(req.last_name, "Last name")?;
     let avatar_url = normalize_avatar_url(req.avatar_url)?;
+    let ui_theme = normalize_ui_theme(req.ui_theme)?;
     let row = user::update_profile(
         &state.pool,
         auth.user_id,
         first_name.as_deref(),
         last_name.as_deref(),
         avatar_url.as_deref(),
+        ui_theme.as_deref(),
     )
     .await?
     .ok_or(AppError::NotFound)?;

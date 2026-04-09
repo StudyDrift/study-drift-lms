@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Pencil } from 'lucide-react'
 import { SyllabusBlockEditor } from '../../components/syllabus/SyllabusBlockEditor'
@@ -11,7 +11,12 @@ import {
   patchModuleAssignment,
   type SyllabusSection,
 } from '../../lib/coursesApi'
-import { type ResolvedMarkdownTheme, resolveMarkdownTheme } from '../../lib/markdownTheme'
+import {
+  type MarkdownThemeCustom,
+  type ResolvedMarkdownTheme,
+  resolveMarkdownTheme,
+} from '../../lib/markdownTheme'
+import { useLmsDarkMode } from '../../hooks/useLmsDarkMode'
 import { permCourseItemCreate } from '../../lib/rbacApi'
 import { LmsPage } from './LmsPage'
 
@@ -54,8 +59,12 @@ export default function CourseModuleAssignmentPage() {
   const [draft, setDraft] = useState<SyllabusSection[]>([])
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [mdTheme, setMdTheme] = useState<ResolvedMarkdownTheme>(() =>
-    resolveMarkdownTheme('classic', null),
+  const [mdPreset, setMdPreset] = useState<string>('classic')
+  const [mdCustom, setMdCustom] = useState<MarkdownThemeCustom | null>(null)
+  const lmsUiDark = useLmsDarkMode()
+  const mdTheme = useMemo(
+    (): ResolvedMarkdownTheme => resolveMarkdownTheme(mdPreset, mdCustom, { lmsUiDark }),
+    [mdPreset, mdCustom, lmsUiDark],
   )
 
   const canEdit = Boolean(
@@ -75,7 +84,8 @@ export default function CourseModuleAssignmentPage() {
       setMarkdown(data.markdown)
       setDueAt(data.dueAt)
       setUpdatedAt(data.updatedAt)
-      setMdTheme(resolveMarkdownTheme(courseRow.markdownThemePreset, courseRow.markdownThemeCustom))
+      setMdPreset(courseRow.markdownThemePreset)
+      setMdCustom(courseRow.markdownThemeCustom)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load this assignment.')
       setTitle('')
@@ -216,13 +226,13 @@ export default function CourseModuleAssignmentPage() {
       {!loading && !loadError && editing && (
         <div className="mt-6 -mx-6 md:-mx-8">
           {saveError && (
-            <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-800 md:px-8">
+            <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200 md:px-8">
               {saveError}
             </p>
           )}
           {canEdit && (
             <div className="mb-4 px-4 md:px-8">
-              <label className="block text-sm font-medium text-slate-800" htmlFor="assignment-due-at">
+              <label className="block text-sm font-medium text-slate-800 dark:text-slate-200" htmlFor="assignment-due-at">
                 Due date (optional)
               </label>
               <input
@@ -231,9 +241,11 @@ export default function CourseModuleAssignmentPage() {
                 value={draftDueLocal}
                 onChange={(e) => setDraftDueLocal(e.target.value)}
                 disabled={saving}
-                className="mt-2 w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-60"
+                className="mt-2 w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-500"
               />
-              <p className="mt-1 text-xs text-slate-500">Shown on the course calendar. Clear the field to remove.</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Shown on the course calendar. Clear the field to remove.
+              </p>
             </div>
           )}
           <div className="px-4 md:px-8">

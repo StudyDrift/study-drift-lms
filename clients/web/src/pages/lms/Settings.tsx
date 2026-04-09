@@ -9,6 +9,7 @@ import { LmsPage } from './LmsPage'
 import { FALLBACK_IMAGE_MODEL_OPTIONS, FALLBACK_TEXT_MODEL_OPTIONS } from '../../lib/aiModels'
 import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
+import { applyUiTheme, parseUiTheme, type UiTheme } from '../../lib/uiTheme'
 
 type TabId = 'ai' | 'account' | 'notifications' | 'roles'
 
@@ -55,6 +56,7 @@ type AccountProfile = {
   firstName?: string | null
   lastName?: string | null
   avatarUrl?: string | null
+  uiTheme?: string | null
 }
 
 function defaultAvatarPrompt(firstName: string, lastName: string): string {
@@ -123,6 +125,7 @@ export default function Settings() {
   const [avatarPrompt, setAvatarPrompt] = useState('')
   const [avatarGenStatus, setAvatarGenStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [avatarGenMessage, setAvatarGenMessage] = useState<string | null>(null)
+  const [uiTheme, setUiTheme] = useState<UiTheme>('light')
 
   const loadModels = useCallback(async () => {
     setModelsError(null)
@@ -234,6 +237,7 @@ export default function Settings() {
       const currentAvatar = data.avatarUrl ?? ''
       setAvatarUrl(currentAvatar)
       setAvatarPreviewUrl(currentAvatar || null)
+      setUiTheme(parseUiTheme(data.uiTheme))
     } catch {
       setAccountError('Could not load account settings.')
     } finally {
@@ -309,6 +313,37 @@ export default function Settings() {
     }
   }
 
+  async function persistUiTheme(next: UiTheme) {
+    const prev = uiTheme
+    setUiTheme(next)
+    applyUiTheme(next)
+    setAccountError(null)
+    try {
+      const res = await authorizedFetch('/api/v1/settings/account', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          avatarUrl: avatarUrl.trim() || null,
+          uiTheme: next,
+        }),
+      })
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setUiTheme(prev)
+        applyUiTheme(prev)
+        setAccountError(readApiErrorMessage(raw))
+        return
+      }
+      window.dispatchEvent(new Event('studydrift-profile-updated'))
+    } catch {
+      setUiTheme(prev)
+      applyUiTheme(prev)
+      setAccountError('Could not save appearance.')
+    }
+  }
+
   async function onSaveAccount(e: FormEvent) {
     e.preventDefault()
     setAccountSaving(true)
@@ -322,6 +357,7 @@ export default function Settings() {
           firstName,
           lastName,
           avatarUrl: avatarUrl.trim() || null,
+          uiTheme,
         }),
       })
       const raw: unknown = await res.json().catch(() => ({}))
@@ -459,6 +495,39 @@ export default function Settings() {
             <p className="mt-1 text-sm text-slate-500">
               Update your name and profile image shown in the app header.
             </p>
+            {!accountLoading && (
+              <div className="mt-6">
+                <p className="text-sm font-medium text-slate-700">Appearance</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Choose light or dark for the LMS interface. This applies on all your devices when
+                  you are signed in.
+                </p>
+                <div className="mt-3 inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-600 dark:bg-slate-800/50">
+                  <button
+                    type="button"
+                    onClick={() => void persistUiTheme('light')}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      uiTheme === 'light'
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    Light
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void persistUiTheme('dark')}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      uiTheme === 'dark'
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    Dark
+                  </button>
+                </div>
+              </div>
+            )}
             {accountLoading && <p className="mt-4 text-sm text-slate-500">Loading…</p>}
             {accountError && (
               <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">

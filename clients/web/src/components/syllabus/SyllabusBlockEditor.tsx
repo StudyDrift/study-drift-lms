@@ -44,19 +44,19 @@ function SyllabusDocumentPanel({
   const chars = sections.reduce((n, s) => n + s.markdown.length + s.heading.length, 0)
   return (
     <div className="space-y-4">
-      <p className="text-[13px] leading-relaxed text-slate-600">
+      <p className="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
         {documentVariant === 'page'
           ? 'Build this page from sections. Each section has an optional title and Markdown body, matching what students see when they open it.'
           : 'The syllabus is built from sections. Each section has an optional title and Markdown body, matching what students see on the course page.'}
       </p>
       <dl className="space-y-0 text-[13px]">
-        <div className="flex justify-between gap-3 border-b border-slate-100 py-2.5">
-          <dt className="text-slate-500">Sections</dt>
-          <dd className="font-medium text-slate-900">{blocks}</dd>
+        <div className="flex justify-between gap-3 border-b border-slate-100 py-2.5 dark:border-slate-700">
+          <dt className="text-slate-500 dark:text-slate-400">Sections</dt>
+          <dd className="font-medium text-slate-900 dark:text-slate-100">{blocks}</dd>
         </div>
-        <div className="flex justify-between gap-3 border-b border-slate-100 py-2.5">
-          <dt className="text-slate-500">Characters</dt>
-          <dd className="font-medium text-slate-900">{chars.toLocaleString()}</dd>
+        <div className="flex justify-between gap-3 border-b border-slate-100 py-2.5 dark:border-slate-700">
+          <dt className="text-slate-500 dark:text-slate-400">Characters</dt>
+          <dd className="font-medium text-slate-900 dark:text-slate-100">{chars.toLocaleString()}</dd>
         </div>
       </dl>
     </div>
@@ -79,18 +79,18 @@ function SyllabusBlockPanel({
 
   return (
     <div>
-      <div className="mb-4 flex items-start gap-2 border-b border-slate-100 pb-4">
-        <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-slate-50 text-slate-600">
+      <div className="mb-4 flex items-start gap-2 border-b border-slate-100 pb-4 dark:border-slate-700">
+        <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
           <FileText className="h-4 w-4" aria-hidden />
         </span>
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-slate-900">Section</h3>
-          <p className="text-xs text-slate-500">Optional heading plus Markdown content.</p>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Section</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Optional heading plus Markdown content.</p>
         </div>
       </div>
       <SidebarSection title="Content" defaultOpen>
         <div>
-          <label htmlFor={`syllabus-heading-${section.id}`} className="mb-1.5 block text-xs font-medium text-slate-600">
+          <label htmlFor={`syllabus-heading-${section.id}`} className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300">
             Heading
           </label>
           <input
@@ -100,15 +100,15 @@ function SyllabusBlockPanel({
             onChange={(e) => updateAt(index, { heading: e.target.value })}
             disabled={disabled}
             placeholder="Optional"
-            className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60"
+            className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500"
           />
         </div>
       </SidebarSection>
       <SidebarSection title="Markdown" defaultOpen>
-        <p className="text-xs leading-relaxed text-slate-600">
+        <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
           Formatting is visual in the editor; stored content is Markdown for reliable rendering on the course page.
         </p>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           ~{words.toLocaleString()} word{words === 1 ? '' : 's'} ·{' '}
           {section.markdown.length.toLocaleString()} characters
         </p>
@@ -154,12 +154,12 @@ function BlockInsertionRow({ onAdd, disabled }: { onAdd: () => void; disabled?: 
   return (
     <div className="relative py-6" onClick={(e) => e.stopPropagation()}>
       <div className="relative flex items-center justify-center">
-        <div className="absolute inset-x-0 top-1/2 h-px bg-slate-300/80" aria-hidden />
+        <div className="absolute inset-x-0 top-1/2 h-px bg-slate-300/80 dark:bg-slate-600" aria-hidden />
         <button
           type="button"
           disabled={disabled}
           onClick={onAdd}
-          className="relative z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-[#f0f0f0] text-slate-600 shadow-sm transition hover:border-slate-400 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+          className="relative z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-[#f0f0f0] text-slate-600 shadow-sm transition hover:border-slate-400 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-50"
           aria-label="Add section"
         >
           <Plus className="h-5 w-5" strokeWidth={2} aria-hidden />
@@ -169,7 +169,7 @@ function BlockInsertionRow({ onAdd, disabled }: { onAdd: () => void; disabled?: 
         type="button"
         disabled={disabled}
         onClick={onAdd}
-        className="mt-4 w-full border-0 bg-transparent py-1 text-left text-[13px] text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-4 w-full border-0 bg-transparent py-1 text-left text-[13px] text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:text-slate-300"
       >
         Type / to add a section
       </button>
@@ -317,7 +317,7 @@ function SyllabusBlockEditorInner({
                 }}
                 disabled={disabled}
                 placeholder="Section heading (optional)"
-                className="mb-1 w-full border-0 border-b border-dashed border-transparent bg-transparent pb-2 text-2xl font-semibold tracking-tight text-slate-900 placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-0 disabled:opacity-60"
+                className="mb-1 w-full border-0 border-b border-dashed border-transparent bg-transparent pb-2 text-2xl font-semibold tracking-tight text-slate-900 placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-0 disabled:opacity-60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-slate-600"
               />
               <label className="sr-only" htmlFor={`canvas-md-${section.id}`}>
                 Section body (Markdown)

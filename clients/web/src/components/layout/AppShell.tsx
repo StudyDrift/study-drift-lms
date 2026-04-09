@@ -3,16 +3,18 @@ import { CommandPaletteProvider } from '../command-palette/CommandPaletteProvide
 import { InboxUnreadProvider } from '../../context/InboxUnreadProvider'
 import { SideNav } from './SideNav'
 import { TopBar } from './TopBar'
+import { UiThemeSync } from './UiThemeSync'
 
 export function AppShell() {
   return (
     <InboxUnreadProvider>
       <CommandPaletteProvider>
-        <div className="flex min-h-screen bg-slate-50">
+        <UiThemeSync />
+        <div className="flex h-screen min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
           <SideNav />
-          <div className="flex min-h-screen min-w-0 flex-1 flex-col bg-white">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-slate-900">
             <TopBar />
-            <main className="min-h-0 flex-1 overflow-auto">
+            <main className="lms-scope min-h-0 flex-1 overflow-auto dark:bg-slate-900">
               <Outlet />
             </main>
           </div>

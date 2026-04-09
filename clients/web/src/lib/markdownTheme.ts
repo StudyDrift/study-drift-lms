@@ -225,8 +225,28 @@ const CUSTOM_DEFAULTS: Required<
 /** Default custom theme values for the branding form and API seeding. */
 export const markdownThemeCustomSeed: MarkdownThemeCustom = { ...CUSTOM_DEFAULTS }
 
-function mergeCustom(base: ThemeClasses, c: MarkdownThemeCustom): { classes: ThemeClasses; overrides: ElementStyleOverrides } {
-  const m = { ...CUSTOM_DEFAULTS, ...c }
+/** Inline colors when the LMS shell is dark — custom branding defaults assume a light page. */
+const CUSTOM_INLINE_COLORS_DARK_LMS: Pick<
+  MarkdownThemeCustom,
+  'headingColor' | 'bodyColor' | 'linkColor' | 'codeBackground' | 'blockquoteBorder'
+> = {
+  headingColor: '#f1f5f9',
+  bodyColor: '#cbd5e1',
+  linkColor: '#a5b4fc',
+  codeBackground: '#1e293b',
+  blockquoteBorder: '#475569',
+}
+
+function mergeCustom(
+  base: ThemeClasses,
+  c: MarkdownThemeCustom,
+  lmsUiDark?: boolean,
+): { classes: ThemeClasses; overrides: ElementStyleOverrides } {
+  const m = {
+    ...CUSTOM_DEFAULTS,
+    ...c,
+    ...(lmsUiDark ? CUSTOM_INLINE_COLORS_DARK_LMS : {}),
+  }
   const maxW = WIDTH_MAX[m.articleWidth]
   const font = m.fontFamily === 'serif' ? 'font-serif' : 'font-sans'
 
@@ -265,21 +285,72 @@ function mergeCustom(base: ThemeClasses, c: MarkdownThemeCustom): { classes: The
   return { classes, overrides }
 }
 
+/** Reading surface when the LMS shell is dark — dark panel (no white flash). */
+const LMS_DARK_READING_SURFACE =
+  'rounded-2xl border border-slate-700/90 !bg-slate-950/95 px-6 py-8 shadow-sm ring-1 ring-slate-700/70'
+
+function effectiveMarkdownPresetId(preset: string): MarkdownThemePresetId | 'custom' {
+  if (preset === 'custom') return 'custom'
+  const pid = preset as MarkdownThemePresetId
+  return pid in PRESET_CLASSES ? pid : 'classic'
+}
+
+function articleSurfaceForLmsDark(
+  effective: MarkdownThemePresetId | 'custom',
+  _articleClass: string,
+  lmsUiDark: boolean,
+): string {
+  if (!lmsUiDark) return ''
+  if (effective === 'night' || effective === 'contrast') return ''
+  if (
+    effective === 'reader' ||
+    effective === 'custom' ||
+    effective === 'classic' ||
+    effective === 'serif' ||
+    effective === 'accent'
+  ) {
+    return LMS_DARK_READING_SURFACE
+  }
+  return ''
+}
+
+export type ResolveMarkdownThemeOptions = {
+  /** When true, adjust article chrome so course branding stays readable on the dark LMS shell. */
+  lmsUiDark?: boolean
+}
+
 /** Resolves API fields into classes + optional inline colors for custom themes. */
 export function resolveMarkdownTheme(
   preset: string,
   custom: MarkdownThemeCustom | null | undefined,
+  options?: ResolveMarkdownThemeOptions,
 ): ResolvedMarkdownTheme {
+  const lmsUiDark = options?.lmsUiDark === true
+  let resolved: ResolvedMarkdownTheme
+
   if (preset === 'custom') {
-    const { classes, overrides } = mergeCustom(PRESET_CLASSES.classic, custom ?? {})
-    return { classes, styleOverrides: overrides }
+    const { classes, overrides } = mergeCustom(PRESET_CLASSES.classic, custom ?? {}, lmsUiDark)
+    resolved = { classes, styleOverrides: overrides }
+  } else {
+    const pid = preset as MarkdownThemePresetId
+    if (pid in PRESET_CLASSES) {
+      resolved = { classes: PRESET_CLASSES[pid], styleOverrides: {} }
+    } else {
+      resolved = { classes: PRESET_CLASSES.classic, styleOverrides: {} }
+    }
   }
-  const pid = preset as MarkdownThemePresetId
-  if (pid in PRESET_CLASSES) {
-    const classes = PRESET_CLASSES[pid]
-    return { classes, styleOverrides: {} }
+
+  const effective = effectiveMarkdownPresetId(preset)
+  const extra = articleSurfaceForLmsDark(effective, resolved.classes.article, lmsUiDark)
+  if (!extra) return resolved
+
+  return {
+    ...resolved,
+    classes: {
+      ...resolved.classes,
+      article: `${resolved.classes.article} ${extra}`.trim(),
+    },
   }
-  return { classes: PRESET_CLASSES.classic, styleOverrides: {} }
 }
 
 export const MARKDOWN_THEME_PRESET_META: {

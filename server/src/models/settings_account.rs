@@ -8,6 +8,7 @@ pub struct AccountProfileResponse {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar_url: Option<String>,
+    pub ui_theme: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -16,6 +17,7 @@ pub struct UpdateAccountProfileRequest {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar_url: Option<String>,
+    pub ui_theme: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

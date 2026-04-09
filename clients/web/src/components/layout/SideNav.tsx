@@ -26,9 +26,10 @@ import { PERM_REPORTS_VIEW } from '../../lib/rbacApi'
 import { BrandLogo } from '../BrandLogo'
 
 const linkClass =
-  'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-white hover:text-slate-900 hover:shadow-sm'
+  'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-white hover:text-slate-900 hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-slate-50'
 
-const activeClass = 'bg-indigo-50 text-indigo-700 shadow-sm'
+const activeClass =
+  'bg-indigo-50 text-indigo-700 shadow-sm dark:bg-indigo-950/60 dark:text-indigo-300'
 
 function MainNavLinks() {
   const unreadInboxCount = useInboxUnreadCount()
@@ -117,7 +118,9 @@ function CourseNavLinks({ courseCode }: CourseNavLinksProps) {
         <ArrowLeft className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Back
       </NavLink>
-      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900">Course Menu</p>
+      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+        Course Menu
+      </p>
       <NavLink
         to={base}
         end
@@ -212,7 +215,9 @@ function CourseSettingsNavLinks({ courseCode }: CourseSettingsNavLinksProps) {
         <ArrowLeft className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Back
       </NavLink>
-      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900">Course Settings</p>
+      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+        Course Settings
+      </p>
       <NavLink
         to={base}
         end
@@ -260,7 +265,9 @@ function SettingsNavLinks() {
         <ArrowLeft className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Back
       </NavLink>
-      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900">User Settings</p>
+      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+        User Settings
+      </p>
       <NavLink
         to="/settings/account"
         className={() => `${linkClass} ${tab === 'account' ? activeClass : ''}`}
@@ -275,7 +282,9 @@ function SettingsNavLinks() {
         <Bell className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Notifications
       </NavLink>
-      <p className="px-3 pb-1 pt-4 text-sm font-bold tracking-tight text-slate-900">System Settings</p>
+      <p className="px-3 pb-1 pt-4 text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+        System Settings
+      </p>
       <NavLink
         to="/settings/roles"
         className={() => `${linkClass} ${tab === 'roles' ? activeClass : ''}`}
@@ -312,15 +321,17 @@ export function SideNav() {
   const showSettingsNav = isSettingsNav
 
   return (
-    <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-slate-200 bg-[#F8F9FA]">
-      <div className="border-b border-slate-200 px-4 py-5">
+    <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-slate-200 bg-[#F8F9FA] text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+      <div className="border-b border-slate-200 px-4 py-5 dark:border-slate-700">
         <NavLink
           to="/"
           className="flex items-center gap-3 rounded-xl outline-none ring-indigo-500/40 focus-visible:ring-2"
           end
         >
           <BrandLogo className="mx-0 h-9 w-auto shrink-0 object-contain object-left drop-shadow-sm" />
-          <span className="truncate text-lg font-semibold tracking-tight text-slate-900">Lextures</span>
+          <span className="truncate text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+            Lextures
+          </span>
         </NavLink>
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
