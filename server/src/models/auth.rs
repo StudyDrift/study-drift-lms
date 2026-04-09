@@ -15,6 +15,7 @@ pub struct SignupRequest {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserPublic {
     pub id: Uuid,
     pub email: String,
@@ -22,6 +23,7 @@ pub struct UserPublic {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar_url: Option<String>,
+    pub ui_theme: String,
 }
 
 #[derive(Debug, Serialize)]

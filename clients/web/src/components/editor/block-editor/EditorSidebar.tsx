@@ -28,7 +28,7 @@ export function EditorSidebar({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div
-        className="flex shrink-0 border-b border-slate-200"
+        className="flex shrink-0 border-b border-slate-200 dark:border-slate-700"
         role="tablist"
         aria-label="Editor settings"
       >
@@ -38,8 +38,8 @@ export function EditorSidebar({
           aria-selected={tab === 'document'}
           className={`flex-1 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide transition ${
             tab === 'document'
-              ? 'border-b-2 border-indigo-600 text-slate-900'
-              : 'border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+              ? 'border-b-2 border-indigo-600 text-slate-900 dark:border-indigo-500 dark:text-slate-100'
+              : 'border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
           onClick={() => setTab('document')}
         >
@@ -51,8 +51,8 @@ export function EditorSidebar({
           aria-selected={tab === 'block'}
           className={`flex-1 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide transition ${
             tab === 'block'
-              ? 'border-b-2 border-indigo-600 text-slate-900'
-              : 'border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+              ? 'border-b-2 border-indigo-600 text-slate-900 dark:border-indigo-500 dark:text-slate-100'
+              : 'border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
           onClick={() => setTab('block')}
         >
@@ -63,7 +63,7 @@ export function EditorSidebar({
         {tab === 'document' && documentPanel}
         {tab === 'block' &&
           (blockDisabled ? (
-            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
+            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-300">
               {blockDisabledMessage}
             </p>
           ) : (

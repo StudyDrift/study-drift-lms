@@ -42,7 +42,11 @@ export const handlers = [
       user: {
         id: mockUserId,
         email: body.email,
-        display_name: null as string | null,
+        displayName: null as string | null,
+        firstName: null as string | null,
+        lastName: null as string | null,
+        avatarUrl: null as string | null,
+        uiTheme: 'light',
       },
     })
   }),
@@ -71,7 +75,11 @@ export const handlers = [
       user: {
         id: mockUserId,
         email: body.email,
-        display_name: displayName,
+        displayName,
+        firstName: null as string | null,
+        lastName: null as string | null,
+        avatarUrl: null as string | null,
+        uiTheme: 'light',
       },
     })
   }),

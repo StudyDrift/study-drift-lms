@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Pencil } from 'lucide-react'
 import { SyllabusBlockEditor } from '../../components/syllabus/SyllabusBlockEditor'
@@ -10,7 +10,12 @@ import {
   patchCourseSyllabus,
   type SyllabusSection,
 } from '../../lib/coursesApi'
-import { type ResolvedMarkdownTheme, resolveMarkdownTheme } from '../../lib/markdownTheme'
+import {
+  type MarkdownThemeCustom,
+  type ResolvedMarkdownTheme,
+  resolveMarkdownTheme,
+} from '../../lib/markdownTheme'
+import { useLmsDarkMode } from '../../hooks/useLmsDarkMode'
 import { permCourseItemCreate } from '../../lib/rbacApi'
 import { LmsPage } from './LmsPage'
 
@@ -37,8 +42,12 @@ export default function CourseSyllabus() {
   const [editing, setEditing] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [mdTheme, setMdTheme] = useState<ResolvedMarkdownTheme>(() =>
-    resolveMarkdownTheme('classic', null),
+  const [mdPreset, setMdPreset] = useState<string>('classic')
+  const [mdCustom, setMdCustom] = useState<MarkdownThemeCustom | null>(null)
+  const lmsUiDark = useLmsDarkMode()
+  const mdTheme = useMemo(
+    (): ResolvedMarkdownTheme => resolveMarkdownTheme(mdPreset, mdCustom, { lmsUiDark }),
+    [mdPreset, mdCustom, lmsUiDark],
   )
 
   const canEdit = Boolean(
@@ -56,7 +65,8 @@ export default function CourseSyllabus() {
       ])
       setSections(data.sections)
       setUpdatedAt(data.updatedAt)
-      setMdTheme(resolveMarkdownTheme(courseRow.markdownThemePreset, courseRow.markdownThemeCustom))
+      setMdPreset(courseRow.markdownThemePreset)
+      setMdCustom(courseRow.markdownThemeCustom)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load the syllabus.')
       setSections([])
@@ -157,7 +167,7 @@ export default function CourseSyllabus() {
       }
     >
       {loadError && (
-        <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200">
           {loadError}
         </p>
       )}
@@ -184,7 +194,7 @@ export default function CourseSyllabus() {
       {!loading && !loadError && editing && (
         <div className="mt-6 -mx-6 md:-mx-8">
           {saveError && (
-            <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-800 md:px-8">
+            <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200 md:px-8">
               {saveError}
             </p>
           )}

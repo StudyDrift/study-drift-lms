@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Native pickers (datetime-local, date, time, color) follow color-scheme on the root. */
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
 @keyframes sidenav-item-in {
   from {
     opacity: 0;
@@ -50,6 +60,100 @@ body {
   font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
+.dark body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+/* Main LMS content: map common light-mode utility classes to readable dark surfaces without editing every page. */
+.dark .lms-scope .text-slate-900 {
+  @apply text-slate-100;
+}
+.dark .lms-scope .text-slate-800 {
+  @apply text-slate-200;
+}
+.dark .lms-scope .text-slate-700 {
+  @apply text-slate-300;
+}
+.dark .lms-scope .text-slate-600 {
+  @apply text-slate-400;
+}
+.dark .lms-scope .text-slate-500 {
+  @apply text-slate-400;
+}
+.dark .lms-scope .bg-white {
+  @apply bg-slate-800/60;
+}
+.dark .lms-scope .bg-slate-50 {
+  @apply bg-slate-800/40;
+}
+.dark .lms-scope .bg-slate-100 {
+  @apply bg-slate-800/50;
+}
+.dark .lms-scope .border-slate-200 {
+  @apply border-slate-700;
+}
+.dark .lms-scope .border-slate-100 {
+  @apply border-slate-700;
+}
+
+/*
+ * Course markdown: slate utilities follow global .lms-scope remapping (light text on dark surfaces).
+ * Presets using stone/violet/amber/emerald/black need explicit dark-readable colors on the dark panel.
+ */
+.dark .lms-scope .syllabus-md .text-stone-900 {
+  @apply text-stone-100;
+}
+.dark .lms-scope .syllabus-md .text-stone-800 {
+  @apply text-stone-200;
+}
+.dark .lms-scope .syllabus-md .text-stone-700 {
+  @apply text-stone-300;
+}
+.dark .lms-scope .syllabus-md .text-stone-600 {
+  @apply text-stone-400;
+}
+.dark .lms-scope .syllabus-md .text-stone-500 {
+  @apply text-stone-400;
+}
+.dark .lms-scope .syllabus-md .text-stone-400 {
+  @apply text-stone-400;
+}
+
+.dark .lms-scope .syllabus-md .text-violet-950 {
+  @apply text-violet-200;
+}
+.dark .lms-scope .syllabus-md .text-violet-900 {
+  @apply text-violet-300;
+}
+
+.dark .lms-scope .syllabus-md .text-emerald-950 {
+  @apply text-emerald-200;
+}
+.dark .lms-scope .syllabus-md .text-emerald-700 {
+  @apply text-emerald-300;
+}
+
+.dark .lms-scope .syllabus-md .text-amber-950 {
+  @apply text-amber-200;
+}
+.dark .lms-scope .syllabus-md .text-amber-900 {
+  @apply text-amber-200;
+}
+.dark .lms-scope .syllabus-md .text-amber-800 {
+  @apply text-amber-300;
+}
+
+.dark .lms-scope .syllabus-md .text-indigo-600 {
+  @apply text-indigo-400;
+}
+.dark .lms-scope .syllabus-md .text-indigo-800 {
+  @apply text-indigo-300;
+}
+
+.dark .lms-scope .syllabus-md .text-black {
+  @apply text-slate-100;
+}
+
 /* Course markdown (syllabus, modules): bounded width is set per theme; min-w-0 avoids flex overflow. */
 .syllabus-md {
   @apply min-w-0;
@@ -62,4 +166,8 @@ body {
   color: rgb(148 163 184);
   pointer-events: none;
   height: 0;
+}
+
+.dark .tiptap p.is-empty::before {
+  color: rgb(100 116 139);
 }

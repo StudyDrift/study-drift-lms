@@ -47,7 +47,7 @@ export function BlockFrame({ blockId, toolbar, children, className }: BlockFrame
       <div
         className={[
           'border-l-2 border-transparent pl-3 transition-colors',
-          selected ? 'border-indigo-600' : '',
+          selected ? 'border-indigo-600 dark:border-indigo-400' : '',
           disabled ? 'opacity-60' : '',
         ].join(' ')}
       >

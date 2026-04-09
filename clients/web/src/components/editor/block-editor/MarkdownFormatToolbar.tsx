@@ -25,13 +25,13 @@ export function MarkdownFormatToolbar({ disabled, onApply }: MarkdownFormatToolb
 
   return (
     <>
-      <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200" aria-hidden />
+      <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200 dark:bg-slate-600" aria-hidden />
       <button
         type="button"
         disabled={disabled}
         onMouseDown={preventBlur}
         onClick={() => onApply('bulletList')}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-700"
         aria-label="Bullet list"
         title="Bullet list"
       >
@@ -42,7 +42,7 @@ export function MarkdownFormatToolbar({ disabled, onApply }: MarkdownFormatToolb
         disabled={disabled}
         onMouseDown={preventBlur}
         onClick={() => onApply('orderedList')}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-700"
         aria-label="Numbered list"
         title="Numbered list"
       >
@@ -53,7 +53,7 @@ export function MarkdownFormatToolbar({ disabled, onApply }: MarkdownFormatToolb
         disabled={disabled}
         onMouseDown={preventBlur}
         onClick={() => onApply('bold')}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-700"
         aria-label="Bold"
         title="Bold"
       >
@@ -64,7 +64,7 @@ export function MarkdownFormatToolbar({ disabled, onApply }: MarkdownFormatToolb
         disabled={disabled}
         onMouseDown={preventBlur}
         onClick={() => onApply('italic')}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-700"
         aria-label="Italic"
         title="Italic"
       >
@@ -75,7 +75,7 @@ export function MarkdownFormatToolbar({ disabled, onApply }: MarkdownFormatToolb
         disabled={disabled}
         onMouseDown={preventBlur}
         onClick={() => onApply('inlineCode')}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-700"
         aria-label="Inline code"
         title="Inline code"
       >
@@ -86,7 +86,7 @@ export function MarkdownFormatToolbar({ disabled, onApply }: MarkdownFormatToolb
         disabled={disabled}
         onMouseDown={preventBlur}
         onClick={() => onApply('codeBlock')}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-700"
         aria-label="Code block"
         title="Code block"
       >
@@ -97,7 +97,7 @@ export function MarkdownFormatToolbar({ disabled, onApply }: MarkdownFormatToolb
         disabled={disabled}
         onMouseDown={preventBlur}
         onClick={() => onApply('link')}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-700"
         aria-label="Link"
         title="Link"
       >

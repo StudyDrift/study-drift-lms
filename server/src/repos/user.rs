@@ -12,11 +12,12 @@ pub struct UserRow {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar_url: Option<String>,
+    pub ui_theme: String,
 }
 
 pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>, sqlx::Error> {
     sqlx::query_as::<_, UserRow>(&format!(
-        "SELECT id, email, password_hash, display_name, first_name, last_name, avatar_url FROM {} WHERE email = $1",
+        "SELECT id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme FROM {} WHERE email = $1",
         schema::USERS
     ))
     .bind(email)
@@ -34,7 +35,7 @@ pub async fn insert_user(
         r#"
         INSERT INTO {} (email, password_hash, display_name)
         VALUES ($1, $2, $3)
-        RETURNING id, email, password_hash, display_name, first_name, last_name, avatar_url
+        RETURNING id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme
         "#,
         schema::USERS
     ))
@@ -52,6 +53,7 @@ pub struct UserProfileRow {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar_url: Option<String>,
+    pub ui_theme: String,
 }
 
 pub async fn get_profile_by_id(
@@ -60,7 +62,7 @@ pub async fn get_profile_by_id(
 ) -> Result<Option<UserProfileRow>, sqlx::Error> {
     sqlx::query_as::<_, UserProfileRow>(&format!(
         r#"
-        SELECT email, display_name, first_name, last_name, avatar_url
+        SELECT email, display_name, first_name, last_name, avatar_url, ui_theme
         FROM {}
         WHERE id = $1
         "#,
@@ -96,6 +98,7 @@ pub async fn update_profile(
     first_name: Option<&str>,
     last_name: Option<&str>,
     avatar_url: Option<&str>,
+    ui_theme: Option<&str>,
 ) -> Result<Option<UserProfileRow>, sqlx::Error> {
     let display_name = derive_display_name(first_name, last_name);
     sqlx::query_as::<_, UserProfileRow>(&format!(
@@ -105,9 +108,10 @@ pub async fn update_profile(
             first_name = $2,
             last_name = $3,
             avatar_url = $4,
-            display_name = $5
+            display_name = $5,
+            ui_theme = COALESCE($6, ui_theme)
         WHERE id = $1
-        RETURNING email, display_name, first_name, last_name, avatar_url
+        RETURNING email, display_name, first_name, last_name, avatar_url, ui_theme
         "#,
         schema::USERS
     ))
@@ -116,6 +120,7 @@ pub async fn update_profile(
     .bind(last_name)
     .bind(avatar_url)
     .bind(display_name)
+    .bind(ui_theme)
     .fetch_optional(pool)
     .await
 }

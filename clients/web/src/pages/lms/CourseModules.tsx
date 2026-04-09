@@ -80,14 +80,14 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
       {child.kind === 'content_page' ? (
         <div className="flex items-center gap-3">
           <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-600"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-600 dark:border-indigo-500/35 dark:bg-indigo-950/60 dark:text-indigo-300"
             aria-hidden
           >
             <FileText className="h-4 w-4" strokeWidth={2} />
           </span>
           <Link
             to={`/courses/${encodeURIComponent(courseCode)}/modules/content/${encodeURIComponent(child.id)}`}
-            className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500"
+            className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
           >
             {child.title}
           </Link>
@@ -95,14 +95,14 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
       ) : child.kind === 'assignment' ? (
         <div className="flex items-center gap-3">
           <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/90 bg-amber-50 text-amber-800"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/90 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-200"
             aria-hidden
           >
             <ClipboardList className="h-4 w-4" strokeWidth={2} />
           </span>
           <Link
             to={`/courses/${encodeURIComponent(courseCode)}/modules/assignment/${encodeURIComponent(child.id)}`}
-            className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500"
+            className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
           >
             {child.title}
           </Link>
@@ -110,12 +110,14 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
       ) : (
         <div className="flex items-center gap-3">
           <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400"
             aria-hidden
           >
             <Heading className="h-4 w-4" strokeWidth={2} />
           </span>
-          <p className="min-w-0 text-xl font-bold leading-snug tracking-tight text-slate-900">{child.title}</p>
+          <p className="min-w-0 text-xl font-bold leading-snug tracking-tight text-slate-950 dark:text-slate-100">
+            {child.title}
+          </p>
         </div>
       )}
     </>
@@ -147,7 +149,7 @@ function SortableChildRow({ child, courseCode, disabled, moduleId }: SortableChi
         {!disabled && (
           <button
             type="button"
-            className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing"
+            className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing dark:text-slate-500 dark:hover:text-slate-300"
             aria-label="Drag to reorder item"
             {...listeners}
             {...attributes}
@@ -207,7 +209,7 @@ function ModuleCardBody({
   const children = moduleChildrenById.get(item.id) ?? []
   return (
     <div
-      className={`w-full rounded-2xl border border-slate-200 bg-slate-50/80 shadow-sm ${
+      className={`w-full rounded-2xl border border-slate-200 bg-slate-50/80 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 ${
         minified ? 'p-2.5' : 'p-4'
       }`}
     >
@@ -216,14 +218,14 @@ function ModuleCardBody({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+              <p className="text-sm font-semibold text-slate-950 dark:text-slate-100">{item.title}</p>
               {!minified && (
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   Course activities and items can be grouped under this module.
                 </p>
               )}
               {minified && children.length > 0 && (
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                   {children.length} {children.length === 1 ? 'item' : 'items'}
                 </p>
               )}
@@ -244,8 +246,8 @@ function ModuleCardBody({
                     aria-pressed={item.published}
                     className={`flex h-9 w-9 items-center justify-center rounded-lg border shadow-none transition disabled:cursor-not-allowed disabled:opacity-50 ${
                       item.published
-                        ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                        : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                        ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-950/60 dark:text-indigo-200 dark:hover:bg-indigo-950/90'
+                        : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300'
                     }`}
                   >
                     {item.published ? (
@@ -260,7 +262,7 @@ function ModuleCardBody({
                     disabled={anyModalBusy}
                     title="Module settings"
                     aria-label="Module settings"
-                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-none transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-none transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
                   >
                     <Settings className="h-4 w-4" strokeWidth={2} aria-hidden />
                   </button>
@@ -325,7 +327,7 @@ function SortableModuleCard({
         items={childIds}
         strategy={verticalListSortingStrategy}
       >
-        <ul className="mt-4 divide-y divide-slate-200/90 border-t border-slate-200/80 pt-4">
+        <ul className="mt-4 divide-y divide-slate-200/90 border-t border-slate-200/80 pt-4 dark:divide-slate-700 dark:border-slate-700">
           {children.map((child) => (
             <SortableChildRow
               key={child.id}
@@ -356,7 +358,7 @@ function SortableModuleCard({
           canEditModules ? (
             <button
               type="button"
-              className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing"
+              className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing dark:text-slate-500 dark:hover:text-slate-300"
               aria-label="Drag to reorder module"
               {...listeners}
               {...attributes}
@@ -383,7 +385,7 @@ function StaticModuleCard({
   const children = moduleChildrenById.get(item.id) ?? []
   const childrenList =
     children.length > 0 ? (
-      <ul className="mt-4 divide-y divide-slate-200/90 border-t border-slate-200/80 pt-4">
+      <ul className="mt-4 divide-y divide-slate-200/90 border-t border-slate-200/80 pt-4 dark:divide-slate-700 dark:border-slate-700">
         {children.map((child) => (
           <StaticChildRow key={child.id} child={child} courseCode={courseCode} />
         ))}
@@ -780,7 +782,7 @@ export default function CourseModules() {
   if (!courseCode) {
     return (
       <LmsPage title="Modules" description="">
-        <p className="mt-6 text-sm text-slate-500">Invalid link.</p>
+        <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">Invalid link.</p>
       </LmsPage>
     )
   }
@@ -799,7 +801,7 @@ export default function CourseModules() {
                 disabled={anyModalBusy}
                 aria-pressed={courseDesignerOpen}
                 aria-expanded={courseDesignerOpen}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800"
               >
                 Course Designer
               </button>
@@ -820,34 +822,36 @@ export default function CourseModules() {
         </RequirePermission>
       )}
       {loadError && (
-        <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200">
           {loadError}
         </p>
       )}
       {reorderError && (
-        <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200">
           {reorderError}
         </p>
       )}
       {moduleActionError && (
-        <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200">
           {moduleActionError}
         </p>
       )}
-      {loading && <p className="mt-8 text-sm text-slate-500">Loading modules…</p>}
+      {loading && <p className="mt-8 text-sm text-slate-500 dark:text-slate-400">Loading modules…</p>}
       {!loading && showViewerOnlyHint && (
-        <p className="mt-8 text-sm text-slate-500">
+        <p className="mt-8 text-sm text-slate-500 dark:text-slate-400">
           You can view this outline, but only the course creator and assigned course teachers can add
           modules.
         </p>
       )}
       {empty && canEditModules && (
-        <p className="mt-8 text-sm text-slate-500">
-          No course items yet. Use <span className="font-medium text-slate-700">Add Course Item</span>{' '}
-          to add a module.
+        <p className="mt-8 text-sm text-slate-500 dark:text-slate-400">
+          No course items yet. Use{' '}
+          <span className="font-medium text-slate-700 dark:text-slate-300">Add Course Item</span> to add a module.
         </p>
       )}
-      {empty && !canEditModules && <p className="mt-8 text-sm text-slate-500">No modules yet.</p>}
+      {empty && !canEditModules && (
+        <p className="mt-8 text-sm text-slate-500 dark:text-slate-400">No modules yet.</p>
+      )}
       {!loading && hasRows && canEditModules && (
         <DndContext
           sensors={sensors}
@@ -860,7 +864,9 @@ export default function CourseModules() {
             <ul className="mt-8 flex w-full max-w-none flex-col gap-3">
               {nonModuleTopLevel.map((item) => (
                 <li key={item.id} className="w-full">
-                  <p className="text-base font-semibold tracking-tight text-slate-900">{item.title}</p>
+                  <p className="text-base font-semibold tracking-tight text-slate-950 dark:text-slate-100">
+                    {item.title}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -896,9 +902,9 @@ export default function CourseModules() {
               desyncs the overlay from the cursor. Only use DragOverlay for in-module item drags. */}
           {activeDragId && activeItem && activeItem.kind !== 'module' ? (
             <DragOverlay dropAnimation={null}>
-              <div className="pointer-events-none max-w-lg rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-lg">
-                <p className="text-sm font-semibold text-slate-900">{activeItem.title}</p>
-                <p className="text-xs text-slate-500">
+              <div className="pointer-events-none max-w-lg rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-lg dark:border-slate-600 dark:bg-slate-800">
+                <p className="text-sm font-semibold text-slate-950 dark:text-slate-100">{activeItem.title}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   {activeItem.kind === 'content_page'
                     ? 'Page'
                     : activeItem.kind === 'assignment'
@@ -916,7 +922,9 @@ export default function CourseModules() {
             <ul className="mt-8 flex w-full max-w-none flex-col gap-3">
               {nonModuleTopLevel.map((item) => (
                 <li key={item.id} className="w-full">
-                  <p className="text-base font-semibold tracking-tight text-slate-900">{item.title}</p>
+                  <p className="text-base font-semibold tracking-tight text-slate-950 dark:text-slate-100">
+                    {item.title}
+                  </p>
                 </li>
               ))}
             </ul>

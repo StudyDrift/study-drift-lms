@@ -49,12 +49,12 @@ export default function CourseCalendarPage() {
       description={`Assignments and due dates for course ${courseCode}.`}
     >
       {error && (
-        <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200">
           {error}
         </p>
       )}
       {!error && items === null && (
-        <p className="mt-8 text-sm text-slate-500">Loading…</p>
+        <p className="mt-8 text-sm text-slate-500 dark:text-slate-400">Loading…</p>
       )}
       {!error && items !== null && <CourseCalendar courseCode={courseCode} assignments={assignments} />}
     </LmsPage>
