@@ -10,6 +10,7 @@
 #                            postgres image exits with code 1 if POSTGRES_PASSWORD is empty)
 #   DEMO_JWT_SECRET      — JWT signing secret for the API
 #   OPEN_ROUTER_API_KEY  — OpenRouter API key (written to the droplet as OPENROUTER_API_KEY)
+#   DEMO_PUBLIC_ORIGIN (optional) — public browser origin for VITE_API_URL (default https://demo.lextures.com)
 #
 # Terraform state lives in HCP Terraform (workspace `lextures-demo` in iac/demo/versions.tf).
 # SSH keys are generated in Terraform (tls_private_key); the workflow reads the private key from
@@ -203,10 +204,12 @@ jobs:
 
           drop_ip = os.environ["DROPLET_IP"]
           path = os.environ["TMP_ENV"]
+          # Browser origin must be HTTPS when using Cloudflare; same-origin API calls.
+          public_origin = os.environ.get("DEMO_PUBLIC_ORIGIN") or "https://demo.lextures.com"
           with open(path, "w", encoding="utf-8") as f:
               f.write(line("POSTGRES_PASSWORD", os.environ["DEMO_POSTGRES_PASSWORD"]))
               f.write(line("JWT_SECRET", os.environ["DEMO_JWT_SECRET"]))
-              f.write(line("VITE_API_URL", f"http://{drop_ip}"))
+              f.write(line("VITE_API_URL", public_origin))
               f.write(line("OPENROUTER_API_KEY", os.environ.get("OPEN_ROUTER_API_KEY", "")))
           PY
           scp -i ~/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new \
@@ -226,11 +229,12 @@ jobs:
           DROPLET_IP: ${{ steps.droplet.outputs.ip }}
         run: |
           for i in $(seq 1 60); do
-            if curl -fsS --max-time 15 "http://${DROPLET_IP}/health" >/dev/null; then
-              echo "Application health check passed."
+            if curl -fsS --max-time 15 "http://${DROPLET_IP}/health" >/dev/null \
+              && curl -fsS --max-time 15 -k "https://${DROPLET_IP}/health" >/dev/null; then
+              echo "Application health check passed (HTTP and HTTPS)."
               exit 0
             fi
-            echo "Waiting for HTTP /health (attempt $i)..."
+            echo "Waiting for HTTP+HTTPS /health (attempt $i)..."
             sleep 10
           done
           echo "Health check failed after timeout."

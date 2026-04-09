@@ -1,7 +1,7 @@
 # Minimal stack for a single droplet: Postgres and API are co-located (no external DB).
-# Only nginx publishes host port 80; API and DB stay on the Docker network.
+# nginx publishes 80 (HTTP) and 443 (HTTPS for Cloudflare Full); API and DB stay on the Docker network.
 #   docker compose -f docker-compose.deploy.yml --env-file .env up -d --build
-#   VITE_API_URL should be the public origin the browser uses (e.g. http://localhost or http://<droplet-ip>).
+#   VITE_API_URL should match the public origin (e.g. https://demo.lextures.com behind Cloudflare).
 
 services:
   postgres:
@@ -42,6 +42,7 @@ services:
       - server
     ports:
       - "80:80"
+      - "443:443"
 
 volumes:
   postgres_data:
