@@ -20,6 +20,10 @@ pub struct UpdateCourse<'a> {
     pub ends_at: Option<DateTime<Utc>>,
     pub visible_from: Option<DateTime<Utc>>,
     pub hidden_at: Option<DateTime<Utc>>,
+    pub schedule_mode: &'a str,
+    pub relative_end_after: Option<&'a str>,
+    pub relative_hidden_after: Option<&'a str>,
+    pub relative_schedule_anchor_at: Option<DateTime<Utc>>,
 }
 
 /// Courses the user is enrolled in (any role), including drafts.
@@ -40,6 +44,10 @@ pub async fn list_for_enrolled_user(
             c.ends_at,
             c.visible_from,
             c.hidden_at,
+            c.schedule_mode,
+            c.relative_end_after,
+            c.relative_hidden_after,
+            c.relative_schedule_anchor_at,
             c.published,
             c.markdown_theme_preset,
             c.markdown_theme_custom,
@@ -88,6 +96,10 @@ pub async fn create_course(
                 ends_at,
                 visible_from,
                 hidden_at,
+                schedule_mode,
+                relative_end_after,
+                relative_hidden_after,
+                relative_schedule_anchor_at,
                 published,
                 markdown_theme_preset,
                 markdown_theme_custom,
@@ -157,6 +169,10 @@ pub async fn get_by_course_code(
             ends_at,
             visible_from,
             hidden_at,
+            schedule_mode,
+            relative_end_after,
+            relative_hidden_after,
+            relative_schedule_anchor_at,
             published,
             markdown_theme_preset,
             markdown_theme_custom,
@@ -201,8 +217,12 @@ pub async fn update_course(
             ends_at = $5,
             visible_from = $6,
             hidden_at = $7,
+            schedule_mode = $8,
+            relative_end_after = $9,
+            relative_hidden_after = $10,
+            relative_schedule_anchor_at = $11,
             updated_at = NOW()
-        WHERE course_code = $8
+        WHERE course_code = $12
         RETURNING
             id,
             course_code,
@@ -214,6 +234,10 @@ pub async fn update_course(
             ends_at,
             visible_from,
             hidden_at,
+            schedule_mode,
+            relative_end_after,
+            relative_hidden_after,
+            relative_schedule_anchor_at,
             published,
             markdown_theme_preset,
             markdown_theme_custom,
@@ -230,6 +254,10 @@ pub async fn update_course(
     .bind(u.ends_at)
     .bind(u.visible_from)
     .bind(u.hidden_at)
+    .bind(u.schedule_mode)
+    .bind(u.relative_end_after)
+    .bind(u.relative_hidden_after)
+    .bind(u.relative_schedule_anchor_at)
     .bind(u.course_code)
     .fetch_optional(pool)
     .await
@@ -260,6 +288,10 @@ pub async fn set_hero_image_fields(
             ends_at,
             visible_from,
             hidden_at,
+            schedule_mode,
+            relative_end_after,
+            relative_hidden_after,
+            relative_schedule_anchor_at,
             published,
             markdown_theme_preset,
             markdown_theme_custom,
@@ -304,6 +336,10 @@ pub async fn update_markdown_theme(
             ends_at,
             visible_from,
             hidden_at,
+            schedule_mode,
+            relative_end_after,
+            relative_hidden_after,
+            relative_schedule_anchor_at,
             published,
             markdown_theme_preset,
             markdown_theme_custom,

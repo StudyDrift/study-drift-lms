@@ -484,7 +484,8 @@ async fn full_http_walkthrough() {
             "startsAt": null,
             "endsAt": null,
             "visibleFrom": null,
-            "hiddenAt": null
+            "hiddenAt": null,
+            "scheduleMode": "fixed"
         }))
         .send()
         .await

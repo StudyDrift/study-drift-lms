@@ -53,6 +53,7 @@ use crate::services::auth;
 use crate::services::adaptive_quiz_ai;
 use crate::services::course_export_import;
 use crate::services::quiz_generation_ai;
+use crate::services::relative_schedule;
 use crate::services::syllabus_section_ai;
 use crate::state::AppState;
 use axum::{
@@ -113,6 +114,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/quizzes/{item_id}/adaptive-next",
             post(module_quiz_adaptive_next_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/structure/archived",
+            get(structure_archived_list_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/structure",
@@ -301,7 +306,20 @@ fn module_quiz_response_for_api(
     item_id: Uuid,
     row: &course_module_quizzes::CourseItemQuizRow,
     show_adaptive_details: bool,
+    shift: Option<&relative_schedule::RelativeShiftContext>,
 ) -> ModuleQuizResponse {
+    let due_at = match shift {
+        Some(ctx) => relative_schedule::shift_opt(ctx, row.due_at),
+        None => row.due_at,
+    };
+    let available_from = match shift {
+        Some(ctx) => relative_schedule::shift_opt(ctx, row.available_from),
+        None => row.available_from,
+    };
+    let available_until = match shift {
+        Some(ctx) => relative_schedule::shift_opt(ctx, row.available_until),
+        None => row.available_until,
+    };
     let requires_quiz_access_code = row
         .quiz_access_code
         .as_ref()
@@ -315,9 +333,9 @@ fn module_quiz_response_for_api(
         item_id,
         title: row.title.clone(),
         markdown: row.markdown.clone(),
-        due_at: row.due_at,
-        available_from: row.available_from,
-        available_until: row.available_until,
+        due_at,
+        available_from,
+        available_until,
         unlimited_attempts: row.unlimited_attempts,
         max_attempts: row.max_attempts,
         grade_attempt_policy: row.grade_attempt_policy.clone(),
@@ -712,6 +730,20 @@ async fn list_handler(
     let user = auth_user(&state, &headers)?;
 
     let courses = course::list_for_enrolled_user(&state.pool, user.user_id).await?;
+    let meta = enrollment::enrollment_course_meta(&state.pool, user.user_id).await?;
+    let courses: Vec<CoursePublic> = courses
+        .into_iter()
+        .map(|c| {
+            if c.schedule_mode == "relative" {
+                if let Some((role, started)) = meta.get(&c.id) {
+                    if role == "student" {
+                        return relative_schedule::materialize_course_for_student(c, *started);
+                    }
+                }
+            }
+            c
+        })
+        .collect();
     Ok(Json(CoursesResponse { courses }))
 }
 
@@ -740,19 +772,48 @@ async fn structure_list_handler(
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let rows = course_structure::list_for_course(&state.pool, course_id).await?;
+    let rows = course_structure::filter_archived_items_from_structure_list(rows);
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit_structure =
+        rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    let mut rows = rows;
+    if !can_edit_structure {
+        if let Some(ctx) =
+            relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id)
+                .await?
+        {
+            rows = relative_schedule::shift_structure_item_rows(rows, &ctx);
+        }
+        rows = course_structure::filter_structure_for_student_view(rows, Utc::now());
+    }
+    let items = course_structure::rows_to_responses_with_quiz_adaptive(&state.pool, course_id, rows).await?;
+    Ok(Json(CourseStructureResponse { items }))
+}
+
+async fn structure_archived_list_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<CourseStructureResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
 
-    let rows = course_structure::list_for_course(&state.pool, course_id).await?;
-    let required = course_grants::course_item_create_permission(&course_code);
-    let can_edit_structure =
-        rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
-    let rows = if can_edit_structure {
-        rows
-    } else {
-        course_structure::filter_structure_for_student_view(rows, Utc::now())
-    };
+    let rows = course_structure::list_archived_staff_structure(&state.pool, course_id).await?;
     let items = course_structure::rows_to_responses_with_quiz_adaptive(&state.pool, course_id, rows).await?;
     Ok(Json(CourseStructureResponse { items }))
 }
@@ -790,6 +851,7 @@ async fn structure_reorder_handler(
     })?;
 
     let rows = course_structure::list_for_course(&state.pool, course_id).await?;
+    let rows = course_structure::filter_archived_items_from_structure_list(rows);
     let items = course_structure::rows_to_responses_with_quiz_adaptive(&state.pool, course_id, rows).await?;
     Ok(Json(CourseStructureResponse { items }))
 }
@@ -1011,17 +1073,24 @@ async fn module_content_page_get_handler(
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
-    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
+    let course_id = course_row.id;
 
     let required = course_grants::course_item_create_permission(&course_code);
     let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    let shift_ctx = if !can_edit {
+        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id).await?
+    } else {
+        None
+    };
     if !can_edit {
         let visible = course_structure::content_page_visible_to_student(
             &state.pool,
             course_id,
             item_id,
+            user.user_id,
             Utc::now(),
         )
         .await?;
@@ -1030,11 +1099,15 @@ async fn module_content_page_get_handler(
         }
     }
 
-    let Some((title, markdown, due_at, updated_at)) =
+    let Some((title, markdown, mut due_at, updated_at)) =
         course_module_content::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
+
+    if let Some(ctx) = shift_ctx {
+        due_at = relative_schedule::shift_opt(&ctx, due_at);
+    }
 
     Ok(Json(ModuleContentPageResponse {
         item_id,
@@ -1111,17 +1184,24 @@ async fn module_assignment_get_handler(
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
-    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
+    let course_id = course_row.id;
 
     let required = course_grants::course_item_create_permission(&course_code);
     let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    let shift_ctx = if !can_edit {
+        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id).await?
+    } else {
+        None
+    };
     if !can_edit {
         let visible = course_structure::assignment_visible_to_student(
             &state.pool,
             course_id,
             item_id,
+            user.user_id,
             Utc::now(),
         )
         .await?;
@@ -1130,11 +1210,15 @@ async fn module_assignment_get_handler(
         }
     }
 
-    let Some((title, markdown, due_at, updated_at)) =
+    let Some((title, markdown, mut due_at, updated_at)) =
         course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
+
+    if let Some(ctx) = shift_ctx {
+        due_at = relative_schedule::shift_opt(&ctx, due_at);
+    }
 
     Ok(Json(ModuleContentPageResponse {
         item_id,
@@ -1211,17 +1295,24 @@ async fn module_quiz_get_handler(
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
-    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
+    let course_id = course_row.id;
 
     let required = course_grants::course_item_create_permission(&course_code);
     let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    let shift_ctx = if !can_edit {
+        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id).await?
+    } else {
+        None
+    };
     if !can_edit {
         let visible = course_structure::quiz_visible_to_student(
             &state.pool,
             course_id,
             item_id,
+            user.user_id,
             Utc::now(),
         )
         .await?;
@@ -1235,7 +1326,12 @@ async fn module_quiz_get_handler(
         return Err(AppError::NotFound);
     };
 
-    Ok(Json(module_quiz_response_for_api(item_id, &row, can_edit)))
+    Ok(Json(module_quiz_response_for_api(
+        item_id,
+        &row,
+        can_edit,
+        shift_ctx.as_ref(),
+    )))
 }
 
 async fn module_quiz_patch_handler(
@@ -1418,7 +1514,7 @@ async fn module_quiz_patch_handler(
         return Err(AppError::NotFound);
     };
 
-    Ok(Json(module_quiz_response_for_api(item_id, &row, true)))
+    Ok(Json(module_quiz_response_for_api(item_id, &row, true, None)))
 }
 
 async fn module_quiz_adaptive_next_handler(
@@ -1441,6 +1537,7 @@ async fn module_quiz_adaptive_next_handler(
             &state.pool,
             course_id,
             item_id,
+            user.user_id,
             Utc::now(),
         )
         .await?;
@@ -1641,9 +1738,9 @@ async fn patch_structure_item_handler(
         return Err(AppError::Forbidden);
     }
 
-    if req.title.is_none() && req.published.is_none() {
+    if req.title.is_none() && req.published.is_none() && req.archived.is_none() {
         return Err(AppError::InvalidInput(
-            "Provide title and/or published.".into(),
+            "Provide title, published, and/or archived.".into(),
         ));
     }
 
@@ -1668,6 +1765,7 @@ async fn patch_structure_item_handler(
         item_id,
         title_opt,
         req.published,
+        req.archived,
     )
     .await
     .map_err(|e| match e {
@@ -1767,11 +1865,24 @@ async fn get_handler(
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
-    let row = course::get_by_course_code(&state.pool, &course_code)
+    let mut row = course::get_by_course_code(&state.pool, &course_code)
         .await?
         .ok_or(AppError::NotFound)?;
     let viewer_enrollment_roles =
         enrollment::user_roles_in_course(&state.pool, &course_code, user.user_id).await?;
+    let student_only = viewer_enrollment_roles
+        .iter()
+        .any(|r| r == "student")
+        && !viewer_enrollment_roles
+            .iter()
+            .any(|r| r == "teacher" || r == "instructor");
+    if row.schedule_mode == "relative" && student_only {
+        if let Some(started) =
+            enrollment::student_enrollment_started_at(&state.pool, row.id, user.user_id).await?
+        {
+            row = relative_schedule::materialize_course_for_student(row, started);
+        }
+    }
     Ok(Json(CourseWithViewerResponse {
         course: row,
         viewer_enrollment_roles,
@@ -2030,6 +2141,59 @@ async fn update_handler(
         return Err(AppError::InvalidInput("Course title is required.".into()));
     }
 
+    let existing = course::get_by_course_code(&state.pool, &course_code)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let mode_str = req
+        .schedule_mode
+        .as_deref()
+        .unwrap_or(existing.schedule_mode.as_str())
+        .trim();
+    if mode_str != "fixed" && mode_str != "relative" {
+        return Err(AppError::InvalidInput("Invalid scheduleMode.".into()));
+    }
+
+    let rel_end = normalize_relative_duration_iso(req.relative_end_after.as_deref())?;
+    let rel_hidden = normalize_relative_duration_iso(req.relative_hidden_after.as_deref())?;
+
+    let (
+        starts_at,
+        ends_at,
+        visible_from,
+        hidden_at,
+        schedule_mode,
+        relative_end_after,
+        relative_hidden_after,
+        relative_schedule_anchor_at,
+    ) = if mode_str == "relative" {
+        let anchor_at = existing
+            .relative_schedule_anchor_at
+            .or(existing.starts_at)
+            .unwrap_or_else(Utc::now);
+        (
+            None,
+            None,
+            None,
+            None,
+            "relative",
+            rel_end.as_deref(),
+            rel_hidden.as_deref(),
+            Some(anchor_at),
+        )
+    } else {
+        (
+            req.starts_at,
+            req.ends_at,
+            req.visible_from,
+            req.hidden_at,
+            "fixed",
+            None,
+            None,
+            None,
+        )
+    };
+
     let row = course::update_course(
         &state.pool,
         &course::UpdateCourse {
@@ -2037,15 +2201,31 @@ async fn update_handler(
             title,
             description: req.description.trim(),
             published: req.published,
-            starts_at: req.starts_at,
-            ends_at: req.ends_at,
-            visible_from: req.visible_from,
-            hidden_at: req.hidden_at,
+            starts_at,
+            ends_at,
+            visible_from,
+            hidden_at,
+            schedule_mode,
+            relative_end_after,
+            relative_hidden_after,
+            relative_schedule_anchor_at,
         },
     )
     .await?
     .ok_or(AppError::NotFound)?;
     Ok(Json(row))
+}
+
+fn normalize_relative_duration_iso(input: Option<&str>) -> Result<Option<String>, AppError> {
+    let Some(s) = input else {
+        return Ok(None);
+    };
+    let t = s.trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    relative_schedule::parse_iso8601_duration(t).map_err(|m| AppError::InvalidInput(m.into()))?;
+    Ok(Some(t.to_ascii_uppercase()))
 }
 
 async fn generate_image_handler(

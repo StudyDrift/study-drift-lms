@@ -49,6 +49,14 @@ pub struct CoursePublic {
     pub ends_at: Option<DateTime<Utc>>,
     pub visible_from: Option<DateTime<Utc>>,
     pub hidden_at: Option<DateTime<Utc>>,
+    /// `fixed` or `relative` (enrollment-based window; module dates shift from anchor).
+    pub schedule_mode: String,
+    /// ISO 8601 duration (e.g. P90D) from enrollment for course end when `schedule_mode` is relative.
+    pub relative_end_after: Option<String>,
+    /// ISO 8601 duration from enrollment for catalog hide when relative.
+    pub relative_hidden_after: Option<String>,
+    /// Reference instant for authored module `visible_from` / due dates in relative mode.
+    pub relative_schedule_anchor_at: Option<DateTime<Utc>>,
     pub published: bool,
     /// Preset id: classic, reader, serif, contrast, night, accent, or custom.
     pub markdown_theme_preset: String,
@@ -74,6 +82,13 @@ pub struct UpdateCourseRequest {
     pub ends_at: Option<DateTime<Utc>>,
     pub visible_from: Option<DateTime<Utc>>,
     pub hidden_at: Option<DateTime<Utc>>,
+    /// Omit to leave the course schedule mode unchanged (backward compatible).
+    #[serde(default)]
+    pub schedule_mode: Option<String>,
+    #[serde(default)]
+    pub relative_end_after: Option<String>,
+    #[serde(default)]
+    pub relative_hidden_after: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

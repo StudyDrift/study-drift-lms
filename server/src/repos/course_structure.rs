@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::db::schema;
 use crate::models::course_structure::{CourseStructureItemResponse, CourseStructureItemRow};
 use crate::repos::course_module_assignments;
+use crate::services::relative_schedule::{self, RelativeShiftContext};
 use crate::repos::course_module_content;
 use crate::repos::course_module_quizzes;
 
@@ -131,10 +132,93 @@ fn order_structure_rows(rows: Vec<CourseStructureItemRow>) -> Vec<CourseStructur
 }
 
 fn module_visible_to_student_now(m: &CourseStructureItemRow, now: DateTime<Utc>) -> bool {
-    m.kind == "module" && m.published && m.visible_from.is_none_or(|t| t <= now)
+    m.kind == "module"
+        && m.published
+        && !m.archived
+        && m.visible_from.is_none_or(|t| t <= now)
+}
+
+/// Strips archived outline rows and any child whose parent module is archived.
+/// Applied to the main course structure API so clients never receive archived items in that payload.
+pub fn filter_archived_items_from_structure_list(rows: Vec<CourseStructureItemRow>) -> Vec<CourseStructureItemRow> {
+    let archived_module_ids: HashSet<Uuid> = rows
+        .iter()
+        .filter(|r| r.kind == "module" && r.archived)
+        .map(|r| r.id)
+        .collect();
+
+    rows.into_iter()
+        .filter(|r| {
+            if r.archived {
+                return false;
+            }
+            if let Some(pid) = r.parent_id {
+                if archived_module_ids.contains(&pid) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect()
+}
+
+/// Archived module children (staff-only list) plus their parent module rows for display.
+pub async fn list_archived_staff_structure(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<Vec<CourseStructureItemRow>, sqlx::Error> {
+    let archived_children = sqlx::query_as::<_, CourseStructureItemRow>(&format!(
+        r#"
+        SELECT id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
+        FROM {}
+        WHERE course_id = $1
+          AND archived = true
+          AND parent_id IS NOT NULL
+          AND kind IN ('heading', 'content_page', 'assignment', 'quiz')
+        ORDER BY parent_id, sort_order
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(course_id)
+    .fetch_all(pool)
+    .await?;
+
+    if archived_children.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let parent_ids: Vec<Uuid> = archived_children
+        .iter()
+        .filter_map(|r| r.parent_id)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    let mut parents = sqlx::query_as::<_, CourseStructureItemRow>(&format!(
+        r#"
+        SELECT id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
+        FROM {}
+        WHERE course_id = $1
+          AND kind = 'module'
+          AND parent_id IS NULL
+          AND id = ANY($2)
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(course_id)
+    .bind(&parent_ids)
+    .fetch_all(pool)
+    .await?;
+
+    parents.sort_by_key(|r| r.sort_order);
+
+    let mut out = parents;
+    out.extend(archived_children);
+    Ok(out)
 }
 
 /// Drops modules (and their children) that are not yet visible to enrolled students who are not staff.
+/// Excludes archived modules and archived child items (`heading`, `content_page`, `assignment`, `quiz`).
 pub fn filter_structure_for_student_view(
     rows: Vec<CourseStructureItemRow>,
     now: DateTime<Utc>,
@@ -193,27 +277,67 @@ pub async fn content_page_visible_to_student(
     pool: &PgPool,
     course_id: Uuid,
     content_page_id: Uuid,
+    user_id: Uuid,
     now: DateTime<Utc>,
 ) -> Result<bool, sqlx::Error> {
-    let row: Option<(bool, bool, bool, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
+    let row: Option<(
+        bool,
+        bool,
+        bool,
+        bool,
+        Option<DateTime<Utc>>,
+        String,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+    )> = sqlx::query_as(&format!(
         r#"
-        SELECT c.published, c.archived, m.published, m.visible_from
-        FROM {} c
-        INNER JOIN {} m ON m.id = c.parent_id AND m.kind = 'module'
-        WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'content_page'
+        SELECT
+            page.published,
+            page.archived,
+            m.published,
+            m.archived,
+            m.visible_from,
+            crs.schedule_mode,
+            crs.relative_schedule_anchor_at,
+            stu.created_at
+        FROM {items} page
+        INNER JOIN {items} m
+            ON m.id = page.parent_id AND m.course_id = page.course_id AND m.kind = 'module'
+        INNER JOIN {crs} crs ON crs.id = page.course_id
+        LEFT JOIN {enu} stu
+            ON stu.course_id = crs.id AND stu.user_id = $3 AND stu.role = 'student'
+        WHERE page.id = $1 AND page.course_id = $2 AND page.kind = 'content_page'
         "#,
-        schema::COURSE_STRUCTURE_ITEMS,
-        schema::COURSE_STRUCTURE_ITEMS
+        items = schema::COURSE_STRUCTURE_ITEMS,
+        crs = schema::COURSES,
+        enu = schema::COURSE_ENROLLMENTS,
     ))
     .bind(content_page_id)
     .bind(course_id)
+    .bind(user_id)
     .fetch_optional(pool)
     .await?;
 
     Ok(row
-        .map(|(c_pub, c_arch, m_pub, vf)| {
-            c_pub && !c_arch && m_pub && vf.is_none_or(|t| t <= now)
-        })
+        .map(
+            |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at)| {
+                let effective_vf = if schedule_mode == "relative" {
+                    match (anchor, enrolled_at) {
+                        (Some(anchor), Some(enrollment_start)) => {
+                            let ctx = RelativeShiftContext {
+                                enrollment_start,
+                                anchor,
+                            };
+                            relative_schedule::shift_opt(&ctx, vf)
+                        }
+                        _ => vf,
+                    }
+                } else {
+                    vf
+                };
+                c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now)
+            },
+        )
         .unwrap_or(false))
 }
 
@@ -247,27 +371,67 @@ pub async fn assignment_visible_to_student(
     pool: &PgPool,
     course_id: Uuid,
     assignment_id: Uuid,
+    user_id: Uuid,
     now: DateTime<Utc>,
 ) -> Result<bool, sqlx::Error> {
-    let row: Option<(bool, bool, bool, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
+    let row: Option<(
+        bool,
+        bool,
+        bool,
+        bool,
+        Option<DateTime<Utc>>,
+        String,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+    )> = sqlx::query_as(&format!(
         r#"
-        SELECT c.published, c.archived, m.published, m.visible_from
-        FROM {} c
-        INNER JOIN {} m ON m.id = c.parent_id AND m.kind = 'module'
-        WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
+        SELECT
+            page.published,
+            page.archived,
+            m.published,
+            m.archived,
+            m.visible_from,
+            crs.schedule_mode,
+            crs.relative_schedule_anchor_at,
+            stu.created_at
+        FROM {items} page
+        INNER JOIN {items} m
+            ON m.id = page.parent_id AND m.course_id = page.course_id AND m.kind = 'module'
+        INNER JOIN {crs} crs ON crs.id = page.course_id
+        LEFT JOIN {enu} stu
+            ON stu.course_id = crs.id AND stu.user_id = $3 AND stu.role = 'student'
+        WHERE page.id = $1 AND page.course_id = $2 AND page.kind = 'assignment'
         "#,
-        schema::COURSE_STRUCTURE_ITEMS,
-        schema::COURSE_STRUCTURE_ITEMS
+        items = schema::COURSE_STRUCTURE_ITEMS,
+        crs = schema::COURSES,
+        enu = schema::COURSE_ENROLLMENTS,
     ))
     .bind(assignment_id)
     .bind(course_id)
+    .bind(user_id)
     .fetch_optional(pool)
     .await?;
 
     Ok(row
-        .map(|(c_pub, c_arch, m_pub, vf)| {
-            c_pub && !c_arch && m_pub && vf.is_none_or(|t| t <= now)
-        })
+        .map(
+            |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at)| {
+                let effective_vf = if schedule_mode == "relative" {
+                    match (anchor, enrolled_at) {
+                        (Some(anchor), Some(enrollment_start)) => {
+                            let ctx = RelativeShiftContext {
+                                enrollment_start,
+                                anchor,
+                            };
+                            relative_schedule::shift_opt(&ctx, vf)
+                        }
+                        _ => vf,
+                    }
+                } else {
+                    vf
+                };
+                c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now)
+            },
+        )
         .unwrap_or(false))
 }
 
@@ -301,27 +465,67 @@ pub async fn quiz_visible_to_student(
     pool: &PgPool,
     course_id: Uuid,
     quiz_id: Uuid,
+    user_id: Uuid,
     now: DateTime<Utc>,
 ) -> Result<bool, sqlx::Error> {
-    let row: Option<(bool, bool, bool, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
+    let row: Option<(
+        bool,
+        bool,
+        bool,
+        bool,
+        Option<DateTime<Utc>>,
+        String,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+    )> = sqlx::query_as(&format!(
         r#"
-        SELECT c.published, c.archived, m.published, m.visible_from
-        FROM {} c
-        INNER JOIN {} m ON m.id = c.parent_id AND m.kind = 'module'
-        WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'quiz'
+        SELECT
+            page.published,
+            page.archived,
+            m.published,
+            m.archived,
+            m.visible_from,
+            crs.schedule_mode,
+            crs.relative_schedule_anchor_at,
+            stu.created_at
+        FROM {items} page
+        INNER JOIN {items} m
+            ON m.id = page.parent_id AND m.course_id = page.course_id AND m.kind = 'module'
+        INNER JOIN {crs} crs ON crs.id = page.course_id
+        LEFT JOIN {enu} stu
+            ON stu.course_id = crs.id AND stu.user_id = $3 AND stu.role = 'student'
+        WHERE page.id = $1 AND page.course_id = $2 AND page.kind = 'quiz'
         "#,
-        schema::COURSE_STRUCTURE_ITEMS,
-        schema::COURSE_STRUCTURE_ITEMS
+        items = schema::COURSE_STRUCTURE_ITEMS,
+        crs = schema::COURSES,
+        enu = schema::COURSE_ENROLLMENTS,
     ))
     .bind(quiz_id)
     .bind(course_id)
+    .bind(user_id)
     .fetch_optional(pool)
     .await?;
 
     Ok(row
-        .map(|(c_pub, c_arch, m_pub, vf)| {
-            c_pub && !c_arch && m_pub && vf.is_none_or(|t| t <= now)
-        })
+        .map(
+            |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at)| {
+                let effective_vf = if schedule_mode == "relative" {
+                    match (anchor, enrolled_at) {
+                        (Some(anchor), Some(enrollment_start)) => {
+                            let ctx = RelativeShiftContext {
+                                enrollment_start,
+                                anchor,
+                            };
+                            relative_schedule::shift_opt(&ctx, vf)
+                        }
+                        _ => vf,
+                    }
+                } else {
+                    vf
+                };
+                c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now)
+            },
+        )
         .unwrap_or(false))
 }
 
@@ -664,9 +868,9 @@ pub async fn insert_quiz_under_module(
 const REORDER_OFFSET: i32 = 10_000_000;
 
 /// Reassigns `sort_order` for top-level modules and each module's children. `module_ids_in_order`
-/// must be a permutation of all module rows for the course. For each module, `children_by_module`
-/// must list every child id (heading / content_page / assignment) in the desired order; modules with no children
-/// use an empty vec (or may be omitted from the map).
+/// must list every **non-archived** top-level module id. For each such module, `children_by_module`
+/// must list every **non-archived** child id in the desired order; modules with no children
+/// use an empty vec (or may be omitted from the map). Archived modules and children are unchanged.
 pub async fn apply_module_and_child_order(
     pool: &PgPool,
     course_id: Uuid,
@@ -684,9 +888,9 @@ pub async fn apply_module_and_child_order(
     .await?
     .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
-    let db_modules: Vec<Uuid> = sqlx::query_scalar(&format!(
+    let modules_with_archived: Vec<(Uuid, bool)> = sqlx::query_as(&format!(
         r#"
-        SELECT id
+        SELECT id, archived
         FROM {}
         WHERE course_id = $1 AND parent_id IS NULL AND kind = 'module'
         ORDER BY sort_order
@@ -697,16 +901,21 @@ pub async fn apply_module_and_child_order(
     .fetch_all(&mut *tx)
     .await?;
 
-    let db_set: HashSet<Uuid> = db_modules.iter().copied().collect();
+    let visible_modules: Vec<Uuid> = modules_with_archived
+        .iter()
+        .filter(|(_, archived)| !archived)
+        .map(|(id, _)| *id)
+        .collect();
+    let visible_mod_set: HashSet<Uuid> = visible_modules.iter().copied().collect();
     let order_set: HashSet<Uuid> = module_ids_in_order.iter().copied().collect();
-    if db_set != order_set {
+    if visible_mod_set != order_set {
         return Err(sqlx::Error::RowNotFound);
     }
 
-    for &mid in &db_modules {
-        let rows: Vec<Uuid> = sqlx::query_scalar(&format!(
+    for &mid in &visible_modules {
+        let rows: Vec<(Uuid, bool)> = sqlx::query_as(&format!(
             r#"
-            SELECT id
+            SELECT id, archived
             FROM {}
             WHERE parent_id = $1
             ORDER BY sort_order
@@ -717,10 +926,15 @@ pub async fn apply_module_and_child_order(
         .fetch_all(&mut *tx)
         .await?;
 
+        let visible_child_ids: Vec<Uuid> = rows
+            .iter()
+            .filter(|(_, archived)| !archived)
+            .map(|(id, _)| *id)
+            .collect();
+        let visible_child_set: HashSet<Uuid> = visible_child_ids.iter().copied().collect();
         let specified = children_by_module.get(&mid).cloned().unwrap_or_default();
-        let child_set: HashSet<Uuid> = rows.iter().copied().collect();
         let spec_set: HashSet<Uuid> = specified.iter().copied().collect();
-        if child_set != spec_set {
+        if visible_child_set != spec_set {
             return Err(sqlx::Error::RowNotFound);
         }
     }
@@ -754,7 +968,7 @@ pub async fn apply_module_and_child_order(
         .await?;
     }
 
-    for &mid in &db_modules {
+    for &mid in &visible_modules {
         let child_ids = children_by_module.get(&mid).cloned().unwrap_or_default();
         if child_ids.is_empty() {
             continue;
@@ -794,15 +1008,16 @@ pub async fn apply_module_and_child_order(
     Ok(())
 }
 
-/// Updates title and/or `published` for a module child item (not a top-level module).
+/// Updates title, `published`, and/or `archived` for a module child item (not a top-level module).
 pub async fn patch_child_structure_item(
     pool: &PgPool,
     course_id: Uuid,
     item_id: Uuid,
     title: Option<&str>,
     published: Option<bool>,
+    archived: Option<bool>,
 ) -> Result<CourseStructureItemRow, sqlx::Error> {
-    if title.is_none() && published.is_none() {
+    if title.is_none() && published.is_none() && archived.is_none() {
         return Err(sqlx::Error::RowNotFound);
     }
     sqlx::query_as::<_, CourseStructureItemRow>(&format!(
@@ -810,6 +1025,7 @@ pub async fn patch_child_structure_item(
         UPDATE {}
         SET title = COALESCE($3, title),
             published = COALESCE($4, published),
+            archived = COALESCE($5, archived),
             updated_at = NOW()
         WHERE id = $1
           AND course_id = $2
@@ -823,6 +1039,7 @@ pub async fn patch_child_structure_item(
     .bind(course_id)
     .bind(title)
     .bind(published)
+    .bind(archived)
     .fetch_optional(pool)
     .await?
     .ok_or(sqlx::Error::RowNotFound)

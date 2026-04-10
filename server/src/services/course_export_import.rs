@@ -177,15 +177,57 @@ async fn apply_course_snapshot(
     course_code: &str,
     snap: &CourseExportSnapshot,
 ) -> Result<(), AppError> {
+    let mode = snap.schedule_mode.trim();
+    let mode = if mode == "relative" { "relative" } else { "fixed" };
+    let (
+        starts_at,
+        ends_at,
+        visible_from,
+        hidden_at,
+        schedule_mode,
+        relative_end_after,
+        relative_hidden_after,
+        relative_schedule_anchor_at,
+    ) = if mode == "relative" {
+        let anchor_at = snap
+            .relative_schedule_anchor_at
+            .or(snap.starts_at)
+            .unwrap_or_else(Utc::now);
+        (
+            None,
+            None,
+            None,
+            None,
+            "relative",
+            snap.relative_end_after.as_deref(),
+            snap.relative_hidden_after.as_deref(),
+            Some(anchor_at),
+        )
+    } else {
+        (
+            snap.starts_at,
+            snap.ends_at,
+            snap.visible_from,
+            snap.hidden_at,
+            "fixed",
+            None,
+            None,
+            None,
+        )
+    };
     let u = UpdateCourse {
         course_code,
         title: snap.title.trim(),
         description: snap.description.trim(),
         published: snap.published,
-        starts_at: snap.starts_at,
-        ends_at: snap.ends_at,
-        visible_from: snap.visible_from,
-        hidden_at: snap.hidden_at,
+        starts_at,
+        ends_at,
+        visible_from,
+        hidden_at,
+        schedule_mode,
+        relative_end_after,
+        relative_hidden_after,
+        relative_schedule_anchor_at,
     };
     course::update_course(pool, &u)
         .await?
@@ -477,6 +519,10 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         ends_at: course.ends_at,
         visible_from: course.visible_from,
         hidden_at: course.hidden_at,
+        schedule_mode: course.schedule_mode.clone(),
+        relative_end_after: course.relative_end_after.clone(),
+        relative_hidden_after: course.relative_hidden_after.clone(),
+        relative_schedule_anchor_at: course.relative_schedule_anchor_at,
         published: course.published,
         markdown_theme_preset: course.markdown_theme_preset.clone(),
         markdown_theme_custom: course.markdown_theme_custom.clone(),

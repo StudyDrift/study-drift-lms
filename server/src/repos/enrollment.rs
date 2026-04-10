@@ -1,6 +1,8 @@
 use std::ops::DerefMut;
 
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::db::schema;
@@ -31,6 +33,44 @@ pub async fn user_is_course_creator(
 }
 
 /// All enrollment roles for this user in the course (e.g. `teacher` and `student`).
+/// `course_id` → `(role, enrollment created_at)` for this user.
+pub async fn enrollment_course_meta(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<HashMap<Uuid, (String, DateTime<Utc>)>, sqlx::Error> {
+    let rows: Vec<(Uuid, String, DateTime<Utc>)> = sqlx::query_as(&format!(
+        r#"
+        SELECT course_id, role, created_at
+        FROM {}
+        WHERE user_id = $1
+        "#,
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(a, b, c)| (a, (b, c))).collect())
+}
+
+pub async fn student_enrollment_started_at(
+    pool: &PgPool,
+    course_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
+    sqlx::query_scalar(&format!(
+        r#"
+        SELECT created_at
+        FROM {}
+        WHERE course_id = $1 AND user_id = $2 AND role = 'student'
+        "#,
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(course_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+}
+
 pub async fn user_roles_in_course(
     pool: &PgPool,
     course_code: &str,

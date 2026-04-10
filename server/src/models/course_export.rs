@@ -31,10 +31,22 @@ pub struct CourseExportSnapshot {
     pub ends_at: Option<DateTime<Utc>>,
     pub visible_from: Option<DateTime<Utc>>,
     pub hidden_at: Option<DateTime<Utc>>,
+    #[serde(default = "default_export_schedule_mode")]
+    pub schedule_mode: String,
+    #[serde(default)]
+    pub relative_end_after: Option<String>,
+    #[serde(default)]
+    pub relative_hidden_after: Option<String>,
+    #[serde(default)]
+    pub relative_schedule_anchor_at: Option<DateTime<Utc>>,
     pub published: bool,
     pub markdown_theme_preset: String,
     #[serde(default)]
     pub markdown_theme_custom: Option<JsonValue>,
+}
+
+fn default_export_schedule_mode() -> String {
+    "fixed".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

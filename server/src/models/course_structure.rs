@@ -87,6 +87,8 @@ pub struct PatchCourseModuleRequest {
 pub struct PatchStructureItemRequest {
     pub title: Option<String>,
     pub published: Option<bool>,
+    /// When `false`, restores an archived module child item. When `true`, soft-archives (same as `DELETE` on the item).
+    pub archived: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
