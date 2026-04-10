@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { anyGrantMatches, permissionMatches } from './permissionMatch'
+import {
+  anyGrantMatches,
+  hasConcreteCourseItemCreatePermission,
+  permissionMatches,
+} from './permissionMatch'
 
 describe('permissionMatches', () => {
   it('matches exact strings', () => {
@@ -29,5 +33,17 @@ describe('anyGrantMatches', () => {
     expect(
       anyGrantMatches(['global:other:perm:here', 'course:*:enrollments:create'], 'course:x:enrollments:create'),
     ).toBe(true)
+  })
+})
+
+describe('hasConcreteCourseItemCreatePermission', () => {
+  it('is true for a grant scoped to the course code', () => {
+    expect(
+      hasConcreteCourseItemCreatePermission(['course:C-1:item:create'], 'C-1'),
+    ).toBe(true)
+  })
+
+  it('is false when only a wildcard course segment exists', () => {
+    expect(hasConcreteCourseItemCreatePermission(['course:*:item:create'], 'C-1')).toBe(false)
   })
 })

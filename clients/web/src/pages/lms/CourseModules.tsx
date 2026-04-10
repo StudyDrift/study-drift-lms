@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   DndContext,
@@ -19,29 +19,52 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CircleHelp, ClipboardList, Eye, EyeOff, FileText, GripVertical, Heading, Settings } from 'lucide-react'
+import {
+  CircleHelp,
+  ClipboardList,
+  Eye,
+  EyeOff,
+  FileText,
+  GripVertical,
+  Heading,
+  MoreVertical,
+  Settings,
+  Sparkles,
+} from 'lucide-react'
 import { AddCourseItemMenu } from './AddCourseItemMenu'
 import { AddModuleItemMenu, type ModuleItemKind } from './AddModuleItemMenu'
-import { CourseModulesAiPanel } from './CourseModulesAiPanel'
 import { LmsPage } from './LmsPage'
 import { ModuleNameModal } from './ModuleNameModal'
 import { ModuleSettingsModal } from './ModuleSettingsModal'
-import { RequirePermission } from '../../components/RequirePermission'
 import { usePermissions } from '../../context/usePermissions'
 import {
   createCourseModule,
   createModuleAssignment,
   createModuleContentPage,
   createModuleHeading,
+  archiveCourseStructureItem,
   createModuleQuiz,
   fetchCourseStructure,
   patchCourseModule,
+  patchCourseStructureItem,
   reorderCourseStructure,
   type CourseStructureItem,
 } from '../../lib/coursesApi'
+import { useCourseViewAs } from '../../lib/courseViewAs'
 import { permCourseItemCreate } from '../../lib/rbacApi'
 
 const MODULE_SORT_ID = 'sortable-modules'
+
+/** Matches drag-handle footprint (`mt-0.5` + `h-9 w-9 shrink-0`) so student/read-only rows align with teacher layout. */
+const DRAG_HANDLE_GAP_CLASS = 'mt-0.5 h-9 w-9 shrink-0'
+
+/** Quiet icon-only controls (no box borders) for module + item toolbars. */
+const iconGhost =
+  'rounded-md p-1.5 text-slate-500 transition hover:bg-slate-200/45 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-700/35 dark:hover:text-slate-200'
+const iconGhostPublished =
+  'rounded-md p-1.5 text-indigo-600 transition hover:bg-indigo-50/90 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-indigo-400 dark:hover:bg-indigo-950/45 dark:hover:text-indigo-300'
+const iconGhostDraft =
+  'rounded-md p-1.5 text-slate-400 transition hover:bg-slate-200/45 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:bg-slate-700/35 dark:hover:text-slate-300'
 
 function findModuleIdForChildItem(
   childId: string,
@@ -114,17 +137,35 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
       ) : child.kind === 'quiz' ? (
         <div className="flex items-center gap-3">
           <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700"
+            className={
+              child.isAdaptive
+                ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/90 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200'
+                : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 dark:border-emerald-500/35 dark:bg-emerald-950/50 dark:text-emerald-200'
+            }
             aria-hidden
           >
-            <CircleHelp className="h-4 w-4" strokeWidth={2} />
+            {child.isAdaptive ? (
+              <Sparkles className="h-4 w-4" strokeWidth={2} />
+            ) : (
+              <CircleHelp className="h-4 w-4" strokeWidth={2} />
+            )}
           </span>
-          <Link
-            to={`/courses/${encodeURIComponent(courseCode)}/modules/quiz/${encodeURIComponent(child.id)}`}
-            className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500"
-          >
-            {child.title}
-          </Link>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pl-3">
+            <Link
+              to={`/courses/${encodeURIComponent(courseCode)}/modules/quiz/${encodeURIComponent(child.id)}`}
+              className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+              aria-label={
+                child.isAdaptive ? `${child.title} (adaptive quiz)` : undefined
+              }
+            >
+              {child.title}
+            </Link>
+            {child.isAdaptive ? (
+              <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-800 dark:bg-violet-900/80 dark:text-violet-200">
+                Adaptive
+              </span>
+            ) : null}
+          </div>
         </div>
       ) : (
         <div className="flex items-center gap-3">
@@ -143,14 +184,130 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
   )
 }
 
+function ModuleItemRowActions({
+  child,
+  disabled,
+  busy,
+  onTogglePublished,
+  onEditTitle,
+  onArchive,
+}: {
+  child: CourseStructureItem
+  disabled: boolean
+  busy: boolean
+  onTogglePublished: () => void
+  onEditTitle: () => void
+  onArchive: () => void
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const menuId = useId()
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [menuOpen])
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5">
+      <button
+        type="button"
+        onClick={() => onTogglePublished()}
+        disabled={disabled || busy}
+        title={
+          child.published
+            ? 'Published — visible to students when the module is available'
+            : 'Draft — hidden from students; staff can still see it'
+        }
+        aria-label={child.published ? 'Published to students' : 'Hidden from students'}
+        aria-pressed={child.published}
+        className={`flex shrink-0 items-center justify-center ${child.published ? iconGhostPublished : iconGhostDraft}`}
+      >
+        {child.published ? (
+          <Eye className="h-4 w-4" strokeWidth={2} aria-hidden />
+        ) : (
+          <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden />
+        )}
+      </button>
+      <div ref={rootRef} className="relative">
+        <button
+          type="button"
+          disabled={disabled || busy}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-controls={menuOpen ? menuId : undefined}
+          onClick={() => {
+            if (disabled || busy) return
+            setMenuOpen((o) => !o)
+          }}
+          title="Item actions"
+          className={`flex shrink-0 items-center justify-center ${iconGhost}`}
+        >
+          <MoreVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
+        </button>
+        {menuOpen && (
+          <div
+            id={menuId}
+            role="menu"
+            aria-label="Module item actions"
+            className="absolute right-0 z-50 mt-1 min-w-[10rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-slate-600 dark:bg-slate-800 dark:shadow-black/40"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onEditTitle()
+                setMenuOpen(false)
+              }}
+              className="flex w-full px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-700/80"
+            >
+              Edit title
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onArchive()
+                setMenuOpen(false)
+              }}
+              className="flex w-full border-t border-slate-100 px-3 py-2.5 text-left text-sm font-medium text-rose-700 transition hover:bg-rose-50 dark:border-slate-700 dark:text-rose-300 dark:hover:bg-rose-950/50"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 type SortableChildRowProps = {
   child: CourseStructureItem
   courseCode: string
   disabled: boolean
   moduleId: string
+  canManageItemRow: boolean
+  busyChildItemId: string | null
+  onChildTogglePublished: (child: CourseStructureItem) => void
+  onOpenEditChildTitle: (child: CourseStructureItem) => void
+  onArchiveChild: (child: CourseStructureItem) => void
 }
 
-function SortableChildRow({ child, courseCode, disabled, moduleId }: SortableChildRowProps) {
+function SortableChildRow({
+  child,
+  courseCode,
+  disabled,
+  moduleId,
+  canManageItemRow,
+  busyChildItemId,
+  onChildTogglePublished,
+  onOpenEditChildTitle,
+  onArchiveChild,
+}: SortableChildRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: child.id,
     disabled,
@@ -161,6 +318,8 @@ function SortableChildRow({ child, courseCode, disabled, moduleId }: SortableChi
     transition,
     opacity: isDragging ? 0.45 : undefined,
   }
+
+  const showRowChrome = canManageItemRow && !child.archived
 
   return (
     <li ref={setNodeRef} style={style} className="py-3 first:pt-0">
@@ -176,8 +335,25 @@ function SortableChildRow({ child, courseCode, disabled, moduleId }: SortableChi
             <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
         )}
-        <div className="min-w-0 flex-1">
-          <ChildRowContent child={child} courseCode={courseCode} />
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div
+            className={`min-w-0 flex-1 ${child.archived ? 'opacity-70' : ''}`}
+          >
+            <ChildRowContent child={child} courseCode={courseCode} />
+            {child.archived ? (
+              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Archived</p>
+            ) : null}
+          </div>
+          {showRowChrome ? (
+            <ModuleItemRowActions
+              child={child}
+              disabled={disabled}
+              busy={busyChildItemId === child.id}
+              onTogglePublished={() => onChildTogglePublished(child)}
+              onEditTitle={() => onOpenEditChildTitle(child)}
+              onArchive={() => onArchiveChild(child)}
+            />
+          ) : null}
         </div>
       </div>
     </li>
@@ -188,6 +364,7 @@ function StaticChildRow({ child, courseCode }: { child: CourseStructureItem; cou
   return (
     <li className="py-3 first:pt-0">
       <div className="flex items-start gap-2">
+        <span className={`${DRAG_HANDLE_GAP_CLASS} select-none`} aria-hidden />
         <div className="min-w-0 flex-1">
           <ChildRowContent child={child} courseCode={courseCode} />
         </div>
@@ -198,7 +375,6 @@ function StaticChildRow({ child, courseCode }: { child: CourseStructureItem; cou
 
 type ModuleCardBodyProps = {
   item: CourseStructureItem
-  courseCode: string
   moduleChildrenById: Map<string, CourseStructureItem[]>
   canEditModules: boolean
   anyModalBusy: boolean
@@ -213,7 +389,6 @@ type ModuleCardBodyProps = {
 
 function ModuleCardBody({
   item,
-  courseCode,
   moduleChildrenById,
   canEditModules,
   anyModalBusy,
@@ -228,7 +403,7 @@ function ModuleCardBody({
   const children = moduleChildrenById.get(item.id) ?? []
   return (
     <div
-      className={`w-full rounded-2xl border border-slate-200 bg-slate-50/80 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 ${
+      className={`w-full rounded-2xl border border-slate-200/70 bg-slate-50/60 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/85 ${
         minified ? 'p-2.5' : 'p-4'
       }`}
     >
@@ -250,46 +425,42 @@ function ModuleCardBody({
               )}
             </div>
             {canEditModules && !minified && (
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:gap-2">
-                <RequirePermission permission={permCourseItemCreate(courseCode)} fallback={null}>
-                  <button
-                    type="button"
-                    onClick={() => onTogglePublished(item)}
-                    disabled={anyModalBusy || busyModuleId === item.id}
-                    title={
-                      item.published
-                        ? 'Published — visible to students when scheduled'
-                        : 'Draft — hidden from students'
-                    }
-                    aria-label={item.published ? 'Published to students' : 'Hidden from students'}
-                    aria-pressed={item.published}
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg border shadow-none transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                      item.published
-                        ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-950/60 dark:text-indigo-200 dark:hover:bg-indigo-950/90'
-                        : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300'
-                    }`}
-                  >
-                    {item.published ? (
-                      <Eye className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    ) : (
-                      <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onOpenModuleSettings(item)}
-                    disabled={anyModalBusy}
-                    title="Module settings"
-                    aria-label="Module settings"
-                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-none transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-                  >
-                    <Settings className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  </button>
-                  <AddModuleItemMenu
-                    onAdd={(kind) => onModuleItemAdd(item.id, kind)}
-                    disabled={anyModalBusy}
-                  />
-                </RequirePermission>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-0.5 sm:gap-1">
+                <button
+                  type="button"
+                  onClick={() => onTogglePublished(item)}
+                  disabled={anyModalBusy || busyModuleId === item.id}
+                  title={
+                    item.published
+                      ? 'Published — visible to students when scheduled'
+                      : 'Draft — hidden from students'
+                  }
+                  aria-label={item.published ? 'Published to students' : 'Hidden from students'}
+                  aria-pressed={item.published}
+                  className={`flex shrink-0 items-center justify-center ${
+                    item.published ? iconGhostPublished : iconGhostDraft
+                  }`}
+                >
+                  {item.published ? (
+                    <Eye className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  ) : (
+                    <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenModuleSettings(item)}
+                  disabled={anyModalBusy}
+                  title="Module settings"
+                  aria-label="Module settings"
+                  className={`flex shrink-0 items-center justify-center ${iconGhost}`}
+                >
+                  <Settings className="h-4 w-4" strokeWidth={2} aria-hidden />
+                </button>
+                <AddModuleItemMenu
+                  onAdd={(kind) => onModuleItemAdd(item.id, kind)}
+                  disabled={anyModalBusy}
+                />
               </div>
             )}
           </div>
@@ -309,8 +480,12 @@ type SortableModuleCardProps = {
   onModuleItemAdd: (moduleId: string, kind: ModuleItemKind) => void
   minified: boolean
   busyModuleId: string | null
+  busyChildItemId: string | null
   onTogglePublished: (item: CourseStructureItem) => void
   onOpenModuleSettings: (item: CourseStructureItem) => void
+  onChildTogglePublished: (child: CourseStructureItem) => void
+  onOpenEditChildTitle: (child: CourseStructureItem) => void
+  onArchiveChild: (child: CourseStructureItem) => void
 }
 
 function SortableModuleCard({
@@ -322,8 +497,12 @@ function SortableModuleCard({
   onModuleItemAdd,
   minified,
   busyModuleId,
+  busyChildItemId,
   onTogglePublished,
   onOpenModuleSettings,
+  onChildTogglePublished,
+  onOpenEditChildTitle,
+  onArchiveChild,
 }: SortableModuleCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -346,7 +525,7 @@ function SortableModuleCard({
         items={childIds}
         strategy={verticalListSortingStrategy}
       >
-        <ul className="mt-4 divide-y divide-slate-200/90 border-t border-slate-200/80 pt-4 dark:divide-slate-700 dark:border-slate-700">
+        <ul className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-slate-700/80 dark:border-slate-700/80">
           {children.map((child) => (
             <SortableChildRow
               key={child.id}
@@ -354,6 +533,11 @@ function SortableModuleCard({
               courseCode={courseCode}
               moduleId={item.id}
               disabled={!canEditModules || anyModalBusy}
+              canManageItemRow={canEditModules}
+              busyChildItemId={busyChildItemId}
+              onChildTogglePublished={onChildTogglePublished}
+              onOpenEditChildTitle={onOpenEditChildTitle}
+              onArchiveChild={onArchiveChild}
             />
           ))}
         </ul>
@@ -364,7 +548,6 @@ function SortableModuleCard({
     <li ref={setNodeRef} style={style} className="w-full">
       <ModuleCardBody
         item={item}
-        courseCode={courseCode}
         moduleChildrenById={moduleChildrenById}
         canEditModules={canEditModules}
         anyModalBusy={anyModalBusy}
@@ -404,7 +587,7 @@ function StaticModuleCard({
   const children = moduleChildrenById.get(item.id) ?? []
   const childrenList =
     children.length > 0 ? (
-      <ul className="mt-4 divide-y divide-slate-200/90 border-t border-slate-200/80 pt-4 dark:divide-slate-700 dark:border-slate-700">
+      <ul className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-slate-700/80 dark:border-slate-700/80">
         {children.map((child) => (
           <StaticChildRow key={child.id} child={child} courseCode={courseCode} />
         ))}
@@ -415,7 +598,6 @@ function StaticModuleCard({
     <li className="w-full">
       <ModuleCardBody
         item={item}
-        courseCode={courseCode}
         moduleChildrenById={moduleChildrenById}
         canEditModules={false}
         anyModalBusy={false}
@@ -424,7 +606,7 @@ function StaticModuleCard({
         busyModuleId={null}
         onTogglePublished={() => {}}
         onOpenModuleSettings={() => {}}
-        moduleDragHandle={null}
+        moduleDragHandle={<span className={`${DRAG_HANDLE_GAP_CLASS} select-none`} aria-hidden />}
         childrenList={childrenList}
       />
     </li>
@@ -468,22 +650,33 @@ export default function CourseModules() {
   const [quizSaving, setQuizSaving] = useState(false)
   const [quizSaveError, setQuizSaveError] = useState<string | null>(null)
   const [busyModuleId, setBusyModuleId] = useState<string | null>(null)
+  const [busyChildItemId, setBusyChildItemId] = useState<string | null>(null)
   const [moduleActionError, setModuleActionError] = useState<string | null>(null)
+  const [editItemModalKey, setEditItemModalKey] = useState(0)
+  const [editItemModalOpen, setEditItemModalOpen] = useState(false)
+  const [editTargetItem, setEditTargetItem] = useState<CourseStructureItem | null>(null)
+  const [editItemSaving, setEditItemSaving] = useState(false)
+  const [editItemError, setEditItemError] = useState<string | null>(null)
   const [moduleSettingsOpen, setModuleSettingsOpen] = useState(false)
   const [moduleSettingsKey, setModuleSettingsKey] = useState(0)
   const [moduleSettingsModuleId, setModuleSettingsModuleId] = useState<string | null>(null)
   const [moduleSettingsSaving, setModuleSettingsSaving] = useState(false)
   const [moduleSettingsSaveError, setModuleSettingsSaveError] = useState<string | null>(null)
-  const [aiBusy, setAiBusy] = useState(false)
-  const [courseDesignerOpen, setCourseDesignerOpen] = useState(false)
 
   const [isDraggingModule, setIsDraggingModule] = useState(false)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 
   /** `course:<courseCode>:item:create` — structure edit, reorder, and add items (server: `course_grants::course_item_create_permission`). */
   const itemCreatePerm = courseCode ? permCourseItemCreate(courseCode) : ''
+  const courseViewMode = useCourseViewAs(courseCode)
+  const viewAsStudent = courseViewMode === 'student'
+  /** Student preview is read-only: never show authoring chrome even if wildcards still match `allows()`. */
   const canEditModules = Boolean(
-    courseCode && !permissionsLoading && !permissionsError && allows(itemCreatePerm),
+    courseCode &&
+      !permissionsLoading &&
+      !permissionsError &&
+      !viewAsStudent &&
+      allows(itemCreatePerm),
   )
   const showViewerOnlyHint = Boolean(
     courseCode && !permissionsLoading && !permissionsError && !allows(itemCreatePerm),
@@ -501,9 +694,11 @@ export default function CourseModules() {
     quizSaving ||
     quizModalOpen ||
     moduleSettingsSaving ||
-    moduleSettingsOpen
+    moduleSettingsOpen ||
+    editItemSaving ||
+    editItemModalOpen
 
-  const anyModalBusy = blockingUi || aiBusy || reorderSaving
+  const anyModalBusy = blockingUi || reorderSaving
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -682,6 +877,73 @@ export default function CourseModules() {
     [courseCode, load],
   )
 
+  const handleChildTogglePublished = useCallback(
+    async (child: CourseStructureItem) => {
+      if (!courseCode) return
+      setModuleActionError(null)
+      setBusyChildItemId(child.id)
+      try {
+        await patchCourseStructureItem(courseCode, child.id, { published: !child.published })
+        await load()
+      } catch (e) {
+        setModuleActionError(e instanceof Error ? e.message : 'Could not update item.')
+      } finally {
+        setBusyChildItemId(null)
+      }
+    },
+    [courseCode, load],
+  )
+
+  const openEditChildTitle = useCallback((child: CourseStructureItem) => {
+    setEditItemError(null)
+    setEditTargetItem(child)
+    setEditItemModalKey((k) => k + 1)
+    setEditItemModalOpen(true)
+  }, [])
+
+  const saveEditChildTitle = useCallback(
+    async (title: string) => {
+      if (!courseCode || !editTargetItem) return
+      setEditItemError(null)
+      setEditItemSaving(true)
+      try {
+        await patchCourseStructureItem(courseCode, editTargetItem.id, { title })
+        await load()
+        setEditItemModalOpen(false)
+        setEditTargetItem(null)
+      } catch (e) {
+        setEditItemError(e instanceof Error ? e.message : 'Could not save title.')
+      } finally {
+        setEditItemSaving(false)
+      }
+    },
+    [courseCode, editTargetItem, load],
+  )
+
+  const handleArchiveChild = useCallback(
+    async (child: CourseStructureItem) => {
+      if (!courseCode) return
+      if (
+        !window.confirm(
+          'Archive this item? It will be hidden from students. You can still see it here as archived.',
+        )
+      ) {
+        return
+      }
+      setModuleActionError(null)
+      setBusyChildItemId(child.id)
+      try {
+        await archiveCourseStructureItem(courseCode, child.id)
+        await load()
+      } catch (e) {
+        setModuleActionError(e instanceof Error ? e.message : 'Could not archive item.')
+      } finally {
+        setBusyChildItemId(null)
+      }
+    },
+    [courseCode, load],
+  )
+
   const handleOpenModuleSettings = useCallback((item: CourseStructureItem) => {
     setModuleSettingsSaveError(null)
     setModuleSettingsModuleId(item.id)
@@ -847,35 +1109,13 @@ export default function CourseModules() {
       title="Modules"
       description=""
       actions={
-        courseCode ? (
-          <RequirePermission permission={permCourseItemCreate(courseCode)} fallback={null}>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCourseDesignerOpen((open) => !open)}
-                disabled={anyModalBusy}
-                aria-pressed={courseDesignerOpen}
-                aria-expanded={courseDesignerOpen}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800"
-              >
-                Course Designer
-              </button>
-              <AddCourseItemMenu onAdd={openAddModule} disabled={anyModalBusy} />
-            </div>
-          </RequirePermission>
+        courseCode && canEditModules ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <AddCourseItemMenu onAdd={openAddModule} disabled={anyModalBusy} />
+          </div>
         ) : null
       }
     >
-      {canEditModules && courseCode && courseDesignerOpen && (
-        <RequirePermission permission={permCourseItemCreate(courseCode)} fallback={null}>
-          <CourseModulesAiPanel
-            courseCode={courseCode}
-            onApplied={(next) => setItems(next)}
-            disabled={blockingUi}
-            onBusyChange={setAiBusy}
-          />
-        </RequirePermission>
-      )}
       {loadError && (
         <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200">
           {loadError}
@@ -947,8 +1187,12 @@ export default function CourseModules() {
                     onModuleItemAdd={onModuleItemAdd}
                     minified={isDraggingModule}
                     busyModuleId={busyModuleId}
+                    busyChildItemId={busyChildItemId}
                     onTogglePublished={handleTogglePublished}
                     onOpenModuleSettings={handleOpenModuleSettings}
+                    onChildTogglePublished={handleChildTogglePublished}
+                    onOpenEditChildTitle={openEditChildTitle}
+                    onArchiveChild={handleArchiveChild}
                   />
                 ))}
             </ul>
@@ -965,7 +1209,9 @@ export default function CourseModules() {
                     : activeItem.kind === 'assignment'
                       ? 'Assignment'
                       : activeItem.kind === 'quiz'
-                        ? 'Quiz'
+                        ? activeItem.isAdaptive
+                          ? 'Adaptive quiz'
+                          : 'Quiz'
                       : 'Heading'}
                 </p>
               </div>
@@ -1073,6 +1319,34 @@ export default function CourseModules() {
         saving={quizSaving}
         errorMessage={quizSaveError}
         mode="quiz"
+      />
+
+      <ModuleNameModal
+        key={`edit-structure-item-${editItemModalKey}`}
+        open={editItemModalOpen && editTargetItem !== null}
+        onClose={() => {
+          if (!editItemSaving) {
+            setEditItemModalOpen(false)
+            setEditTargetItem(null)
+          }
+        }}
+        onSave={(title) => void saveEditChildTitle(title)}
+        saving={editItemSaving}
+        errorMessage={editItemError}
+        mode={
+          editTargetItem?.kind === 'heading'
+            ? 'heading'
+            : editTargetItem?.kind === 'content_page'
+              ? 'content_page'
+              : editTargetItem?.kind === 'assignment'
+                ? 'assignment'
+                : editTargetItem?.kind === 'quiz'
+                  ? 'quiz'
+                  : 'content_page'
+        }
+        initialTitle={editTargetItem?.title ?? ''}
+        dialogTitleOverride="Edit title"
+        submitLabelOverride="Save title"
       />
 
       <ModuleSettingsModal

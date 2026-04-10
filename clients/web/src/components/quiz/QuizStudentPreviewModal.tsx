@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { X } from 'lucide-react'
+import { BookLoader } from './BookLoader'
 import { MarkdownArticleView } from '../syllabus/SyllabusMarkdownView'
 import {
   postAdaptiveQuizNext,
   type AdaptiveQuizGeneratedQuestion,
   type AdaptiveQuizHistoryTurn,
+  type QuizAdvancedSettings,
   type QuizQuestion,
 } from '../../lib/coursesApi'
 import type { ResolvedMarkdownTheme } from '../../lib/markdownTheme'
@@ -21,10 +23,53 @@ export type QuizStudentPreviewModalProps = {
   itemId?: string
   isAdaptive?: boolean
   adaptiveQuestionCount?: number
+  /** Delivery settings used for preview behavior. */
+  advanced: QuizAdvancedSettings
+  oneQuestionAtATime: boolean
 }
 
 function visibleChoices(q: QuizQuestion): string[] {
   return q.choices.map((c) => c.trim()).filter((c) => c.length > 0)
+}
+
+function shuffleIndices(n: number): number[] {
+  const a = Array.from({ length: n }, (_, i) => i)
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+function shuffleArray<T>(items: T[]): T[] {
+  const copy = [...items]
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[copy[i], copy[j]] = [copy[j], copy[i]]
+  }
+  return copy
+}
+
+/** Apply shuffle choices to a copy of the question. */
+function withShuffledChoices(q: QuizQuestion): QuizQuestion {
+  if (q.questionType !== 'multiple_choice' && q.questionType !== 'true_false') {
+    return q
+  }
+  const choices = visibleChoices(q)
+  if (choices.length === 0) return q
+  const order = shuffleIndices(choices.length)
+  const newChoices = order.map((i) => choices[i])
+  let newCorrect: number | null = null
+  if (q.correctChoiceIndex != null) {
+    const oldIdx = q.correctChoiceIndex
+    newCorrect = order.findIndex((orig) => orig === oldIdx)
+    if (newCorrect < 0) newCorrect = null
+  }
+  return {
+    ...q,
+    choices: newChoices,
+    correctChoiceIndex: newCorrect,
+  }
 }
 
 function QuestionMeta({ q }: { q: QuizQuestion }) {
@@ -156,6 +201,183 @@ function StudentQuestionBlock({ q, index }: { q: QuizQuestion; index: number }) 
   )
 }
 
+function StaticQuizPreview({
+  questions,
+  advanced,
+  oneQuestionAtATime,
+}: {
+  questions: QuizQuestion[]
+  advanced: QuizAdvancedSettings
+  oneQuestionAtATime: boolean
+}) {
+  const prepared = useMemo(() => {
+    let qs = [...questions]
+    if (advanced.shuffleQuestions) {
+      qs = shuffleArray(qs)
+    }
+    const pool = advanced.randomQuestionPoolCount
+    if (typeof pool === 'number' && pool >= 1 && pool < qs.length) {
+      qs = shuffleArray(qs).slice(0, pool)
+    }
+    if (advanced.shuffleChoices) {
+      qs = qs.map((q) => withShuffledChoices({ ...q, choices: [...q.choices] }))
+    }
+    return qs
+  }, [questions, advanced.shuffleQuestions, advanced.shuffleChoices, advanced.randomQuestionPoolCount])
+
+  const [step, setStep] = useState(0)
+  useEffect(() => {
+    setStep(0)
+  }, [prepared])
+
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(() =>
+    advanced.timeLimitMinutes != null ? advanced.timeLimitMinutes * 60 : null,
+  )
+  const [paused, setPaused] = useState(false)
+
+  useEffect(() => {
+    setSecondsLeft(advanced.timeLimitMinutes != null ? advanced.timeLimitMinutes * 60 : null)
+  }, [advanced.timeLimitMinutes, prepared])
+
+  useEffect(() => {
+    if (secondsLeft == null || secondsLeft <= 0 || paused) return
+    const t = window.setInterval(() => {
+      setSecondsLeft((s) => (s == null || s <= 1 ? 0 : s - 1))
+    }, 1000)
+    return () => window.clearInterval(t)
+  }, [secondsLeft, paused])
+
+  useEffect(() => {
+    if (!advanced.timerPauseWhenTabHidden) return
+    function onVis() {
+      setPaused(document.visibilityState === 'hidden')
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [advanced.timerPauseWhenTabHidden])
+
+  const reviewNote = useMemo(() => {
+    const v = advanced.reviewVisibility
+    const w = advanced.reviewWhen
+    const timing = advanced.showScoreTiming
+    return `Preview note: scores shown ${timing.replace('_', ' ')}; review shows ${v.replace(/_/g, ' ')}; available ${w.replace(/_/g, ' ')}.`
+  }, [advanced.reviewVisibility, advanced.reviewWhen, advanced.showScoreTiming])
+
+  if (prepared.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
+        No questions to display (check pool size and question bank).
+      </p>
+    )
+  }
+
+  const atEnd = step >= prepared.length
+  const current = prepared[step]
+
+  return (
+    <div className="space-y-4">
+      {secondsLeft != null && (
+        <p className="text-sm font-medium text-slate-800">
+          Time remaining: {Math.floor(secondsLeft / 60)}:
+          {(secondsLeft % 60).toString().padStart(2, '0')}
+          {paused ? ' (paused)' : ''}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">{reviewNote}</p>
+      {!oneQuestionAtATime ? (
+        prepared.map((q, index) => <StudentQuestionBlock key={`${q.id}-${index}`} q={q} index={index} />)
+      ) : !atEnd && current ? (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Question {step + 1} of {prepared.length}
+          </p>
+          <StudentQuestionBlock q={current} index={step} />
+          <div className="flex flex-wrap justify-end gap-2">
+            {advanced.allowBackNavigation && step > 0 ? (
+              <button
+                type="button"
+                onClick={() => setStep((s) => Math.max(0, s - 1))}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Back
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setStep((s) => s + 1)}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+            >
+              {step + 1 >= prepared.length ? 'Finish' : 'Next'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-600">End of preview for one-question-at-a-time flow.</p>
+      )}
+    </div>
+  )
+}
+
+function AccessCodeGate({
+  advanced,
+  onUnlocked,
+}: {
+  advanced: QuizAdvancedSettings
+  onUnlocked: () => void
+}) {
+  const [value, setValue] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+
+  const secret = advanced.quizAccessCode.trim()
+
+  if (!secret) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p>This quiz requires an access code. Save a code in quiz settings to test the full gate.</p>
+        <button
+          type="button"
+          onClick={onUnlocked}
+          className="mt-3 rounded-lg bg-amber-800/10 px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-800/20"
+        >
+          Continue to question preview anyway
+        </button>
+      </div>
+    )
+  }
+
+  function tryUnlock() {
+    if (value.trim() === secret) {
+      setErr(null)
+      onUnlocked()
+    } else {
+      setErr('Code does not match.')
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-sm font-medium text-slate-800">Enter access code</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <input
+          type="password"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="min-w-[12rem] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          placeholder="Access code"
+        />
+        <button
+          type="button"
+          onClick={tryUnlock}
+          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+        >
+          Continue
+        </button>
+      </div>
+      {err ? <p className="mt-2 text-sm text-rose-600">{err}</p> : null}
+    </div>
+  )
+}
+
 function AdaptivePreviewPanel({
   courseCode,
   itemId,
@@ -229,9 +451,19 @@ function AdaptivePreviewPanel({
         Nothing here is saved.
       </p>
       {phase === 'loading' && (
-        <p className="mt-4 text-sm text-slate-500" role="status">
-          Generating question…
-        </p>
+        <div
+          className="mt-4 flex items-center gap-4 pl-2.5 text-sm leading-snug text-slate-600"
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <div className="inline-flex shrink-0 origin-left scale-[0.32] translate-x-[10px] translate-y-[5px] self-center">
+            <BookLoader />
+          </div>
+          <span className="min-w-0 flex-1">
+            {history.length === 0 ? 'Setting up the quiz…' : 'Preparing the next question…'}
+          </span>
+        </div>
       )}
       {phase === 'error' && errorMessage && (
         <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -242,7 +474,7 @@ function AdaptivePreviewPanel({
         <p className="mt-4 text-sm text-slate-600">End of preview — you have reached the configured question count.</p>
       )}
       {phase === 'question' && current && (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 flex flex-col space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Question {Math.min(history.length + 1, maxQuestions)} of {maxQuestions}
           </p>
@@ -270,7 +502,7 @@ function AdaptivePreviewPanel({
           <button
             type="button"
             onClick={() => void submitAndContinue()}
-            className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+            className="self-end rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
           >
             Submit answer
           </button>
@@ -292,7 +524,17 @@ export function QuizStudentPreviewModal({
   itemId,
   isAdaptive,
   adaptiveQuestionCount = 5,
+  advanced,
+  oneQuestionAtATime,
 }: QuizStudentPreviewModalProps) {
+  const [accessOk, setAccessOk] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setAccessOk(!advanced.requiresQuizAccessCode)
+    }
+  }, [open, advanced.requiresQuizAccessCode])
+
   if (!open) return null
 
   const adaptiveOn = Boolean(isAdaptive && courseCode && itemId)
@@ -344,23 +586,26 @@ export function QuizStudentPreviewModal({
                 theme={theme}
               />
             </div>
-            {adaptiveOn ? (
-              <AdaptivePreviewPanel
-                key={`${courseCode}-${itemId}`}
-                courseCode={courseCode!}
-                itemId={itemId!}
-                maxQuestions={Math.min(30, Math.max(1, adaptiveQuestionCount))}
-              />
-            ) : questions.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
-                There are no questions in this quiz yet.
-              </p>
+            {advanced.requiresQuizAccessCode ? (
+              <AccessCodeGate advanced={advanced} onUnlocked={() => setAccessOk(true)} />
+            ) : null}
+            {accessOk ? (
+              adaptiveOn ? (
+                <AdaptivePreviewPanel
+                  key={`${courseCode}-${itemId}`}
+                  courseCode={courseCode!}
+                  itemId={itemId!}
+                  maxQuestions={Math.min(30, Math.max(1, adaptiveQuestionCount))}
+                />
+              ) : questions.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
+                  There are no questions in this quiz yet.
+                </p>
+              ) : (
+                <StaticQuizPreview questions={questions} advanced={advanced} oneQuestionAtATime={oneQuestionAtATime} />
+              )
             ) : (
-              <div className="space-y-4">
-                {questions.map((q, index) => (
-                  <StudentQuestionBlock key={q.id} q={q} index={index} />
-                ))}
-              </div>
+              <p className="text-center text-sm text-slate-500">Enter the code above to preview questions.</p>
             )}
           </div>
         </div>

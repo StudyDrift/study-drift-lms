@@ -57,7 +57,7 @@ jobs:
         run: |
           cargo install cargo-llvm-cov --locked
           cargo llvm-cov --fail-under-lines 59 \
-            --ignore-filename-regex '(^|/)main\.rs$|services/course_structure_ai\.rs$'
+            --ignore-filename-regex '(^|/)main\.rs$'
 
       - name: Build
         run: cargo build --release

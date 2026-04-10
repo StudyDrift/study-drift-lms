@@ -1,10 +1,14 @@
-import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { UserPlus, X } from 'lucide-react'
+import { GraduationCap, Trash2, UserPlus, X } from 'lucide-react'
 import { LmsPage } from './LmsPage'
-import { usePermissions } from '../../context/usePermissions'
+import { usePermission, usePermissions } from '../../context/usePermissions'
 import { authorizedFetch } from '../../lib/api'
-import { fetchCourseScopedRoles, type CourseScopedAppRole } from '../../lib/coursesApi'
+import {
+  courseEnrollmentsUpdatePermission,
+  fetchCourseScopedRoles,
+  type CourseScopedAppRole,
+} from '../../lib/coursesApi'
 import { readApiErrorMessage } from '../../lib/errors'
 
 export type CourseEnrollment = {
@@ -20,11 +24,27 @@ type AddEnrollmentsResult = {
   notFound: string[]
 }
 
+function enrollmentRoleRank(roleDisplay: string): number {
+  switch (roleDisplay) {
+    case 'Teacher':
+      return 0
+    case 'Instructor':
+      return 1
+    case 'Student':
+      return 2
+    default:
+      return 3
+  }
+}
+
 export default function CourseEnrollments() {
   const { courseCode } = useParams<{ courseCode: string }>()
   const { refresh: refreshPermissions } = usePermissions()
+  const canUpdateEnrollments = usePermission(
+    courseCode ? courseEnrollmentsUpdatePermission(courseCode) : 'global:app:noop:noop',
+  )
   const [enrollments, setEnrollments] = useState<CourseEnrollment[] | null>(null)
-  const [viewerRole, setViewerRole] = useState<string | null>(null)
+  const [viewerRoles, setViewerRoles] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const [modalOpen, setModalOpen] = useState(false)
@@ -35,6 +55,28 @@ export default function CourseEnrollments() {
   const [selectedAppRoleId, setSelectedAppRoleId] = useState('')
   const [addStatus, setAddStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [addMessage, setAddMessage] = useState<string | null>(null)
+  const [selfStudentStatus, setSelfStudentStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [selfStudentMessage, setSelfStudentMessage] = useState<string | null>(null)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+
+  const enrollmentMeta = useMemo(() => {
+    if (!enrollments?.length) {
+      return { isPrimaryRoleRow: (_e: CourseEnrollment) => false }
+    }
+    const byUser = new Map<string, CourseEnrollment[]>()
+    for (const e of enrollments) {
+      const list = byUser.get(e.userId) ?? []
+      list.push(e)
+      byUser.set(e.userId, list)
+    }
+    function isPrimaryRoleRow(e: CourseEnrollment): boolean {
+      const list = byUser.get(e.userId)
+      if (!list || list.length <= 1) return false
+      const minRank = Math.min(...list.map((x) => enrollmentRoleRank(x.role)))
+      return enrollmentRoleRank(e.role) === minRank
+    }
+    return { isPrimaryRoleRow }
+  }, [enrollments])
 
   const loadEnrollments = useCallback(async () => {
     if (!courseCode) return
@@ -46,16 +88,16 @@ export default function CourseEnrollments() {
       const raw: unknown = await res.json().catch(() => ({}))
       if (!res.ok) {
         setEnrollments([])
-        setViewerRole(null)
+        setViewerRoles([])
         setError(readApiErrorMessage(raw))
         return
       }
-      const data = raw as { enrollments?: CourseEnrollment[]; viewerEnrollmentRole?: string | null }
+      const data = raw as { enrollments?: CourseEnrollment[]; viewerEnrollmentRoles?: string[] }
       setEnrollments(data.enrollments ?? [])
-      setViewerRole(data.viewerEnrollmentRole ?? null)
+      setViewerRoles(data.viewerEnrollmentRoles ?? [])
     } catch {
       setEnrollments([])
-      setViewerRole(null)
+      setViewerRoles([])
       setError('Could not load enrollments.')
     }
   }, [courseCode])
@@ -77,7 +119,7 @@ export default function CourseEnrollments() {
   }, [])
 
   useEffect(() => {
-    if (!modalOpen || !courseCode || viewerRole !== 'teacher') {
+    if (!modalOpen || !courseCode || !viewerRoles.includes('teacher')) {
       return
     }
     let cancelled = false
@@ -109,7 +151,7 @@ export default function CourseEnrollments() {
       cancelled = true
       window.clearTimeout(id)
     }
-  }, [modalOpen, courseCode, viewerRole])
+  }, [modalOpen, courseCode, viewerRoles])
 
   useEffect(() => {
     if (!modalOpen) return
@@ -128,7 +170,7 @@ export default function CourseEnrollments() {
       return
     }
 
-    if (viewerRole === 'teacher') {
+    if (viewerRoles.includes('teacher')) {
       if (rolesLoading) {
         setAddMessage('Loading roles…')
         setAddStatus('error')
@@ -150,7 +192,7 @@ export default function CourseEnrollments() {
     setAddMessage(null)
     try {
       const body =
-        viewerRole === 'teacher'
+        viewerRoles.includes('teacher')
           ? { emails: emailListText, appRoleId: selectedAppRoleId }
           : { emails: emailListText }
 
@@ -185,7 +227,57 @@ export default function CourseEnrollments() {
     }
   }
 
-  const isCourseCreator = viewerRole === 'teacher'
+  const isCourseCreator = viewerRoles.includes('teacher')
+
+  const canEnrollSelfAsStudent = isCourseCreator && !viewerRoles.includes('student')
+
+  async function onEnrollAsStudent() {
+    if (!courseCode) return
+    setSelfStudentStatus('loading')
+    setSelfStudentMessage(null)
+    try {
+      const res = await authorizedFetch(
+        `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollments/self-as-student`,
+        { method: 'POST' },
+      )
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSelfStudentStatus('error')
+        setSelfStudentMessage(readApiErrorMessage(raw))
+        return
+      }
+      setSelfStudentStatus('idle')
+      await loadEnrollments()
+      await refreshPermissions()
+    } catch {
+      setSelfStudentStatus('error')
+      setSelfStudentMessage('Request failed.')
+    }
+  }
+
+  async function onRemoveEnrollment(enrollmentId: string) {
+    if (!courseCode) return
+    setError(null)
+    setRemovingId(enrollmentId)
+    try {
+      const res = await authorizedFetch(
+        `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollments/${encodeURIComponent(enrollmentId)}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok) {
+        const raw: unknown = await res.json().catch(() => ({}))
+        setError(readApiErrorMessage(raw))
+        return
+      }
+      await loadEnrollments()
+      await refreshPermissions()
+    } catch {
+      setError('Could not remove enrollment.')
+    } finally {
+      setRemovingId(null)
+    }
+  }
+
   const submitDisabled =
     addStatus === 'loading' ||
     !emailListText.trim() ||
@@ -201,6 +293,17 @@ export default function CourseEnrollments() {
       }
     >
       <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+        {canEnrollSelfAsStudent && (
+          <button
+            type="button"
+            onClick={() => void onEnrollAsStudent()}
+            disabled={selfStudentStatus === 'loading'}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <GraduationCap className="h-4 w-4" aria-hidden />
+            {selfStudentStatus === 'loading' ? 'Enrolling…' : 'Enroll as Student'}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => {
@@ -214,6 +317,11 @@ export default function CourseEnrollments() {
           Add enrollment
         </button>
       </div>
+      {selfStudentMessage && (
+        <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          {selfStudentMessage}
+        </p>
+      )}
 
       {error && (
         <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -234,17 +342,42 @@ export default function CourseEnrollments() {
               <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Role</th>
+                {canUpdateEnrollments && (
+                  <th className="w-12 px-2 py-3 text-right font-normal" aria-label="Actions" />
+                )}
               </tr>
             </thead>
             <tbody>
-              {enrollments.map((e) => (
-                <tr key={e.id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    {e.displayName?.trim() || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">{e.role}</td>
-                </tr>
-              ))}
+              {enrollments.map((e) => {
+                const showRemove =
+                  canUpdateEnrollments && !enrollmentMeta.isPrimaryRoleRow(e)
+                return (
+                  <tr
+                    key={e.id}
+                    className="group border-b border-slate-100 last:border-0"
+                  >
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      {e.displayName?.trim() || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">{e.role}</td>
+                    {canUpdateEnrollments && (
+                      <td className="px-2 py-3 text-right align-middle">
+                        {showRemove ? (
+                          <button
+                            type="button"
+                            onClick={() => void onRemoveEnrollment(e.id)}
+                            disabled={removingId === e.id}
+                            className="inline-flex rounded-lg p-1.5 text-slate-400 opacity-0 transition hover:bg-rose-50 hover:text-rose-700 group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label={`Remove ${e.role} enrollment for ${e.displayName?.trim() || 'this person'}`}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                          </button>
+                        ) : null}
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

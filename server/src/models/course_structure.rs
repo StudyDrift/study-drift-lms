@@ -14,6 +14,7 @@ pub struct CourseStructureItemRow {
     pub parent_id: Option<Uuid>,
     pub published: bool,
     pub visible_from: Option<DateTime<Utc>>,
+    pub archived: bool,
     pub due_at: Option<DateTime<Utc>>,
     pub assignment_group_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
@@ -30,10 +31,15 @@ pub struct CourseStructureItemResponse {
     pub parent_id: Option<Uuid>,
     pub published: bool,
     pub visible_from: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub archived: bool,
     pub due_at: Option<DateTime<Utc>>,
     pub assignment_group_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Present for quiz items when loaded from the API: adaptive vs traditional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_adaptive: Option<bool>,
 }
 
 impl From<CourseStructureItemRow> for CourseStructureItemResponse {
@@ -46,10 +52,12 @@ impl From<CourseStructureItemRow> for CourseStructureItemResponse {
             parent_id: row.parent_id,
             published: row.published,
             visible_from: row.visible_from,
+            archived: row.archived,
             due_at: row.due_at,
             assignment_group_id: row.assignment_group_id,
             created_at: row.created_at,
             updated_at: row.updated_at,
+            is_adaptive: None,
         }
     }
 }
@@ -76,6 +84,13 @@ pub struct PatchCourseModuleRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PatchStructureItemRequest {
+    pub title: Option<String>,
+    pub published: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateCourseHeadingRequest {
     pub title: String,
 }
@@ -88,21 +103,8 @@ pub struct CreateCourseAssignmentRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CourseStructureAiRequest {
-    pub message: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ReorderCourseStructureRequest {
     pub module_order: Vec<Uuid>,
     /// Maps each module id to ordered child item ids (headings and content pages). Omit keys for empty modules.
     pub child_order_by_module: HashMap<Uuid, Vec<Uuid>>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CourseStructureAiResponse {
-    pub items: Vec<CourseStructureItemResponse>,
-    pub assistant_message: Option<String>,
 }

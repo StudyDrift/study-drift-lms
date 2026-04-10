@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { LmsPage } from './LmsPage'
 import { authorizedFetch } from '../../lib/api'
-import { postCourseContext } from '../../lib/coursesApi'
+import { postCourseContext, type Course } from '../../lib/coursesApi'
 import { readApiErrorMessage } from '../../lib/errors'
-import type { Course } from './Courses'
 import { heroImageObjectStyle } from '../../lib/heroImagePosition'
 
 function formatDate(iso: string | null): string {
@@ -98,27 +97,27 @@ export default function CourseDetail() {
             />
           )}
           <dl className="mt-8 grid max-w-xl gap-4 text-sm">
-          <div>
-            <dt className="font-medium text-slate-500">Course code</dt>
-            <dd className="mt-1 text-slate-900">{course.courseCode}</dd>
-          </div>
-          <div>
-            <dt className="font-medium text-slate-500">Starts / ends</dt>
-            <dd className="mt-1 text-slate-900">
-              {formatDate(course.startsAt)} — {formatDate(course.endsAt)}
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium text-slate-500">Visible / hidden window</dt>
-            <dd className="mt-1 text-slate-900">
-              {formatDate(course.visibleFrom)} — {formatDate(course.hiddenAt)}
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium text-slate-500">Published</dt>
-            <dd className="mt-1 text-slate-900">{course.published ? 'Yes' : 'No'}</dd>
-          </div>
-        </dl>
+            <div>
+              <dt className="font-medium text-slate-500">Course code</dt>
+              <dd className="mt-1 text-slate-900">{course.courseCode}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-slate-500">Starts / ends</dt>
+              <dd className="mt-1 text-slate-900">
+                {formatDate(course.startsAt)} — {formatDate(course.endsAt)}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium text-slate-500">Visible / hidden window</dt>
+              <dd className="mt-1 text-slate-900">
+                {formatDate(course.visibleFrom)} — {formatDate(course.hiddenAt)}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium text-slate-500">Published</dt>
+              <dd className="mt-1 text-slate-900">{course.published ? 'Yes' : 'No'}</dd>
+            </div>
+          </dl>
         </>
       )}
     </LmsPage>

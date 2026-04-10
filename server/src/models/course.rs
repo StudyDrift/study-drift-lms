@@ -25,6 +25,16 @@ pub struct MarkdownThemeCustom {
     pub font_family: Option<String>,
 }
 
+/// [`CoursePublic`] plus enrollment context for the signed-in user (single-course GET).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CourseWithViewerResponse {
+    #[serde(flatten)]
+    pub course: CoursePublic,
+    /// Raw enrollment roles for the authenticated user in this course (e.g. `teacher`, `student`).
+    pub viewer_enrollment_roles: Vec<String>,
+}
+
 #[derive(Debug, sqlx::FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoursePublic {

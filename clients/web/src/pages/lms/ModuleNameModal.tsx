@@ -9,6 +9,12 @@ type ModuleNameModalProps = {
   errorMessage?: string | null
   /** Adjusts labels only. */
   mode?: 'module' | 'heading' | 'content_page' | 'assignment' | 'quiz'
+  /** Prefill the input (e.g. edit title). */
+  initialTitle?: string
+  /** Overrides the dialog heading (e.g. "Edit title"). */
+  dialogTitleOverride?: string
+  /** Overrides the primary submit button label. */
+  submitLabelOverride?: string
 }
 
 export function ModuleNameModal(props: ModuleNameModalProps) {
@@ -22,10 +28,13 @@ function ModuleNameModalInner({
   saving = false,
   errorMessage,
   mode = 'module',
+  initialTitle = '',
+  dialogTitleOverride,
+  submitLabelOverride,
 }: ModuleNameModalProps) {
   const titleId = useId()
   const inputId = useId()
-  const [value, setValue] = useState('')
+  const [value, setValue] = useState(initialTitle)
 
   const dialogTitle =
     mode === 'heading'
@@ -68,6 +77,9 @@ function ModuleNameModalInner({
             ? 'Save quiz'
           : 'Save module'
 
+  const headingText = dialogTitleOverride ?? dialogTitle
+  const primarySubmitLabel = submitLabelOverride ?? submitLabel
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
@@ -81,7 +93,7 @@ function ModuleNameModalInner({
       <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h3 id={titleId} className="text-sm font-semibold text-slate-900">
-            {dialogTitle}
+            {headingText}
           </h3>
           <button
             type="button"
@@ -134,7 +146,7 @@ function ModuleNameModalInner({
               disabled={saving || !value.trim()}
               className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {saving ? 'Saving…' : submitLabel}
+              {saving ? 'Saving…' : primarySubmitLabel}
             </button>
           </div>
         </form>

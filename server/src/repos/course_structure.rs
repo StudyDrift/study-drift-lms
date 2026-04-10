@@ -43,7 +43,7 @@ pub async fn get_item_row(
 ) -> Result<Option<CourseStructureItemRow>, sqlx::Error> {
     sqlx::query_as::<_, CourseStructureItemRow>(&format!(
         r#"
-        SELECT id, course_id, sort_order, kind, title, parent_id, published, visible_from, due_at, assignment_group_id, created_at, updated_at
+        SELECT id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         FROM {}
         WHERE id = $1 AND course_id = $2
         "#,
@@ -61,7 +61,7 @@ pub async fn list_for_course(
 ) -> Result<Vec<CourseStructureItemRow>, sqlx::Error> {
     let rows = sqlx::query_as::<_, CourseStructureItemRow>(&format!(
         r#"
-        SELECT id, course_id, sort_order, kind, title, parent_id, published, visible_from, due_at, assignment_group_id, created_at, updated_at
+        SELECT id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         FROM {}
         WHERE course_id = $1
         "#,
@@ -72,6 +72,35 @@ pub async fn list_for_course(
     .await?;
 
     Ok(order_structure_rows(rows))
+}
+
+/// Maps structure rows to API responses, including `is_adaptive` for quiz items.
+pub async fn rows_to_responses_with_quiz_adaptive(
+    pool: &PgPool,
+    course_id: Uuid,
+    rows: Vec<CourseStructureItemRow>,
+) -> Result<Vec<CourseStructureItemResponse>, sqlx::Error> {
+    let quiz_ids: Vec<Uuid> = rows.iter().filter(|r| r.kind == "quiz").map(|r| r.id).collect();
+    let flags = course_module_quizzes::is_adaptive_flags_for_structure_items(pool, course_id, &quiz_ids).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let mut item: CourseStructureItemResponse = row.into();
+            if item.kind == "quiz" {
+                item.is_adaptive = Some(flags.get(&item.id).copied().unwrap_or(false));
+            }
+            item
+        })
+        .collect())
+}
+
+pub async fn row_to_response_with_quiz_adaptive(
+    pool: &PgPool,
+    course_id: Uuid,
+    row: CourseStructureItemRow,
+) -> Result<CourseStructureItemResponse, sqlx::Error> {
+    let mut items = rows_to_responses_with_quiz_adaptive(pool, course_id, vec![row]).await?;
+    Ok(items.pop().expect("one row"))
 }
 
 /// Top-level items by `sort_order`, then each module's child headings in order.
@@ -123,7 +152,7 @@ pub fn filter_structure_for_student_view(
             } else if let Some(pid) = r.parent_id {
                 modules
                     .get(&pid)
-                    .map(|m| module_visible_to_student_now(m, now))
+                    .map(|m| module_visible_to_student_now(m, now) && r.published && !r.archived)
                     .unwrap_or(false)
             } else {
                 true
@@ -166,9 +195,9 @@ pub async fn content_page_visible_to_student(
     content_page_id: Uuid,
     now: DateTime<Utc>,
 ) -> Result<bool, sqlx::Error> {
-    let row: Option<(bool, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
+    let row: Option<(bool, bool, bool, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
         r#"
-        SELECT m.published, m.visible_from
+        SELECT c.published, c.archived, m.published, m.visible_from
         FROM {} c
         INNER JOIN {} m ON m.id = c.parent_id AND m.kind = 'module'
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'content_page'
@@ -182,7 +211,9 @@ pub async fn content_page_visible_to_student(
     .await?;
 
     Ok(row
-        .map(|(published, visible_from)| published && visible_from.is_none_or(|t| t <= now))
+        .map(|(c_pub, c_arch, m_pub, vf)| {
+            c_pub && !c_arch && m_pub && vf.is_none_or(|t| t <= now)
+        })
         .unwrap_or(false))
 }
 
@@ -218,9 +249,9 @@ pub async fn assignment_visible_to_student(
     assignment_id: Uuid,
     now: DateTime<Utc>,
 ) -> Result<bool, sqlx::Error> {
-    let row: Option<(bool, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
+    let row: Option<(bool, bool, bool, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
         r#"
-        SELECT m.published, m.visible_from
+        SELECT c.published, c.archived, m.published, m.visible_from
         FROM {} c
         INNER JOIN {} m ON m.id = c.parent_id AND m.kind = 'module'
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
@@ -234,7 +265,9 @@ pub async fn assignment_visible_to_student(
     .await?;
 
     Ok(row
-        .map(|(published, visible_from)| published && visible_from.is_none_or(|t| t <= now))
+        .map(|(c_pub, c_arch, m_pub, vf)| {
+            c_pub && !c_arch && m_pub && vf.is_none_or(|t| t <= now)
+        })
         .unwrap_or(false))
 }
 
@@ -270,9 +303,9 @@ pub async fn quiz_visible_to_student(
     quiz_id: Uuid,
     now: DateTime<Utc>,
 ) -> Result<bool, sqlx::Error> {
-    let row: Option<(bool, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
+    let row: Option<(bool, bool, bool, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
         r#"
-        SELECT m.published, m.visible_from
+        SELECT c.published, c.archived, m.published, m.visible_from
         FROM {} c
         INNER JOIN {} m ON m.id = c.parent_id AND m.kind = 'module'
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'quiz'
@@ -286,7 +319,9 @@ pub async fn quiz_visible_to_student(
     .await?;
 
     Ok(row
-        .map(|(published, visible_from)| published && visible_from.is_none_or(|t| t <= now))
+        .map(|(c_pub, c_arch, m_pub, vf)| {
+            c_pub && !c_arch && m_pub && vf.is_none_or(|t| t <= now)
+        })
         .unwrap_or(false))
 }
 
@@ -306,7 +341,7 @@ pub async fn update_module(
             visible_from = $5,
             updated_at = NOW()
         WHERE id = $1 AND course_id = $2 AND kind = 'module' AND parent_id IS NULL
-        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, due_at, assignment_group_id, created_at, updated_at
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         "#,
         schema::COURSE_STRUCTURE_ITEMS
     ))
@@ -349,7 +384,7 @@ pub async fn insert_module(
         INSERT INTO {} (id, course_id, sort_order, kind, title, parent_id)
         SELECT $2, $1, max_ord + 1, 'module', $3, NULL
         FROM mx
-        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, due_at, assignment_group_id, created_at, updated_at
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         "#,
         schema::COURSE_STRUCTURE_ITEMS,
         schema::COURSE_STRUCTURE_ITEMS
@@ -412,7 +447,7 @@ pub async fn insert_heading_under_module(
         INSERT INTO {} (id, course_id, sort_order, kind, title, parent_id)
         SELECT $2, $3, max_ord + 1, 'heading', $4, $1
         FROM mx
-        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, due_at, assignment_group_id, created_at, updated_at
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         "#,
         schema::COURSE_STRUCTURE_ITEMS,
         schema::COURSE_STRUCTURE_ITEMS
@@ -476,7 +511,7 @@ pub async fn insert_assignment_under_module(
         INSERT INTO {} (id, course_id, sort_order, kind, title, parent_id)
         SELECT $2, $3, max_ord + 1, 'assignment', $4, $1
         FROM mx
-        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, due_at, assignment_group_id, created_at, updated_at
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         "#,
         schema::COURSE_STRUCTURE_ITEMS,
         schema::COURSE_STRUCTURE_ITEMS
@@ -542,7 +577,7 @@ pub async fn insert_content_page_under_module(
         INSERT INTO {} (id, course_id, sort_order, kind, title, parent_id)
         SELECT $2, $3, max_ord + 1, 'content_page', $4, $1
         FROM mx
-        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, due_at, assignment_group_id, created_at, updated_at
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         "#,
         schema::COURSE_STRUCTURE_ITEMS,
         schema::COURSE_STRUCTURE_ITEMS
@@ -608,7 +643,7 @@ pub async fn insert_quiz_under_module(
         INSERT INTO {} (id, course_id, sort_order, kind, title, parent_id)
         SELECT $2, $3, max_ord + 1, 'quiz', $4, $1
         FROM mx
-        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, due_at, assignment_group_id, created_at, updated_at
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         "#,
         schema::COURSE_STRUCTURE_ITEMS,
         schema::COURSE_STRUCTURE_ITEMS
@@ -759,6 +794,66 @@ pub async fn apply_module_and_child_order(
     Ok(())
 }
 
+/// Updates title and/or `published` for a module child item (not a top-level module).
+pub async fn patch_child_structure_item(
+    pool: &PgPool,
+    course_id: Uuid,
+    item_id: Uuid,
+    title: Option<&str>,
+    published: Option<bool>,
+) -> Result<CourseStructureItemRow, sqlx::Error> {
+    if title.is_none() && published.is_none() {
+        return Err(sqlx::Error::RowNotFound);
+    }
+    sqlx::query_as::<_, CourseStructureItemRow>(&format!(
+        r#"
+        UPDATE {}
+        SET title = COALESCE($3, title),
+            published = COALESCE($4, published),
+            updated_at = NOW()
+        WHERE id = $1
+          AND course_id = $2
+          AND parent_id IS NOT NULL
+          AND kind IN ('heading', 'content_page', 'assignment', 'quiz')
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(item_id)
+    .bind(course_id)
+    .bind(title)
+    .bind(published)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(sqlx::Error::RowNotFound)
+}
+
+/// Marks a module child item as archived (soft-delete).
+pub async fn archive_child_structure_item(
+    pool: &PgPool,
+    course_id: Uuid,
+    item_id: Uuid,
+) -> Result<CourseStructureItemRow, sqlx::Error> {
+    sqlx::query_as::<_, CourseStructureItemRow>(&format!(
+        r#"
+        UPDATE {}
+        SET archived = true,
+            updated_at = NOW()
+        WHERE id = $1
+          AND course_id = $2
+          AND parent_id IS NOT NULL
+          AND kind IN ('heading', 'content_page', 'assignment', 'quiz')
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(item_id)
+    .bind(course_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(sqlx::Error::RowNotFound)
+}
+
 /// Sets `assignment_group_id` for a gradable module item (`content_page` or `assignment`).
 pub async fn set_item_assignment_group(
     pool: &PgPool,
@@ -817,10 +912,10 @@ pub async fn import_upsert_structure_item(
             r#"
             INSERT INTO {} (
                 id, course_id, sort_order, kind, title, parent_id,
-                published, visible_from, due_at, assignment_group_id,
+                published, visible_from, archived, due_at, assignment_group_id,
                 created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             ON CONFLICT (id) DO NOTHING
             RETURNING id
             "#,
@@ -834,6 +929,7 @@ pub async fn import_upsert_structure_item(
         .bind(item.parent_id)
         .bind(item.published)
         .bind(item.visible_from)
+        .bind(item.archived)
         .bind(item.due_at)
         .bind(item.assignment_group_id)
         .bind(item.created_at)
@@ -847,10 +943,10 @@ pub async fn import_upsert_structure_item(
         r#"
         INSERT INTO {} (
             id, course_id, sort_order, kind, title, parent_id,
-            published, visible_from, due_at, assignment_group_id,
+            published, visible_from, archived, due_at, assignment_group_id,
             created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT (id) DO UPDATE SET
             course_id = EXCLUDED.course_id,
             sort_order = EXCLUDED.sort_order,
@@ -859,6 +955,7 @@ pub async fn import_upsert_structure_item(
             parent_id = EXCLUDED.parent_id,
             published = EXCLUDED.published,
             visible_from = EXCLUDED.visible_from,
+            archived = EXCLUDED.archived,
             due_at = EXCLUDED.due_at,
             assignment_group_id = EXCLUDED.assignment_group_id,
             updated_at = EXCLUDED.updated_at
@@ -873,6 +970,7 @@ pub async fn import_upsert_structure_item(
     .bind(item.parent_id)
     .bind(item.published)
     .bind(item.visible_from)
+    .bind(item.archived)
     .bind(item.due_at)
     .bind(item.assignment_group_id)
     .bind(item.created_at)

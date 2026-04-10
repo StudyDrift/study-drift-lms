@@ -25,6 +25,137 @@ pub const MAX_ADAPTIVE_QUESTION_COUNT: i32 = 30;
 
 pub const ADAPTIVE_SOURCE_KINDS: &[&str] = &["content_page", "assignment", "quiz"];
 
+pub const GRADE_ATTEMPT_POLICIES: &[&str] = &["highest", "latest", "first", "average"];
+pub const LATE_SUBMISSION_POLICIES: &[&str] = &["allow", "penalty", "block"];
+pub const SHOW_SCORE_TIMINGS: &[&str] = &["immediate", "after_due", "manual"];
+pub const REVIEW_VISIBILITIES: &[&str] =
+    &["none", "score_only", "responses", "correct_answers", "full"];
+pub const REVIEW_WHENS: &[&str] = &["after_submit", "after_due", "always", "never"];
+pub const ADAPTIVE_DIFFICULTIES: &[&str] = &["introductory", "standard", "challenging"];
+pub const ADAPTIVE_STOP_RULES: &[&str] = &["fixed_count", "mastery_estimate"];
+
+pub const MAX_QUIZ_ACCESS_CODE_LEN: usize = 128;
+pub const MIN_MAX_ATTEMPTS: i32 = 1;
+pub const MAX_MAX_ATTEMPTS: i32 = 100;
+
+pub fn validate_quiz_comprehensive_settings(
+    unlimited_attempts: bool,
+    max_attempts: i32,
+    grade_attempt_policy: &str,
+    passing_score_percent: Option<i32>,
+    late_submission_policy: &str,
+    late_penalty_percent: Option<i32>,
+    time_limit_minutes: Option<i32>,
+    per_question_time_limit_seconds: Option<i32>,
+    show_score_timing: &str,
+    review_visibility: &str,
+    review_when: &str,
+    adaptive_difficulty: &str,
+    adaptive_stop_rule: &str,
+    random_question_pool_count: Option<i32>,
+    quiz_access_code: Option<&str>,
+) -> Result<(), AppError> {
+    let grade_attempt_policy = grade_attempt_policy.trim();
+    let late_submission_policy = late_submission_policy.trim();
+    let show_score_timing = show_score_timing.trim();
+    let review_visibility = review_visibility.trim();
+    let review_when = review_when.trim();
+    let adaptive_difficulty = adaptive_difficulty.trim();
+    let adaptive_stop_rule = adaptive_stop_rule.trim();
+
+    if !GRADE_ATTEMPT_POLICIES.contains(&grade_attempt_policy) {
+        return Err(AppError::InvalidInput(
+            "gradeAttemptPolicy must be one of: highest, latest, first, average.".into(),
+        ));
+    }
+    if !LATE_SUBMISSION_POLICIES.contains(&late_submission_policy) {
+        return Err(AppError::InvalidInput(
+            "lateSubmissionPolicy must be one of: allow, penalty, block.".into(),
+        ));
+    }
+
+    if late_submission_policy == "penalty" {
+        let Some(p) = late_penalty_percent else {
+            return Err(AppError::InvalidInput(
+                "latePenaltyPercent is required when lateSubmissionPolicy is penalty.".into(),
+            ));
+        };
+        if !(0..=100).contains(&p) {
+            return Err(AppError::InvalidInput(
+                "latePenaltyPercent must be between 0 and 100.".into(),
+            ));
+        }
+    }
+    if !SHOW_SCORE_TIMINGS.contains(&show_score_timing) {
+        return Err(AppError::InvalidInput(
+            "showScoreTiming must be one of: immediate, after_due, manual.".into(),
+        ));
+    }
+    if !REVIEW_VISIBILITIES.contains(&review_visibility) {
+        return Err(AppError::InvalidInput(
+            "reviewVisibility must be one of: none, score_only, responses, correct_answers, full.".into(),
+        ));
+    }
+    if !REVIEW_WHENS.contains(&review_when) {
+        return Err(AppError::InvalidInput(
+            "reviewWhen must be one of: after_submit, after_due, always, never.".into(),
+        ));
+    }
+    if !ADAPTIVE_DIFFICULTIES.contains(&adaptive_difficulty) {
+        return Err(AppError::InvalidInput(
+            "adaptiveDifficulty must be one of: introductory, standard, challenging.".into(),
+        ));
+    }
+    if !ADAPTIVE_STOP_RULES.contains(&adaptive_stop_rule) {
+        return Err(AppError::InvalidInput(
+            "adaptiveStopRule must be one of: fixed_count, mastery_estimate.".into(),
+        ));
+    }
+    if !unlimited_attempts {
+        if max_attempts < MIN_MAX_ATTEMPTS || max_attempts > MAX_MAX_ATTEMPTS {
+            return Err(AppError::InvalidInput(format!(
+                "maxAttempts must be between {MIN_MAX_ATTEMPTS} and {MAX_MAX_ATTEMPTS} when unlimitedAttempts is false."
+            )));
+        }
+    }
+    if let Some(p) = passing_score_percent {
+        if !(0..=100).contains(&p) {
+            return Err(AppError::InvalidInput(
+                "passingScorePercent must be between 0 and 100.".into(),
+            ));
+        }
+    }
+    if let Some(m) = time_limit_minutes {
+        if !(1..=10080).contains(&m) {
+            return Err(AppError::InvalidInput(
+                "timeLimitMinutes must be between 1 and 10080.".into(),
+            ));
+        }
+    }
+    if let Some(s) = per_question_time_limit_seconds {
+        if !(10..=86400).contains(&s) {
+            return Err(AppError::InvalidInput(
+                "perQuestionTimeLimitSeconds must be between 10 and 86400.".into(),
+            ));
+        }
+    }
+    if let Some(n) = random_question_pool_count {
+        if !(1..=300).contains(&n) {
+            return Err(AppError::InvalidInput(
+                "randomQuestionPoolCount must be between 1 and 300.".into(),
+            ));
+        }
+    }
+    if let Some(code) = quiz_access_code {
+        if code.len() > MAX_QUIZ_ACCESS_CODE_LEN {
+            return Err(AppError::InvalidInput(
+                "quizAccessCode is too long (max 128 characters).".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn validate_adaptive_quiz_settings(
     is_adaptive: bool,
     adaptive_system_prompt: &str,
@@ -151,7 +282,30 @@ pub struct ModuleQuizResponse {
     pub available_from: Option<DateTime<Utc>>,
     pub available_until: Option<DateTime<Utc>>,
     pub unlimited_attempts: bool,
+    pub max_attempts: i32,
+    pub grade_attempt_policy: String,
+    pub passing_score_percent: Option<i32>,
+    pub late_submission_policy: String,
+    pub late_penalty_percent: Option<i32>,
+    pub time_limit_minutes: Option<i32>,
+    pub timer_pause_when_tab_hidden: bool,
+    pub per_question_time_limit_seconds: Option<i32>,
+    pub show_score_timing: String,
+    pub review_visibility: String,
+    pub review_when: String,
     pub one_question_at_a_time: bool,
+    pub shuffle_questions: bool,
+    pub shuffle_choices: bool,
+    pub allow_back_navigation: bool,
+    /// True when a non-empty access code is configured (learners see this without the code).
+    pub requires_quiz_access_code: bool,
+    /// Only included for course editors who can view secrets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quiz_access_code: Option<String>,
+    pub adaptive_difficulty: String,
+    pub adaptive_topic_balance: bool,
+    pub adaptive_stop_rule: String,
+    pub random_question_pool_count: Option<i32>,
     pub questions: Vec<QuizQuestion>,
     pub updated_at: DateTime<Utc>,
     pub is_adaptive: bool,
@@ -195,6 +349,45 @@ pub struct UpdateModuleQuizRequest {
     pub unlimited_attempts: Option<bool>,
     #[serde(default)]
     pub one_question_at_a_time: Option<bool>,
+    #[serde(default)]
+    pub max_attempts: Option<i32>,
+    #[serde(default)]
+    pub grade_attempt_policy: Option<String>,
+    #[serde(default)]
+    pub passing_score_percent: Option<Option<i32>>,
+    #[serde(default)]
+    pub late_submission_policy: Option<String>,
+    #[serde(default)]
+    pub late_penalty_percent: Option<Option<i32>>,
+    #[serde(default)]
+    pub time_limit_minutes: Option<Option<i32>>,
+    #[serde(default)]
+    pub timer_pause_when_tab_hidden: Option<bool>,
+    #[serde(default)]
+    pub per_question_time_limit_seconds: Option<Option<i32>>,
+    #[serde(default)]
+    pub show_score_timing: Option<String>,
+    #[serde(default)]
+    pub review_visibility: Option<String>,
+    #[serde(default)]
+    pub review_when: Option<String>,
+    #[serde(default)]
+    pub shuffle_questions: Option<bool>,
+    #[serde(default)]
+    pub shuffle_choices: Option<bool>,
+    #[serde(default)]
+    pub allow_back_navigation: Option<bool>,
+    /// Omit unchanged; JSON null clears the code.
+    #[serde(default)]
+    pub quiz_access_code: Option<Option<String>>,
+    #[serde(default)]
+    pub adaptive_difficulty: Option<String>,
+    #[serde(default)]
+    pub adaptive_topic_balance: Option<bool>,
+    #[serde(default)]
+    pub adaptive_stop_rule: Option<String>,
+    #[serde(default)]
+    pub random_question_pool_count: Option<Option<i32>>,
     #[serde(default)]
     pub is_adaptive: Option<bool>,
     #[serde(default)]

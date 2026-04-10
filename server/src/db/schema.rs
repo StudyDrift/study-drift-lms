@@ -15,6 +15,7 @@ pub const MODULE_CONTENT_PAGES: &str = "course.module_content_pages";
 pub const MODULE_ASSIGNMENTS: &str = "course.module_assignments";
 pub const MODULE_QUIZZES: &str = "course.module_quizzes";
 pub const COURSE_SYLLABUS: &str = "course.course_syllabus";
+pub const SYLLABUS_ACCEPTANCES: &str = "course.syllabus_acceptances";
 pub const USER_COURSE_GRANTS: &str = "course.user_course_grants";
 pub const ASSIGNMENT_GROUPS: &str = "course.assignment_groups";
 pub const SETTINGS_SYSTEM_PROMPTS: &str = "settings.system_prompts";

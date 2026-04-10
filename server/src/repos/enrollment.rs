@@ -30,26 +30,59 @@ pub async fn user_is_course_creator(
     Ok(ok)
 }
 
-/// Enrollment role for this user in the course, if any.
-pub async fn user_role_in_course(
+/// All enrollment roles for this user in the course (e.g. `teacher` and `student`).
+pub async fn user_roles_in_course(
     pool: &PgPool,
     course_code: &str,
     user_id: Uuid,
-) -> Result<Option<String>, sqlx::Error> {
+) -> Result<Vec<String>, sqlx::Error> {
     sqlx::query_scalar::<_, String>(&format!(
         r#"
         SELECT ce.role
         FROM {} ce
         INNER JOIN {} c ON c.id = ce.course_id
         WHERE c.course_code = $1 AND ce.user_id = $2
+        ORDER BY
+            CASE ce.role
+                WHEN 'teacher' THEN 0
+                WHEN 'instructor' THEN 1
+                ELSE 2
+            END,
+            ce.role ASC
         "#,
         schema::COURSE_ENROLLMENTS,
         schema::COURSES
     ))
     .bind(course_code)
     .bind(user_id)
-    .fetch_optional(pool)
+    .fetch_all(pool)
     .await
+}
+
+pub async fn user_has_enrollment_role(
+    pool: &PgPool,
+    course_code: &str,
+    user_id: Uuid,
+    role: &str,
+) -> Result<bool, sqlx::Error> {
+    let ok = sqlx::query_scalar::<_, bool>(&format!(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM {} ce
+            INNER JOIN {} c ON c.id = ce.course_id
+            WHERE c.course_code = $1 AND ce.user_id = $2 AND ce.role = $3
+        )
+        "#,
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES
+    ))
+    .bind(course_code)
+    .bind(user_id)
+    .bind(role)
+    .fetch_one(pool)
+    .await?;
+    Ok(ok)
 }
 
 /// Enrolls a user as `instructor` if missing; if already enrolled, upgrades non-`teacher` to instructor.
@@ -60,36 +93,39 @@ pub async fn upsert_instructor_enrollment(
     course_id: Uuid,
     user_id: Uuid,
 ) -> Result<(), sqlx::Error> {
-    match user_role_in_course(pool, course_code, user_id).await? {
-        None => {
-            sqlx::query(&format!(
-                r#"
-                INSERT INTO {} (course_id, user_id, role)
-                VALUES ($1, $2, 'instructor')
-                "#,
-                schema::COURSE_ENROLLMENTS
-            ))
-            .bind(course_id)
-            .bind(user_id)
-            .execute(pool)
-            .await?;
-        }
-        Some(role) if role == "teacher" => {}
-        Some(_) => {
-            sqlx::query(&format!(
-                r#"
-                UPDATE {}
-                SET role = 'instructor'
-                WHERE course_id = $1 AND user_id = $2 AND role <> 'teacher'
-                "#,
-                schema::COURSE_ENROLLMENTS
-            ))
-            .bind(course_id)
-            .bind(user_id)
-            .execute(pool)
-            .await?;
-        }
+    let roles = user_roles_in_course(pool, course_code, user_id).await?;
+    if roles.iter().any(|r| r == "teacher") {
+        return Ok(());
     }
+    if roles.iter().any(|r| r == "instructor") {
+        return Ok(());
+    }
+    if roles.iter().any(|r| r == "student") {
+        sqlx::query(&format!(
+            r#"
+            UPDATE {}
+            SET role = 'instructor'
+            WHERE course_id = $1 AND user_id = $2 AND role = 'student'
+            "#,
+            schema::COURSE_ENROLLMENTS
+        ))
+        .bind(course_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+        return Ok(());
+    }
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (course_id, user_id, role)
+        VALUES ($1, $2, 'instructor')
+        "#,
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(course_id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -282,7 +318,7 @@ pub async fn insert_student_if_missing(
         r#"
         INSERT INTO {} (course_id, user_id, role)
         VALUES ($1, $2, 'student')
-        ON CONFLICT (course_id, user_id) DO NOTHING
+        ON CONFLICT (course_id, user_id, role) DO NOTHING
         RETURNING id
         "#,
         schema::COURSE_ENROLLMENTS
@@ -295,6 +331,93 @@ pub async fn insert_student_if_missing(
 }
 
 /// Enrolls the course creator with role `teacher` (RBAC `Teacher` supplies permissions).
+/// Same ordering as list ordering: teacher > instructor > student.
+pub fn enrollment_role_rank(role: &str) -> i32 {
+    match role {
+        "teacher" => 0,
+        "instructor" => 1,
+        "student" => 2,
+        _ => 3,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnrollmentDeleteOutcome {
+    Deleted,
+    NotFound,
+    /// This row is the enrollee's highest-ranked role while they have multiple enrollments in the course.
+    CannotRemoveHighestRole,
+}
+
+/// Deletes one enrollment row. When the person has several roles, the highest-ranked row cannot be removed.
+pub async fn delete_enrollment_for_course(
+    pool: &PgPool,
+    course_code: &str,
+    enrollment_id: Uuid,
+) -> Result<EnrollmentDeleteOutcome, sqlx::Error> {
+    let row = sqlx::query_as::<_, EnrollmentForDelete>(&format!(
+        r#"
+        SELECT ce.user_id, ce.role, ce.course_id
+        FROM {} ce
+        INNER JOIN {} c ON c.id = ce.course_id
+        WHERE ce.id = $1 AND c.course_code = $2
+        "#,
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES
+    ))
+    .bind(enrollment_id)
+    .bind(course_code)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(row) = row else {
+        return Ok(EnrollmentDeleteOutcome::NotFound);
+    };
+
+    let roles = sqlx::query_scalar::<_, String>(&format!(
+        r#"
+        SELECT ce.role
+        FROM {} ce
+        WHERE ce.course_id = $1 AND ce.user_id = $2
+        "#,
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(row.course_id)
+    .bind(row.user_id)
+    .fetch_all(pool)
+    .await?;
+
+    if roles.len() > 1 {
+        let min_rank = roles
+            .iter()
+            .map(|r| enrollment_role_rank(r.as_str()))
+            .min()
+            .unwrap_or(0);
+        if enrollment_role_rank(row.role.as_str()) == min_rank {
+            return Ok(EnrollmentDeleteOutcome::CannotRemoveHighestRole);
+        }
+    }
+
+    let res = sqlx::query(&format!(
+        "DELETE FROM {} WHERE id = $1",
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(enrollment_id)
+    .execute(pool)
+    .await?;
+    if res.rows_affected() == 0 {
+        return Ok(EnrollmentDeleteOutcome::NotFound);
+    }
+    Ok(EnrollmentDeleteOutcome::Deleted)
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct EnrollmentForDelete {
+    user_id: Uuid,
+    role: String,
+    course_id: Uuid,
+}
+
 pub async fn insert_course_creator_teacher(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     course_id: Uuid,

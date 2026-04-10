@@ -1,8 +1,9 @@
 use crate::error::AppError;
 use crate::http_auth::{auth_user, require_permission};
 use crate::models::course::{
-    CoursePublic, CoursesResponse, CreateCourseRequest, MarkdownThemeCustom, SetHeroImageRequest,
-    UpdateCourseRequest, UpdateMarkdownThemeRequest, GRADING_SCALES, MARKDOWN_THEME_PRESETS,
+    CoursePublic, CourseWithViewerResponse, CoursesResponse, CreateCourseRequest, MarkdownThemeCustom,
+    SetHeroImageRequest, UpdateCourseRequest, UpdateMarkdownThemeRequest, GRADING_SCALES,
+    MARKDOWN_THEME_PRESETS,
 };
 use crate::models::course_export::{CourseExportV1, CourseImportRequest};
 use crate::models::course_grading::{
@@ -12,22 +13,22 @@ use crate::models::course_module_content::{
     CreateCourseContentPageRequest, ModuleContentPageResponse, UpdateModuleContentPageRequest,
 };
 use crate::models::course_module_quiz::{
-    validate_adaptive_quiz_settings, validate_quiz_questions, AdaptiveQuizNextRequest,
-    AdaptiveQuizNextResponse, CreateCourseQuizRequest, GenerateModuleQuizQuestionsRequest,
-    GenerateModuleQuizQuestionsResponse, ModuleQuizResponse, UpdateModuleQuizRequest,
-    ADAPTIVE_SOURCE_KINDS,
+    validate_adaptive_quiz_settings, validate_quiz_comprehensive_settings, validate_quiz_questions,
+    AdaptiveQuizNextRequest, AdaptiveQuizNextResponse, CreateCourseQuizRequest,
+    GenerateModuleQuizQuestionsRequest, GenerateModuleQuizQuestionsResponse, ModuleQuizResponse,
+    UpdateModuleQuizRequest, ADAPTIVE_SOURCE_KINDS,
 };
 use crate::models::course_structure::{
-    CourseStructureAiRequest, CourseStructureAiResponse, CourseStructureItemResponse,
-    CourseStructureResponse, CreateCourseAssignmentRequest, CreateCourseHeadingRequest,
-    CreateCourseModuleRequest, PatchCourseModuleRequest, ReorderCourseStructureRequest,
+    CourseStructureItemResponse, CourseStructureResponse, CreateCourseAssignmentRequest,
+    CreateCourseHeadingRequest, CreateCourseModuleRequest, PatchCourseModuleRequest,
+    PatchStructureItemRequest, ReorderCourseStructureRequest,
 };
 use crate::models::course_syllabus::{
     CourseSyllabusResponse, GenerateSyllabusSectionRequest, GenerateSyllabusSectionResponse,
-    SyllabusSection, UpdateCourseSyllabusRequest,
+    SyllabusAcceptanceStatusResponse, SyllabusSection, UpdateCourseSyllabusRequest,
 };
 use crate::models::enrollment::{
-    AddEnrollmentsRequest, AddEnrollmentsResponse, CourseEnrollmentsResponse,
+    AddEnrollmentsRequest, AddEnrollmentsResponse, CourseEnrollmentsResponse, EnrollSelfAsStudentResponse,
 };
 use crate::models::rbac::CourseScopedRolesResponse;
 use crate::models::settings_ai::{GenerateCourseImageRequest, GenerateCourseImageResponse};
@@ -38,10 +39,11 @@ use crate::repos::course_grading::PutError;
 use crate::repos::course_grants;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
-use crate::repos::course_module_quizzes;
+use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
+use crate::repos::syllabus_acceptance;
 use crate::repos::rbac;
 use crate::repos::user;
 use crate::repos::user_ai_settings;
@@ -50,17 +52,17 @@ use crate::services::ai::OpenRouterError;
 use crate::services::auth;
 use crate::services::adaptive_quiz_ai;
 use crate::services::course_export_import;
-use crate::services::course_structure_ai;
 use crate::services::quiz_generation_ai;
 use crate::services::syllabus_section_ai;
 use crate::state::AppState;
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
-    routing::{get, patch, post, put},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 use chrono::Utc;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 const PERM_COURSE_CREATE: &str = "global:app:course:create";
@@ -121,10 +123,6 @@ pub fn router() -> Router<AppState> {
             post(structure_reorder_handler),
         )
         .route(
-            "/api/v1/courses/{course_code}/structure/ai-assist",
-            post(course_structure_ai_handler),
-        )
-        .route(
             "/api/v1/courses/{course_code}/generate-image",
             post(generate_image_handler),
         )
@@ -137,12 +135,28 @@ pub fn router() -> Router<AppState> {
             get(list_course_scoped_roles_handler),
         )
         .route(
+            "/api/v1/courses/{course_code}/enrollments/self-as-student",
+            post(enroll_self_as_student_handler),
+        )
+        .route(
             "/api/v1/courses/{course_code}/enrollments",
             get(enrollments_handler).post(add_enrollments_handler),
         )
         .route(
+            "/api/v1/courses/{course_code}/enrollments/{enrollment_id}",
+            delete(delete_enrollment_handler),
+        )
+        .route(
             "/api/v1/courses/{course_code}/syllabus",
             get(syllabus_get_handler).patch(syllabus_patch_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/syllabus/acceptance-status",
+            get(syllabus_acceptance_status_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/syllabus/accept",
+            post(syllabus_accept_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/syllabus/generate-section",
@@ -176,7 +190,11 @@ pub fn router() -> Router<AppState> {
             "/api/v1/courses/{course_code}/structure/items/{item_id}/assignment-group",
             patch(structure_item_assignment_group_patch_handler),
         )
-}
+        .route(
+            "/api/v1/courses/{course_code}/structure/items/{item_id}",
+            patch(patch_structure_item_handler).delete(archive_structure_item_handler),
+        )
+    }
 
 fn parse_email_list(raw: &str) -> Vec<String> {
     use std::collections::HashSet;
@@ -284,6 +302,15 @@ fn module_quiz_response_for_api(
     row: &course_module_quizzes::CourseItemQuizRow,
     show_adaptive_details: bool,
 ) -> ModuleQuizResponse {
+    let requires_quiz_access_code = row
+        .quiz_access_code
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    let quiz_access_code = show_adaptive_details
+        .then(|| row.quiz_access_code.clone())
+        .flatten()
+        .filter(|s| !s.trim().is_empty());
     ModuleQuizResponse {
         item_id,
         title: row.title.clone(),
@@ -292,7 +319,27 @@ fn module_quiz_response_for_api(
         available_from: row.available_from,
         available_until: row.available_until,
         unlimited_attempts: row.unlimited_attempts,
+        max_attempts: row.max_attempts,
+        grade_attempt_policy: row.grade_attempt_policy.clone(),
+        passing_score_percent: row.passing_score_percent,
+        late_submission_policy: row.late_submission_policy.clone(),
+        late_penalty_percent: row.late_penalty_percent,
+        time_limit_minutes: row.time_limit_minutes,
+        timer_pause_when_tab_hidden: row.timer_pause_when_tab_hidden,
+        per_question_time_limit_seconds: row.per_question_time_limit_seconds,
+        show_score_timing: row.show_score_timing.clone(),
+        review_visibility: row.review_visibility.clone(),
+        review_when: row.review_when.clone(),
         one_question_at_a_time: row.one_question_at_a_time,
+        shuffle_questions: row.shuffle_questions,
+        shuffle_choices: row.shuffle_choices,
+        allow_back_navigation: row.allow_back_navigation,
+        requires_quiz_access_code,
+        quiz_access_code,
+        adaptive_difficulty: row.adaptive_difficulty.clone(),
+        adaptive_topic_balance: row.adaptive_topic_balance,
+        adaptive_stop_rule: row.adaptive_stop_rule.clone(),
+        random_question_pool_count: row.random_question_pool_count,
         questions: row.questions_json.0.clone(),
         updated_at: row.updated_at,
         is_adaptive: row.is_adaptive,
@@ -302,6 +349,112 @@ fn module_quiz_response_for_api(
             .then(|| row.adaptive_source_item_ids.0.clone()),
         adaptive_question_count: row.adaptive_question_count,
     }
+}
+
+fn quiz_settings_patch_requested(req: &UpdateModuleQuizRequest) -> bool {
+    req.available_from.is_some()
+        || req.available_until.is_some()
+        || req.unlimited_attempts.is_some()
+        || req.one_question_at_a_time.is_some()
+        || req.max_attempts.is_some()
+        || req.grade_attempt_policy.is_some()
+        || req.passing_score_percent.is_some()
+        || req.late_submission_policy.is_some()
+        || req.late_penalty_percent.is_some()
+        || req.time_limit_minutes.is_some()
+        || req.timer_pause_when_tab_hidden.is_some()
+        || req.per_question_time_limit_seconds.is_some()
+        || req.show_score_timing.is_some()
+        || req.review_visibility.is_some()
+        || req.review_when.is_some()
+        || req.shuffle_questions.is_some()
+        || req.shuffle_choices.is_some()
+        || req.allow_back_navigation.is_some()
+        || req.quiz_access_code.is_some()
+        || req.adaptive_difficulty.is_some()
+        || req.adaptive_topic_balance.is_some()
+        || req.adaptive_stop_rule.is_some()
+        || req.random_question_pool_count.is_some()
+}
+
+fn merge_quiz_settings_write(
+    cur: &course_module_quizzes::CourseItemQuizRow,
+    req: &UpdateModuleQuizRequest,
+) -> QuizSettingsWrite {
+    let mut s = QuizSettingsWrite::from(cur);
+    if let Some(v) = &req.available_from {
+        s.available_from = v.clone();
+    }
+    if let Some(v) = &req.available_until {
+        s.available_until = v.clone();
+    }
+    if let Some(v) = req.unlimited_attempts {
+        s.unlimited_attempts = v;
+    }
+    if let Some(v) = req.max_attempts {
+        s.max_attempts = v;
+    }
+    if let Some(v) = &req.grade_attempt_policy {
+        s.grade_attempt_policy = v.trim().to_string();
+    }
+    if let Some(v) = &req.passing_score_percent {
+        s.passing_score_percent = *v;
+    }
+    if let Some(v) = &req.late_submission_policy {
+        s.late_submission_policy = v.trim().to_string();
+    }
+    if let Some(v) = &req.late_penalty_percent {
+        s.late_penalty_percent = *v;
+    }
+    if let Some(v) = &req.time_limit_minutes {
+        s.time_limit_minutes = *v;
+    }
+    if let Some(v) = req.timer_pause_when_tab_hidden {
+        s.timer_pause_when_tab_hidden = v;
+    }
+    if let Some(v) = &req.per_question_time_limit_seconds {
+        s.per_question_time_limit_seconds = *v;
+    }
+    if let Some(v) = &req.show_score_timing {
+        s.show_score_timing = v.trim().to_string();
+    }
+    if let Some(v) = &req.review_visibility {
+        s.review_visibility = v.trim().to_string();
+    }
+    if let Some(v) = &req.review_when {
+        s.review_when = v.trim().to_string();
+    }
+    if let Some(v) = req.one_question_at_a_time {
+        s.one_question_at_a_time = v;
+    }
+    if let Some(v) = req.shuffle_questions {
+        s.shuffle_questions = v;
+    }
+    if let Some(v) = req.shuffle_choices {
+        s.shuffle_choices = v;
+    }
+    if let Some(v) = req.allow_back_navigation {
+        s.allow_back_navigation = v;
+    }
+    if let Some(v) = &req.quiz_access_code {
+        s.quiz_access_code = v
+            .as_ref()
+            .map(|c| c.trim().to_string())
+            .filter(|c| !c.is_empty());
+    }
+    if let Some(v) = &req.adaptive_difficulty {
+        s.adaptive_difficulty = v.trim().to_string();
+    }
+    if let Some(v) = req.adaptive_topic_balance {
+        s.adaptive_topic_balance = v;
+    }
+    if let Some(v) = &req.adaptive_stop_rule {
+        s.adaptive_stop_rule = v.trim().to_string();
+    }
+    if let Some(v) = &req.random_question_pool_count {
+        s.random_question_pool_count = *v;
+    }
+    s
 }
 
 fn validate_syllabus_sections(sections: &[SyllabusSection]) -> Result<(), AppError> {
@@ -328,6 +481,23 @@ fn validate_syllabus_sections(sections: &[SyllabusSection]) -> Result<(), AppErr
     Ok(())
 }
 
+async fn syllabus_acceptance_pending_for_user(
+    pool: &PgPool,
+    course_code: &str,
+    course_id: Uuid,
+    user_id: Uuid,
+    require: bool,
+) -> Result<bool, AppError> {
+    if !require {
+        return Ok(false);
+    }
+    let required_perm = course_grants::course_item_create_permission(course_code);
+    if rbac::user_has_permission(pool, user_id, &required_perm).await? {
+        return Ok(false);
+    }
+    Ok(!syllabus_acceptance::has_accepted(pool, user_id, course_id).await?)
+}
+
 async fn syllabus_get_handler(
     State(state): State<AppState>,
     Path(course_code): Path<String>,
@@ -342,15 +512,84 @@ async fn syllabus_get_handler(
         return Err(AppError::NotFound);
     };
 
-    let row = course_syllabus::get_sections(&state.pool, course_id).await?;
-    let (sections, updated_at) = match row {
-        Some((s, t)) => (s, t),
-        None => (Vec::new(), Utc::now()),
+    let row = course_syllabus::get_for_course(&state.pool, course_id).await?;
+    let (sections, updated_at, require) = match row {
+        Some((s, t, r)) => (s, t, r),
+        None => (Vec::new(), Utc::now(), false),
     };
+    let syllabus_acceptance_pending = syllabus_acceptance_pending_for_user(
+        &state.pool,
+        &course_code,
+        course_id,
+        user.user_id,
+        require,
+    )
+    .await?;
     Ok(Json(CourseSyllabusResponse {
         sections,
         updated_at,
+        require_syllabus_acceptance: require,
+        syllabus_acceptance_pending,
     }))
+}
+
+async fn syllabus_acceptance_status_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<SyllabusAcceptanceStatusResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let require = course_syllabus::get_for_course(&state.pool, course_id)
+        .await?
+        .map(|(_, _, r)| r)
+        .unwrap_or(false);
+
+    let has_accepted_syllabus = if !require {
+        true
+    } else {
+        let required_perm = course_grants::course_item_create_permission(&course_code);
+        if rbac::user_has_permission(&state.pool, user.user_id, &required_perm).await? {
+            true
+        } else {
+            syllabus_acceptance::has_accepted(&state.pool, user.user_id, course_id).await?
+        }
+    };
+
+    Ok(Json(SyllabusAcceptanceStatusResponse {
+        require_syllabus_acceptance: require,
+        has_accepted_syllabus,
+    }))
+}
+
+async fn syllabus_accept_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let require = course_syllabus::get_for_course(&state.pool, course_id)
+        .await?
+        .map(|(_, _, r)| r)
+        .unwrap_or(false);
+
+    if !require {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    syllabus_acceptance::record(&state.pool, user.user_id, course_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn syllabus_generate_section_handler(
@@ -427,12 +666,28 @@ async fn syllabus_patch_handler(
         return Err(AppError::NotFound);
     };
 
-    let updated_at =
-        course_syllabus::upsert_sections(&state.pool, course_id, &req.sections).await?;
+    let updated_at = course_syllabus::upsert_syllabus(
+        &state.pool,
+        course_id,
+        &req.sections,
+        req.require_syllabus_acceptance,
+    )
+    .await?;
+
+    let syllabus_acceptance_pending = syllabus_acceptance_pending_for_user(
+        &state.pool,
+        &course_code,
+        course_id,
+        user.user_id,
+        req.require_syllabus_acceptance,
+    )
+    .await?;
 
     Ok(Json(CourseSyllabusResponse {
         sections: req.sections,
         updated_at,
+        require_syllabus_acceptance: req.require_syllabus_acceptance,
+        syllabus_acceptance_pending,
     }))
 }
 
@@ -498,7 +753,7 @@ async fn structure_list_handler(
     } else {
         course_structure::filter_structure_for_student_view(rows, Utc::now())
     };
-    let items: Vec<CourseStructureItemResponse> = rows.into_iter().map(Into::into).collect();
+    let items = course_structure::rows_to_responses_with_quiz_adaptive(&state.pool, course_id, rows).await?;
     Ok(Json(CourseStructureResponse { items }))
 }
 
@@ -535,53 +790,8 @@ async fn structure_reorder_handler(
     })?;
 
     let rows = course_structure::list_for_course(&state.pool, course_id).await?;
-    let items: Vec<CourseStructureItemResponse> = rows.into_iter().map(Into::into).collect();
+    let items = course_structure::rows_to_responses_with_quiz_adaptive(&state.pool, course_id, rows).await?;
     Ok(Json(CourseStructureResponse { items }))
-}
-
-async fn course_structure_ai_handler(
-    State(state): State<AppState>,
-    Path(course_code): Path<String>,
-    headers: HeaderMap,
-    Json(req): Json<CourseStructureAiRequest>,
-) -> Result<Json<CourseStructureAiResponse>, AppError> {
-    let user = auth_user(&state, &headers)?;
-    require_course_access(&state, &course_code, user.user_id).await?;
-
-    let required = course_grants::course_item_create_permission(&course_code);
-    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
-        return Err(AppError::Forbidden);
-    }
-
-    let msg = req.message.trim();
-    if msg.is_empty() {
-        return Err(AppError::InvalidInput("Message is required.".into()));
-    }
-
-    let client = state
-        .open_router
-        .as_ref()
-        .ok_or(AppError::AiNotConfigured)?;
-
-    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
-        return Err(AppError::NotFound);
-    };
-
-    let model = user_ai_settings::get_course_setup_model_id(&state.pool, user.user_id).await?;
-
-    let (items, assistant_message) = course_structure_ai::run_course_structure_ai(
-        &state.pool,
-        client.as_ref(),
-        &model,
-        course_id,
-        msg,
-    )
-    .await?;
-
-    Ok(Json(CourseStructureAiResponse {
-        items,
-        assistant_message,
-    }))
 }
 
 async fn create_course_module_handler(
@@ -608,7 +818,8 @@ async fn create_course_module_handler(
     };
 
     let row = course_structure::insert_module(&state.pool, course_id, title).await?;
-    Ok(Json(row.into()))
+    let item = course_structure::row_to_response_with_quiz_adaptive(&state.pool, course_id, row).await?;
+    Ok(Json(item))
 }
 
 async fn patch_course_module_handler(
@@ -647,7 +858,8 @@ async fn patch_course_module_handler(
         sqlx::Error::RowNotFound => AppError::NotFound,
         _ => e.into(),
     })?;
-    Ok(Json(row.into()))
+    let item = course_structure::row_to_response_with_quiz_adaptive(&state.pool, course_id, row).await?;
+    Ok(Json(item))
 }
 
 async fn create_module_heading_handler(
@@ -680,7 +892,8 @@ async fn create_module_heading_handler(
                 sqlx::Error::RowNotFound => AppError::NotFound,
                 _ => e.into(),
             })?;
-    Ok(Json(row.into()))
+    let item = course_structure::row_to_response_with_quiz_adaptive(&state.pool, course_id, row).await?;
+    Ok(Json(item))
 }
 
 async fn create_module_assignment_handler(
@@ -715,7 +928,8 @@ async fn create_module_assignment_handler(
                 sqlx::Error::RowNotFound => AppError::NotFound,
                 _ => e.into(),
             })?;
-    Ok(Json(row.into()))
+    let item = course_structure::row_to_response_with_quiz_adaptive(&state.pool, course_id, row).await?;
+    Ok(Json(item))
 }
 
 async fn create_module_content_page_handler(
@@ -752,7 +966,8 @@ async fn create_module_content_page_handler(
         sqlx::Error::RowNotFound => AppError::NotFound,
         _ => e.into(),
     })?;
-    Ok(Json(row.into()))
+    let item = course_structure::row_to_response_with_quiz_adaptive(&state.pool, course_id, row).await?;
+    Ok(Json(item))
 }
 
 async fn create_module_quiz_handler(
@@ -784,7 +999,8 @@ async fn create_module_quiz_handler(
             sqlx::Error::RowNotFound => AppError::NotFound,
             _ => e.into(),
         })?;
-    Ok(Json(row.into()))
+    let item = course_structure::row_to_response_with_quiz_adaptive(&state.pool, course_id, row).await?;
+    Ok(Json(item))
 }
 
 async fn module_content_page_get_handler(
@@ -1049,6 +1265,35 @@ async fn module_quiz_patch_handler(
         return Err(AppError::NotFound);
     };
 
+    let patch_quiz_settings = quiz_settings_patch_requested(&req);
+    let mut quiz_settings_write: Option<QuizSettingsWrite> = None;
+    if patch_quiz_settings {
+        let Some(cur) =
+            course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+        else {
+            return Err(AppError::NotFound);
+        };
+        let merged = merge_quiz_settings_write(&cur, &req);
+        validate_quiz_comprehensive_settings(
+            merged.unlimited_attempts,
+            merged.max_attempts,
+            &merged.grade_attempt_policy,
+            merged.passing_score_percent,
+            &merged.late_submission_policy,
+            merged.late_penalty_percent,
+            merged.time_limit_minutes,
+            merged.per_question_time_limit_seconds,
+            &merged.show_score_timing,
+            &merged.review_visibility,
+            &merged.review_when,
+            &merged.adaptive_difficulty,
+            &merged.adaptive_stop_rule,
+            merged.random_question_pool_count,
+            merged.quiz_access_code.as_deref(),
+        )?;
+        quiz_settings_write = Some(merged);
+    }
+
     if let Some(title) = &req.title {
         let title = title.trim();
         if title.is_empty() {
@@ -1087,19 +1332,12 @@ async fn module_quiz_patch_handler(
             })?;
     }
 
-    if req.available_from.is_some()
-        || req.available_until.is_some()
-        || req.unlimited_attempts.is_some()
-        || req.one_question_at_a_time.is_some()
-    {
-        let updated = course_module_quizzes::update_delivery_settings(
+    if let Some(ref merged) = quiz_settings_write {
+        let updated = course_module_quizzes::write_quiz_settings(
             &state.pool,
             course_id,
             item_id,
-            req.available_from,
-            req.available_until,
-            req.unlimited_attempts,
-            req.one_question_at_a_time,
+            merged,
         )
         .await?;
         if updated.is_none() {
@@ -1259,6 +1497,9 @@ async fn module_quiz_adaptive_next_handler(
         &model,
         &bundle,
         &row.adaptive_system_prompt,
+        &row.adaptive_difficulty,
+        row.adaptive_topic_balance,
+        &row.adaptive_stop_rule,
         total,
         &req.history,
     )
@@ -1386,6 +1627,83 @@ async fn grading_put_handler(
     }
 }
 
+async fn patch_structure_item_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<PatchStructureItemRequest>,
+) -> Result<Json<CourseStructureItemResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    if req.title.is_none() && req.published.is_none() {
+        return Err(AppError::InvalidInput(
+            "Provide title and/or published.".into(),
+        ));
+    }
+
+    let title_opt: Option<&str> = match &req.title {
+        None => None,
+        Some(s) => {
+            let t = s.trim();
+            if t.is_empty() {
+                return Err(AppError::InvalidInput("Title cannot be empty.".into()));
+            }
+            Some(t)
+        }
+    };
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let row = course_structure::patch_child_structure_item(
+        &state.pool,
+        course_id,
+        item_id,
+        title_opt,
+        req.published,
+    )
+    .await
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => AppError::NotFound,
+        _ => e.into(),
+    })?;
+    let item = course_structure::row_to_response_with_quiz_adaptive(&state.pool, course_id, row).await?;
+    Ok(Json(item))
+}
+
+async fn archive_structure_item_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    course_structure::archive_child_structure_item(&state.pool, course_id, item_id)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => AppError::NotFound,
+            _ => e.into(),
+        })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn structure_item_assignment_group_patch_handler(
     State(state): State<AppState>,
     Path((course_code, item_id)): Path<(String, Uuid)>,
@@ -1437,21 +1755,27 @@ async fn structure_item_assignment_group_patch_handler(
     else {
         return Err(AppError::NotFound);
     };
-    Ok(Json(CourseStructureItemResponse::from(updated)))
+    let item = course_structure::row_to_response_with_quiz_adaptive(&state.pool, course_id, updated).await?;
+    Ok(Json(item))
 }
 
 async fn get_handler(
     State(state): State<AppState>,
     Path(course_code): Path<String>,
     headers: HeaderMap,
-) -> Result<Json<CoursePublic>, AppError> {
+) -> Result<Json<CourseWithViewerResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
     let row = course::get_by_course_code(&state.pool, &course_code)
         .await?
         .ok_or(AppError::NotFound)?;
-    Ok(Json(row))
+    let viewer_enrollment_roles =
+        enrollment::user_roles_in_course(&state.pool, &course_code, user.user_id).await?;
+    Ok(Json(CourseWithViewerResponse {
+        course: row,
+        viewer_enrollment_roles,
+    }))
 }
 
 async fn course_export_get_handler(
@@ -1498,12 +1822,58 @@ async fn enrollments_handler(
     require_course_access(&state, &course_code, user.user_id).await?;
 
     let enrollments = enrollment::list_for_course_code(&state.pool, &course_code).await?;
-    let viewer_enrollment_role =
-        enrollment::user_role_in_course(&state.pool, &course_code, user.user_id).await?;
+    let viewer_enrollment_roles =
+        enrollment::user_roles_in_course(&state.pool, &course_code, user.user_id).await?;
     Ok(Json(CourseEnrollmentsResponse {
         enrollments,
-        viewer_enrollment_role,
+        viewer_enrollment_roles,
     }))
+}
+
+async fn delete_enrollment_handler(
+    State(state): State<AppState>,
+    Path((course_code, enrollment_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_enrollments_update_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    match enrollment::delete_enrollment_for_course(&state.pool, &course_code, enrollment_id).await? {
+        enrollment::EnrollmentDeleteOutcome::Deleted => Ok(StatusCode::NO_CONTENT),
+        enrollment::EnrollmentDeleteOutcome::NotFound => Err(AppError::NotFound),
+        enrollment::EnrollmentDeleteOutcome::CannotRemoveHighestRole => Err(AppError::InvalidInput(
+            "You can't remove this enrollment while it's the person's primary role in the course."
+                .into(),
+        )),
+    }
+}
+
+async fn enroll_self_as_student_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<EnrollSelfAsStudentResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_has_enrollment_role(&state.pool, &course_code, user.user_id, "teacher")
+        .await?
+    {
+        return Err(AppError::Forbidden);
+    }
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let created =
+        enrollment::insert_student_if_missing(&state.pool, course_id, user.user_id).await?;
+    Ok(Json(EnrollSelfAsStudentResponse { created }))
 }
 
 async fn list_course_scoped_roles_handler(
@@ -1573,9 +1943,9 @@ async fn add_enrollments_handler(
                 already_enrolled.push(row.email);
                 continue;
             }
-            let existed_before = enrollment::user_role_in_course(&state.pool, &course_code, row.id)
+            let existed_before = !enrollment::user_roles_in_course(&state.pool, &course_code, row.id)
                 .await?
-                .is_some();
+                .is_empty();
 
             enrollment::upsert_instructor_enrollment(&state.pool, &course_code, course_id, row.id)
                 .await?;

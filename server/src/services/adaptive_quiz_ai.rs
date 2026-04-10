@@ -173,6 +173,9 @@ pub async fn generate_adaptive_next_question(
     model: &str,
     reference_materials: &str,
     instructor_system_prompt: &str,
+    adaptive_difficulty: &str,
+    adaptive_topic_balance: bool,
+    adaptive_stop_rule: &str,
     total_questions_allowed: i32,
     history: &[AdaptiveQuizHistoryTurn],
 ) -> Result<AdaptiveQuizGeneratedQuestion, AppError> {
@@ -188,11 +191,24 @@ pub async fn generate_adaptive_next_question(
     }
 
     let cap = total_questions_allowed.clamp(1, MAX_ADAPTIVE_QUESTION_COUNT);
+    let balance_note = if adaptive_topic_balance {
+        "Aim to spread coverage across the reference materials when possible."
+    } else {
+        "You may focus on the most relevant reference sections."
+    };
+    let stop_note = if adaptive_stop_rule == "mastery_estimate" {
+        "If the learner has demonstrated strong, consistent understanding in recent answers, you may shift toward synthesis or harder application rather than repeating similar recall items before the cap."
+    } else {
+        "Continue generating questions until the question cap is reached."
+    };
     let user_body = format!(
         "Reference course materials (for grounding only; do not quote long passages verbatim):\n\
          ---\n{reference_materials}\n---\n\n\
          Instructor system prompt (follow unless it conflicts with safety or schema):\n\
          ---\n{instructor_system_prompt}\n---\n\n\
+         Target difficulty level for this quiz: {adaptive_difficulty}\n\
+         Topic coverage: {balance_note}\n\
+         Stop rule: {stop_note}\n\n\
          totalQuestionsAllowed: {cap}\n\
          questionsAlreadyAnswered: {answered}\n\n\
          Learner history (most recent last). Each entry includes what they saw and how they answered. \
@@ -201,6 +217,7 @@ pub async fn generate_adaptive_next_question(
          Generate the next single question as JSON (one object only) following your system instructions.",
         reference_materials = reference_materials.trim(),
         instructor_system_prompt = instructor_system_prompt.trim(),
+        adaptive_difficulty = adaptive_difficulty.trim(),
         history = history_json(history).to_string()
     );
 

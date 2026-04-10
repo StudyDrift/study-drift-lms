@@ -256,9 +256,88 @@ pub async fn set_role_permissions(
     Ok(())
 }
 
+struct CourseViewFilter {
+    course_code: String,
+    view_as_student: bool,
+}
+
+/// Permission catalog strings for a named app role (e.g. `Teacher`, `Student`).
+pub async fn list_permission_strings_for_role_name(
+    pool: &PgPool,
+    role_name: &str,
+) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar(&format!(
+        r#"
+        SELECT p.permission_string
+        FROM {} r
+        INNER JOIN {} rp ON rp.role_id = r.id
+        INNER JOIN {} p ON p.id = rp.permission_id
+        WHERE r.name = $1
+        ORDER BY p.permission_string ASC
+        "#,
+        schema::APP_ROLES,
+        schema::RBAC_ROLE_PERMISSIONS,
+        schema::PERMISSIONS
+    ))
+    .bind(role_name)
+    .fetch_all(pool)
+    .await
+}
+
+fn filter_course_concrete_for_student_view(
+    course_code: &str,
+    grants: BTreeSet<String>,
+    teacher_catalog: &[String],
+    student_catalog: &[String],
+) -> BTreeSet<String> {
+    let prefix = format!("course:{}:", course_code);
+    grants
+        .into_iter()
+        .filter(|p| {
+            if !p.starts_with(&prefix) {
+                return true;
+            }
+            let teacher_match = any_grant_matches(teacher_catalog, p);
+            let student_match = any_grant_matches(student_catalog, p);
+            if teacher_match && !student_match {
+                return false;
+            }
+            true
+        })
+        .collect()
+}
+
 pub async fn list_granted_permission_strings(
     pool: &PgPool,
     user_id: Uuid,
+) -> Result<Vec<String>, sqlx::Error> {
+    list_granted_permission_strings_inner(pool, user_id, None).await
+}
+
+/// Like [`list_granted_permission_strings`], but when `view_as_student` is true, course-scoped
+/// permissions for `course_code` are reduced to those also granted to the Student role (or shared
+/// with Student), and staff-only placeholder expansion for that course is skipped.
+pub async fn list_granted_permission_strings_course_view(
+    pool: &PgPool,
+    user_id: Uuid,
+    course_code: &str,
+    view_as_student: bool,
+) -> Result<Vec<String>, sqlx::Error> {
+    list_granted_permission_strings_inner(
+        pool,
+        user_id,
+        Some(CourseViewFilter {
+            course_code: course_code.to_string(),
+            view_as_student,
+        }),
+    )
+    .await
+}
+
+async fn list_granted_permission_strings_inner(
+    pool: &PgPool,
+    user_id: Uuid,
+    course_view: Option<CourseViewFilter>,
 ) -> Result<Vec<String>, sqlx::Error> {
     let raw: Vec<String> = sqlx::query_scalar(&format!(
         r#"
@@ -284,8 +363,13 @@ pub async fn list_granted_permission_strings(
     .fetch_all(pool)
     .await?;
 
-    let staff_course_codes =
+    let mut staff_course_codes =
         enrollment::list_course_codes_where_user_is_staff(pool, user_id).await?;
+    if let Some(ref cv) = course_view {
+        if cv.view_as_student {
+            staff_course_codes.retain(|c| c != &cv.course_code);
+        }
+    }
 
     let mut out: BTreeSet<String> = BTreeSet::new();
     for s in raw {
@@ -299,6 +383,18 @@ pub async fn list_granted_permission_strings(
             out.insert(s);
         }
     }
+
+    let out = if let Some(ref cv) = course_view {
+        if cv.view_as_student {
+            let teacher = list_permission_strings_for_role_name(pool, "Teacher").await?;
+            let student = list_permission_strings_for_role_name(pool, "Student").await?;
+            filter_course_concrete_for_student_view(&cv.course_code, out, &teacher, &student)
+        } else {
+            out
+        }
+    } else {
+        out
+    };
 
     Ok(out.into_iter().collect())
 }

@@ -6,12 +6,15 @@ import { MarkdownArticleView } from '../../components/syllabus/SyllabusMarkdownV
 import { markdownToSectionsForEditor, sectionsToMarkdown } from '../../components/syllabus/syllabusSectionMarkdown'
 import { usePermissions } from '../../context/usePermissions'
 import {
+  defaultQuizAdvancedSettings,
   fetchCourse,
   fetchCourseStructure,
   fetchModuleQuiz,
   generateModuleQuizQuestions,
   patchModuleQuiz,
+  quizAdvancedSettingsFromPayload,
   type CourseStructureItem,
+  type QuizAdvancedSettings,
   type QuizQuestion,
   type SyllabusSection,
 } from '../../lib/coursesApi'
@@ -53,6 +56,14 @@ function formatQuizDateTime(iso: string | null): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return 'Not set'
   return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function formatGradePolicyShort(p: string): string {
+  if (p === 'highest') return 'Highest score'
+  if (p === 'latest') return 'Latest attempt'
+  if (p === 'first') return 'First attempt'
+  if (p === 'average') return 'Average'
+  return p
 }
 
 function newLocalId(): string {
@@ -270,6 +281,8 @@ export default function CourseModuleQuizPage() {
   const [draftAvailableUntilLocal, setDraftAvailableUntilLocal] = useState('')
   const [draftUnlimitedAttempts, setDraftUnlimitedAttempts] = useState(false)
   const [draftOneQuestionAtATime, setDraftOneQuestionAtATime] = useState(false)
+  const [quizAdvanced, setQuizAdvanced] = useState<QuizAdvancedSettings>(() => defaultQuizAdvancedSettings())
+  const [draftQuizAdvanced, setDraftQuizAdvanced] = useState<QuizAdvancedSettings>(() => defaultQuizAdvancedSettings())
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [questionsOpen, setQuestionsOpen] = useState(false)
@@ -308,6 +321,9 @@ export default function CourseModuleQuizPage() {
       setAvailableUntilAt(data.availableUntil ?? null)
       setUnlimitedAttempts(Boolean(data.unlimitedAttempts))
       setOneQuestionAtATime(Boolean(data.oneQuestionAtATime))
+      const adv = quizAdvancedSettingsFromPayload(data)
+      setQuizAdvanced(adv)
+      setDraftQuizAdvanced(adv)
       setUpdatedAt(data.updatedAt)
       setQuestions(data.questions)
       setIsAdaptive(Boolean(data.isAdaptive))
@@ -326,6 +342,9 @@ export default function CourseModuleQuizPage() {
       setAvailableUntilAt(null)
       setUnlimitedAttempts(false)
       setOneQuestionAtATime(false)
+      const blankAdv = defaultQuizAdvancedSettings()
+      setQuizAdvanced(blankAdv)
+      setDraftQuizAdvanced(blankAdv)
       setUpdatedAt(null)
       setQuestions([])
       setIsAdaptive(false)
@@ -417,6 +436,7 @@ export default function CourseModuleQuizPage() {
     setDraftAvailableUntilLocal(isoToDatetimeLocalValue(availableUntilAt))
     setDraftUnlimitedAttempts(unlimitedAttempts)
     setDraftOneQuestionAtATime(oneQuestionAtATime)
+    setDraftQuizAdvanced(quizAdvanced)
     setEditingContent(true)
   }
 
@@ -430,6 +450,7 @@ export default function CourseModuleQuizPage() {
     setDraftAvailableUntilLocal(isoToDatetimeLocalValue(availableUntilAt))
     setDraftUnlimitedAttempts(unlimitedAttempts)
     setDraftOneQuestionAtATime(oneQuestionAtATime)
+    setDraftQuizAdvanced(quizAdvanced)
   }
 
   async function saveContent() {
@@ -443,6 +464,7 @@ export default function CourseModuleQuizPage() {
     setSaveError(null)
     setSaving(true)
     try {
+      const code = draftQuizAdvanced.quizAccessCode.trim()
       const data = await patchModuleQuiz(courseCode, itemId, {
         title: trimmedTitle,
         markdown: body,
@@ -451,6 +473,25 @@ export default function CourseModuleQuizPage() {
         availableUntil: datetimeLocalValueToIso(draftAvailableUntilLocal),
         unlimitedAttempts: draftUnlimitedAttempts,
         oneQuestionAtATime: draftOneQuestionAtATime,
+        maxAttempts: draftQuizAdvanced.maxAttempts,
+        gradeAttemptPolicy: draftQuizAdvanced.gradeAttemptPolicy,
+        passingScorePercent: draftQuizAdvanced.passingScorePercent,
+        lateSubmissionPolicy: draftQuizAdvanced.lateSubmissionPolicy,
+        latePenaltyPercent: draftQuizAdvanced.latePenaltyPercent,
+        timeLimitMinutes: draftQuizAdvanced.timeLimitMinutes,
+        timerPauseWhenTabHidden: draftQuizAdvanced.timerPauseWhenTabHidden,
+        perQuestionTimeLimitSeconds: draftQuizAdvanced.perQuestionTimeLimitSeconds,
+        showScoreTiming: draftQuizAdvanced.showScoreTiming,
+        reviewVisibility: draftQuizAdvanced.reviewVisibility,
+        reviewWhen: draftQuizAdvanced.reviewWhen,
+        shuffleQuestions: draftQuizAdvanced.shuffleQuestions,
+        shuffleChoices: draftQuizAdvanced.shuffleChoices,
+        allowBackNavigation: draftQuizAdvanced.allowBackNavigation,
+        quizAccessCode: code.length > 0 ? code : null,
+        adaptiveDifficulty: draftQuizAdvanced.adaptiveDifficulty,
+        adaptiveTopicBalance: draftQuizAdvanced.adaptiveTopicBalance,
+        adaptiveStopRule: draftQuizAdvanced.adaptiveStopRule,
+        randomQuestionPoolCount: draftQuizAdvanced.randomQuestionPoolCount,
       })
       setTitle(data.title)
       setMarkdown(data.markdown)
@@ -459,6 +500,9 @@ export default function CourseModuleQuizPage() {
       setAvailableUntilAt(data.availableUntil ?? null)
       setUnlimitedAttempts(Boolean(data.unlimitedAttempts))
       setOneQuestionAtATime(Boolean(data.oneQuestionAtATime))
+      const adv = quizAdvancedSettingsFromPayload(data)
+      setQuizAdvanced(adv)
+      setDraftQuizAdvanced(adv)
       setUpdatedAt(data.updatedAt)
       setEditingContent(false)
       setDraft([])
@@ -504,6 +548,7 @@ export default function CourseModuleQuizPage() {
         setAdaptiveQuestionCount(
           typeof data.adaptiveQuestionCount === 'number' ? data.adaptiveQuestionCount : adaptiveCount,
         )
+        setQuizAdvanced(quizAdvancedSettingsFromPayload(data))
         setUpdatedAt(data.updatedAt)
       } else {
         const payload = questionsDraft.map((q) => ({
@@ -523,6 +568,7 @@ export default function CourseModuleQuizPage() {
         setAdaptiveSystemPrompt(data.adaptiveSystemPrompt ?? '')
         setAdaptiveSourceItemIds(data.adaptiveSourceItemIds ?? [])
         setAdaptiveQuestionCount(5)
+        setQuizAdvanced(quizAdvancedSettingsFromPayload(data))
         setUpdatedAt(data.updatedAt)
       }
       setQuestionsOpen(false)
@@ -761,6 +807,52 @@ export default function CourseModuleQuizPage() {
                       {oneQuestionAtATime ? 'Yes' : 'No'}
                     </dd>
                   </div>
+                  {!unlimitedAttempts ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500">Max attempts</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900">{quizAdvanced.maxAttempts}</dd>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500">Grade uses</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900">
+                      {formatGradePolicyShort(quizAdvanced.gradeAttemptPolicy)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500">Passing score</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900">
+                      {quizAdvanced.passingScorePercent != null ? `${quizAdvanced.passingScorePercent}%` : 'Not set'}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500">Time limit</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900">
+                      {quizAdvanced.timeLimitMinutes != null
+                        ? `${quizAdvanced.timeLimitMinutes} min`
+                        : 'Not set'}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500">Shuffle questions</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900">
+                      {quizAdvanced.shuffleQuestions ? 'Yes' : 'No'}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500">Access code</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900">
+                      {quizAdvanced.requiresQuizAccessCode ? 'Required' : 'None'}
+                    </dd>
+                  </div>
+                  {isAdaptive ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500">Adaptive difficulty</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 capitalize">
+                        {quizAdvanced.adaptiveDifficulty}
+                      </dd>
+                    </div>
+                  ) : null}
                 </dl>
               </div>
             </aside>
@@ -796,6 +888,9 @@ export default function CourseModuleQuizPage() {
                     onUnlimitedAttemptsChange={setDraftUnlimitedAttempts}
                     oneQuestionAtATime={draftOneQuestionAtATime}
                     onOneQuestionAtATimeChange={setDraftOneQuestionAtATime}
+                    advanced={draftQuizAdvanced}
+                    onAdvancedChange={setDraftQuizAdvanced}
+                    showAdaptiveSection={isAdaptive}
                   />
                 ) : null
               }
@@ -905,6 +1000,8 @@ export default function CourseModuleQuizPage() {
         itemId={itemId}
         isAdaptive={isAdaptive}
         adaptiveQuestionCount={adaptiveQuestionCount}
+        advanced={quizAdvanced}
+        oneQuestionAtATime={oneQuestionAtATime}
       />
 
       {questionsOpen && (

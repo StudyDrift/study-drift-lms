@@ -101,8 +101,9 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900/40">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Import</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Choose a JSON file produced by this course&apos;s export (or another course you own).
-          The file&apos;s <code className="text-xs">courseCode</code> must match this course.
+          Choose a JSON file from any course export (including another server or environment). The
+          bundle is applied to this course; the <code className="text-xs">courseCode</code> in the
+          file is informational (where it was exported from).
         </p>
 
         <fieldset className="mt-4 space-y-3">

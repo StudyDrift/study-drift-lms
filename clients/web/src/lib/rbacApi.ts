@@ -46,8 +46,20 @@ async function parseJson(res: Response): Promise<unknown> {
 }
 
 /** Effective permission strings for the signed-in user (from all assigned roles). */
-export async function fetchMyPermissionStrings(): Promise<string[]> {
-  const res = await authorizedFetch('/api/v1/me/permissions')
+export async function fetchMyPermissionStrings(options?: {
+  courseCode?: string
+  /** When `student`, the server filters course-scoped grants for that course to match a student experience. */
+  viewAs?: 'teacher' | 'student'
+}): Promise<string[]> {
+  const params = new URLSearchParams()
+  if (options?.courseCode) {
+    params.set('courseCode', options.courseCode)
+    if (options.viewAs === 'student') {
+      params.set('viewAs', 'student')
+    }
+  }
+  const qs = params.toString()
+  const res = await authorizedFetch(`/api/v1/me/permissions${qs ? `?${qs}` : ''}`)
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   const data = raw as { permissionStrings?: string[] }

@@ -19,12 +19,40 @@ use crate::repos::course;
 use crate::repos::course_grading::{self, PutError};
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
-use crate::repos::course_module_quizzes;
+use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use sqlx::PgPool;
 
 const EXPORT_FORMAT_VERSION: i32 = 1;
+
+fn quiz_settings_from_export(body: &ExportedQuizBody) -> QuizSettingsWrite {
+    QuizSettingsWrite {
+        available_from: body.available_from,
+        available_until: body.available_until,
+        unlimited_attempts: body.unlimited_attempts,
+        max_attempts: body.max_attempts,
+        grade_attempt_policy: body.grade_attempt_policy.clone(),
+        passing_score_percent: body.passing_score_percent,
+        late_submission_policy: body.late_submission_policy.clone(),
+        late_penalty_percent: body.late_penalty_percent,
+        time_limit_minutes: body.time_limit_minutes,
+        timer_pause_when_tab_hidden: body.timer_pause_when_tab_hidden,
+        per_question_time_limit_seconds: body.per_question_time_limit_seconds,
+        show_score_timing: body.show_score_timing.clone(),
+        review_visibility: body.review_visibility.clone(),
+        review_when: body.review_when.clone(),
+        one_question_at_a_time: body.one_question_at_a_time,
+        shuffle_questions: body.shuffle_questions,
+        shuffle_choices: body.shuffle_choices,
+        allow_back_navigation: body.allow_back_navigation,
+        quiz_access_code: body.quiz_access_code.clone(),
+        adaptive_difficulty: body.adaptive_difficulty.clone(),
+        adaptive_topic_balance: body.adaptive_topic_balance,
+        adaptive_stop_rule: body.adaptive_stop_rule.clone(),
+        random_question_pool_count: body.random_question_pool_count,
+    }
+}
 const MAX_SYLLABUS_SECTIONS: usize = 50;
 const MAX_SYLLABUS_HEADING_LEN: usize = 512;
 const MAX_SYLLABUS_MARKDOWN_LEN: usize = 200_000;
@@ -100,6 +128,7 @@ fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
     if ex.course_code.trim().is_empty() {
         return Err(AppError::InvalidInput("Export is missing courseCode.".into()));
     }
+    // `courseCode` in the file records the source course; imports may target any course.
     if !GRADING_SCALES.contains(&ex.grading.grading_scale.as_str()) {
         return Err(AppError::InvalidInput("Invalid grading scale in export.".into()));
     }
@@ -274,16 +303,14 @@ async fn apply_module_bodies(
             }
             "quiz" => {
                 if let Some(body) = ex.quizzes.get(&it.id) {
+                    let settings = quiz_settings_from_export(body);
                     course_module_quizzes::upsert_import_body(
                         pool,
                         course_id,
                         it.id,
                         &body.markdown,
                         &body.questions,
-                        body.available_from,
-                        body.available_until,
-                        body.unlimited_attempts,
-                        body.one_question_at_a_time,
+                        &settings,
                         body.is_adaptive,
                         &body.adaptive_system_prompt,
                         &body.adaptive_source_item_ids,
@@ -342,16 +369,14 @@ async fn apply_module_bodies_for_new_items_only(
             }
             "quiz" => {
                 if let Some(body) = ex.quizzes.get(&it.id) {
+                    let settings = quiz_settings_from_export(body);
                     course_module_quizzes::upsert_import_body(
                         pool,
                         course_id,
                         it.id,
                         &body.markdown,
                         &body.questions,
-                        body.available_from,
-                        body.available_until,
-                        body.unlimited_attempts,
-                        body.one_question_at_a_time,
+                        &settings,
                         body.is_adaptive,
                         &body.adaptive_system_prompt,
                         &body.adaptive_source_item_ids,
@@ -461,14 +486,14 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let syllabus = course_syllabus::get_sections(pool, course_id)
-        .await?
-        .map(|(s, _)| s)
-        .unwrap_or_default();
+    let (syllabus, require_syllabus_acceptance) = match course_syllabus::get_for_course(pool, course_id).await? {
+        Some((s, _, r)) => (s, r),
+        None => (Vec::new(), false),
+    };
 
     let structure_rows = course_structure::list_for_course(pool, course_id).await?;
-    let structure: Vec<CourseStructureItemResponse> =
-        structure_rows.into_iter().map(Into::into).collect();
+    let structure =
+        course_structure::rows_to_responses_with_quiz_adaptive(pool, course_id, structure_rows).await?;
 
     let mut content_pages: HashMap<Uuid, ExportedContentPageBody> = HashMap::new();
     let mut assignments: HashMap<Uuid, ExportedAssignmentBody> = HashMap::new();
@@ -516,7 +541,26 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                             available_from: row.available_from,
                             available_until: row.available_until,
                             unlimited_attempts: row.unlimited_attempts,
+                            max_attempts: row.max_attempts,
+                            grade_attempt_policy: row.grade_attempt_policy.clone(),
+                            passing_score_percent: row.passing_score_percent,
+                            late_submission_policy: row.late_submission_policy.clone(),
+                            late_penalty_percent: row.late_penalty_percent,
+                            time_limit_minutes: row.time_limit_minutes,
+                            timer_pause_when_tab_hidden: row.timer_pause_when_tab_hidden,
+                            per_question_time_limit_seconds: row.per_question_time_limit_seconds,
+                            show_score_timing: row.show_score_timing.clone(),
+                            review_visibility: row.review_visibility.clone(),
+                            review_when: row.review_when.clone(),
                             one_question_at_a_time: row.one_question_at_a_time,
+                            shuffle_questions: row.shuffle_questions,
+                            shuffle_choices: row.shuffle_choices,
+                            allow_back_navigation: row.allow_back_navigation,
+                            quiz_access_code: row.quiz_access_code.clone(),
+                            adaptive_difficulty: row.adaptive_difficulty.clone(),
+                            adaptive_topic_balance: row.adaptive_topic_balance,
+                            adaptive_stop_rule: row.adaptive_stop_rule.clone(),
+                            random_question_pool_count: row.random_question_pool_count,
                             questions: row.questions_json.0,
                             is_adaptive: row.is_adaptive,
                             adaptive_system_prompt: row.adaptive_system_prompt,
@@ -536,6 +580,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         course_code: course.course_code.clone(),
         course: snap,
         syllabus,
+        require_syllabus_acceptance,
         grading,
         structure,
         content_pages,
@@ -551,12 +596,6 @@ pub async fn apply_import(
     ex: &CourseExportV1,
 ) -> Result<(), AppError> {
     validate_export_payload(ex)?;
-    if ex.course_code != target_course_code {
-        return Err(AppError::InvalidInput(
-            "This export belongs to a different course. Import it only into the matching course."
-                .into(),
-        ));
-    }
 
     let course_id = course::get_id_by_course_code(pool, target_course_code)
         .await?
@@ -569,7 +608,7 @@ pub async fn apply_import(
                 .map_err(AppError::from)?;
             apply_grading_from_export(pool, target_course_code, &ex.grading).await?;
             apply_course_snapshot(pool, target_course_code, &ex.course).await?;
-            course_syllabus::upsert_sections(pool, course_id, &ex.syllabus)
+            course_syllabus::upsert_syllabus(pool, course_id, &ex.syllabus, ex.require_syllabus_acceptance)
                 .await
                 .map_err(AppError::from)?;
             for it in &ex.structure {
@@ -596,7 +635,7 @@ pub async fn apply_import(
         CourseImportMode::Overwrite => {
             apply_grading_from_export(pool, target_course_code, &ex.grading).await?;
             apply_course_snapshot(pool, target_course_code, &ex.course).await?;
-            course_syllabus::upsert_sections(pool, course_id, &ex.syllabus)
+            course_syllabus::upsert_syllabus(pool, course_id, &ex.syllabus, ex.require_syllabus_acceptance)
                 .await
                 .map_err(AppError::from)?;
             let keep: HashSet<Uuid> = ex.structure.iter().map(|i| i.id).collect();

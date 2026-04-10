@@ -35,6 +35,7 @@ export default function CourseSyllabus() {
   const { allows, loading: permLoading } = usePermissions()
 
   const [sections, setSections] = useState<SyllabusSection[]>([])
+  const [requireSyllabusAcceptance, setRequireSyllabusAcceptance] = useState(false)
   const [draft, setDraft] = useState<SyllabusSection[]>([])
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -64,12 +65,14 @@ export default function CourseSyllabus() {
         fetchCourse(courseCode),
       ])
       setSections(data.sections)
+      setRequireSyllabusAcceptance(Boolean(data.requireSyllabusAcceptance))
       setUpdatedAt(data.updatedAt)
       setMdPreset(courseRow.markdownThemePreset)
       setMdCustom(courseRow.markdownThemeCustom)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load the syllabus.')
       setSections([])
+      setRequireSyllabusAcceptance(false)
       setUpdatedAt(null)
     } finally {
       setLoading(false)
@@ -101,8 +104,12 @@ export default function CourseSyllabus() {
     setSaveError(null)
     setSaving(true)
     try {
-      const data = await patchCourseSyllabus(courseCode, { sections: draft })
+      const data = await patchCourseSyllabus(courseCode, {
+        sections: draft,
+        requireSyllabusAcceptance,
+      })
       setSections(data.sections)
+      setRequireSyllabusAcceptance(Boolean(data.requireSyllabusAcceptance))
       setUpdatedAt(data.updatedAt)
       setEditing(false)
       setDraft([])
@@ -204,6 +211,8 @@ export default function CourseSyllabus() {
               sections={draft}
               onChange={setDraft}
               disabled={saving}
+              requireSyllabusAcceptance={requireSyllabusAcceptance}
+              onRequireSyllabusAcceptanceChange={setRequireSyllabusAcceptance}
             />
           </div>
         </div>

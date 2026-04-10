@@ -22,11 +22,88 @@ pub struct CourseItemQuizRow {
     pub available_from: Option<DateTime<Utc>>,
     pub available_until: Option<DateTime<Utc>>,
     pub unlimited_attempts: bool,
+    pub max_attempts: i32,
+    pub grade_attempt_policy: String,
+    pub passing_score_percent: Option<i32>,
+    pub late_submission_policy: String,
+    pub late_penalty_percent: Option<i32>,
+    pub time_limit_minutes: Option<i32>,
+    pub timer_pause_when_tab_hidden: bool,
+    pub per_question_time_limit_seconds: Option<i32>,
+    pub show_score_timing: String,
+    pub review_visibility: String,
+    pub review_when: String,
     pub one_question_at_a_time: bool,
+    pub shuffle_questions: bool,
+    pub shuffle_choices: bool,
+    pub allow_back_navigation: bool,
+    pub quiz_access_code: Option<String>,
+    pub adaptive_difficulty: String,
+    pub adaptive_topic_balance: bool,
+    pub adaptive_stop_rule: String,
+    pub random_question_pool_count: Option<i32>,
     pub is_adaptive: bool,
     pub adaptive_system_prompt: String,
     pub adaptive_source_item_ids: Json<Vec<Uuid>>,
     pub adaptive_question_count: i32,
+}
+
+/// Full quiz scheduling / behavior row for PATCH merge + UPDATE.
+#[derive(Debug, Clone)]
+pub struct QuizSettingsWrite {
+    pub available_from: Option<DateTime<Utc>>,
+    pub available_until: Option<DateTime<Utc>>,
+    pub unlimited_attempts: bool,
+    pub max_attempts: i32,
+    pub grade_attempt_policy: String,
+    pub passing_score_percent: Option<i32>,
+    pub late_submission_policy: String,
+    pub late_penalty_percent: Option<i32>,
+    pub time_limit_minutes: Option<i32>,
+    pub timer_pause_when_tab_hidden: bool,
+    pub per_question_time_limit_seconds: Option<i32>,
+    pub show_score_timing: String,
+    pub review_visibility: String,
+    pub review_when: String,
+    pub one_question_at_a_time: bool,
+    pub shuffle_questions: bool,
+    pub shuffle_choices: bool,
+    pub allow_back_navigation: bool,
+    pub quiz_access_code: Option<String>,
+    pub adaptive_difficulty: String,
+    pub adaptive_topic_balance: bool,
+    pub adaptive_stop_rule: String,
+    pub random_question_pool_count: Option<i32>,
+}
+
+impl From<&CourseItemQuizRow> for QuizSettingsWrite {
+    fn from(row: &CourseItemQuizRow) -> Self {
+        Self {
+            available_from: row.available_from,
+            available_until: row.available_until,
+            unlimited_attempts: row.unlimited_attempts,
+            max_attempts: row.max_attempts,
+            grade_attempt_policy: row.grade_attempt_policy.clone(),
+            passing_score_percent: row.passing_score_percent,
+            late_submission_policy: row.late_submission_policy.clone(),
+            late_penalty_percent: row.late_penalty_percent,
+            time_limit_minutes: row.time_limit_minutes,
+            timer_pause_when_tab_hidden: row.timer_pause_when_tab_hidden,
+            per_question_time_limit_seconds: row.per_question_time_limit_seconds,
+            show_score_timing: row.show_score_timing.clone(),
+            review_visibility: row.review_visibility.clone(),
+            review_when: row.review_when.clone(),
+            one_question_at_a_time: row.one_question_at_a_time,
+            shuffle_questions: row.shuffle_questions,
+            shuffle_choices: row.shuffle_choices,
+            allow_back_navigation: row.allow_back_navigation,
+            quiz_access_code: row.quiz_access_code.clone(),
+            adaptive_difficulty: row.adaptive_difficulty.clone(),
+            adaptive_topic_balance: row.adaptive_topic_balance,
+            adaptive_stop_rule: row.adaptive_stop_rule.clone(),
+            random_question_pool_count: row.random_question_pool_count,
+        }
+    }
 }
 
 pub async fn insert_empty_for_item(
@@ -46,6 +123,37 @@ pub async fn insert_empty_for_item(
     Ok(())
 }
 
+/// `is_adaptive` for each quiz structure item id (batch).
+pub async fn is_adaptive_flags_for_structure_items(
+    pool: &PgPool,
+    course_id: Uuid,
+    structure_item_ids: &[Uuid],
+) -> Result<HashMap<Uuid, bool>, sqlx::Error> {
+    if structure_item_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    #[derive(FromRow)]
+    struct Row {
+        id: Uuid,
+        is_adaptive: bool,
+    }
+    let rows: Vec<Row> = sqlx::query_as(&format!(
+        r#"
+        SELECT c.id, m.is_adaptive
+        FROM {} c
+        INNER JOIN {} m ON m.structure_item_id = c.id
+        WHERE c.course_id = $1 AND c.kind = 'quiz' AND c.id = ANY($2)
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS,
+        schema::MODULE_QUIZZES
+    ))
+    .bind(course_id)
+    .bind(structure_item_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.id, r.is_adaptive)).collect())
+}
+
 pub async fn get_for_course_item(
     pool: &PgPool,
     course_id: Uuid,
@@ -54,7 +162,13 @@ pub async fn get_for_course_item(
     let row: Option<CourseItemQuizRow> = sqlx::query_as(&format!(
         r#"
         SELECT c.title, m.markdown, c.due_at, m.questions_json, m.updated_at,
-               m.available_from, m.available_until, m.unlimited_attempts, m.one_question_at_a_time,
+               m.available_from, m.available_until, m.unlimited_attempts, m.max_attempts,
+               m.grade_attempt_policy, m.passing_score_percent, m.late_submission_policy, m.late_penalty_percent,
+               m.time_limit_minutes, m.timer_pause_when_tab_hidden, m.per_question_time_limit_seconds,
+               m.show_score_timing, m.review_visibility, m.review_when,
+               m.one_question_at_a_time, m.shuffle_questions, m.shuffle_choices, m.allow_back_navigation,
+               m.quiz_access_code, m.adaptive_difficulty, m.adaptive_topic_balance, m.adaptive_stop_rule,
+               m.random_question_pool_count,
                m.is_adaptive, m.adaptive_system_prompt, m.adaptive_source_item_ids, m.adaptive_question_count
         FROM {} c
         INNER JOIN {} m ON m.structure_item_id = c.id
@@ -128,60 +242,38 @@ pub async fn reference_markdown_for_items(
     Ok(blocks.join("\n"))
 }
 
-pub async fn update_delivery_settings(
+pub async fn write_quiz_settings(
     pool: &PgPool,
     course_id: Uuid,
     item_id: Uuid,
-    available_from: Option<Option<DateTime<Utc>>>,
-    available_until: Option<Option<DateTime<Utc>>>,
-    unlimited_attempts: Option<bool>,
-    one_question_at_a_time: Option<bool>,
+    s: &QuizSettingsWrite,
 ) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
-    if available_from.is_none()
-        && available_until.is_none()
-        && unlimited_attempts.is_none()
-        && one_question_at_a_time.is_none()
-    {
-        return Ok(None);
-    }
-
-    let cur: Option<(Option<DateTime<Utc>>, Option<DateTime<Utc>>, bool, bool)> = sqlx::query_as(&format!(
-        r#"
-        SELECT m.available_from, m.available_until, m.unlimited_attempts, m.one_question_at_a_time
-        FROM {} m
-        INNER JOIN {} c ON m.structure_item_id = c.id
-        WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'quiz'
-        "#,
-        schema::MODULE_QUIZZES,
-        schema::COURSE_STRUCTURE_ITEMS
-    ))
-    .bind(item_id)
-    .bind(course_id)
-    .fetch_optional(pool)
-    .await?;
-
-    let Some((caf, cau, cua, coq)) = cur else {
-        return Ok(None);
-    };
-
-    let n_af = match available_from {
-        None => caf,
-        Some(v) => v,
-    };
-    let n_au = match available_until {
-        None => cau,
-        Some(v) => v,
-    };
-    let n_ua = unlimited_attempts.unwrap_or(cua);
-    let n_oq = one_question_at_a_time.unwrap_or(coq);
-
     sqlx::query_scalar(&format!(
         r#"
         UPDATE {} m
         SET available_from = $3,
             available_until = $4,
             unlimited_attempts = $5,
-            one_question_at_a_time = $6,
+            max_attempts = $6,
+            grade_attempt_policy = $7,
+            passing_score_percent = $8,
+            late_submission_policy = $9,
+            late_penalty_percent = $10,
+            time_limit_minutes = $11,
+            timer_pause_when_tab_hidden = $12,
+            per_question_time_limit_seconds = $13,
+            show_score_timing = $14,
+            review_visibility = $15,
+            review_when = $16,
+            one_question_at_a_time = $17,
+            shuffle_questions = $18,
+            shuffle_choices = $19,
+            allow_back_navigation = $20,
+            quiz_access_code = $21,
+            adaptive_difficulty = $22,
+            adaptive_topic_balance = $23,
+            adaptive_stop_rule = $24,
+            random_question_pool_count = $25,
             updated_at = NOW()
         FROM {} c
         WHERE m.structure_item_id = c.id
@@ -195,10 +287,29 @@ pub async fn update_delivery_settings(
     ))
     .bind(item_id)
     .bind(course_id)
-    .bind(n_af)
-    .bind(n_au)
-    .bind(n_ua)
-    .bind(n_oq)
+    .bind(s.available_from)
+    .bind(s.available_until)
+    .bind(s.unlimited_attempts)
+    .bind(s.max_attempts)
+    .bind(&s.grade_attempt_policy)
+    .bind(s.passing_score_percent)
+    .bind(&s.late_submission_policy)
+    .bind(s.late_penalty_percent)
+    .bind(s.time_limit_minutes)
+    .bind(s.timer_pause_when_tab_hidden)
+    .bind(s.per_question_time_limit_seconds)
+    .bind(&s.show_score_timing)
+    .bind(&s.review_visibility)
+    .bind(&s.review_when)
+    .bind(s.one_question_at_a_time)
+    .bind(s.shuffle_questions)
+    .bind(s.shuffle_choices)
+    .bind(s.allow_back_navigation)
+    .bind(s.quiz_access_code.as_deref())
+    .bind(&s.adaptive_difficulty)
+    .bind(s.adaptive_topic_balance)
+    .bind(&s.adaptive_stop_rule)
+    .bind(s.random_question_pool_count)
     .fetch_optional(pool)
     .await
 }
@@ -330,10 +441,7 @@ pub async fn upsert_import_body(
     item_id: Uuid,
     markdown: &str,
     questions: &[QuizQuestion],
-    available_from: Option<DateTime<Utc>>,
-    available_until: Option<DateTime<Utc>>,
-    unlimited_attempts: bool,
-    one_question_at_a_time: bool,
+    settings: &QuizSettingsWrite,
     is_adaptive: bool,
     adaptive_system_prompt: &str,
     adaptive_source_item_ids: &[Uuid],
@@ -343,10 +451,16 @@ pub async fn upsert_import_body(
         r#"
         INSERT INTO {} (
             structure_item_id, markdown, questions_json, updated_at,
-            available_from, available_until, unlimited_attempts, one_question_at_a_time,
+            available_from, available_until, unlimited_attempts, max_attempts,
+            grade_attempt_policy, passing_score_percent, late_submission_policy, late_penalty_percent,
+            time_limit_minutes, timer_pause_when_tab_hidden, per_question_time_limit_seconds,
+            show_score_timing, review_visibility, review_when,
+            one_question_at_a_time, shuffle_questions, shuffle_choices, allow_back_navigation,
+            quiz_access_code, adaptive_difficulty, adaptive_topic_balance, adaptive_stop_rule,
+            random_question_pool_count,
             is_adaptive, adaptive_system_prompt, adaptive_source_item_ids, adaptive_question_count
         )
-        SELECT c.id, $3, $4::jsonb, NOW(), $5, $6, $7, $8, $9, $10, $11::jsonb, $12
+        SELECT c.id, $3, $4::jsonb, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30::jsonb, $31
         FROM {} c
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'quiz'
         ON CONFLICT (structure_item_id) DO UPDATE SET
@@ -356,7 +470,26 @@ pub async fn upsert_import_body(
             available_from = EXCLUDED.available_from,
             available_until = EXCLUDED.available_until,
             unlimited_attempts = EXCLUDED.unlimited_attempts,
+            max_attempts = EXCLUDED.max_attempts,
+            grade_attempt_policy = EXCLUDED.grade_attempt_policy,
+            passing_score_percent = EXCLUDED.passing_score_percent,
+            late_submission_policy = EXCLUDED.late_submission_policy,
+            late_penalty_percent = EXCLUDED.late_penalty_percent,
+            time_limit_minutes = EXCLUDED.time_limit_minutes,
+            timer_pause_when_tab_hidden = EXCLUDED.timer_pause_when_tab_hidden,
+            per_question_time_limit_seconds = EXCLUDED.per_question_time_limit_seconds,
+            show_score_timing = EXCLUDED.show_score_timing,
+            review_visibility = EXCLUDED.review_visibility,
+            review_when = EXCLUDED.review_when,
             one_question_at_a_time = EXCLUDED.one_question_at_a_time,
+            shuffle_questions = EXCLUDED.shuffle_questions,
+            shuffle_choices = EXCLUDED.shuffle_choices,
+            allow_back_navigation = EXCLUDED.allow_back_navigation,
+            quiz_access_code = EXCLUDED.quiz_access_code,
+            adaptive_difficulty = EXCLUDED.adaptive_difficulty,
+            adaptive_topic_balance = EXCLUDED.adaptive_topic_balance,
+            adaptive_stop_rule = EXCLUDED.adaptive_stop_rule,
+            random_question_pool_count = EXCLUDED.random_question_pool_count,
             is_adaptive = EXCLUDED.is_adaptive,
             adaptive_system_prompt = EXCLUDED.adaptive_system_prompt,
             adaptive_source_item_ids = EXCLUDED.adaptive_source_item_ids,
@@ -369,10 +502,29 @@ pub async fn upsert_import_body(
     .bind(course_id)
     .bind(markdown)
     .bind(Json(questions.to_vec()))
-    .bind(available_from)
-    .bind(available_until)
-    .bind(unlimited_attempts)
-    .bind(one_question_at_a_time)
+    .bind(settings.available_from)
+    .bind(settings.available_until)
+    .bind(settings.unlimited_attempts)
+    .bind(settings.max_attempts)
+    .bind(&settings.grade_attempt_policy)
+    .bind(settings.passing_score_percent)
+    .bind(&settings.late_submission_policy)
+    .bind(settings.late_penalty_percent)
+    .bind(settings.time_limit_minutes)
+    .bind(settings.timer_pause_when_tab_hidden)
+    .bind(settings.per_question_time_limit_seconds)
+    .bind(&settings.show_score_timing)
+    .bind(&settings.review_visibility)
+    .bind(&settings.review_when)
+    .bind(settings.one_question_at_a_time)
+    .bind(settings.shuffle_questions)
+    .bind(settings.shuffle_choices)
+    .bind(settings.allow_back_navigation)
+    .bind(settings.quiz_access_code.as_deref())
+    .bind(&settings.adaptive_difficulty)
+    .bind(settings.adaptive_topic_balance)
+    .bind(&settings.adaptive_stop_rule)
+    .bind(settings.random_question_pool_count)
     .bind(is_adaptive)
     .bind(adaptive_system_prompt)
     .bind(Json(adaptive_source_item_ids.to_vec()))

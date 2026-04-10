@@ -7,6 +7,7 @@ import CourseEnrollments from './pages/lms/CourseEnrollments'
 import CourseGradebook from './pages/lms/CourseGradebook'
 import CourseCreate from './pages/lms/CourseCreate'
 import CourseDetail from './pages/lms/CourseDetail'
+import CourseLayout from './pages/lms/CourseLayout'
 import CourseModuleAssignmentPage from './pages/lms/CourseModuleAssignmentPage'
 import CourseModuleContentPage from './pages/lms/CourseModuleContentPage'
 import CourseModuleQuizPage from './pages/lms/CourseModuleQuizPage.tsx'
@@ -31,22 +32,18 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/courses" element={<Courses />} />
           <Route path="/courses/create" element={<CourseCreate />} />
-          <Route path="/courses/:courseCode/settings/*" element={<CourseSettings />} />
-          <Route path="/courses/:courseCode/syllabus" element={<CourseSyllabus />} />
-          <Route path="/courses/:courseCode/modules" element={<CourseModules />} />
-          <Route
-            path="/courses/:courseCode/modules/content/:itemId"
-            element={<CourseModuleContentPage />}
-          />
-          <Route
-            path="/courses/:courseCode/modules/assignment/:itemId"
-            element={<CourseModuleAssignmentPage />}
-          />
-          <Route path="/courses/:courseCode/modules/quiz/:itemId" element={<CourseModuleQuizPage />} />
-          <Route path="/courses/:courseCode/calendar" element={<CourseCalendarPage />} />
-          <Route path="/courses/:courseCode/gradebook" element={<CourseGradebook />} />
-          <Route path="/courses/:courseCode/enrollments" element={<CourseEnrollments />} />
-          <Route path="/courses/:courseCode" element={<CourseDetail />} />
+          <Route path="/courses/:courseCode" element={<CourseLayout />}>
+            <Route path="settings/*" element={<CourseSettings />} />
+            <Route path="syllabus" element={<CourseSyllabus />} />
+            <Route path="modules/content/:itemId" element={<CourseModuleContentPage />} />
+            <Route path="modules/assignment/:itemId" element={<CourseModuleAssignmentPage />} />
+            <Route path="modules/quiz/:itemId" element={<CourseModuleQuizPage />} />
+            <Route path="modules" element={<CourseModules />} />
+            <Route path="calendar" element={<CourseCalendarPage />} />
+            <Route path="gradebook" element={<CourseGradebook />} />
+            <Route path="enrollments" element={<CourseEnrollments />} />
+            <Route index element={<CourseDetail />} />
+          </Route>
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/inbox" element={<Inbox />} />

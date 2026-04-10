@@ -40,6 +40,9 @@ type SyllabusBlockEditorProps = {
    * and renames that tab to “Settings”.
    */
   pageDocumentPanel?: ReactNode
+  /** Syllabus only: require first-visit acceptance from students. */
+  requireSyllabusAcceptance?: boolean
+  onRequireSyllabusAcceptanceChange?: (next: boolean) => void
 }
 
 type ActiveField = { blockId: string; field: 'heading' | 'markdown' }
@@ -47,10 +50,15 @@ type ActiveField = { blockId: string; field: 'heading' | 'markdown' }
 function SyllabusDocumentPanel({
   sections,
   documentVariant,
+  requireSyllabusAcceptance,
+  onRequireSyllabusAcceptanceChange,
 }: {
   sections: SyllabusSection[]
   documentVariant: 'syllabus' | 'page'
+  requireSyllabusAcceptance?: boolean
+  onRequireSyllabusAcceptanceChange?: (next: boolean) => void
 }) {
+  const { disabled } = useBlockEditor()
   const blocks = sections.length
   const chars = sections.reduce((n, s) => n + s.markdown.length + s.heading.length, 0)
 
@@ -85,6 +93,22 @@ function SyllabusDocumentPanel({
           ? 'Build this page from sections. Each section has an optional title and Markdown body, matching what students see when they open it.'
           : 'The syllabus is built from sections. Each section has an optional title and Markdown body, matching what students see on the course page.'}
       </p>
+      {documentVariant === 'syllabus' &&
+        requireSyllabusAcceptance !== undefined &&
+        onRequireSyllabusAcceptanceChange && (
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/50">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900"
+              checked={requireSyllabusAcceptance}
+              disabled={disabled}
+              onChange={(e) => onRequireSyllabusAcceptanceChange(e.target.checked)}
+            />
+            <span className="text-[13px] leading-snug text-slate-700 dark:text-slate-200">
+              Require students to review and accept this syllabus the first time they open the course.
+            </span>
+          </label>
+        )}
       <dl className="space-y-0 text-[13px]">
         <div className="flex justify-between gap-3 border-b border-slate-100 py-2.5 dark:border-slate-700">
           <dt className="text-slate-500 dark:text-slate-400">Sections</dt>
@@ -204,11 +228,15 @@ function SyllabusSidebar({
   updateAt,
   documentVariant,
   pageDocumentPanel,
+  requireSyllabusAcceptance,
+  onRequireSyllabusAcceptanceChange,
 }: {
   sections: SyllabusSection[]
   updateAt: (index: number, patch: Partial<SyllabusSection>) => void
   documentVariant: 'syllabus' | 'page'
   pageDocumentPanel?: ReactNode
+  requireSyllabusAcceptance?: boolean
+  onRequireSyllabusAcceptanceChange?: (next: boolean) => void
 }) {
   const { selectedId } = useBlockEditor()
   const index = selectedId ? sections.findIndex((s) => s.id === selectedId) : -1
@@ -224,7 +252,12 @@ function SyllabusSidebar({
         usePageSettings ? (
           pageDocumentPanel
         ) : (
-          <SyllabusDocumentPanel sections={sections} documentVariant={documentVariant} />
+          <SyllabusDocumentPanel
+            sections={sections}
+            documentVariant={documentVariant}
+            requireSyllabusAcceptance={requireSyllabusAcceptance}
+            onRequireSyllabusAcceptanceChange={onRequireSyllabusAcceptanceChange}
+          />
         )
       }
       blockPanel={
@@ -278,6 +311,8 @@ function SyllabusBlockEditorInner({
   courseCode,
   documentVariant = 'syllabus',
   pageDocumentPanel,
+  requireSyllabusAcceptance,
+  onRequireSyllabusAcceptanceChange,
 }: SyllabusBlockEditorInnerProps) {
   const { selectedId, setSelectedId } = useBlockEditor()
   const [activeField, setActiveField] = useState<ActiveField | null>(null)
@@ -469,6 +504,8 @@ function SyllabusBlockEditorInner({
           updateAt={updateAt}
           documentVariant={documentVariant}
           pageDocumentPanel={pageDocumentPanel}
+          requireSyllabusAcceptance={requireSyllabusAcceptance}
+          onRequireSyllabusAcceptanceChange={onRequireSyllabusAcceptanceChange}
         />
       }
     >

@@ -15,8 +15,15 @@ pub struct CourseEnrollmentPublic {
 #[serde(rename_all = "camelCase")]
 pub struct CourseEnrollmentsResponse {
     pub enrollments: Vec<CourseEnrollmentPublic>,
-    /// Raw enrollment role for the authenticated user (`teacher`, `instructor`, `student`), if enrolled.
-    pub viewer_enrollment_role: Option<String>,
+    /// Raw enrollment roles for the authenticated user (e.g. `teacher` and `student`).
+    pub viewer_enrollment_roles: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnrollSelfAsStudentResponse {
+    /// `true` when a new student enrollment row was created.
+    pub created: bool,
 }
 
 #[derive(Debug, Deserialize)]

@@ -9,6 +9,11 @@ pub fn course_item_create_permission(course_code: &str) -> String {
     format!("course:{course_code}:item:create")
 }
 
+/// `course:<course_code>:enrollments:update` — add/remove enrollment rows for that course (e.g. drop a duplicate role).
+pub fn course_enrollments_update_permission(course_code: &str) -> String {
+    format!("course:{course_code}:enrollments:update")
+}
+
 /// Second segment value in catalog permissions meaning “this course” when the role is applied per course.
 pub const COURSE_CODE_PLACEHOLDER: &str = "<courseCode>";
 
@@ -110,6 +115,14 @@ mod tests {
         assert_eq!(
             course_item_create_permission("C-XYZ"),
             "course:C-XYZ:item:create"
+        );
+    }
+
+    #[test]
+    fn course_enrollments_update_permission_formats() {
+        assert_eq!(
+            course_enrollments_update_permission("C-XYZ"),
+            "course:C-XYZ:enrollments:update"
         );
     }
 }

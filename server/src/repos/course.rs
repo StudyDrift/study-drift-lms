@@ -47,7 +47,7 @@ pub async fn list_for_enrolled_user(
             c.created_at,
             c.updated_at
         FROM {} c
-        INNER JOIN {} e ON e.course_id = c.id AND e.user_id = $1
+        WHERE c.id IN (SELECT e.course_id FROM {} e WHERE e.user_id = $1)
         ORDER BY c.title ASC
         "#,
         schema::COURSES,

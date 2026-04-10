@@ -1,9 +1,10 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronDown, LogOut, Search, User } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
+import { setCourseViewAs, useCourseViewAs } from '../../lib/courseViewAs'
+import { authorizedFetch } from '../../lib/api'
 import { useCommandPalette } from '../command-palette/useCommandPalette'
 import { clearAccessToken } from '../../lib/auth'
-import { authorizedFetch } from '../../lib/api'
 import { applyUiTheme } from '../../lib/uiTheme'
 import {
   initialsFromName,
@@ -135,6 +136,128 @@ function UserMenu() {
   )
 }
 
+function CourseEnrollmentViewDropdown() {
+  const location = useLocation()
+  const courseCode = useMemo(() => {
+    const m = matchPath({ path: '/courses/:courseCode', end: false }, location.pathname)
+    return m?.params.courseCode ?? null
+  }, [location.pathname])
+
+  const courseViewMode = useCourseViewAs(courseCode ?? undefined)
+
+  const [viewerRoles, setViewerRoles] = useState<string[] | null>(null)
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const menuId = useId()
+
+  useEffect(() => {
+    if (!courseCode) {
+      setViewerRoles(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}`)
+        const raw: unknown = await res.json().catch(() => ({}))
+        if (!res.ok || cancelled) return
+        const data = raw as { viewerEnrollmentRoles?: string[] }
+        if (!cancelled) setViewerRoles(data.viewerEnrollmentRoles ?? [])
+      } catch {
+        if (!cancelled) setViewerRoles(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [courseCode])
+
+  useEffect(() => {
+    if (!open) return
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const hasTeacher = viewerRoles?.includes('teacher') ?? false
+  const hasStudent = viewerRoles?.includes('student') ?? false
+  const show = Boolean(courseCode && hasTeacher && hasStudent)
+
+  if (!show || !courseCode) return null
+
+  const label = courseViewMode === 'student' ? 'Student' : 'Teacher'
+
+  return (
+    <div ref={rootRef} className="relative hidden shrink-0 text-left sm:inline-block">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
+      >
+        View as · {label}
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 transition ${open ? 'rotate-180' : ''}`}
+          aria-hidden
+        />
+      </button>
+
+      {open && (
+        <div
+          id={menuId}
+          role="menu"
+          aria-label="View course as"
+          className="absolute right-0 z-50 mt-1 min-w-[14rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-slate-600 dark:bg-slate-800 dark:shadow-black/40"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setCourseViewAs(courseCode, 'teacher')
+              setOpen(false)
+            }}
+            className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/80 ${
+              courseViewMode === 'teacher' ? 'bg-indigo-50 dark:bg-indigo-950/50' : ''
+            }`}
+          >
+            <span className="font-semibold text-slate-950 dark:text-slate-100">Teacher</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Manage course content, gradebook, and settings
+            </span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setCourseViewAs(courseCode, 'student')
+              setOpen(false)
+            }}
+            className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/80 ${
+              courseViewMode === 'student' ? 'bg-indigo-50 dark:bg-indigo-950/50' : ''
+            }`}
+          >
+            <span className="font-semibold text-slate-950 dark:text-slate-100">Student</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Preview the course as a learner would see it
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function TopBar() {
   const { open } = useCommandPalette()
 
@@ -153,7 +276,8 @@ export function TopBar() {
           </kbd>
         </button>
       </div>
-      <div className="ml-auto shrink-0">
+      <div className="ml-auto flex shrink-0 items-center gap-3">
+        <CourseEnrollmentViewDropdown />
         <UserMenu />
       </div>
     </header>
