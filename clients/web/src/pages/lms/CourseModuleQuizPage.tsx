@@ -207,7 +207,7 @@ function QuizEditorMoreMenu({
           id={menuId}
           role="menu"
           aria-label="More quiz actions"
-          className="absolute right-0 z-50 mt-1 min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-slate-600 dark:bg-slate-900"
+          className="absolute right-0 z-50 mt-1 min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-neutral-600 dark:bg-neutral-900"
         >
           <button
             type="button"
@@ -216,9 +216,9 @@ function QuizEditorMoreMenu({
               onEditIntro()
               setOpen(false)
             }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 dark:text-neutral-200 dark:hover:bg-neutral-800"
           >
-            <Pencil className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />
+            <Pencil className="h-4 w-4 shrink-0 text-slate-500 dark:text-neutral-400" aria-hidden />
             Edit
           </button>
           <button
@@ -228,15 +228,15 @@ function QuizEditorMoreMenu({
               onGenerate()
               setOpen(false)
             }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 dark:text-neutral-200 dark:hover:bg-neutral-800"
           >
-            <Sparkles className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />
+            <Sparkles className="h-4 w-4 shrink-0 text-slate-500 dark:text-neutral-400" aria-hidden />
             Generate questions
           </button>
           <div
             role="separator"
             aria-orientation="horizontal"
-            className="my-1 border-t border-slate-200 dark:border-slate-600"
+            className="my-1 border-t border-slate-200 dark:border-neutral-600"
           />
           <button
             type="button"
@@ -245,9 +245,9 @@ function QuizEditorMoreMenu({
               onPreview()
               setOpen(false)
             }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 dark:text-neutral-200 dark:hover:bg-neutral-800"
           >
-            <Eye className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />
+            <Eye className="h-4 w-4 shrink-0 text-slate-500 dark:text-neutral-400" aria-hidden />
             Preview
           </button>
         </div>
@@ -650,7 +650,7 @@ export default function CourseModuleQuizPage() {
       title={displayTitle}
       titleContent={
         editingContent && !loading ? (
-          <h1 className="m-0 text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          <h1 className="m-0 text-2xl font-semibold tracking-tight text-slate-900 dark:text-neutral-100">
             <label htmlFor={quizTitleFieldId} className="sr-only">
               Quiz title
             </label>
@@ -661,7 +661,7 @@ export default function CourseModuleQuizPage() {
               onChange={(e) => setDraftTitle(e.target.value)}
               disabled={saving}
               autoComplete="off"
-              className="w-full min-w-0 border-0 border-b border-transparent bg-transparent p-0 pb-0.5 text-2xl font-semibold tracking-tight text-slate-900 outline-none ring-0 transition placeholder:text-slate-400 focus:border-indigo-500 disabled:opacity-60 dark:border-transparent dark:text-slate-100 dark:focus:border-indigo-400"
+              className="w-full min-w-0 border-0 border-b border-transparent bg-transparent p-0 pb-0.5 text-2xl font-semibold tracking-tight text-slate-900 outline-none ring-0 transition placeholder:text-slate-400 focus:border-indigo-500 disabled:opacity-60 dark:border-transparent dark:text-neutral-100 dark:focus:border-indigo-400"
               placeholder="Quiz title"
             />
           </h1>

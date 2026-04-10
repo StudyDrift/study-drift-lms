@@ -16,7 +16,13 @@ export function settingsViewFromPathname(pathname: string): SettingsNavView {
   return 'ai-models'
 }
 
-export type CourseSettingsSection = 'basic' | 'dates' | 'branding' | 'grading' | 'export-import'
+export type CourseSettingsSection =
+  | 'basic'
+  | 'dates'
+  | 'branding'
+  | 'grading'
+  | 'export-import'
+  | 'archived'
 
 export function courseSettingsSectionFromPathname(pathname: string): CourseSettingsSection {
   const m = matchPath({ path: '/courses/:courseCode/settings/*', end: true }, pathname)
@@ -27,5 +33,6 @@ export function courseSettingsSectionFromPathname(pathname: string): CourseSetti
   if (parts[0] === 'branding') return 'branding'
   if (parts[0] === 'grading') return 'grading'
   if (parts[0] === 'export-import') return 'export-import'
+  if (parts[0] === 'archived') return 'archived'
   return 'basic'
 }

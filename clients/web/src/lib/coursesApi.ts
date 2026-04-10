@@ -15,6 +15,12 @@ export type Course = {
   endsAt: string | null
   visibleFrom: string | null
   hiddenAt: string | null
+  /** `fixed` (calendar) or `relative` (per-student enrollment). */
+  scheduleMode?: string
+  /** ISO 8601 duration from enrollment (e.g. P90D) when relative. */
+  relativeEndAfter?: string | null
+  relativeHiddenAfter?: string | null
+  relativeScheduleAnchorAt?: string | null
   published: boolean
   markdownThemePreset: string
   markdownThemeCustom: MarkdownThemeCustom | null
@@ -128,7 +134,7 @@ export type CourseStructureItem = {
   published: boolean
   /** Module rows: optional UTC instant — students only see the module on or after this time. */
   visibleFrom: string | null
-  /** Child items: soft-deleted; hidden from students, still listed for staff. */
+  /** Child items: when true, omitted from `fetchCourseStructure`; staff uses `fetchCourseArchivedStructure`. */
   archived?: boolean
   /** Content pages: optional due time for calendar / assignments. */
   dueAt: string | null
@@ -143,6 +149,19 @@ export type CourseStructureItem = {
 export async function fetchCourseStructure(courseCode: string): Promise<CourseStructureItem[]> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/structure`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const body = raw as { items: CourseStructureItem[] }
+  return body.items
+}
+
+/** Staff only: archived module items and their parent modules (for Settings → Archived). */
+export async function fetchCourseArchivedStructure(
+  courseCode: string,
+): Promise<CourseStructureItem[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/archived`,
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
@@ -171,7 +190,7 @@ export async function reorderCourseStructure(
 export async function patchCourseStructureItem(
   courseCode: string,
   itemId: string,
-  body: { title?: string; published?: boolean },
+  body: { title?: string; published?: boolean; archived?: boolean },
 ): Promise<CourseStructureItem> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/items/${encodeURIComponent(itemId)}`,
@@ -184,6 +203,13 @@ export async function patchCourseStructureItem(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as CourseStructureItem
+}
+
+export async function unarchiveCourseStructureItem(
+  courseCode: string,
+  itemId: string,
+): Promise<CourseStructureItem> {
+  return patchCourseStructureItem(courseCode, itemId, { archived: false })
 }
 
 export async function archiveCourseStructureItem(courseCode: string, itemId: string): Promise<void> {

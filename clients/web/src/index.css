@@ -61,39 +61,40 @@ body {
 }
 
 .dark body {
-  @apply bg-slate-950 text-slate-100;
+  /* Neutral charcoal (not blue-tinted slate) — easier long-session reading */
+  @apply bg-neutral-950 text-neutral-100;
 }
 
 /* Main LMS content: map common light-mode utility classes to readable dark surfaces without editing every page. */
 .dark .lms-scope .text-slate-900 {
-  @apply text-slate-100;
+  @apply text-neutral-100;
 }
 .dark .lms-scope .text-slate-800 {
-  @apply text-slate-200;
+  @apply text-neutral-200;
 }
 .dark .lms-scope .text-slate-700 {
-  @apply text-slate-300;
+  @apply text-neutral-300;
 }
 .dark .lms-scope .text-slate-600 {
-  @apply text-slate-400;
+  @apply text-neutral-400;
 }
 .dark .lms-scope .text-slate-500 {
-  @apply text-slate-400;
+  @apply text-neutral-400;
 }
 .dark .lms-scope .bg-white {
-  @apply bg-slate-800/60;
+  @apply bg-neutral-800/55;
 }
 .dark .lms-scope .bg-slate-50 {
-  @apply bg-slate-800/40;
+  @apply bg-neutral-800/35;
 }
 .dark .lms-scope .bg-slate-100 {
-  @apply bg-slate-800/50;
+  @apply bg-neutral-800/45;
 }
 .dark .lms-scope .border-slate-200 {
-  @apply border-slate-700;
+  @apply border-neutral-700;
 }
 .dark .lms-scope .border-slate-100 {
-  @apply border-slate-700;
+  @apply border-neutral-700;
 }
 
 /*
@@ -151,7 +152,7 @@ body {
 }
 
 .dark .lms-scope .syllabus-md .text-black {
-  @apply text-slate-100;
+  @apply text-neutral-100;
 }
 
 /* Course markdown (syllabus, modules): bounded width is set per theme; min-w-0 avoids flex overflow. */
@@ -169,7 +170,7 @@ body {
 }
 
 .dark .tiptap p.is-empty::before {
-  color: rgb(100 116 139);
+  color: rgb(115 115 115);
 }
 
 /* Clipboard “Copied” feedback in syllabus/page sidebar actions */

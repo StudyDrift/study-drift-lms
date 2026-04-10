@@ -21,18 +21,18 @@ export function LmsPage({
   children,
 }: LmsPageProps) {
   return (
-    <div className="p-6 md:p-8">
+    <div className="px-4 py-5 sm:p-6 md:p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           {titleContent ?? (
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-neutral-100">{title}</h1>
           )}
           {description && (
-            <p className="mt-2 max-w-2xl text-xs text-slate-500 dark:text-slate-400">{description}</p>
+            <p className="mt-2 max-w-2xl text-xs text-slate-500 dark:text-neutral-400">{description}</p>
           )}
         </div>
         {actions ? (
-          <div ref={actionsContainerRef} className="shrink-0 pt-0.5">
+          <div ref={actionsContainerRef} className="w-full shrink-0 pt-0.5 sm:w-auto">
             {actions}
           </div>
         ) : null}

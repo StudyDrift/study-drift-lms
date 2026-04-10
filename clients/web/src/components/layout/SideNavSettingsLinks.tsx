@@ -26,7 +26,7 @@ export function SideNavSettingsLinks() {
         <ArrowLeft className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Back
       </NavLink>
-      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
         User Settings
       </p>
       <NavLink
@@ -43,7 +43,7 @@ export function SideNavSettingsLinks() {
         <Bell className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Notifications
       </NavLink>
-      <p className="px-3 pb-1 pt-4 text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+      <p className="px-3 pb-1 pt-4 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
         System Settings
       </p>
       <NavLink
@@ -57,7 +57,7 @@ export function SideNavSettingsLinks() {
         <button
           type="button"
           onClick={() => setAiOpen((o) => !o)}
-          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:bg-white hover:text-slate-900 hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-slate-50 ${
+          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:bg-white hover:text-slate-900 hover:shadow-sm dark:text-neutral-300 dark:hover:bg-neutral-800/80 dark:hover:text-neutral-50 ${
             aiSectionActive ? sideNavActiveClass : 'text-slate-600'
           }`}
           aria-expanded={aiOpen}
@@ -77,7 +77,7 @@ export function SideNavSettingsLinks() {
           }`}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="flex flex-col gap-0.5 border-l border-slate-200/80 pl-2 dark:border-slate-600/80">
+            <div className="flex flex-col gap-0.5 border-l border-slate-200/80 pl-2 dark:border-neutral-600/80">
               <NavLink
                 to="/settings/ai/models"
                 className={() =>

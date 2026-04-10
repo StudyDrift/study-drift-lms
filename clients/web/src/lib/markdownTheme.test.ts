@@ -28,17 +28,17 @@ describe('resolveMarkdownTheme', () => {
     const light = resolveMarkdownTheme('custom', markdownThemeCustomSeed, { lmsUiDark: false })
     const dark = resolveMarkdownTheme('custom', markdownThemeCustomSeed, { lmsUiDark: true })
     expect(light.styleOverrides.p?.color).not.toBe(dark.styleOverrides.p?.color)
-    expect(dark.styleOverrides.p?.color).toBe('#cbd5e1')
+    expect(dark.styleOverrides.p?.color).toBe('#d4d4d4')
   })
 
   it('does not double-wrap night preset with LMS dark reading surface', () => {
     const r = resolveMarkdownTheme('night', null, { lmsUiDark: true })
-    expect(r.classes.article).not.toContain('!bg-slate-950')
+    expect(r.classes.article).not.toContain('!bg-neutral-950')
   })
 
   it('adds LMS dark reading surface for reader preset when lmsUiDark', () => {
     const r = resolveMarkdownTheme('reader', null, { lmsUiDark: true })
-    expect(r.classes.article).toContain('!bg-slate-950')
+    expect(r.classes.article).toContain('!bg-neutral-950')
   })
 
   it('returns preset night without custom style overrides', () => {

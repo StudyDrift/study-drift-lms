@@ -87,16 +87,16 @@ export function CourseSyllabusAcceptanceOverlay({ courseCode }: { courseCode: st
       aria-labelledby="syllabus-accept-title"
     >
       {syllabusGate === 'checking' ? (
-        <div className="rounded-2xl bg-white px-8 py-6 text-sm font-medium text-slate-700 shadow-xl dark:bg-slate-900 dark:text-slate-200">
+        <div className="rounded-2xl bg-white px-8 py-6 text-sm font-medium text-slate-700 shadow-xl dark:bg-neutral-900 dark:text-neutral-200">
           Checking syllabus…
         </div>
       ) : (
-        <div className="flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-900">
-          <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-700">
-            <h2 id="syllabus-accept-title" className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        <div className="flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-neutral-900">
+          <div className="border-b border-slate-200 px-6 py-4 dark:border-neutral-700">
+            <h2 id="syllabus-accept-title" className="text-lg font-semibold text-slate-900 dark:text-neutral-100">
               Review course syllabus
             </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            <p className="mt-1 text-sm text-slate-600 dark:text-neutral-400">
               Your instructor requires you to acknowledge the syllabus before you continue in this course.
             </p>
           </div>
@@ -104,7 +104,7 @@ export function CourseSyllabusAcceptanceOverlay({ courseCode }: { courseCode: st
             {syllabusSections && syllabusSections.length > 0 ? (
               <SyllabusMarkdownView sections={syllabusSections} theme={mdTheme} />
             ) : (
-              <p className="text-sm text-slate-600 dark:text-slate-400">
+              <p className="text-sm text-slate-600 dark:text-neutral-400">
                 No syllabus text has been published yet. You can still confirm that you agree to follow course
                 policies as they appear here when your instructor adds them.
               </p>
@@ -115,7 +115,7 @@ export function CourseSyllabusAcceptanceOverlay({ courseCode }: { courseCode: st
               {acceptError}
             </p>
           )}
-          <div className="border-t border-slate-200 px-6 py-4 dark:border-slate-700">
+          <div className="border-t border-slate-200 px-6 py-4 dark:border-neutral-700">
             <button
               type="button"
               onClick={() => void handleAcceptSyllabus()}

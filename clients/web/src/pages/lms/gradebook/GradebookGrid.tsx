@@ -181,7 +181,7 @@ export function GradebookGrid({ assignments, students, initialGrades }: Gradeboo
 
   return (
     <div className="mt-6 space-y-3">
-      <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
         <table
           role="grid"
           aria-label="Grades by student and assignment"
@@ -190,10 +190,10 @@ export function GradebookGrid({ assignments, students, initialGrades }: Gradeboo
           className="w-full min-w-max border-collapse text-left"
         >
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+            <tr className="border-b border-slate-200 bg-slate-50 dark:border-neutral-700 dark:bg-neutral-800">
               <th
                 scope="col"
-                className={`sticky top-0 left-0 z-30 ${CELL_PAD} border-b border-r border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400`}
+                className={`sticky top-0 left-0 z-30 ${CELL_PAD} border-b border-r border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400`}
               >
                 Student
               </th>
@@ -201,11 +201,11 @@ export function GradebookGrid({ assignments, students, initialGrades }: Gradeboo
                 <th
                   key={a.id}
                   scope="col"
-                  className={`sticky top-0 z-20 ${CELL_PAD} min-w-[9rem] border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200`}
+                  className={`sticky top-0 z-20 ${CELL_PAD} min-w-[9rem] border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-800 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200`}
                 >
                   <div className="flex flex-col gap-0.5">
                     <span>{a.name}</span>
-                    <span className="font-normal text-slate-500 dark:text-slate-400">Out of {a.maxPoints}</span>
+                    <span className="font-normal text-slate-500 dark:text-neutral-400">Out of {a.maxPoints}</span>
                   </div>
                 </th>
               ))}
@@ -215,11 +215,11 @@ export function GradebookGrid({ assignments, students, initialGrades }: Gradeboo
             {students.map((student, row) => (
               <tr
                 key={student.id}
-                className="border-b border-slate-100 last:border-b-0 dark:border-slate-700/80"
+                className="border-b border-slate-100 last:border-b-0 dark:border-neutral-700/80"
               >
                 <th
                   scope="row"
-                  className={`sticky left-0 z-10 ${CELL_PAD} border-r border-slate-200 bg-slate-100 text-left font-medium text-slate-950 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100`}
+                  className={`sticky left-0 z-10 ${CELL_PAD} border-r border-slate-200 bg-slate-100 text-left font-medium text-slate-950 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100`}
                 >
                   {student.name}
                 </th>
@@ -235,10 +235,10 @@ export function GradebookGrid({ assignments, students, initialGrades }: Gradeboo
                       role="gridcell"
                       tabIndex={isActive ? 0 : -1}
                       aria-selected={isActive || isEditing}
-                      className={`${CELL_PAD} min-w-[5.5rem] border-l border-slate-100 text-right tabular-nums outline-none transition dark:border-slate-700/80 ${
+                      className={`${CELL_PAD} min-w-[5.5rem] border-l border-slate-100 text-right tabular-nums outline-none transition dark:border-neutral-700/80 ${
                         isActive || isEditing
                           ? 'relative z-[1] bg-indigo-50 ring-2 ring-inset ring-indigo-500 dark:bg-indigo-950/50 dark:ring-indigo-400'
-                          : 'bg-white dark:bg-slate-900/80'
+                          : 'bg-white dark:bg-neutral-900/80'
                       }`}
                       onKeyDown={(e) => handleGradeCellKeyDown(e, row, col)}
                       onClick={() => {
@@ -255,7 +255,7 @@ export function GradebookGrid({ assignments, students, initialGrades }: Gradeboo
                           inputMode="decimal"
                           autoComplete="off"
                           aria-label={`Grade for ${student.name}, ${a.name}`}
-                          className="w-full min-w-0 rounded border border-indigo-300 bg-white px-2 py-1 text-right text-sm text-slate-950 tabular-nums shadow-sm outline-none focus:border-indigo-500 dark:border-indigo-500 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-400"
+                          className="w-full min-w-0 rounded border border-indigo-300 bg-white px-2 py-1 text-right text-sm text-slate-950 tabular-nums shadow-sm outline-none focus:border-indigo-500 dark:border-indigo-500 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-400"
                           value={draft}
                           onChange={(e) => setDraft(e.target.value)}
                           onKeyDown={handleInputKeyDown}
@@ -264,7 +264,7 @@ export function GradebookGrid({ assignments, students, initialGrades }: Gradeboo
                       ) : (
                         <span
                           className={
-                            val ? 'text-slate-950 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500'
+                            val ? 'text-slate-950 dark:text-neutral-100' : 'text-neutral-400 dark:text-neutral-500'
                           }
                         >
                           {val || '—'}
@@ -279,8 +279,8 @@ export function GradebookGrid({ assignments, students, initialGrades }: Gradeboo
         </table>
       </div>
 
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        <span className="font-medium text-slate-600 dark:text-slate-300">Shortcuts:</span> arrow keys move the cell;
+      <p className="text-xs text-slate-500 dark:text-neutral-400">
+        <span className="font-medium text-slate-600 dark:text-neutral-300">Shortcuts:</span> arrow keys move the cell;
         Enter or F2 edits; Tab / Shift+Tab moves to the next or previous cell; double-click a cell
         to edit. Changes are mock-only and are not saved.
       </p>

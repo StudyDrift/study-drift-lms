@@ -29,15 +29,15 @@ export type QuizPageSettingsPanelProps = {
 }
 
 const inputClass =
-  'w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-500 dark:focus:ring-indigo-500'
+  'w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500 dark:focus:ring-indigo-500'
 
 function SettingsAccordion({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <details className="group border-b border-slate-100 last:border-b-0 dark:border-slate-800/80">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[13px] font-medium text-slate-600 outline-none transition-colors hover:bg-slate-50/80 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800/30 dark:hover:text-slate-200 [&::-webkit-details-marker]:hidden">
+    <details className="group border-b border-slate-100 last:border-b-0 dark:border-neutral-800/80">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[13px] font-medium text-slate-600 outline-none transition-colors hover:bg-slate-50/80 hover:text-slate-800 dark:text-neutral-400 dark:hover:bg-neutral-800/30 dark:hover:text-neutral-200 [&::-webkit-details-marker]:hidden">
         <span>{title}</span>
         <ChevronDown
-          className="h-3.5 w-3.5 shrink-0 text-slate-400/80 transition duration-200 group-open:rotate-180 dark:text-slate-500"
+          className="h-3.5 w-3.5 shrink-0 text-slate-400/80 transition duration-200 group-open:rotate-180 dark:text-neutral-500"
           aria-hidden
         />
       </summary>
@@ -48,7 +48,7 @@ function SettingsAccordion({ title, children }: { title: string; children: React
 
 function SettingsAccordionGroup({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200/70 bg-white dark:border-slate-700/50 dark:bg-slate-950/20">
+    <div className="overflow-hidden rounded-lg border border-slate-200/70 bg-white dark:border-neutral-700/50 dark:bg-neutral-950/20">
       {children}
     </div>
   )
@@ -72,10 +72,10 @@ function ToggleRow({
   return (
     <div className="flex items-start justify-between gap-3 py-2">
       <div className="min-w-0">
-        <label htmlFor={id} className="text-[13px] font-medium text-slate-700 dark:text-slate-200">
+        <label htmlFor={id} className="text-[13px] font-medium text-slate-700 dark:text-neutral-200">
           {label}
         </label>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">{description}</p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400 dark:text-neutral-500">{description}</p>
       </div>
       <button
         id={id}
@@ -85,7 +85,7 @@ function ToggleRow({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${
-          checked ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+          checked ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-neutral-600'
         }`}
       >
         <span
@@ -111,11 +111,11 @@ function Field({
 }) {
   return (
     <div className="space-y-1">
-      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400" htmlFor={htmlFor}>
+      <label className="block text-xs font-medium text-slate-500 dark:text-neutral-400" htmlFor={htmlFor}>
         {label}
       </label>
       {children}
-      {hint ? <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">{hint}</p> : null}
+      {hint ? <p className="text-[11px] leading-snug text-slate-400 dark:text-neutral-500">{hint}</p> : null}
     </div>
   )
 }
@@ -142,7 +142,7 @@ export function QuizPageSettingsPanel({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+      <p className="text-xs leading-relaxed text-slate-500 dark:text-neutral-400">
         Save the page from the toolbar to apply changes.
       </p>
 
@@ -191,7 +191,7 @@ export function QuizPageSettingsPanel({
         </SettingsAccordion>
 
         <SettingsAccordion title="Attempts & grading">
-          <div className="divide-y divide-slate-100/90 dark:divide-slate-800/80">
+          <div className="divide-y divide-slate-100/90 dark:divide-neutral-800/80">
             <ToggleRow
               id="quiz-settings-unlimited-attempts"
               label="Unlimited attempts"
@@ -390,7 +390,7 @@ export function QuizPageSettingsPanel({
         </SettingsAccordion>
 
         <SettingsAccordion title="Presentation">
-          <div className="divide-y divide-slate-100/90 dark:divide-slate-800/80">
+          <div className="divide-y divide-slate-100/90 dark:divide-neutral-800/80">
             <ToggleRow
               id="quiz-settings-one-question"
               label="One question at a time"

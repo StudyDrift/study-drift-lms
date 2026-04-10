@@ -268,7 +268,7 @@ export default function CourseModuleContentPage() {
           )}
           {canEdit && (
             <div className="mb-4 px-4 md:px-8">
-              <label className="block text-sm font-medium text-slate-800 dark:text-slate-200" htmlFor="content-due-at">
+              <label className="block text-sm font-medium text-slate-800 dark:text-neutral-200" htmlFor="content-due-at">
                 Due date (optional)
               </label>
               <input
@@ -277,9 +277,9 @@ export default function CourseModuleContentPage() {
                 value={draftDueLocal}
                 onChange={(e) => setDraftDueLocal(e.target.value)}
                 disabled={saving}
-                className="mt-2 w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-500"
+                className="mt-2 w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500"
               />
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
                 Shown on the course calendar. Clear the field to remove.
               </p>
             </div>

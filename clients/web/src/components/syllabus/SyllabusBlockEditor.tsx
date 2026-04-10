@@ -88,7 +88,7 @@ function SyllabusDocumentPanel({
 
   return (
     <div className="space-y-4">
-      <p className="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
+      <p className="text-[13px] leading-relaxed text-slate-600 dark:text-neutral-300">
         {documentVariant === 'page'
           ? 'Build this page from sections. Each section has an optional title and Markdown body, matching what students see when they open it.'
           : 'The syllabus is built from sections. Each section has an optional title and Markdown body, matching what students see on the course page.'}
@@ -96,37 +96,37 @@ function SyllabusDocumentPanel({
       {documentVariant === 'syllabus' &&
         requireSyllabusAcceptance !== undefined &&
         onRequireSyllabusAcceptanceChange && (
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/50">
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-neutral-700 dark:bg-neutral-800/50">
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-900"
               checked={requireSyllabusAcceptance}
               disabled={disabled}
               onChange={(e) => onRequireSyllabusAcceptanceChange(e.target.checked)}
             />
-            <span className="text-[13px] leading-snug text-slate-700 dark:text-slate-200">
+            <span className="text-[13px] leading-snug text-slate-700 dark:text-neutral-200">
               Require students to review and accept this syllabus the first time they open the course.
             </span>
           </label>
         )}
       <dl className="space-y-0 text-[13px]">
-        <div className="flex justify-between gap-3 border-b border-slate-100 py-2.5 dark:border-slate-700">
-          <dt className="text-slate-500 dark:text-slate-400">Sections</dt>
-          <dd className="font-medium text-slate-900 dark:text-slate-100">{blocks}</dd>
+        <div className="flex justify-between gap-3 border-b border-slate-100 py-2.5 dark:border-neutral-700">
+          <dt className="text-slate-500 dark:text-neutral-400">Sections</dt>
+          <dd className="font-medium text-slate-900 dark:text-neutral-100">{blocks}</dd>
         </div>
-        <div className="flex justify-between gap-3 border-b border-slate-100 py-2.5 dark:border-slate-700">
-          <dt className="text-slate-500 dark:text-slate-400">Characters</dt>
-          <dd className="font-medium text-slate-900 dark:text-slate-100">{chars.toLocaleString()}</dd>
+        <div className="flex justify-between gap-3 border-b border-slate-100 py-2.5 dark:border-neutral-700">
+          <dt className="text-slate-500 dark:text-neutral-400">Characters</dt>
+          <dd className="font-medium text-slate-900 dark:text-neutral-100">{chars.toLocaleString()}</dd>
         </div>
       </dl>
-      <div className="border-t border-slate-100 pt-3 dark:border-slate-700">
-        <h3 className="text-[13px] font-bold text-slate-900 dark:text-slate-100">Actions</h3>
+      <div className="border-t border-slate-100 pt-3 dark:border-neutral-700">
+        <h3 className="text-[13px] font-bold text-slate-900 dark:text-neutral-100">Actions</h3>
         <div className="mt-2 flex flex-col gap-1" aria-live="polite">
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={copyMarkdown}
-              className="min-w-0 flex-1 text-left text-[13px] text-slate-600 underline-offset-2 transition hover:text-indigo-600 hover:underline dark:text-slate-300 dark:hover:text-indigo-400"
+              className="min-w-0 flex-1 text-left text-[13px] text-slate-600 underline-offset-2 transition hover:text-indigo-600 hover:underline dark:text-neutral-300 dark:hover:text-indigo-400"
             >
               Copy as Markdown
             </button>
@@ -146,7 +146,7 @@ function SyllabusDocumentPanel({
             <button
               type="button"
               onClick={copyHtml}
-              className="min-w-0 flex-1 text-left text-[13px] text-slate-600 underline-offset-2 transition hover:text-indigo-600 hover:underline dark:text-slate-300 dark:hover:text-indigo-400"
+              className="min-w-0 flex-1 text-left text-[13px] text-slate-600 underline-offset-2 transition hover:text-indigo-600 hover:underline dark:text-neutral-300 dark:hover:text-indigo-400"
             >
               Copy as HTML
             </button>
@@ -184,18 +184,18 @@ function SyllabusBlockPanel({
 
   return (
     <div>
-      <div className="mb-4 flex items-start gap-2 border-b border-slate-100 pb-4 dark:border-slate-700">
-        <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+      <div className="mb-4 flex items-start gap-2 border-b border-slate-100 pb-4 dark:border-neutral-700">
+        <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-slate-50 text-slate-600 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
           <FileText className="h-4 w-4" aria-hidden />
         </span>
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Section</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Optional heading plus Markdown content.</p>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Section</h3>
+          <p className="text-xs text-slate-500 dark:text-neutral-400">Optional heading plus Markdown content.</p>
         </div>
       </div>
       <SidebarSection title="Content" defaultOpen>
         <div>
-          <label htmlFor={`syllabus-heading-${section.id}`} className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300">
+          <label htmlFor={`syllabus-heading-${section.id}`} className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-neutral-300">
             Heading
           </label>
           <input
@@ -205,16 +205,16 @@ function SyllabusBlockPanel({
             onChange={(e) => updateAt(index, { heading: e.target.value })}
             disabled={disabled}
             placeholder="Optional"
-            className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500"
+            className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500"
           />
         </div>
       </SidebarSection>
       <SidebarSection title="Markdown" defaultOpen>
-        <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+        <p className="text-xs leading-relaxed text-slate-600 dark:text-neutral-300">
           Formatting is visual in the editor; stored content is Markdown for reliable rendering on the course page.
           Type @ to insert a link to a content page or assignment (the @ is not kept in the text).
         </p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-xs text-slate-500 dark:text-neutral-400">
           ~{words.toLocaleString()} word{words === 1 ? '' : 's'} ·{' '}
           {section.markdown.length.toLocaleString()} characters
         </p>
@@ -279,12 +279,12 @@ function BlockInsertionRow({ onAdd, disabled }: { onAdd: () => void; disabled?: 
   return (
     <div className="relative py-6" onClick={(e) => e.stopPropagation()}>
       <div className="relative flex items-center justify-center">
-        <div className="absolute inset-x-0 top-1/2 h-px bg-slate-300/80 dark:bg-slate-600" aria-hidden />
+        <div className="absolute inset-x-0 top-1/2 h-px bg-slate-300/80 dark:bg-neutral-600" aria-hidden />
         <button
           type="button"
           disabled={disabled}
           onClick={onAdd}
-          className="relative z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-[#f0f0f0] text-slate-600 shadow-sm transition hover:border-slate-400 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-50"
+          className="relative z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-[#f0f0f0] text-slate-600 shadow-sm transition hover:border-slate-400 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-500 dark:hover:bg-neutral-700 dark:hover:text-neutral-50"
           aria-label="Add section"
         >
           <Plus className="h-5 w-5" strokeWidth={2} aria-hidden />
@@ -294,7 +294,7 @@ function BlockInsertionRow({ onAdd, disabled }: { onAdd: () => void; disabled?: 
         type="button"
         disabled={disabled}
         onClick={onAdd}
-        className="mt-4 w-full border-0 bg-transparent py-1 text-left text-[13px] text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:text-slate-300"
+        className="mt-4 w-full border-0 bg-transparent py-1 text-left text-[13px] text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-neutral-500 dark:hover:text-neutral-300"
       >
         Type / to add a section
       </button>
@@ -476,7 +476,7 @@ function SyllabusBlockEditorInner({
             />
             {courseCode ? (
               <>
-                <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200 dark:bg-slate-600" aria-hidden />
+                <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200 dark:bg-neutral-600" aria-hidden />
                 <button
                   type="button"
                   disabled={disabled || genBusy}
@@ -484,7 +484,7 @@ function SyllabusBlockEditorInner({
                   aria-controls={`section-generate-${section.id}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => toggleGeneratePanel(section.id)}
-                  className="shrink-0 rounded px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-700"
+                  className="shrink-0 rounded px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-200 dark:hover:bg-neutral-700"
                 >
                   Generate
                 </button>
@@ -516,7 +516,7 @@ function SyllabusBlockEditorInner({
               {generateSectionId === section.id && courseCode ? (
                 <div
                   id={`section-generate-${section.id}`}
-                  className="mb-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-600 dark:bg-slate-900/40"
+                  className="mb-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-neutral-600 dark:bg-neutral-900/40"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <label htmlFor={`section-generate-input-${section.id}`} className="sr-only">
@@ -547,7 +547,7 @@ function SyllabusBlockEditorInner({
                         ? 'Generating…'
                         : 'Describe what this section should say… (Enter to generate)'
                     }
-                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500"
+                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500"
                   />
                   {generateError ? (
                     <p className="mt-1.5 text-xs text-rose-600 dark:text-rose-400">{generateError}</p>
@@ -575,7 +575,7 @@ function SyllabusBlockEditorInner({
                 }}
                 disabled={disabled}
                 placeholder="Section heading (optional)"
-                className="mb-1 w-full border-0 border-b border-dashed border-transparent bg-transparent pb-2 text-2xl font-semibold tracking-tight text-slate-900 placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-0 disabled:opacity-60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-slate-600"
+                className="mb-1 w-full border-0 border-b border-dashed border-transparent bg-transparent pb-2 text-2xl font-semibold tracking-tight text-slate-900 placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-0 disabled:opacity-60 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-neutral-600"
               />
               <label className="sr-only" htmlFor={`canvas-md-${section.id}`}>
                 Section body (Markdown)

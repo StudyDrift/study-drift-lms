@@ -30,6 +30,7 @@ import {
   MoreVertical,
   Settings,
   Sparkles,
+  X,
 } from 'lucide-react'
 import { AddCourseItemMenu } from './AddCourseItemMenu'
 import { AddModuleItemMenu, type ModuleItemKind } from './AddModuleItemMenu'
@@ -55,16 +56,13 @@ import { permCourseItemCreate } from '../../lib/rbacApi'
 
 const MODULE_SORT_ID = 'sortable-modules'
 
-/** Matches drag-handle footprint (`mt-0.5` + `h-9 w-9 shrink-0`) so student/read-only rows align with teacher layout. */
-const DRAG_HANDLE_GAP_CLASS = 'mt-0.5 h-9 w-9 shrink-0'
-
 /** Quiet icon-only controls (no box borders) for module + item toolbars. */
 const iconGhost =
-  'rounded-md p-1.5 text-slate-500 transition hover:bg-slate-200/45 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-700/35 dark:hover:text-slate-200'
+  'rounded-md p-1.5 text-slate-500 transition hover:bg-slate-200/45 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-700/35 dark:hover:text-neutral-200'
 const iconGhostPublished =
   'rounded-md p-1.5 text-indigo-600 transition hover:bg-indigo-50/90 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-indigo-400 dark:hover:bg-indigo-950/45 dark:hover:text-indigo-300'
 const iconGhostDraft =
-  'rounded-md p-1.5 text-slate-400 transition hover:bg-slate-200/45 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:bg-slate-700/35 dark:hover:text-slate-300'
+  'rounded-md p-1.5 text-slate-400 transition hover:bg-slate-200/45 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-neutral-500 dark:hover:bg-neutral-700/35 dark:hover:text-neutral-300'
 
 function findModuleIdForChildItem(
   childId: string,
@@ -170,12 +168,12 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
       ) : (
         <div className="flex items-center gap-3">
           <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
             aria-hidden
           >
             <Heading className="h-4 w-4" strokeWidth={2} />
           </span>
-          <p className="min-w-0 text-xl font-bold leading-snug tracking-tight text-slate-950 dark:text-slate-100">
+          <p className="min-w-0 text-xl font-bold leading-snug tracking-tight text-slate-950 dark:text-neutral-100">
             {child.title}
           </p>
         </div>
@@ -254,7 +252,7 @@ function ModuleItemRowActions({
             id={menuId}
             role="menu"
             aria-label="Module item actions"
-            className="absolute right-0 z-50 mt-1 min-w-[10rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-slate-600 dark:bg-slate-800 dark:shadow-black/40"
+            className="absolute right-0 z-50 mt-1 min-w-[10rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-neutral-600 dark:bg-neutral-800 dark:shadow-black/40"
           >
             <button
               type="button"
@@ -263,7 +261,7 @@ function ModuleItemRowActions({
                 onEditTitle()
                 setMenuOpen(false)
               }}
-              className="flex w-full px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-700/80"
+              className="flex w-full px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 dark:text-neutral-100 dark:hover:bg-neutral-700/80"
             >
               Edit title
             </button>
@@ -274,7 +272,7 @@ function ModuleItemRowActions({
                 onArchive()
                 setMenuOpen(false)
               }}
-              className="flex w-full border-t border-slate-100 px-3 py-2.5 text-left text-sm font-medium text-rose-700 transition hover:bg-rose-50 dark:border-slate-700 dark:text-rose-300 dark:hover:bg-rose-950/50"
+              className="flex w-full border-t border-slate-100 px-3 py-2.5 text-left text-sm font-medium text-rose-700 transition hover:bg-rose-50 dark:border-neutral-700 dark:text-rose-300 dark:hover:bg-rose-950/50"
             >
               Delete
             </button>
@@ -327,7 +325,7 @@ function SortableChildRow({
         {!disabled && (
           <button
             type="button"
-            className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing dark:text-slate-500 dark:hover:text-slate-300"
+            className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing dark:text-neutral-500 dark:hover:text-neutral-300"
             aria-label="Drag to reorder item"
             {...listeners}
             {...attributes}
@@ -341,7 +339,7 @@ function SortableChildRow({
           >
             <ChildRowContent child={child} courseCode={courseCode} />
             {child.archived ? (
-              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Archived</p>
+              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-neutral-400">Archived</p>
             ) : null}
           </div>
           {showRowChrome ? (
@@ -363,11 +361,8 @@ function SortableChildRow({
 function StaticChildRow({ child, courseCode }: { child: CourseStructureItem; courseCode: string }) {
   return (
     <li className="py-3 first:pt-0">
-      <div className="flex items-start gap-2">
-        <span className={`${DRAG_HANDLE_GAP_CLASS} select-none`} aria-hidden />
-        <div className="min-w-0 flex-1">
-          <ChildRowContent child={child} courseCode={courseCode} />
-        </div>
+      <div className="min-w-0">
+        <ChildRowContent child={child} courseCode={courseCode} />
       </div>
     </li>
   )
@@ -403,7 +398,7 @@ function ModuleCardBody({
   const children = moduleChildrenById.get(item.id) ?? []
   return (
     <div
-      className={`w-full rounded-2xl border border-slate-200/70 bg-slate-50/60 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/85 ${
+      className={`w-full rounded-2xl border border-slate-200/70 bg-slate-50/60 shadow-sm dark:border-neutral-700/80 dark:bg-neutral-800/85 ${
         minified ? 'p-2.5' : 'p-4'
       }`}
     >
@@ -412,14 +407,14 @@ function ModuleCardBody({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-950 dark:text-slate-100">{item.title}</p>
+              <p className="text-sm font-semibold text-slate-950 dark:text-neutral-100">{item.title}</p>
               {!minified && (
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
                   Course activities and items can be grouped under this module.
                 </p>
               )}
               {minified && children.length > 0 && (
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
                   {children.length} {children.length === 1 ? 'item' : 'items'}
                 </p>
               )}
@@ -525,7 +520,7 @@ function SortableModuleCard({
         items={childIds}
         strategy={verticalListSortingStrategy}
       >
-        <ul className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-slate-700/80 dark:border-slate-700/80">
+        <ul className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-neutral-700/80 dark:border-neutral-700/80">
           {children.map((child) => (
             <SortableChildRow
               key={child.id}
@@ -560,7 +555,7 @@ function SortableModuleCard({
           canEditModules ? (
             <button
               type="button"
-              className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing dark:text-slate-500 dark:hover:text-slate-300"
+              className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing dark:text-neutral-500 dark:hover:text-neutral-300"
               aria-label="Drag to reorder module"
               {...listeners}
               {...attributes}
@@ -587,7 +582,7 @@ function StaticModuleCard({
   const children = moduleChildrenById.get(item.id) ?? []
   const childrenList =
     children.length > 0 ? (
-      <ul className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-slate-700/80 dark:border-slate-700/80">
+      <ul className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-neutral-700/80 dark:border-neutral-700/80">
         {children.map((child) => (
           <StaticChildRow key={child.id} child={child} courseCode={courseCode} />
         ))}
@@ -606,7 +601,7 @@ function StaticModuleCard({
         busyModuleId={null}
         onTogglePublished={() => {}}
         onOpenModuleSettings={() => {}}
-        moduleDragHandle={<span className={`${DRAG_HANDLE_GAP_CLASS} select-none`} aria-hidden />}
+        moduleDragHandle={null}
         childrenList={childrenList}
       />
     </li>
@@ -615,6 +610,7 @@ function StaticModuleCard({
 
 export default function CourseModules() {
   const { courseCode } = useParams<{ courseCode: string }>()
+  const archiveDialogTitleId = useId()
   const { allows, loading: permissionsLoading, error: permissionsError } = usePermissions()
   const [items, setItems] = useState<CourseStructureItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -662,6 +658,7 @@ export default function CourseModules() {
   const [moduleSettingsModuleId, setModuleSettingsModuleId] = useState<string | null>(null)
   const [moduleSettingsSaving, setModuleSettingsSaving] = useState(false)
   const [moduleSettingsSaveError, setModuleSettingsSaveError] = useState<string | null>(null)
+  const [archiveConfirmItem, setArchiveConfirmItem] = useState<CourseStructureItem | null>(null)
 
   const [isDraggingModule, setIsDraggingModule] = useState(false)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
@@ -696,7 +693,8 @@ export default function CourseModules() {
     moduleSettingsSaving ||
     moduleSettingsOpen ||
     editItemSaving ||
-    editItemModalOpen
+    editItemModalOpen ||
+    archiveConfirmItem !== null
 
   const anyModalBusy = blockingUi || reorderSaving
 
@@ -920,29 +918,26 @@ export default function CourseModules() {
     [courseCode, editTargetItem, load],
   )
 
-  const handleArchiveChild = useCallback(
-    async (child: CourseStructureItem) => {
-      if (!courseCode) return
-      if (
-        !window.confirm(
-          'Archive this item? It will be hidden from students. You can still see it here as archived.',
-        )
-      ) {
-        return
-      }
-      setModuleActionError(null)
-      setBusyChildItemId(child.id)
-      try {
-        await archiveCourseStructureItem(courseCode, child.id)
-        await load()
-      } catch (e) {
-        setModuleActionError(e instanceof Error ? e.message : 'Could not archive item.')
-      } finally {
-        setBusyChildItemId(null)
-      }
-    },
-    [courseCode, load],
-  )
+  const requestArchiveChild = useCallback((child: CourseStructureItem) => {
+    if (!courseCode) return
+    setArchiveConfirmItem(child)
+  }, [courseCode])
+
+  const confirmArchiveChild = useCallback(async () => {
+    if (!courseCode || !archiveConfirmItem) return
+    const child = archiveConfirmItem
+    setModuleActionError(null)
+    setBusyChildItemId(child.id)
+    try {
+      await archiveCourseStructureItem(courseCode, child.id)
+      await load()
+      setArchiveConfirmItem(null)
+    } catch (e) {
+      setModuleActionError(e instanceof Error ? e.message : 'Could not archive item.')
+    } finally {
+      setBusyChildItemId(null)
+    }
+  }, [archiveConfirmItem, courseCode, load])
 
   const handleOpenModuleSettings = useCallback((item: CourseStructureItem) => {
     setModuleSettingsSaveError(null)
@@ -1099,7 +1094,7 @@ export default function CourseModules() {
   if (!courseCode) {
     return (
       <LmsPage title="Modules" description="">
-        <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">Invalid link.</p>
+        <p className="mt-6 text-sm text-slate-500 dark:text-neutral-400">Invalid link.</p>
       </LmsPage>
     )
   }
@@ -1131,21 +1126,21 @@ export default function CourseModules() {
           {moduleActionError}
         </p>
       )}
-      {loading && <p className="mt-8 text-sm text-slate-500 dark:text-slate-400">Loading modules…</p>}
+      {loading && <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400">Loading modules…</p>}
       {!loading && showViewerOnlyHint && (
-        <p className="mt-8 text-sm text-slate-500 dark:text-slate-400">
+        <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400">
           You can view this outline, but only the course creator and assigned course teachers can add
           modules.
         </p>
       )}
       {empty && canEditModules && (
-        <p className="mt-8 text-sm text-slate-500 dark:text-slate-400">
+        <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400">
           No course items yet. Use{' '}
-          <span className="font-medium text-slate-700 dark:text-slate-300">Add Course Item</span> to add a module.
+          <span className="font-medium text-slate-700 dark:text-neutral-300">Add Course Item</span> to add a module.
         </p>
       )}
       {empty && !canEditModules && (
-        <p className="mt-8 text-sm text-slate-500 dark:text-slate-400">No modules yet.</p>
+        <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400">No modules yet.</p>
       )}
       {!loading && hasRows && canEditModules && (
         <DndContext
@@ -1159,7 +1154,7 @@ export default function CourseModules() {
             <ul className="mt-8 flex w-full max-w-none flex-col gap-3">
               {nonModuleTopLevel.map((item) => (
                 <li key={item.id} className="w-full">
-                  <p className="text-base font-semibold tracking-tight text-slate-950 dark:text-slate-100">
+                  <p className="text-base font-semibold tracking-tight text-slate-950 dark:text-neutral-100">
                     {item.title}
                   </p>
                 </li>
@@ -1192,7 +1187,7 @@ export default function CourseModules() {
                     onOpenModuleSettings={handleOpenModuleSettings}
                     onChildTogglePublished={handleChildTogglePublished}
                     onOpenEditChildTitle={openEditChildTitle}
-                    onArchiveChild={handleArchiveChild}
+                    onArchiveChild={requestArchiveChild}
                   />
                 ))}
             </ul>
@@ -1201,9 +1196,9 @@ export default function CourseModules() {
               desyncs the overlay from the cursor. Only use DragOverlay for in-module item drags. */}
           {activeDragId && activeItem && activeItem.kind !== 'module' ? (
             <DragOverlay dropAnimation={null}>
-              <div className="pointer-events-none max-w-lg rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-lg dark:border-slate-600 dark:bg-slate-800">
-                <p className="text-sm font-semibold text-slate-950 dark:text-slate-100">{activeItem.title}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+              <div className="pointer-events-none max-w-lg rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-lg dark:border-neutral-600 dark:bg-neutral-800">
+                <p className="text-sm font-semibold text-slate-950 dark:text-neutral-100">{activeItem.title}</p>
+                <p className="text-xs text-slate-500 dark:text-neutral-400">
                   {activeItem.kind === 'content_page'
                     ? 'Page'
                     : activeItem.kind === 'assignment'
@@ -1225,7 +1220,7 @@ export default function CourseModules() {
             <ul className="mt-8 flex w-full max-w-none flex-col gap-3">
               {nonModuleTopLevel.map((item) => (
                 <li key={item.id} className="w-full">
-                  <p className="text-base font-semibold tracking-tight text-slate-950 dark:text-slate-100">
+                  <p className="text-base font-semibold tracking-tight text-slate-950 dark:text-neutral-100">
                     {item.title}
                   </p>
                 </li>
@@ -1365,6 +1360,74 @@ export default function CourseModules() {
         saving={moduleSettingsSaving}
         errorMessage={moduleSettingsSaveError}
       />
+
+      {archiveConfirmItem ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={archiveDialogTitleId}
+          onClick={(e) => {
+            if (
+              e.target === e.currentTarget &&
+              busyChildItemId !== archiveConfirmItem.id
+            ) {
+              setArchiveConfirmItem(null)
+            }
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-neutral-600 dark:bg-neutral-800">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-neutral-600">
+              <h3
+                id={archiveDialogTitleId}
+                className="text-sm font-semibold text-slate-900 dark:text-neutral-100"
+              >
+                Delete item
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (busyChildItemId !== archiveConfirmItem.id) setArchiveConfirmItem(null)
+                }}
+                disabled={busyChildItemId === archiveConfirmItem.id}
+                className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm leading-relaxed text-slate-600 dark:text-neutral-300">
+                Archive this item? It will be removed from the outline. Restore it anytime from course
+                settings under Archived content.
+              </p>
+              {archiveConfirmItem.title ? (
+                <p className="mt-2 text-sm font-medium text-slate-900 dark:text-neutral-100">
+                  {archiveConfirmItem.title}
+                </p>
+              ) : null}
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setArchiveConfirmItem(null)}
+                  disabled={busyChildItemId === archiveConfirmItem.id}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700/80"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmArchiveChild()}
+                  disabled={busyChildItemId === archiveConfirmItem.id}
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+                >
+                  {busyChildItemId === archiveConfirmItem.id ? 'Archiving…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </LmsPage>
   )
 }

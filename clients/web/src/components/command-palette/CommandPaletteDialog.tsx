@@ -118,20 +118,20 @@ export function CommandPaletteDialog() {
 
   const palette = (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-[min(12vh,8rem)] px-4"
+      className="fixed inset-0 z-[100] flex items-start justify-center px-3 pt-12 pb-[env(safe-area-inset-bottom)] sm:px-4 sm:pt-[min(12vh,8rem)]"
       role="dialog"
       aria-modal="true"
       aria-label="Search"
     >
       <button
         type="button"
-        className="absolute inset-0 cursor-default bg-slate-950/55 backdrop-blur-md dark:bg-slate-950/75"
+        className="absolute inset-0 cursor-default bg-slate-950/55 backdrop-blur-md dark:bg-neutral-950/75"
         aria-label="Close search"
         onClick={() => close()}
       />
-      <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/50">
-        <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <Search className="h-5 w-5 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden />
+      <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl shadow-slate-900/20 dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-black/50">
+        <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-neutral-700">
+          <Search className="h-5 w-5 shrink-0 text-slate-400 dark:text-neutral-500" aria-hidden />
           <input
             ref={inputRef}
             type="search"
@@ -142,7 +142,7 @@ export function CommandPaletteDialog() {
             }}
             onKeyDown={onInputKeyDown}
             placeholder="Search courses, people, pages, actions…"
-            className="min-w-0 flex-1 border-0 bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-500 dark:text-slate-100 dark:placeholder:text-slate-500"
+            className="min-w-0 flex-1 border-0 bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-500 dark:text-neutral-100 dark:placeholder:text-neutral-500"
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
@@ -151,7 +151,7 @@ export function CommandPaletteDialog() {
               filtered[safeIndex] ? `cmd-result-${filtered[safeIndex].id}` : undefined
             }
           />
-          <kbd className="hidden shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-500 sm:inline dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400">
+          <kbd className="hidden shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-500 sm:inline dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
             esc
           </kbd>
         </div>
@@ -163,7 +163,7 @@ export function CommandPaletteDialog() {
           className="max-h-[min(60vh,420px)] overflow-y-auto px-2 py-2"
         >
           {loadState === 'loading' && (
-            <p className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+            <p className="px-3 py-8 text-center text-sm text-slate-500 dark:text-neutral-400">Loading…</p>
           )}
           {loadState === 'error' && (
             <p className="px-3 py-8 text-center text-sm text-rose-600 dark:text-rose-400">
@@ -171,7 +171,7 @@ export function CommandPaletteDialog() {
             </p>
           )}
           {loadState === 'ready' && filtered.length === 0 && (
-            <p className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">No results.</p>
+            <p className="px-3 py-8 text-center text-sm text-slate-500 dark:text-neutral-400">No results.</p>
           )}
           {loadState === 'ready' &&
             filtered.map((item, idx) => {
@@ -181,7 +181,7 @@ export function CommandPaletteDialog() {
               return (
                 <div key={item.id}>
                   {showHeader && (
-                    <div className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <div className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
                       {SEARCH_GROUP_LABEL[item.group]}
                     </div>
                   )}
@@ -193,8 +193,8 @@ export function CommandPaletteDialog() {
                     ref={selected ? activeRowRef : undefined}
                     className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
                       selected
-                        ? 'bg-indigo-50 text-slate-900 dark:bg-indigo-950/70 dark:text-slate-100'
-                        : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/80'
+                        ? 'bg-indigo-50 text-slate-900 dark:bg-indigo-950/70 dark:text-neutral-100'
+                        : 'text-slate-700 hover:bg-slate-50 dark:text-neutral-300 dark:hover:bg-neutral-800/80'
                     }`}
                     onMouseEnter={() => setCursor(idx)}
                     onClick={() => go(item)}
@@ -203,13 +203,13 @@ export function CommandPaletteDialog() {
                       className={`mt-0.5 h-4 w-4 shrink-0 ${
                         selected
                           ? 'text-indigo-600 dark:text-indigo-400'
-                          : 'text-slate-400 dark:text-slate-500'
+                          : 'text-slate-400 dark:text-neutral-500'
                       }`}
                       aria-hidden
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block font-medium leading-snug">{item.title}</span>
-                      <span className="block text-xs text-slate-500 dark:text-slate-400">{item.subtitle}</span>
+                      <span className="block text-xs text-slate-500 dark:text-neutral-400">{item.subtitle}</span>
                     </span>
                   </button>
                 </div>
@@ -217,7 +217,7 @@ export function CommandPaletteDialog() {
             })}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500 dark:border-neutral-700 dark:text-neutral-400">
           <span className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1">
               <ArrowUp className="h-3.5 w-3.5 opacity-90" aria-hidden />
@@ -225,7 +225,7 @@ export function CommandPaletteDialog() {
               Navigate
             </span>
             <span className="inline-flex items-center gap-1">
-              <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
                 ↵
               </kbd>
               Open

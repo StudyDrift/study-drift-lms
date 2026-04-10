@@ -32,7 +32,7 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
         <ArrowLeft className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Back
       </NavLink>
-      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
         Course Menu
       </p>
       <NavLink

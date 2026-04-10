@@ -17,28 +17,28 @@ const editorShellClass = [
   'focus:outline-none',
   '[&_p]:mt-3 [&_p:first-child]:mt-0',
   '[&_h1]:mt-6 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-slate-900 [&_h1]:first:mt-0',
-  'dark:[&_h1]:text-slate-100',
+  'dark:[&_h1]:text-neutral-100',
   '[&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-slate-900 [&_h2]:first:mt-0',
-  'dark:[&_h2]:text-slate-100',
+  'dark:[&_h2]:text-neutral-100',
   '[&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-slate-900 [&_h3]:first:mt-0',
-  'dark:[&_h3]:text-slate-100',
+  'dark:[&_h3]:text-neutral-100',
   '[&_h4]:mt-4 [&_h4]:text-base [&_h4]:font-semibold [&_h4]:text-slate-900',
-  'dark:[&_h4]:text-slate-100',
+  'dark:[&_h4]:text-neutral-100',
   '[&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:text-slate-700',
-  'dark:[&_ul]:text-slate-300',
+  'dark:[&_ul]:text-neutral-300',
   '[&_ol]:mt-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:text-slate-700',
-  'dark:[&_ol]:text-slate-300',
+  'dark:[&_ol]:text-neutral-300',
   '[&_li]:marker:text-slate-500',
-  'dark:[&_li]:marker:text-slate-500',
+  'dark:[&_li]:marker:text-neutral-500',
   '[&_li]:text-slate-700',
-  'dark:[&_li]:text-slate-300',
+  'dark:[&_li]:text-neutral-300',
   '[&_a]:font-medium [&_a]:text-indigo-600 [&_a]:underline [&_a]:decoration-indigo-200 [&_a]:underline-offset-2',
-  '[&_a]:dark:text-indigo-400 [&_a]:dark:decoration-indigo-500/50',
+  '[&_a]:dark:text-neutral-200 [&_a]:dark:decoration-neutral-500/60',
   '[&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px] [&_code]:text-slate-900',
-  '[&_code]:dark:bg-slate-800 [&_code]:dark:text-slate-100',
+  '[&_code]:dark:bg-neutral-800 [&_code]:dark:text-neutral-100',
   '[&_pre]:mt-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-slate-900 [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:text-slate-100',
   '[&_blockquote]:mt-3 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-600',
-  '[&_blockquote]:dark:border-slate-600 [&_blockquote]:dark:text-slate-400',
+  '[&_blockquote]:dark:border-neutral-600 [&_blockquote]:dark:text-neutral-400',
 ].join(' ')
 
 export type MarkdownBodyEditorProps = {
@@ -329,7 +329,7 @@ export function MarkdownBodyEditor({
   if (!editor) {
     return (
       <div
-        className="min-h-[100px] w-full rounded-sm bg-slate-50/80 dark:bg-slate-900/60"
+        className="min-h-[100px] w-full rounded-sm bg-slate-50/80 dark:bg-neutral-900/60"
         aria-busy="true"
         aria-label={placeholder ?? 'Loading editor'}
       />
@@ -354,10 +354,10 @@ export function MarkdownBodyEditor({
                 zIndex: 60,
                 width: 'min(20rem, calc(100vw - 2rem))',
               }}
-              className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/15 dark:border-slate-600 dark:bg-slate-900"
+              className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/15 dark:border-neutral-600 dark:bg-neutral-900"
             >
               {structureLoading ? (
-                <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
+                <p className="px-3 py-2 text-sm text-slate-500 dark:text-neutral-400">
                   Loading course items…
                 </p>
               ) : structureError ? (
@@ -365,7 +365,7 @@ export function MarkdownBodyEditor({
                   Could not load course structure.
                 </p>
               ) : filtered.length === 0 ? (
-                <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
+                <p className="px-3 py-2 text-sm text-slate-500 dark:text-neutral-400">
                   No matching content pages or assignments. Keep typing to filter.
                 </p>
               ) : (
@@ -379,7 +379,7 @@ export function MarkdownBodyEditor({
                     className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm transition ${
                       idx === activeIndex
                         ? 'bg-indigo-50 text-indigo-950 dark:bg-indigo-950/50 dark:text-indigo-50'
-                        : 'text-slate-800 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-800'
+                        : 'text-slate-800 hover:bg-slate-50 dark:text-neutral-100 dark:hover:bg-neutral-800'
                     }`}
                     onMouseDown={(e) => {
                       e.preventDefault()
@@ -387,7 +387,7 @@ export function MarkdownBodyEditor({
                     }}
                     onMouseEnter={() => setActiveIndex(idx)}
                   >
-                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-neutral-400">
                       {kindLabel(item.kind)}
                     </span>
                     <span className="font-medium">{item.title}</span>

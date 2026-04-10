@@ -17,6 +17,7 @@ import {
   heroImageObjectStyle,
   parseHeroObjectPosition,
 } from '../../lib/heroImagePosition'
+import { CourseArchivedContentSection } from './CourseArchivedContentSection'
 import { CourseExportImportSection } from './CourseExportImportSection'
 import { CourseGradingSettingsSection } from './CourseGradingSettings'
 
@@ -36,6 +37,25 @@ function datetimeLocalToIso(value: string): string | null {
   return d.toISOString()
 }
 
+type RelativeDurationUnit = 'D' | 'W' | 'M' | 'Y'
+
+function isoDurationToParts(
+  iso: string | null | undefined,
+): { amount: string; unit: RelativeDurationUnit } {
+  if (!iso?.trim()) return { amount: '', unit: 'M' }
+  const m = /^P(\d+)([DWMY])$/i.exec(iso.trim())
+  if (!m) return { amount: '', unit: 'M' }
+  const u = m[2].toUpperCase()
+  const unit = (['D', 'W', 'M', 'Y'].includes(u) ? u : 'M') as RelativeDurationUnit
+  return { amount: m[1], unit }
+}
+
+function partsToIsoDuration(amountStr: string, unit: RelativeDurationUnit): string | null {
+  const n = parseInt(amountStr, 10)
+  if (!Number.isFinite(n) || n < 1) return null
+  return `P${n}${unit}`
+}
+
 function defaultImagePrompt(courseTitle: string, courseDescription: string): string {
   return `Generate an image for a course banner with the following title and description:
 Title: ${courseTitle}
@@ -51,9 +71,12 @@ type SavePayload = {
   endsAt: string | null
   visibleFrom: string | null
   hiddenAt: string | null
+  scheduleMode: 'fixed' | 'relative'
+  relativeEndAfter: string | null
+  relativeHiddenAfter: string | null
 }
 
-type SettingsSection = 'basic' | 'dates' | 'branding' | 'grading' | 'export-import'
+type SettingsSection = 'basic' | 'dates' | 'branding' | 'grading' | 'export-import' | 'archived'
 
 function parseSettingsSection(courseCode: string, pathname: string): SettingsSection | 'invalid' {
   const base = `/courses/${encodeURIComponent(courseCode)}/settings`
@@ -67,6 +90,7 @@ function parseSettingsSection(courseCode: string, pathname: string): SettingsSec
   if (parts[0] === 'branding') return 'branding'
   if (parts[0] === 'grading') return 'grading'
   if (parts[0] === 'export-import') return 'export-import'
+  if (parts[0] === 'archived') return 'archived'
   return 'invalid'
 }
 
@@ -84,6 +108,11 @@ export default function CourseSettings() {
   const [endsAt, setEndsAt] = useState('')
   const [visibleFrom, setVisibleFrom] = useState('')
   const [hiddenAt, setHiddenAt] = useState('')
+  const [scheduleMode, setScheduleMode] = useState<'fixed' | 'relative'>('fixed')
+  const [relEndAmount, setRelEndAmount] = useState('')
+  const [relEndUnit, setRelEndUnit] = useState<RelativeDurationUnit>('M')
+  const [relHiddenAmount, setRelHiddenAmount] = useState('')
+  const [relHiddenUnit, setRelHiddenUnit] = useState<RelativeDurationUnit>('M')
 
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
@@ -107,6 +136,20 @@ export default function CourseSettings() {
   const [mdThemeMessage, setMdThemeMessage] = useState<string | null>(null)
   const [customDraft, setCustomDraft] = useState<MarkdownThemeCustom>(markdownThemeCustomSeed)
 
+  const applyScheduleStateFromCourse = useCallback((c: Course) => {
+    setStartsAt(isoToDatetimeLocal(c.startsAt))
+    setEndsAt(isoToDatetimeLocal(c.endsAt))
+    setVisibleFrom(isoToDatetimeLocal(c.visibleFrom))
+    setHiddenAt(isoToDatetimeLocal(c.hiddenAt))
+    setScheduleMode(c.scheduleMode === 'relative' ? 'relative' : 'fixed')
+    const endP = isoDurationToParts(c.relativeEndAfter ?? null)
+    setRelEndAmount(endP.amount)
+    setRelEndUnit(endP.unit)
+    const hidP = isoDurationToParts(c.relativeHiddenAfter ?? null)
+    setRelHiddenAmount(hidP.amount)
+    setRelHiddenUnit(hidP.unit)
+  }, [])
+
   const loadCourse = useCallback(async () => {
     if (!courseCode) return
     setLoading(true)
@@ -123,16 +166,13 @@ export default function CourseSettings() {
       setTitle(c.title)
       setDescription(c.description)
       setPublished(c.published)
-      setStartsAt(isoToDatetimeLocal(c.startsAt))
-      setEndsAt(isoToDatetimeLocal(c.endsAt))
-      setVisibleFrom(isoToDatetimeLocal(c.visibleFrom))
-      setHiddenAt(isoToDatetimeLocal(c.hiddenAt))
+      applyScheduleStateFromCourse(c)
     } catch {
       setLoadError('Could not load this course.')
     } finally {
       setLoading(false)
     }
-  }, [courseCode])
+  }, [courseCode, applyScheduleStateFromCourse])
 
   useEffect(() => {
     void loadCourse()
@@ -182,14 +222,20 @@ export default function CourseSettings() {
   }
 
   function buildPayload(overrides?: Partial<{ published: boolean }>): SavePayload {
+    const mode = scheduleMode
     return {
       title: title.trim(),
       description: description.trim(),
       published: overrides?.published ?? published,
-      startsAt: datetimeLocalToIso(startsAt),
-      endsAt: datetimeLocalToIso(endsAt),
-      visibleFrom: datetimeLocalToIso(visibleFrom),
-      hiddenAt: datetimeLocalToIso(hiddenAt),
+      startsAt: mode === 'relative' ? null : datetimeLocalToIso(startsAt),
+      endsAt: mode === 'relative' ? null : datetimeLocalToIso(endsAt),
+      visibleFrom: mode === 'relative' ? null : datetimeLocalToIso(visibleFrom),
+      hiddenAt: mode === 'relative' ? null : datetimeLocalToIso(hiddenAt),
+      scheduleMode: mode,
+      relativeEndAfter:
+        mode === 'relative' ? partsToIsoDuration(relEndAmount, relEndUnit) : null,
+      relativeHiddenAfter:
+        mode === 'relative' ? partsToIsoDuration(relHiddenAmount, relHiddenUnit) : null,
     }
   }
 
@@ -209,6 +255,9 @@ export default function CourseSettings() {
           endsAt: payload.endsAt,
           visibleFrom: payload.visibleFrom,
           hiddenAt: payload.hiddenAt,
+          scheduleMode: payload.scheduleMode,
+          relativeEndAfter: payload.relativeEndAfter,
+          relativeHiddenAfter: payload.relativeHiddenAfter,
         }),
       })
       const raw: unknown = await res.json().catch(() => ({}))
@@ -221,6 +270,7 @@ export default function CourseSettings() {
       const updated = raw as Course
       setCourse(updated)
       setPublished(updated.published)
+      applyScheduleStateFromCourse(updated)
       setSaveStatus('saved')
       setSaveMessage('Saved.')
     } catch {
@@ -440,22 +490,28 @@ export default function CourseSettings() {
             ? course?.title
               ? `${course.title} — export/import`
               : 'Export / import'
-            : course?.title
-              ? `${course.title} — settings`
-              : 'Course settings'
+            : section === 'archived'
+              ? course?.title
+                ? `${course.title} — archived`
+                : 'Archived'
+              : course?.title
+                ? `${course.title} — settings`
+                : 'Course settings'
 
   const pageDescription =
     section === 'basic'
       ? 'Title, description, and publishing for this course.'
       : section === 'dates'
-        ? 'Schedule and visibility windows for this course.'
+        ? 'Calendar dates or a schedule measured from each learner’s enrollment.'
         : section === 'branding'
           ? 'Hero image, banner, and reading appearance for syllabus and module pages.'
           : section === 'grading'
             ? 'Grading scale, weighted assignment groups, and how items map to each group.'
             : section === 'export-import'
               ? 'Download the full course as JSON or restore from a backup file.'
-              : ''
+              : section === 'archived'
+                ? 'Module items you archived from the outline. Restore them when you want them visible again.'
+                : ''
 
   return (
     <LmsPage title={pageTitle} description={pageDescription}>
@@ -477,7 +533,7 @@ export default function CourseSettings() {
 
       {course && !loading && (
         <div
-          className={`mt-8 space-y-6 ${section === 'branding' || section === 'grading' || section === 'export-import' ? 'max-w-4xl' : 'max-w-2xl'}`}
+          className={`mt-8 space-y-6 ${section === 'branding' || section === 'grading' || section === 'export-import' || section === 'archived' ? 'max-w-4xl' : 'max-w-2xl'}`}
         >
           {section === 'basic' && (
             <>
@@ -565,36 +621,96 @@ export default function CourseSettings() {
           {section === 'dates' && (
             <form onSubmit={onSaveForm} className="space-y-6">
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
-                <h2 className="text-sm font-semibold text-slate-900">Schedule & visibility</h2>
+                <h2 className="text-sm font-semibold text-slate-900">Fixed Schedule & Visibility</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Clear a field to remove that date. Times use your local timezone.
+                  Control whether the course uses fixed calendar dates or a timeline from each
+                  student’s enrollment. Module release and due dates follow the same mode: relative
+                  courses shift those dates by the same offset.
                 </p>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <DateField
-                    label="Start"
-                    value={startsAt}
-                    onChange={setStartsAt}
-                    onClear={() => setStartsAt('')}
-                  />
-                  <DateField
-                    label="End"
-                    value={endsAt}
-                    onChange={setEndsAt}
-                    onClear={() => setEndsAt('')}
-                  />
-                  <DateField
-                    label="Visible from"
-                    value={visibleFrom}
-                    onChange={setVisibleFrom}
-                    onClear={() => setVisibleFrom('')}
-                  />
-                  <DateField
-                    label="Hidden after"
-                    value={hiddenAt}
-                    onChange={setHiddenAt}
-                    onClear={() => setHiddenAt('')}
-                  />
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={scheduleMode === 'relative'}
+                    onClick={() =>
+                      setScheduleMode((m) => (m === 'fixed' ? 'relative' : 'fixed'))
+                    }
+                    disabled={saveStatus === 'saving'}
+                    className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
+                      scheduleMode === 'relative' ? 'bg-indigo-600' : 'bg-slate-200'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition ${
+                        scheduleMode === 'relative' ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-sm font-medium text-slate-800">
+                    {scheduleMode === 'fixed'
+                      ? 'Fixed (calendar dates)'
+                      : 'Relative (from enrollment)'}
+                  </span>
                 </div>
+                {scheduleMode === 'fixed' ? (
+                  <>
+                    <p className="mt-3 text-sm text-slate-500">
+                      Clear a field to remove that date. Times use your local timezone.
+                    </p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <DateField
+                        label="Start"
+                        value={startsAt}
+                        onChange={setStartsAt}
+                        onClear={() => setStartsAt('')}
+                      />
+                      <DateField
+                        label="End"
+                        value={endsAt}
+                        onChange={setEndsAt}
+                        onClear={() => setEndsAt('')}
+                      />
+                      <DateField
+                        label="Visible from"
+                        value={visibleFrom}
+                        onChange={setVisibleFrom}
+                        onClear={() => setVisibleFrom('')}
+                      />
+                      <DateField
+                        label="Hidden after"
+                        value={hiddenAt}
+                        onChange={setHiddenAt}
+                        onClear={() => setHiddenAt('')}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-3 text-sm text-slate-500">
+                      Start and catalog visibility begin when the student is enrolled. Set how long
+                      the course runs and when it drops from the catalog (optional). Durations use
+                      ISO-style lengths (days, weeks, months, or years).
+                    </p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <RelativeDurationField
+                        label="End after"
+                        amount={relEndAmount}
+                        unit={relEndUnit}
+                        onAmountChange={setRelEndAmount}
+                        onUnitChange={setRelEndUnit}
+                        onClear={() => setRelEndAmount('')}
+                      />
+                      <RelativeDurationField
+                        label="Hidden from catalog after"
+                        amount={relHiddenAmount}
+                        unit={relHiddenUnit}
+                        onAmountChange={setRelHiddenAmount}
+                        onUnitChange={setRelHiddenUnit}
+                        onClear={() => setRelHiddenAmount('')}
+                      />
+                    </div>
+                  </>
+                )}
               </section>
 
               {saveMessage && (
@@ -834,6 +950,7 @@ export default function CourseSettings() {
 
           {section === 'grading' && <CourseGradingSettingsSection courseCode={courseCode} />}
           {section === 'export-import' && <CourseExportImportSection courseCode={courseCode} />}
+          {section === 'archived' && <CourseArchivedContentSection courseCode={courseCode} />}
         </div>
       )}
 
@@ -1096,6 +1213,66 @@ function DateField({
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
       />
+    </div>
+  )
+}
+
+function RelativeDurationField({
+  label,
+  amount,
+  unit,
+  onAmountChange,
+  onUnitChange,
+  onClear,
+}: {
+  label: string
+  amount: string
+  unit: RelativeDurationUnit
+  onAmountChange: (v: string) => void
+  onUnitChange: (u: RelativeDurationUnit) => void
+  onClear: () => void
+}) {
+  const id = `rel-${label.replace(/\s+/g, '-').toLowerCase()}`
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <label htmlFor={id} className="text-sm font-medium text-slate-700">
+          {label}
+        </label>
+        {amount ? (
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-xs font-medium text-indigo-600 hover:text-indigo-500"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+      <div className="flex gap-2">
+        <input
+          id={id}
+          type="number"
+          min={1}
+          step={1}
+          inputMode="numeric"
+          placeholder="e.g. 3"
+          value={amount}
+          onChange={(e) => onAmountChange(e.target.value)}
+          className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
+        />
+        <select
+          aria-label={`${label} unit`}
+          value={unit}
+          onChange={(e) => onUnitChange(e.target.value as RelativeDurationUnit)}
+          className="w-36 shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
+        >
+          <option value="D">Days</option>
+          <option value="W">Weeks</option>
+          <option value="M">Months</option>
+          <option value="Y">Years</option>
+        </select>
+      </div>
     </div>
   )
 }

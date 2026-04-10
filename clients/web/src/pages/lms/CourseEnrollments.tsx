@@ -336,8 +336,8 @@ export default function CourseEnrollments() {
       )}
 
       {enrollments && enrollments.length > 0 && (
-        <div className="mt-8 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
+        <div className="mt-8 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full min-w-[16rem] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="px-4 py-3">Name</th>

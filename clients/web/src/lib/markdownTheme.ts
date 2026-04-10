@@ -230,11 +230,11 @@ const CUSTOM_INLINE_COLORS_DARK_LMS: Pick<
   MarkdownThemeCustom,
   'headingColor' | 'bodyColor' | 'linkColor' | 'codeBackground' | 'blockquoteBorder'
 > = {
-  headingColor: '#f1f5f9',
-  bodyColor: '#cbd5e1',
-  linkColor: '#a5b4fc',
-  codeBackground: '#1e293b',
-  blockquoteBorder: '#475569',
+  headingColor: '#f5f5f5',
+  bodyColor: '#d4d4d4',
+  linkColor: '#e5e5e5',
+  codeBackground: '#262626',
+  blockquoteBorder: '#525252',
 }
 
 function mergeCustom(
@@ -287,7 +287,7 @@ function mergeCustom(
 
 /** Reading surface when the LMS shell is dark — dark panel (no white flash). */
 const LMS_DARK_READING_SURFACE =
-  'rounded-2xl border border-slate-700/90 !bg-slate-950/95 px-6 py-8 shadow-sm ring-1 ring-slate-700/70'
+  'rounded-2xl border border-neutral-700/90 !bg-neutral-950/95 px-6 py-8 shadow-sm ring-1 ring-neutral-700/60'
 
 function effectiveMarkdownPresetId(preset: string): MarkdownThemePresetId | 'custom' {
   if (preset === 'custom') return 'custom'

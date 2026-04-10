@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { ArrowLeft, Calendar, FolderInput, Info, Palette, Scale } from 'lucide-react'
+import { Archive, ArrowLeft, Calendar, FolderInput, Info, Palette, Scale } from 'lucide-react'
 import { courseSettingsSectionFromPathname } from './sideNavPathUtils'
 import { sideNavActiveClass, sideNavLinkClass } from './sideNavStyles'
 
@@ -21,7 +21,7 @@ export function SideNavCourseSettingsLinks({ courseCode }: SideNavCourseSettings
         <ArrowLeft className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Back
       </NavLink>
-      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
         Course Settings
       </p>
       <NavLink
@@ -61,6 +61,13 @@ export function SideNavCourseSettingsLinks({ courseCode }: SideNavCourseSettings
       >
         <FolderInput className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Export/Import
+      </NavLink>
+      <NavLink
+        to={`${base}/archived`}
+        className={() => `${sideNavLinkClass} ${section === 'archived' ? sideNavActiveClass : ''}`}
+      >
+        <Archive className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        Archived
       </NavLink>
     </>
   )

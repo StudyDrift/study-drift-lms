@@ -47,7 +47,7 @@ export function AddCourseItemMenu({ onAdd, disabled }: AddCourseItemMenuProps) {
           id={menuId}
           role="menu"
           aria-label="Course item types"
-          className="absolute right-0 z-50 mt-1 min-w-[14rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-slate-600 dark:bg-slate-800 dark:shadow-black/40"
+          className="absolute right-0 z-50 mt-1 min-w-[14rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-neutral-600 dark:bg-neutral-800 dark:shadow-black/40"
         >
           <button
             type="button"
@@ -56,10 +56,10 @@ export function AddCourseItemMenu({ onAdd, disabled }: AddCourseItemMenuProps) {
               onAdd()
               setOpen(false)
             }}
-            className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/80"
+            className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700/80"
           >
-            <span className="font-semibold text-slate-950 dark:text-slate-100">Module</span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">Group course activities and items</span>
+            <span className="font-semibold text-slate-950 dark:text-neutral-100">Module</span>
+            <span className="text-xs text-slate-500 dark:text-neutral-400">Group course activities and items</span>
           </button>
         </div>
       )}

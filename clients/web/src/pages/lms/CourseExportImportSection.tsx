@@ -70,7 +70,7 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
 
   if (!canEdit) {
     return (
-      <p className="text-sm text-slate-600 dark:text-slate-400">
+      <p className="text-sm text-slate-600 dark:text-neutral-400">
         You need permission to edit course modules to export or import course content.
       </p>
     )
@@ -78,9 +78,9 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
 
   return (
     <div className="space-y-8">
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900/40">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Export</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-700 dark:bg-neutral-900/40">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Export</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
           Download the full course bundle as one JSON file: syllabus, modules, pages,
           assignments, quizzes, grading groups, and course appearance settings (not enrollments or
           learner data).
@@ -98,19 +98,19 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900/40">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Import</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-700 dark:bg-neutral-900/40">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Import</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
           Choose a JSON file from any course export (including another server or environment). The
           bundle is applied to this course; the <code className="text-xs">courseCode</code> in the
           file is informational (where it was exported from).
         </p>
 
         <fieldset className="mt-4 space-y-3">
-          <legend className="text-sm font-medium text-slate-800 dark:text-slate-200">
+          <legend className="text-sm font-medium text-slate-800 dark:text-neutral-200">
             Import mode
           </legend>
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-600">
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-neutral-600">
             <input
               type="radio"
               name="importMode"
@@ -119,16 +119,16 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
               onChange={() => setImportMode('erase')}
             />
             <span>
-              <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+              <span className="block text-sm font-medium text-slate-900 dark:text-neutral-100">
                 Erase and import
               </span>
-              <span className="mt-0.5 block text-sm text-slate-500 dark:text-slate-400">
+              <span className="mt-0.5 block text-sm text-slate-500 dark:text-neutral-400">
                 Remove all modules and related content, then apply the file. Also replaces
                 syllabus, grading groups, and course settings from the file.
               </span>
             </span>
           </label>
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-600">
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-neutral-600">
             <input
               type="radio"
               name="importMode"
@@ -137,16 +137,16 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
               onChange={() => setImportMode('mergeAdd')}
             />
             <span>
-              <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+              <span className="block text-sm font-medium text-slate-900 dark:text-neutral-100">
                 Add difference (merge)
               </span>
-              <span className="mt-0.5 block text-sm text-slate-500 dark:text-slate-400">
+              <span className="mt-0.5 block text-sm text-slate-500 dark:text-neutral-400">
                 Keep existing content. Only add syllabus sections, assignment groups, and outline
                 items whose ids are not already present, with bodies for those new items only.
               </span>
             </span>
           </label>
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-600">
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-neutral-600">
             <input
               type="radio"
               name="importMode"
@@ -155,10 +155,10 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
               onChange={() => setImportMode('overwrite')}
             />
             <span>
-              <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+              <span className="block text-sm font-medium text-slate-900 dark:text-neutral-100">
                 Overwrite / sync
               </span>
-              <span className="mt-0.5 block text-sm text-slate-500 dark:text-slate-400">
+              <span className="mt-0.5 block text-sm text-slate-500 dark:text-neutral-400">
                 Update this course from the file: replace syllabus and grading, refresh settings,
                 upsert every item in the file, remove outline items not listed in the file, and
                 refresh all module bodies from the file.
@@ -179,7 +179,7 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={busy !== 'idle'}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700"
           >
             <Upload className="h-4 w-4" aria-hidden />
             {busy === 'importing' ? 'Importing…' : 'Choose JSON file…'}

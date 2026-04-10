@@ -14,6 +14,21 @@ function formatDate(iso: string | null): string {
   })
 }
 
+function formatIsoDurationHuman(iso: string | null | undefined): string {
+  if (!iso?.trim()) return '—'
+  const m = /^P(\d+)([DWMY])$/i.exec(iso.trim())
+  if (!m) return iso
+  const n = m[1]
+  const labels: Record<string, string> = {
+    D: 'days',
+    W: 'weeks',
+    M: 'months',
+    Y: 'years',
+  }
+  const u = labels[m[2].toUpperCase()] ?? 'periods'
+  return `${n} ${u}`
+}
+
 export default function CourseDetail() {
   const { courseCode } = useParams<{ courseCode: string }>()
   const [course, setCourse] = useState<Course | null>(null)
@@ -101,18 +116,51 @@ export default function CourseDetail() {
               <dt className="font-medium text-slate-500">Course code</dt>
               <dd className="mt-1 text-slate-900">{course.courseCode}</dd>
             </div>
-            <div>
-              <dt className="font-medium text-slate-500">Starts / ends</dt>
-              <dd className="mt-1 text-slate-900">
-                {formatDate(course.startsAt)} — {formatDate(course.endsAt)}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-slate-500">Visible / hidden window</dt>
-              <dd className="mt-1 text-slate-900">
-                {formatDate(course.visibleFrom)} — {formatDate(course.hiddenAt)}
-              </dd>
-            </div>
+            {course.scheduleMode === 'relative' &&
+            course.viewerEnrollmentRoles?.some(
+              (r) => r === 'teacher' || r === 'instructor',
+            ) ? (
+              <>
+                <div>
+                  <dt className="font-medium text-slate-500">Schedule</dt>
+                  <dd className="mt-1 text-slate-900">
+                    Relative to each student&apos;s enrollment. Module release and due dates are
+                    shifted from the course timeline anchor (see course settings).
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-slate-500">Course length</dt>
+                  <dd className="mt-1 text-slate-900">
+                    {course.relativeEndAfter
+                      ? `${formatIsoDurationHuman(course.relativeEndAfter)} after enrollment`
+                      : 'No fixed end'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-slate-500">Catalog visibility</dt>
+                  <dd className="mt-1 text-slate-900">
+                    {course.relativeHiddenAfter
+                      ? `Hidden ${formatIsoDurationHuman(course.relativeHiddenAfter)} after enrollment`
+                      : 'Not limited by a hide-after duration'}
+                  </dd>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <dt className="font-medium text-slate-500">Starts / ends</dt>
+                  <dd className="mt-1 text-slate-900">
+                    {formatDate(course.startsAt)} — {formatDate(course.endsAt)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-slate-500">Visible / hidden window</dt>
+                  <dd className="mt-1 text-slate-900">
+                    {formatDate(course.visibleFrom)} — {formatDate(course.hiddenAt)}
+                  </dd>
+                </div>
+              </>
+            )}
             <div>
               <dt className="font-medium text-slate-500">Published</dt>
               <dd className="mt-1 text-slate-900">{course.published ? 'Yes' : 'No'}</dd>

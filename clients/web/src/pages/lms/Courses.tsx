@@ -200,7 +200,7 @@ export default function Courses() {
         <RequirePermission permission={PERM_COURSE_CREATE} fallback={null}>
           <Link
             to="/courses/create"
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 sm:w-auto"
           >
             <Plus className="h-4 w-4" aria-hidden />
             New course

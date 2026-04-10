@@ -36,5 +36,6 @@ describe('courseSettingsSectionFromPathname', () => {
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/export-import')).toBe(
       'export-import',
     )
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/archived')).toBe('archived')
   })
 })

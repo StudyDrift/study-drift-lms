@@ -489,8 +489,8 @@ export default function Settings() {
       >
         {activeView === 'ai-models' && (
           <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Models</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">Models</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
               Choose models for course setup (text) and for generating course hero images. Lists are
               loaded from{' '}
               <a
@@ -582,7 +582,7 @@ export default function Settings() {
                 <button
                   type="submit"
                   disabled={saveDisabled}
-                  className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white dark:shadow-none"
                 >
                   {aiSaving ? 'Saving…' : 'Save'}
                 </button>
@@ -593,14 +593,14 @@ export default function Settings() {
 
         {activeView === 'ai-prompts' && (
           <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">System Prompts</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">System Prompts</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
               Edit platform system prompts used by AI features. Changes are audited.
             </p>
             <RequirePermission
               permission={PERM_RBAC_MANAGE}
               fallback={
-                <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
+                <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-neutral-600 dark:bg-neutral-800/50 dark:text-neutral-300">
                   You need permission to manage system prompts (
                   <code className="font-mono text-xs">{PERM_RBAC_MANAGE}</code>).
                 </p>
@@ -617,14 +617,14 @@ export default function Settings() {
               {!systemPromptsLoading && systemPrompts.length > 0 && (
                 <form className="mt-6 space-y-4" onSubmit={onSaveSystemPrompt}>
                   <div>
-                    <label htmlFor="system-prompt-select" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <label htmlFor="system-prompt-select" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-neutral-200">
                       Prompt
                     </label>
                     <select
                       id="system-prompt-select"
                       value={systemPromptKey}
                       onChange={(e) => onSystemPromptKeyChange(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
                     >
                       {systemPrompts.map((p) => (
                         <option key={p.key} value={p.key}>
@@ -634,7 +634,7 @@ export default function Settings() {
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="system-prompt-body" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <label htmlFor="system-prompt-body" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-neutral-200">
                       Content
                     </label>
                     <textarea
@@ -643,7 +643,7 @@ export default function Settings() {
                       onChange={(e) => setSystemPromptDraft(e.target.value)}
                       rows={12}
                       spellCheck={false}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
                     />
                   </div>
                   {systemPromptsMessage && (
@@ -654,7 +654,7 @@ export default function Settings() {
                   <button
                     type="submit"
                     disabled={systemPromptsSaving || !systemPromptKey}
-                    className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white dark:shadow-none"
                   >
                     {systemPromptsSaving ? 'Saving…' : 'Save'}
                   </button>
@@ -680,14 +680,14 @@ export default function Settings() {
                   Choose light or dark for the LMS interface. This applies on all your devices when
                   you are signed in.
                 </p>
-                <div className="mt-3 inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-600 dark:bg-slate-800/50">
+                <div className="mt-3 inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-neutral-600 dark:bg-neutral-800/50">
                   <button
                     type="button"
                     onClick={() => void persistUiTheme('light')}
                     className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                       uiTheme === 'light'
-                        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-neutral-600 dark:text-neutral-50 dark:shadow-md dark:ring-1 dark:ring-inset dark:ring-white/10'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-neutral-200'
                     }`}
                   >
                     Light
@@ -697,8 +697,8 @@ export default function Settings() {
                     onClick={() => void persistUiTheme('dark')}
                     className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                       uiTheme === 'dark'
-                        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-neutral-600 dark:text-neutral-50 dark:shadow-md dark:ring-1 dark:ring-inset dark:ring-white/10'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-neutral-200'
                     }`}
                   >
                     Dark
@@ -800,7 +800,7 @@ export default function Settings() {
                 <button
                   type="submit"
                   disabled={accountSaving}
-                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white dark:shadow-none"
                 >
                   <Save className="h-4 w-4" aria-hidden />
                   {accountSaving ? 'Saving…' : 'Save'}
@@ -896,7 +896,7 @@ export default function Settings() {
                   <button
                     type="submit"
                     disabled={avatarGenStatus === 'loading' || !avatarPrompt.trim()}
-                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white dark:shadow-none"
                   >
                     {avatarGenStatus === 'loading' ? 'Generating…' : 'Generate'}
                   </button>
