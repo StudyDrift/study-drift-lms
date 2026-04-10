@@ -66,18 +66,20 @@ describe('buildSearchItems', () => {
     const dashboard = items.find((i) => i.path === '/')
     expect(dashboard?.group).toBe('page')
     expect(items.some((i) => i.path === '/courses')).toBe(true)
-    expect(items.some((i) => i.path === '/settings/ai')).toBe(true)
+    expect(items.some((i) => i.path === '/settings/ai/models')).toBe(true)
   })
 
   it('adds Roles page when PERM_RBAC_MANAGE is allowed', () => {
     const allowed = (p: string) => p === PERM_RBAC_MANAGE
     const items = buildSearchItems([], [], allowed)
     expect(items.some((i) => i.path === '/settings/roles')).toBe(true)
+    expect(items.some((i) => i.path === '/settings/ai/system-prompts')).toBe(true)
   })
 
   it('omits Roles page without rbac permission', () => {
     const items = buildSearchItems([], [], allowsNone)
     expect(items.some((i) => i.path === '/settings/roles')).toBe(false)
+    expect(items.some((i) => i.path === '/settings/ai/system-prompts')).toBe(false)
   })
 
   it('adds Create course action when PERM_COURSE_CREATE is allowed', () => {

@@ -36,6 +36,26 @@ pub fn validate_permission_string(raw: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
+mod validate_tests {
+    use super::validate_permission_string;
+
+    #[test]
+    fn accepts_four_segments() {
+        assert!(validate_permission_string("a:b:c:d").is_ok());
+    }
+
+    #[test]
+    fn rejects_wrong_count() {
+        assert!(validate_permission_string("a:b").is_err());
+    }
+
+    #[test]
+    fn rejects_empty_segment() {
+        assert!(validate_permission_string("a:b::d").is_err());
+    }
+}
+
 pub async fn list_permissions(pool: &PgPool) -> Result<Vec<Permission>, sqlx::Error> {
     sqlx::query_as::<_, Permission>(&format!(
         r#"

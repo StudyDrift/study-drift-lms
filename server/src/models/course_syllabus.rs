@@ -23,3 +23,19 @@ pub struct CourseSyllabusResponse {
 pub struct UpdateCourseSyllabusRequest {
     pub sections: Vec<SyllabusSection>,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateSyllabusSectionRequest {
+    pub instructions: String,
+    #[serde(default)]
+    pub section_heading: String,
+    #[serde(default)]
+    pub existing_markdown: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateSyllabusSectionResponse {
+    pub markdown: String,
+}

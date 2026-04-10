@@ -1,7 +1,9 @@
 import { FileText, Plus } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { marked } from 'marked'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/core'
-import type { SyllabusSection } from '../../lib/coursesApi'
+import { generateSyllabusSectionMarkdown, type SyllabusSection } from '../../lib/coursesApi'
+import { sectionsToMarkdown } from './syllabusSectionMarkdown'
 import {
   BlockCanvas,
   BlockEditorProvider,
@@ -23,12 +25,21 @@ function newLocalId(): string {
   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+const MAX_SECTION_GENERATE_INSTRUCTIONS = 8000
+
 type SyllabusBlockEditorProps = {
   sections: SyllabusSection[]
   onChange: (next: SyllabusSection[]) => void
   disabled?: boolean
+  /** When set, section toolbars can generate Markdown via the course setup model. */
+  courseCode?: string
   /** Sidebar copy: syllabus vs module page / assignment body. */
   documentVariant?: 'syllabus' | 'page'
+  /**
+   * With `documentVariant="page"`, replaces the default “Page” sidebar tab (stats + copy actions)
+   * and renames that tab to “Settings”.
+   */
+  pageDocumentPanel?: ReactNode
 }
 
 type ActiveField = { blockId: string; field: 'heading' | 'markdown' }
@@ -42,6 +53,31 @@ function SyllabusDocumentPanel({
 }) {
   const blocks = sections.length
   const chars = sections.reduce((n, s) => n + s.markdown.length + s.heading.length, 0)
+
+  const [markdownCopiedFlash, setMarkdownCopiedFlash] = useState(0)
+  const [htmlCopiedFlash, setHtmlCopiedFlash] = useState(0)
+
+  const copyMarkdown = useCallback(async () => {
+    const text = sectionsToMarkdown(sections)
+    try {
+      await navigator.clipboard.writeText(text)
+      setMarkdownCopiedFlash((n) => n + 1)
+    } catch {
+      /* ignore */
+    }
+  }, [sections, setMarkdownCopiedFlash])
+
+  const copyHtml = useCallback(async () => {
+    const md = sectionsToMarkdown(sections)
+    const html = marked.parse(md, { async: false }) as string
+    try {
+      await navigator.clipboard.writeText(html)
+      setHtmlCopiedFlash((n) => n + 1)
+    } catch {
+      /* ignore */
+    }
+  }, [sections, setHtmlCopiedFlash])
+
   return (
     <div className="space-y-4">
       <p className="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
@@ -59,6 +95,51 @@ function SyllabusDocumentPanel({
           <dd className="font-medium text-slate-900 dark:text-slate-100">{chars.toLocaleString()}</dd>
         </div>
       </dl>
+      <div className="border-t border-slate-100 pt-3 dark:border-slate-700">
+        <h3 className="text-[13px] font-bold text-slate-900 dark:text-slate-100">Actions</h3>
+        <div className="mt-2 flex flex-col gap-1" aria-live="polite">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={copyMarkdown}
+              className="min-w-0 flex-1 text-left text-[13px] text-slate-600 underline-offset-2 transition hover:text-indigo-600 hover:underline dark:text-slate-300 dark:hover:text-indigo-400"
+            >
+              Copy as Markdown
+            </button>
+            <span className="pointer-events-none flex h-5 min-w-[3.25rem] shrink-0 items-center justify-end text-[13px]">
+              {markdownCopiedFlash > 0 ? (
+                <span
+                  key={markdownCopiedFlash}
+                  className="copy-action-copied-fade font-medium text-emerald-600 dark:text-emerald-400"
+                  onAnimationEnd={() => setMarkdownCopiedFlash(0)}
+                >
+                  Copied
+                </span>
+              ) : null}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={copyHtml}
+              className="min-w-0 flex-1 text-left text-[13px] text-slate-600 underline-offset-2 transition hover:text-indigo-600 hover:underline dark:text-slate-300 dark:hover:text-indigo-400"
+            >
+              Copy as HTML
+            </button>
+            <span className="pointer-events-none flex h-5 min-w-[3.25rem] shrink-0 items-center justify-end text-[13px]">
+              {htmlCopiedFlash > 0 ? (
+                <span
+                  key={htmlCopiedFlash}
+                  className="copy-action-copied-fade font-medium text-emerald-600 dark:text-emerald-400"
+                  onAnimationEnd={() => setHtmlCopiedFlash(0)}
+                >
+                  Copied
+                </span>
+              ) : null}
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -107,6 +188,7 @@ function SyllabusBlockPanel({
       <SidebarSection title="Markdown" defaultOpen>
         <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
           Formatting is visual in the editor; stored content is Markdown for reliable rendering on the course page.
+          Type @ to insert a link to a content page or assignment (the @ is not kept in the text).
         </p>
         <p className="text-xs text-slate-500 dark:text-slate-400">
           ~{words.toLocaleString()} word{words === 1 ? '' : 's'} ·{' '}
@@ -121,20 +203,30 @@ function SyllabusSidebar({
   sections,
   updateAt,
   documentVariant,
+  pageDocumentPanel,
 }: {
   sections: SyllabusSection[]
   updateAt: (index: number, patch: Partial<SyllabusSection>) => void
   documentVariant: 'syllabus' | 'page'
+  pageDocumentPanel?: ReactNode
 }) {
   const { selectedId } = useBlockEditor()
   const index = selectedId ? sections.findIndex((s) => s.id === selectedId) : -1
   const section = index >= 0 ? sections[index] : null
 
+  const usePageSettings = documentVariant === 'page' && pageDocumentPanel != null
+
   return (
     <EditorSidebar
-      documentLabel={documentVariant === 'page' ? 'Page' : 'Syllabus'}
+      documentLabel={usePageSettings ? 'Settings' : documentVariant === 'page' ? 'Page' : 'Syllabus'}
       blockLabel="Section"
-      documentPanel={<SyllabusDocumentPanel sections={sections} documentVariant={documentVariant} />}
+      documentPanel={
+        usePageSettings ? (
+          pageDocumentPanel
+        ) : (
+          <SyllabusDocumentPanel sections={sections} documentVariant={documentVariant} />
+        )
+      }
       blockPanel={
         section ? (
           <SyllabusBlockPanel
@@ -183,11 +275,18 @@ function SyllabusBlockEditorInner({
   sections,
   onChange,
   disabled,
+  courseCode,
   documentVariant = 'syllabus',
+  pageDocumentPanel,
 }: SyllabusBlockEditorInnerProps) {
-  const { selectedId } = useBlockEditor()
+  const { selectedId, setSelectedId } = useBlockEditor()
   const [activeField, setActiveField] = useState<ActiveField | null>(null)
   const editorRefs = useRef<Record<string, Editor | null>>({})
+  const [generateSectionId, setGenerateSectionId] = useState<string | null>(null)
+  const [generateInstructions, setGenerateInstructions] = useState('')
+  const [generateSubmittingId, setGenerateSubmittingId] = useState<string | null>(null)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+  const generateInputRef = useRef<HTMLInputElement>(null)
 
   const handleEditorChange = useCallback((sectionId: string, editor: Editor | null) => {
     editorRefs.current[sectionId] = editor
@@ -199,6 +298,28 @@ function SyllabusBlockEditorInner({
     if (activeField.blockId !== selectedId) return null
     return activeField
   }, [activeField, selectedId])
+
+  const showMarkdownToolbar = useMemo(() => {
+    const markdownFocused =
+      activeFieldResolved?.field === 'markdown' && activeFieldResolved.blockId === selectedId
+    const generateOpenForSelection =
+      generateSectionId != null && generateSectionId === selectedId
+    return Boolean(markdownFocused || generateOpenForSelection)
+  }, [activeFieldResolved, selectedId, generateSectionId])
+
+  useEffect(() => {
+    if (generateSectionId && generateInputRef.current) {
+      generateInputRef.current.focus()
+    }
+  }, [generateSectionId])
+
+  useEffect(() => {
+    if (generateSectionId != null && selectedId !== generateSectionId) {
+      setGenerateSectionId(null)
+      setGenerateInstructions('')
+      setGenerateError(null)
+    }
+  }, [selectedId, generateSectionId])
 
   function updateAt(index: number, patch: Partial<SyllabusSection>) {
     const next = sections.map((s, i) => (i === index ? { ...s, ...patch } : s))
@@ -260,11 +381,45 @@ function SyllabusBlockEditorInner({
     }
   }
 
+  function toggleGeneratePanel(sectionId: string) {
+    if (generateSectionId === sectionId) {
+      setGenerateSectionId(null)
+      setGenerateInstructions('')
+      setGenerateError(null)
+      return
+    }
+    setSelectedId(sectionId)
+    setActiveField({ blockId: sectionId, field: 'markdown' })
+    setGenerateSectionId(sectionId)
+    setGenerateInstructions('')
+    setGenerateError(null)
+  }
+
+  async function submitGenerate(section: SyllabusSection, index: number) {
+    const text = generateInstructions.trim()
+    if (!text || !courseCode) return
+    setGenerateError(null)
+    setGenerateSubmittingId(section.id)
+    try {
+      const { markdown } = await generateSyllabusSectionMarkdown(courseCode, {
+        instructions: text,
+        sectionHeading: section.heading,
+        existingMarkdown: section.markdown,
+      })
+      updateAt(index, { markdown })
+      setGenerateSectionId(null)
+      setGenerateInstructions('')
+    } catch (e) {
+      setGenerateError(e instanceof Error ? e.message : 'Generation failed.')
+    } finally {
+      setGenerateSubmittingId(null)
+    }
+  }
+
   function renderToolbar(section: SyllabusSection, index: number) {
-    const isMarkdown =
-      activeFieldResolved?.blockId === section.id && activeFieldResolved.field === 'markdown'
-    const showMarkdownTools = isMarkdown
-    const label = isMarkdown ? 'Markdown' : 'Section'
+    const showMarkdownTools = showMarkdownToolbar && selectedId === section.id
+    const label = showMarkdownTools ? 'Markdown' : 'Section'
+    const genBusy = generateSubmittingId === section.id
 
     return (
       <BlockFloatingToolbar
@@ -279,10 +434,28 @@ function SyllabusBlockEditorInner({
         disabled={disabled}
       >
         {showMarkdownTools && (
-          <MarkdownFormatToolbar
-            disabled={disabled}
-            onApply={(kind) => applyMarkdownForSection(section.id, kind)}
-          />
+          <>
+            <MarkdownFormatToolbar
+              disabled={disabled || genBusy}
+              onApply={(kind) => applyMarkdownForSection(section.id, kind)}
+            />
+            {courseCode ? (
+              <>
+                <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200 dark:bg-slate-600" aria-hidden />
+                <button
+                  type="button"
+                  disabled={disabled || genBusy}
+                  aria-expanded={generateSectionId === section.id}
+                  aria-controls={`section-generate-${section.id}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => toggleGeneratePanel(section.id)}
+                  className="shrink-0 rounded px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  Generate
+                </button>
+              </>
+            ) : null}
+          </>
         )}
       </BlockFloatingToolbar>
     )
@@ -290,12 +463,60 @@ function SyllabusBlockEditorInner({
 
   return (
     <BlockEditorShell
-      sidebar={<SyllabusSidebar sections={sections} updateAt={updateAt} documentVariant={documentVariant} />}
+      sidebar={
+        <SyllabusSidebar
+          sections={sections}
+          updateAt={updateAt}
+          documentVariant={documentVariant}
+          pageDocumentPanel={pageDocumentPanel}
+        />
+      }
     >
       <BlockCanvas className="pt-10">
         {sections.map((section, index) => (
           <BlockFrame key={section.id} blockId={section.id} toolbar={renderToolbar(section, index)}>
             <div className="pb-8 pt-0.5">
+              {generateSectionId === section.id && courseCode ? (
+                <div
+                  id={`section-generate-${section.id}`}
+                  className="mb-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-600 dark:bg-slate-900/40"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <label htmlFor={`section-generate-input-${section.id}`} className="sr-only">
+                    Instructions for generated section content
+                  </label>
+                  <input
+                    ref={generateInputRef}
+                    id={`section-generate-input-${section.id}`}
+                    type="text"
+                    value={generateInstructions}
+                    maxLength={MAX_SECTION_GENERATE_INSTRUCTIONS}
+                    disabled={disabled || generateSubmittingId === section.id}
+                    onChange={(e) => setGenerateInstructions(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        void submitGenerate(section, index)
+                      }
+                      if (e.key === 'Escape') {
+                        e.stopPropagation()
+                        setGenerateSectionId(null)
+                        setGenerateInstructions('')
+                        setGenerateError(null)
+                      }
+                    }}
+                    placeholder={
+                      generateSubmittingId === section.id
+                        ? 'Generating…'
+                        : 'Describe what this section should say… (Enter to generate)'
+                    }
+                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500"
+                  />
+                  {generateError ? (
+                    <p className="mt-1.5 text-xs text-rose-600 dark:text-rose-400">{generateError}</p>
+                  ) : null}
+                </div>
+              ) : null}
               <label className="sr-only" htmlFor={`canvas-heading-${section.id}`}>
                 Section heading (optional)
               </label>
@@ -340,6 +561,7 @@ function SyllabusBlockEditorInner({
                   disabled={disabled}
                   placeholder="Write this section in Markdown…"
                   onEditorChange={handleEditorChange}
+                  courseCode={courseCode}
                 />
               </div>
             </div>

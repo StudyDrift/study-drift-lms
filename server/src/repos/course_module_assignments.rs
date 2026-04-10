@@ -75,3 +75,29 @@ pub async fn update_markdown(
     .fetch_optional(pool)
     .await
 }
+
+pub async fn upsert_import_body(
+    pool: &PgPool,
+    course_id: Uuid,
+    item_id: Uuid,
+    markdown: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (structure_item_id, markdown, updated_at)
+        SELECT c.id, $3, NOW()
+        FROM {} c
+        WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
+        ON CONFLICT (structure_item_id) DO UPDATE
+        SET markdown = EXCLUDED.markdown, updated_at = NOW()
+        "#,
+        schema::MODULE_ASSIGNMENTS,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(item_id)
+    .bind(course_id)
+    .bind(markdown)
+    .execute(pool)
+    .await?;
+    Ok(())
+}

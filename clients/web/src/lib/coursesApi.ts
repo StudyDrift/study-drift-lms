@@ -311,8 +311,17 @@ export type ModuleQuizPayload = {
   title: string
   markdown: string
   dueAt: string | null
+  availableFrom: string | null
+  availableUntil: string | null
+  unlimitedAttempts: boolean
+  oneQuestionAtATime: boolean
   questions: QuizQuestion[]
   updatedAt: string
+  isAdaptive: boolean
+  /** Omitted for learners when the quiz is adaptive. */
+  adaptiveSystemPrompt: string | null
+  adaptiveSourceItemIds: string[] | null
+  adaptiveQuestionCount: number
 }
 
 export async function fetchModuleQuiz(courseCode: string, itemId: string): Promise<ModuleQuizPayload> {
@@ -327,7 +336,20 @@ export async function fetchModuleQuiz(courseCode: string, itemId: string): Promi
 export async function patchModuleQuiz(
   courseCode: string,
   itemId: string,
-  body: { markdown?: string; dueAt?: string | null; questions?: QuizQuestion[] },
+  body: {
+    title?: string
+    markdown?: string
+    dueAt?: string | null
+    availableFrom?: string | null
+    availableUntil?: string | null
+    unlimitedAttempts?: boolean
+    oneQuestionAtATime?: boolean
+    questions?: QuizQuestion[]
+    isAdaptive?: boolean
+    adaptiveSystemPrompt?: string
+    adaptiveSourceItemIds?: string[]
+    adaptiveQuestionCount?: number
+  },
 ): Promise<ModuleQuizPayload> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}`,
@@ -340,6 +362,69 @@ export async function patchModuleQuiz(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as ModuleQuizPayload
+}
+
+export async function generateModuleQuizQuestions(
+  courseCode: string,
+  itemId: string,
+  body: { prompt: string; questionCount: number },
+): Promise<{ questions: QuizQuestion[] }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/generate-questions`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: body.prompt,
+        questionCount: body.questionCount,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { questions: QuizQuestion[] }
+}
+
+export type AdaptiveQuizHistoryTurn = {
+  prompt: string
+  questionType: string
+  choices: string[]
+  choiceWeights: number[]
+  selectedChoiceIndex: number | null
+}
+
+export type AdaptiveQuizGeneratedQuestion = {
+  prompt: string
+  questionType: string
+  choices: string[]
+  choiceWeights: number[]
+  multipleAnswer: boolean
+  answerWithImage: boolean
+  required: boolean
+  points: number
+  estimatedMinutes: number
+}
+
+export type AdaptiveQuizNextResponse =
+  | { finished: true; message?: string | null }
+  | { finished: false; question: AdaptiveQuizGeneratedQuestion }
+
+export async function postAdaptiveQuizNext(
+  courseCode: string,
+  itemId: string,
+  body: { history: AdaptiveQuizHistoryTurn[] },
+): Promise<AdaptiveQuizNextResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/adaptive-next`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history: body.history }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as AdaptiveQuizNextResponse
 }
 
 export async function fetchModuleContentPage(
@@ -448,6 +533,31 @@ export async function patchCourseSyllabus(
   return raw as CourseSyllabusPayload
 }
 
+export async function generateSyllabusSectionMarkdown(
+  courseCode: string,
+  body: {
+    instructions: string
+    sectionHeading?: string
+    existingMarkdown?: string
+  },
+): Promise<{ markdown: string }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/syllabus/generate-section`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        instructions: body.instructions,
+        sectionHeading: body.sectionHeading ?? '',
+        existingMarkdown: body.existingMarkdown ?? '',
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { markdown: string }
+}
+
 export async function fetchCourseGradingSettings(courseCode: string): Promise<CourseGradingSettings> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/grading`,
@@ -525,6 +635,33 @@ export async function postCourseContext(
       keepalive: options?.keepalive ?? false,
     },
   )
+  if (!res.ok) {
+    const raw = await res.json().catch(() => ({}))
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
+export type CourseBundleImportMode = 'erase' | 'mergeAdd' | 'overwrite'
+
+/** Full course export from `GET /api/v1/courses/:courseCode/export`. */
+export type CourseExportBundle = Record<string, unknown>
+
+export async function fetchCourseExport(courseCode: string): Promise<CourseExportBundle> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/export`)
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as CourseExportBundle
+}
+
+export async function postCourseImport(
+  courseCode: string,
+  body: { mode: CourseBundleImportMode; export: CourseExportBundle },
+): Promise<void> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
   if (!res.ok) {
     const raw = await res.json().catch(() => ({}))
     throw new Error(readApiErrorMessage(raw))

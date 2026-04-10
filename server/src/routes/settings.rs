@@ -1,13 +1,13 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
 use serde::Deserialize;
 
 use crate::error::AppError;
-use crate::http_auth::auth_user;
+use crate::http_auth::{auth_user, require_permission};
 use crate::models::settings_account::{
     AccountProfileResponse, GenerateAvatarRequest, GenerateAvatarResponse,
     UpdateAccountProfileRequest,
@@ -15,11 +15,18 @@ use crate::models::settings_account::{
 use crate::models::settings_ai::{
     AiModelOption, AiModelsListResponse, AiSettingsResponse, AiSettingsUpdateRequest,
 };
+use crate::models::settings_system_prompts::{
+    SystemPromptItem, SystemPromptsListResponse, SystemPromptUpdateRequest,
+};
 use crate::repos::user;
+use crate::repos::system_prompts;
 use crate::repos::user_ai_settings;
 use crate::services::ai::OpenRouterError;
 use crate::services::ai::{list_image_models, list_text_models};
 use crate::state::AppState;
+
+/// Same permission as Roles & Permissions — system-wide configuration.
+const PERM_RBAC_MANAGE: &str = "global:app:rbac:manage";
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -50,6 +57,68 @@ pub fn router() -> Router<AppState> {
             "/api/v1/settings/ai",
             get(get_ai_handler).put(put_ai_handler),
         )
+        .route(
+            "/api/v1/settings/system-prompts",
+            get(list_system_prompts_handler),
+        )
+        .route(
+            "/api/v1/settings/system-prompts/{key}",
+            put(put_system_prompt_handler),
+        )
+}
+
+async fn list_system_prompts_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<SystemPromptsListResponse>, AppError> {
+    require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
+    let rows = system_prompts::list_all(&state.pool).await?;
+    let prompts = rows
+        .into_iter()
+        .map(|r| SystemPromptItem {
+            key: r.key,
+            label: r.label,
+            content: r.content,
+            updated_at: r.updated_at,
+        })
+        .collect();
+    Ok(Json(SystemPromptsListResponse { prompts }))
+}
+
+async fn put_system_prompt_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(key): Path<String>,
+    Json(req): Json<SystemPromptUpdateRequest>,
+) -> Result<Json<SystemPromptItem>, AppError> {
+    let user = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
+    let key = key.trim();
+    if key.is_empty()
+        || !key
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    {
+        return Err(AppError::InvalidInput("Invalid prompt key.".into()));
+    }
+    let content = req.content.trim();
+    if content.is_empty() {
+        return Err(AppError::InvalidInput("Prompt content is required.".into()));
+    }
+    if content.len() > 500_000 {
+        return Err(AppError::InvalidInput("Prompt is too long.".into()));
+    }
+    let row = system_prompts::update_system_prompt(&state.pool, key, content, user.user_id)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => AppError::NotFound,
+            _ => e.into(),
+        })?;
+    Ok(Json(SystemPromptItem {
+        key: row.key,
+        label: row.label,
+        content: row.content,
+        updated_at: row.updated_at,
+    }))
 }
 
 fn map_open_router_err(e: OpenRouterError) -> AppError {

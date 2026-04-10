@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod communication;
 pub mod course;
+pub mod course_export;
 pub mod course_grading;
 pub mod course_module_content;
 pub mod course_module_quiz;
@@ -13,4 +14,5 @@ pub mod reports;
 pub mod search;
 pub mod settings_account;
 pub mod settings_ai;
+pub mod settings_system_prompts;
 pub mod user_audit;

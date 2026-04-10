@@ -845,7 +845,7 @@ export default function CourseModules() {
   return (
     <LmsPage
       title="Modules"
-      description={courseCode ? `Course ${courseCode}` : 'Course modules'}
+      description=""
       actions={
         courseCode ? (
           <RequirePermission permission={permCourseItemCreate(courseCode)} fallback={null}>

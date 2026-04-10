@@ -71,10 +71,10 @@ export function buildSearchItems(
       hint: 'notifications alerts',
     },
     {
-      title: 'Artificial Intelligence',
+      title: 'AI models',
       subtitle: 'System settings',
-      path: '/settings/ai',
-      hint: 'ai artificial intelligence openrouter',
+      path: '/settings/ai/models',
+      hint: 'ai intelligence openrouter models',
     },
   ]
 
@@ -90,6 +90,14 @@ export function buildSearchItems(
   }
 
   if (allows(PERM_RBAC_MANAGE)) {
+    items.push({
+      id: 'page:/settings/ai/system-prompts',
+      group: 'page',
+      title: 'System prompts',
+      subtitle: 'System settings',
+      path: '/settings/ai/system-prompts',
+      haystack: 'system prompts ai configuration admin page'.toLowerCase(),
+    })
     items.push({
       id: 'page:/settings/roles',
       group: 'page',

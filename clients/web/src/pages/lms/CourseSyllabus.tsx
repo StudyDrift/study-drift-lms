@@ -123,8 +123,8 @@ export default function CourseSyllabus() {
 
   const description =
     updatedAt == null
-      ? `Course ${courseCode}`
-      : `Course ${courseCode} · Updated ${new Date(updatedAt).toLocaleString(undefined, {
+      ? ''
+      : `Updated ${new Date(updatedAt).toLocaleString(undefined, {
           dateStyle: 'medium',
           timeStyle: 'short',
         })}`
@@ -199,7 +199,12 @@ export default function CourseSyllabus() {
             </p>
           )}
           <div className="px-4 md:px-8">
-            <SyllabusBlockEditor sections={draft} onChange={setDraft} disabled={saving} />
+            <SyllabusBlockEditor
+              courseCode={courseCode}
+              sections={draft}
+              onChange={setDraft}
+              disabled={saving}
+            />
           </div>
         </div>
       )}

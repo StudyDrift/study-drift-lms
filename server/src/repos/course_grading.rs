@@ -216,3 +216,31 @@ pub async fn group_belongs_to_course(
     .await?;
     Ok(ok)
 }
+
+/// Inserts a group with a fixed id when it is missing for this course.
+pub async fn insert_assignment_group_if_missing(
+    pool: &PgPool,
+    course_id: Uuid,
+    id: Uuid,
+    sort_order: i32,
+    name: &str,
+    weight_percent: f64,
+) -> Result<bool, sqlx::Error> {
+    let inserted = sqlx::query_scalar::<_, Uuid>(&format!(
+        r#"
+        INSERT INTO {} (id, course_id, sort_order, name, weight_percent)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id
+        "#,
+        schema::ASSIGNMENT_GROUPS
+    ))
+    .bind(id)
+    .bind(course_id)
+    .bind(sort_order)
+    .bind(name)
+    .bind(weight_percent)
+    .fetch_optional(pool)
+    .await?;
+    Ok(inserted.is_some())
+}

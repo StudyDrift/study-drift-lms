@@ -136,3 +136,13 @@ pub async fn login(
         },
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_email_trims_and_lowercases() {
+        assert_eq!(normalize_email("  A@B.COM  "), "a@b.com");
+    }
+}

@@ -16,6 +16,24 @@ jobs:
   server:
     name: Server
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgres://test:test@localhost:5432/studydrift_test
+      JWT_SECRET: ci-test-jwt-secret
+      RUN_MIGRATIONS: "true"
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: studydrift_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d studydrift_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: server
@@ -24,7 +42,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt, clippy, llvm-tools-preview
 
       - name: Format
         run: cargo fmt --check
@@ -34,6 +52,12 @@ jobs:
 
       - name: Test
         run: cargo test
+
+      - name: Line coverage (library sources)
+        run: |
+          cargo install cargo-llvm-cov --locked
+          cargo llvm-cov --fail-under-lines 59 \
+            --ignore-filename-regex '(^|/)main\.rs$|services/course_structure_ai\.rs$'
 
       - name: Build
         run: cargo build --release

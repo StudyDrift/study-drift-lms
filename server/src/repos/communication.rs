@@ -40,6 +40,24 @@ pub fn make_snippet(body: &str) -> String {
     }
 }
 
+#[cfg(test)]
+mod snippet_tests {
+    use super::make_snippet;
+
+    #[test]
+    fn short_body_unchanged() {
+        assert_eq!(make_snippet("hi"), "hi");
+    }
+
+    #[test]
+    fn long_body_truncates() {
+        let s: String = (0..200).map(|_| 'a').collect();
+        let out = make_snippet(&s);
+        assert!(out.ends_with('…'));
+        assert_eq!(out.chars().count(), 121);
+    }
+}
+
 fn row_to_public(row: ListRow) -> MailboxMessage {
     let sender_name = row
         .sender_display_name

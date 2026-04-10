@@ -32,3 +32,35 @@ pub async fn require_permission(
     }
     Ok(user)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    #[test]
+    fn bearer_token_extracts_value() {
+        let mut h = axum::http::HeaderMap::new();
+        h.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer abc.def.ghi"),
+        );
+        assert_eq!(bearer_token(&h), Some("abc.def.ghi"));
+    }
+
+    #[test]
+    fn bearer_token_missing_without_header() {
+        let h = axum::http::HeaderMap::new();
+        assert_eq!(bearer_token(&h), None);
+    }
+
+    #[test]
+    fn bearer_token_requires_bearer_scheme() {
+        let mut h = axum::http::HeaderMap::new();
+        h.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_static("Basic Zm9v"),
+        );
+        assert_eq!(bearer_token(&h), None);
+    }
+}

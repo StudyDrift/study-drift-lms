@@ -50,7 +50,9 @@ export default function App() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/inbox" element={<Inbox />} />
-          <Route path="/settings" element={<Navigate to="/settings/ai" replace />} />
+          <Route path="/settings" element={<Navigate to="/settings/ai/models" replace />} />
+          <Route path="/settings/ai" element={<Navigate to="/settings/ai/models" replace />} />
+          <Route path="/settings/ai/:aiSection" element={<Settings />} />
           <Route path="/settings/:tab" element={<Settings />} />
         </Route>
       </Route>

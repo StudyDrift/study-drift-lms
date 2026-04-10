@@ -76,4 +76,17 @@ mod tests {
             "course:a:b:create"
         ));
     }
+
+    #[test]
+    fn any_grant_matches_finds_one() {
+        let g = vec![
+            "global:app:other:read".to_string(),
+            "course:*:enrollments:create".to_string(),
+        ];
+        assert!(any_grant_matches(
+            &g,
+            "course:C-1:enrollments:create"
+        ));
+        assert!(!any_grant_matches(&g, "course:C-1:enrollments:delete"));
+    }
 }

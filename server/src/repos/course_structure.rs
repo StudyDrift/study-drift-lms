@@ -4,10 +4,37 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::db::schema;
-use crate::models::course_structure::CourseStructureItemRow;
+use crate::models::course_structure::{CourseStructureItemResponse, CourseStructureItemRow};
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
 use crate::repos::course_module_quizzes;
+
+/// Counts how many of `ids` exist in this course with `kind` in `kinds`.
+pub async fn count_structure_items_with_kinds(
+    pool: &PgPool,
+    course_id: Uuid,
+    ids: &[Uuid],
+    kinds: &[&str],
+) -> Result<i64, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    sqlx::query_scalar(&format!(
+        r#"
+        SELECT COUNT(*)::bigint
+        FROM {}
+        WHERE course_id = $1
+          AND id = ANY($2)
+          AND kind = ANY($3)
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(course_id)
+    .bind(ids)
+    .bind(kinds)
+    .fetch_one(pool)
+    .await
+}
 
 pub async fn get_item_row(
     pool: &PgPool,
@@ -757,4 +784,100 @@ pub async fn set_item_assignment_group(
         return Err(sqlx::Error::RowNotFound);
     }
     Ok(())
+}
+
+/// Deletes all module outline rows for a course (children first). Cascades to module body tables.
+pub async fn delete_all_items_for_course(pool: &PgPool, course_id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1 AND parent_id IS NOT NULL"#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(course_id)
+    .execute(pool)
+    .await?;
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(course_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Insert or update a structure row for import. When `only_insert` is true, existing ids are left unchanged.
+pub async fn import_upsert_structure_item(
+    pool: &PgPool,
+    course_id: Uuid,
+    item: &CourseStructureItemResponse,
+    only_insert: bool,
+) -> Result<bool, sqlx::Error> {
+    if only_insert {
+        let id = sqlx::query_scalar::<_, Uuid>(&format!(
+            r#"
+            INSERT INTO {} (
+                id, course_id, sort_order, kind, title, parent_id,
+                published, visible_from, due_at, assignment_group_id,
+                created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT (id) DO NOTHING
+            RETURNING id
+            "#,
+            schema::COURSE_STRUCTURE_ITEMS
+        ))
+        .bind(item.id)
+        .bind(course_id)
+        .bind(item.sort_order)
+        .bind(&item.kind)
+        .bind(&item.title)
+        .bind(item.parent_id)
+        .bind(item.published)
+        .bind(item.visible_from)
+        .bind(item.due_at)
+        .bind(item.assignment_group_id)
+        .bind(item.created_at)
+        .bind(item.updated_at)
+        .fetch_optional(pool)
+        .await?;
+        return Ok(id.is_some());
+    }
+
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (
+            id, course_id, sort_order, kind, title, parent_id,
+            published, visible_from, due_at, assignment_group_id,
+            created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT (id) DO UPDATE SET
+            course_id = EXCLUDED.course_id,
+            sort_order = EXCLUDED.sort_order,
+            kind = EXCLUDED.kind,
+            title = EXCLUDED.title,
+            parent_id = EXCLUDED.parent_id,
+            published = EXCLUDED.published,
+            visible_from = EXCLUDED.visible_from,
+            due_at = EXCLUDED.due_at,
+            assignment_group_id = EXCLUDED.assignment_group_id,
+            updated_at = EXCLUDED.updated_at
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(item.id)
+    .bind(course_id)
+    .bind(item.sort_order)
+    .bind(&item.kind)
+    .bind(&item.title)
+    .bind(item.parent_id)
+    .bind(item.published)
+    .bind(item.visible_from)
+    .bind(item.due_at)
+    .bind(item.assignment_group_id)
+    .bind(item.created_at)
+    .bind(item.updated_at)
+    .execute(pool)
+    .await?;
+    Ok(true)
 }

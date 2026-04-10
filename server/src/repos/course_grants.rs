@@ -104,4 +104,12 @@ mod tests {
             "course:C-1:gradebook:view"
         ));
     }
+
+    #[test]
+    fn course_item_create_permission_formats() {
+        assert_eq!(
+            course_item_create_permission("C-XYZ"),
+            "course:C-XYZ:item:create"
+        );
+    }
 }

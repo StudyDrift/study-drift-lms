@@ -5,48 +5,17 @@ import { useCommandPalette } from '../command-palette/useCommandPalette'
 import { clearAccessToken } from '../../lib/auth'
 import { authorizedFetch } from '../../lib/api'
 import { applyUiTheme } from '../../lib/uiTheme'
-
-type AccountProfile = {
-  email: string
-  displayName?: string | null
-  firstName?: string | null
-  lastName?: string | null
-  avatarUrl?: string | null
-}
-
-function profileName(profile: AccountProfile | null): string {
-  if (!profile) return 'Profile'
-  const first = profile.firstName?.trim() ?? ''
-  const last = profile.lastName?.trim() ?? ''
-  const combined = [first, last].filter(Boolean).join(' ').trim()
-  if (combined) return combined
-  const display = profile.displayName?.trim() ?? ''
-  if (display) return display
-  return profile.email
-}
-
-function initialsFromName(name: string): string {
-  const parts = name
-    .split(/\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  if (parts.length === 0) return 'U'
-  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase()
-  return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase()
-}
-
-function shortcutHint(): string {
-  if (typeof navigator === 'undefined') return '⌘K'
-  const p = navigator.platform ?? ''
-  const ua = navigator.userAgent ?? ''
-  const apple = /Mac|iPhone|iPad|iPod/.test(p) || /Mac OS/.test(ua)
-  return apple ? '⌘K' : 'Ctrl+K'
-}
+import {
+  initialsFromName,
+  profileName,
+  shortcutHint,
+  type TopBarAccountProfile,
+} from './topBarUtils'
 
 function UserMenu() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-  const [profile, setProfile] = useState<AccountProfile | null>(null)
+  const [profile, setProfile] = useState<TopBarAccountProfile | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const menuId = useId()
 
@@ -57,7 +26,7 @@ function UserMenu() {
         const res = await authorizedFetch('/api/v1/settings/account')
         const raw: unknown = await res.json().catch(() => ({}))
         if (!res.ok || cancelled) return
-        const data = raw as AccountProfile
+        const data = raw as TopBarAccountProfile
         setProfile(data)
       } catch {
         if (!cancelled) setProfile(null)

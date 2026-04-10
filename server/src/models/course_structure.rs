@@ -20,7 +20,7 @@ pub struct CourseStructureItemRow {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CourseStructureItemResponse {
     pub id: Uuid,

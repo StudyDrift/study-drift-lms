@@ -177,11 +177,12 @@ fn retry_after_seconds_hint(e: &OpenRouterError) -> Option<u64> {
 /// The models endpoint is **public** (no API key required). Keys are only needed for chat/completions
 /// and other paid calls.
 async fn list_models_by_output_modality(
+    base_url: &str,
     output_modality: &str,
 ) -> Result<Vec<ListedOpenRouterModel>, OpenRouterError> {
     let url = format!(
         "{}/models?output_modalities={}",
-        DEFAULT_BASE_URL.trim_end_matches('/'),
+        base_url.trim_end_matches('/'),
         output_modality
     );
     let http = reqwest::Client::new();
@@ -228,12 +229,12 @@ async fn list_models_by_output_modality(
 /// Text-to-text (chat) models: [`GET /models`](https://openrouter.ai/docs/api/api-reference/models/get-models)
 /// with `output_modalities=text`.
 pub async fn list_text_models() -> Result<Vec<ListedOpenRouterModel>, OpenRouterError> {
-    list_models_by_output_modality("text").await
+    list_models_by_output_modality(DEFAULT_BASE_URL, "text").await
 }
 
 /// Image-capable models: `output_modalities=image`.
 pub async fn list_image_models() -> Result<Vec<ListedOpenRouterModel>, OpenRouterError> {
-    list_models_by_output_modality("image").await
+    list_models_by_output_modality(DEFAULT_BASE_URL, "image").await
 }
 
 /// `text+image -> image+text` style string from `architecture.input_modalities` / `output_modalities`.
@@ -405,5 +406,157 @@ impl OpenRouterClient {
             content: msg.content,
             tool_calls,
         })
+    }
+}
+
+#[cfg(test)]
+impl OpenRouterClient {
+    fn new_with_base_url(api_key: String, base_url: String) -> Self {
+        Self {
+            http: reqwest::Client::new(),
+            api_key,
+            base_url,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[test]
+    fn modalities_for_model_flux_is_image_only() {
+        let m = modalities_for_model("black-forest-labs/flux-pro");
+        assert_eq!(m, vec!["image"]);
+    }
+
+    #[test]
+    fn modalities_for_model_default_includes_text() {
+        let m = modalities_for_model("gpt-4");
+        assert_eq!(m, vec!["image", "text"]);
+    }
+
+    #[test]
+    fn retryable_status_detection() {
+        assert!(is_retryable_openrouter_status(&OpenRouterError::ApiStatus(
+            502,
+            "{}".into()
+        )));
+        assert!(!is_retryable_openrouter_status(&OpenRouterError::ApiStatus(
+            400,
+            "{}".into()
+        )));
+    }
+
+    #[test]
+    fn retry_after_hint_parses_metadata() {
+        let msg = r#"{"error":{"metadata":{"retry_after_seconds":7}}}"#;
+        let e = OpenRouterError::ApiStatus(503, msg.into());
+        assert_eq!(retry_after_seconds_hint(&e), Some(7));
+    }
+
+    #[test]
+    fn price_to_per_million_usd_accepts_string_or_number() {
+        let v = json!("0.000001");
+        assert!((price_to_per_million_usd(&v).unwrap() - 1.0).abs() < 1e-6);
+        let v2 = json!(0.000001f64);
+        assert!((price_to_per_million_usd(&v2).unwrap() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn modalities_summary_from_row_builds_string() {
+        let row = json!({
+            "architecture": {
+                "input_modalities": ["text"],
+                "output_modalities": ["text", "image"]
+            }
+        });
+        assert_eq!(
+            modalities_summary_from_row(&row).as_deref(),
+            Some("text -> text+image")
+        );
+    }
+
+    #[test]
+    fn parse_prices_handles_missing() {
+        let (a, b) = parse_prompt_completion_prices_million_usd(None);
+        assert!(a.is_none() && b.is_none());
+    }
+
+    #[tokio::test]
+    async fn list_models_mocked_sorts_by_name() {
+        let srv = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/models"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "z", "name": "Zed"},
+                    {"id": "a", "name": "Alpha", "context_length": 100, "pricing": {"prompt": "0.000002", "completion": "0.000003"}}
+                ]
+            })))
+            .mount(&srv)
+            .await;
+
+        let models = list_models_by_output_modality(&srv.uri(), "text")
+            .await
+            .unwrap();
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "a");
+        assert_eq!(models[1].id, "z");
+        assert!(models[0].input_price_per_million_usd.is_some());
+    }
+
+    #[tokio::test]
+    async fn generate_image_happy_path() {
+        let srv = MockServer::start().await;
+        let body = json!({
+            "choices": [{
+                "message": {
+                    "images": [{"image_url": {"url": "data:image/png;base64,AAA"}}]
+                }
+            }]
+        });
+        Mock::given(method("POST"))
+            .and(path("/api/v1/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .mount(&srv)
+            .await;
+
+        let client = OpenRouterClient::new_with_base_url("k".into(), format!("{}/api/v1", srv.uri()));
+        let url = client.generate_image("gpt-4", "hi").await.unwrap();
+        assert!(url.starts_with("data:image/png"));
+    }
+
+    #[tokio::test]
+    async fn chat_completion_parses_tool_calls() {
+        let srv = MockServer::start().await;
+        let body = json!({
+            "choices": [{
+                "message": {
+                    "content": null,
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "create_module", "arguments": "{}"}
+                    }]
+                }
+            }]
+        });
+        Mock::given(method("POST"))
+            .and(path("/api/v1/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .mount(&srv)
+            .await;
+
+        let client = OpenRouterClient::new_with_base_url("k".into(), format!("{}/api/v1", srv.uri()));
+        let msg = client
+            .chat_completion("m", &[], &[])
+            .await
+            .unwrap();
+        assert_eq!(msg.tool_calls.len(), 1);
+        assert_eq!(msg.tool_calls[0].name, "create_module");
     }
 }

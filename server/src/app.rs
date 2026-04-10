@@ -31,3 +31,29 @@ pub fn router(state: AppState) -> Router {
         .layer(cors)
         .with_state(state)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jwt::JwtSigner;
+    use crate::state::AppState;
+    use sqlx::PgPool;
+
+    fn dummy_state(pool: PgPool) -> AppState {
+        let jwt = JwtSigner::new("test");
+        let (comm_tx, _rx) = tokio::sync::broadcast::channel(4);
+        AppState {
+            pool,
+            jwt,
+            open_router: None,
+            comm_events: comm_tx,
+        }
+    }
+
+    /// Router builds when given a pool (no connection required for graph construction).
+    #[tokio::test]
+    async fn router_constructs() {
+        let pool = PgPool::connect_lazy("postgres://localhost/does_not_connect_yet").unwrap();
+        let _ = router(dummy_state(pool));
+    }
+}

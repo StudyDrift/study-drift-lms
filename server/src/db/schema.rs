@@ -17,3 +17,5 @@ pub const MODULE_QUIZZES: &str = "course.module_quizzes";
 pub const COURSE_SYLLABUS: &str = "course.course_syllabus";
 pub const USER_COURSE_GRANTS: &str = "course.user_course_grants";
 pub const ASSIGNMENT_GROUPS: &str = "course.assignment_groups";
+pub const SETTINGS_SYSTEM_PROMPTS: &str = "settings.system_prompts";
+pub const SETTINGS_SYSTEM_PROMPTS_AUDIT: &str = "settings.system_prompts_audit";

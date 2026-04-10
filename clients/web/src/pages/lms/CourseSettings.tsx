@@ -17,6 +17,7 @@ import {
   heroImageObjectStyle,
   parseHeroObjectPosition,
 } from '../../lib/heroImagePosition'
+import { CourseExportImportSection } from './CourseExportImportSection'
 import { CourseGradingSettingsSection } from './CourseGradingSettings'
 
 function isoToDatetimeLocal(iso: string | null): string {
@@ -52,7 +53,7 @@ type SavePayload = {
   hiddenAt: string | null
 }
 
-type SettingsSection = 'basic' | 'dates' | 'branding' | 'grading'
+type SettingsSection = 'basic' | 'dates' | 'branding' | 'grading' | 'export-import'
 
 function parseSettingsSection(courseCode: string, pathname: string): SettingsSection | 'invalid' {
   const base = `/courses/${encodeURIComponent(courseCode)}/settings`
@@ -65,6 +66,7 @@ function parseSettingsSection(courseCode: string, pathname: string): SettingsSec
   if (parts[0] === 'dates') return 'dates'
   if (parts[0] === 'branding') return 'branding'
   if (parts[0] === 'grading') return 'grading'
+  if (parts[0] === 'export-import') return 'export-import'
   return 'invalid'
 }
 
@@ -434,18 +436,26 @@ export default function CourseSettings() {
           ? course?.title
             ? `${course.title} — grading`
             : 'Grading'
-          : course?.title
-            ? `${course.title} — settings`
-            : 'Course settings'
+          : section === 'export-import'
+            ? course?.title
+              ? `${course.title} — export/import`
+              : 'Export / import'
+            : course?.title
+              ? `${course.title} — settings`
+              : 'Course settings'
 
   const pageDescription =
     section === 'basic'
       ? 'Title, description, and publishing for this course.'
       : section === 'dates'
         ? 'Schedule and visibility windows for this course.'
-        : section === 'grading'
-          ? 'Grading scale, weighted assignment groups, and how items map to each group.'
-          : 'Hero image, banner, and reading appearance for syllabus and module pages.'
+        : section === 'branding'
+          ? 'Hero image, banner, and reading appearance for syllabus and module pages.'
+          : section === 'grading'
+            ? 'Grading scale, weighted assignment groups, and how items map to each group.'
+            : section === 'export-import'
+              ? 'Download the full course as JSON or restore from a backup file.'
+              : ''
 
   return (
     <LmsPage title={pageTitle} description={pageDescription}>
@@ -467,7 +477,7 @@ export default function CourseSettings() {
 
       {course && !loading && (
         <div
-          className={`mt-8 space-y-6 ${section === 'branding' || section === 'grading' ? 'max-w-4xl' : 'max-w-2xl'}`}
+          className={`mt-8 space-y-6 ${section === 'branding' || section === 'grading' || section === 'export-import' ? 'max-w-4xl' : 'max-w-2xl'}`}
         >
           {section === 'basic' && (
             <>
@@ -823,6 +833,7 @@ export default function CourseSettings() {
           )}
 
           {section === 'grading' && <CourseGradingSettingsSection courseCode={courseCode} />}
+          {section === 'export-import' && <CourseExportImportSection courseCode={courseCode} />}
         </div>
       )}
 

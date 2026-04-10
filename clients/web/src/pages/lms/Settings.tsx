@@ -1,5 +1,5 @@
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { matchPath, useLocation } from 'react-router-dom'
 import { ImageIcon, Save, Upload, X } from 'lucide-react'
 import { ImageModelPicker } from '../../components/ImageModelPicker'
 import { RequirePermission } from '../../components/RequirePermission'
@@ -11,10 +11,22 @@ import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { applyUiTheme, parseUiTheme, type UiTheme } from '../../lib/uiTheme'
 
-type TabId = 'ai' | 'account' | 'notifications' | 'roles'
+type SettingsViewId = 'ai-models' | 'ai-prompts' | 'account' | 'notifications' | 'roles'
 
-function isTabId(s: string | null): s is TabId {
-  return s === 'ai' || s === 'account' || s === 'notifications' || s === 'roles'
+function settingsViewFromPathname(pathname: string): SettingsViewId {
+  if (pathname.startsWith('/settings/ai/system-prompts')) return 'ai-prompts'
+  if (pathname.startsWith('/settings/ai/models')) return 'ai-models'
+  const m = matchPath({ path: '/settings/:tab', end: true }, pathname)
+  const raw = m?.params.tab
+  if (raw === 'account' || raw === 'notifications' || raw === 'roles') return raw
+  return 'ai-models'
+}
+
+type SystemPromptItem = {
+  key: string
+  label: string
+  content: string
+  updatedAt: string
 }
 
 type AiModelOption = {
@@ -93,9 +105,16 @@ async function fetchModelsForKind(kind: ModelKind): Promise<{
 }
 
 export default function Settings() {
-  const { tab: tabParam } = useParams()
-  const rawTab = tabParam ?? null
-  const activeTab: TabId = isTabId(rawTab) ? rawTab : 'ai'
+  const location = useLocation()
+  const activeView = settingsViewFromPathname(location.pathname)
+
+  const [systemPrompts, setSystemPrompts] = useState<SystemPromptItem[]>([])
+  const [systemPromptKey, setSystemPromptKey] = useState('')
+  const [systemPromptDraft, setSystemPromptDraft] = useState('')
+  const [systemPromptsLoading, setSystemPromptsLoading] = useState(false)
+  const [systemPromptsSaving, setSystemPromptsSaving] = useState(false)
+  const [systemPromptsError, setSystemPromptsError] = useState<string | null>(null)
+  const [systemPromptsMessage, setSystemPromptsMessage] = useState<string | null>(null)
 
   const [imageModelId, setImageModelId] = useState('')
   const [courseSetupModelId, setCourseSetupModelId] = useState('')
@@ -154,6 +173,39 @@ export default function Settings() {
     await loadModels()
     setModelsRefreshing(false)
   }, [loadModels])
+
+  const loadSystemPrompts = useCallback(async () => {
+    setSystemPromptsLoading(true)
+    setSystemPromptsError(null)
+    try {
+      const res = await authorizedFetch('/api/v1/settings/system-prompts')
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSystemPromptsError(readApiErrorMessage(raw))
+        return
+      }
+      const data = raw as { prompts?: SystemPromptItem[] }
+      const list = data.prompts ?? []
+      setSystemPrompts(list)
+      if (list.length > 0) {
+        setSystemPromptKey((prev) => {
+          const nextKey = list.some((p) => p.key === prev) ? prev : list[0].key
+          const row = list.find((p) => p.key === nextKey)
+          if (row) setSystemPromptDraft(row.content)
+          return nextKey
+        })
+      }
+    } catch {
+      setSystemPromptsError('Could not load system prompts.')
+    } finally {
+      setSystemPromptsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeView !== 'ai-prompts') return
+    void loadSystemPrompts()
+  }, [activeView, loadSystemPrompts])
 
   useEffect(() => {
     let cancelled = false
@@ -246,9 +298,9 @@ export default function Settings() {
   }, [])
 
   useEffect(() => {
-    if (activeTab !== 'account') return
+    if (activeView !== 'account') return
     void loadAccount()
-  }, [activeTab, loadAccount])
+  }, [activeView, loadAccount])
 
   async function onAvatarUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -382,13 +434,63 @@ export default function Settings() {
 
   const saveDisabled = aiSaving || !imageModelId || !courseSetupModelId
 
+  async function onSaveSystemPrompt(e: FormEvent) {
+    e.preventDefault()
+    if (!systemPromptKey.trim()) return
+    setSystemPromptsSaving(true)
+    setSystemPromptsError(null)
+    setSystemPromptsMessage(null)
+    try {
+      const res = await authorizedFetch(
+        `/api/v1/settings/system-prompts/${encodeURIComponent(systemPromptKey)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: systemPromptDraft }),
+        },
+      )
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSystemPromptsError(readApiErrorMessage(raw))
+        return
+      }
+      const row = raw as SystemPromptItem
+      setSystemPrompts((prev) =>
+        prev.map((p) =>
+          p.key === row.key
+            ? { ...p, content: row.content, updatedAt: row.updatedAt }
+            : p,
+        ),
+      )
+      setSystemPromptsMessage('Saved.')
+    } catch {
+      setSystemPromptsError('Could not save system prompt.')
+    } finally {
+      setSystemPromptsSaving(false)
+    }
+  }
+
+  function onSystemPromptKeyChange(key: string) {
+    setSystemPromptKey(key)
+    const row = systemPrompts.find((p) => p.key === key)
+    if (row) setSystemPromptDraft(row.content)
+  }
+
   return (
     <LmsPage title="Settings" description="Account and learning preferences.">
-      <div className={`mt-8 ${activeTab === 'roles' ? 'max-w-4xl' : 'max-w-xl'}`}>
-        {activeTab === 'ai' && (
+      <div
+        className={`mt-8 ${
+          activeView === 'roles'
+            ? 'max-w-4xl'
+            : activeView === 'ai-prompts'
+              ? 'max-w-3xl'
+              : 'max-w-xl'
+        }`}
+      >
+        {activeView === 'ai-models' && (
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Artificial Intelligence</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Models</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Choose models for course setup (text) and for generating course hero images. Lists are
               loaded from{' '}
               <a
@@ -489,7 +591,83 @@ export default function Settings() {
           </div>
         )}
 
-        {activeTab === 'account' && (
+        {activeView === 'ai-prompts' && (
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">System Prompts</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Edit platform system prompts used by AI features. Changes are audited.
+            </p>
+            <RequirePermission
+              permission={PERM_RBAC_MANAGE}
+              fallback={
+                <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
+                  You need permission to manage system prompts (
+                  <code className="font-mono text-xs">{PERM_RBAC_MANAGE}</code>).
+                </p>
+              }
+            >
+              {systemPromptsLoading && (
+                <p className="mt-4 text-sm text-slate-500">Loading…</p>
+              )}
+              {systemPromptsError && (
+                <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-200">
+                  {systemPromptsError}
+                </p>
+              )}
+              {!systemPromptsLoading && systemPrompts.length > 0 && (
+                <form className="mt-6 space-y-4" onSubmit={onSaveSystemPrompt}>
+                  <div>
+                    <label htmlFor="system-prompt-select" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                      Prompt
+                    </label>
+                    <select
+                      id="system-prompt-select"
+                      value={systemPromptKey}
+                      onChange={(e) => onSystemPromptKeyChange(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      {systemPrompts.map((p) => (
+                        <option key={p.key} value={p.key}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="system-prompt-body" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                      Content
+                    </label>
+                    <textarea
+                      id="system-prompt-body"
+                      value={systemPromptDraft}
+                      onChange={(e) => setSystemPromptDraft(e.target.value)}
+                      rows={12}
+                      spellCheck={false}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  {systemPromptsMessage && (
+                    <p className="text-sm text-emerald-700 dark:text-emerald-400" role="status">
+                      {systemPromptsMessage}
+                    </p>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={systemPromptsSaving || !systemPromptKey}
+                    className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {systemPromptsSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </form>
+              )}
+              {!systemPromptsLoading && systemPrompts.length === 0 && !systemPromptsError && (
+                <p className="mt-4 text-sm text-slate-500">No system prompts are registered.</p>
+              )}
+            </RequirePermission>
+          </div>
+        )}
+
+        {activeView === 'account' && (
           <div>
             <h2 className="text-base font-semibold text-slate-900">Account</h2>
             <p className="mt-1 text-sm text-slate-500">
@@ -632,14 +810,14 @@ export default function Settings() {
           </div>
         )}
 
-        {activeTab === 'notifications' && (
+        {activeView === 'notifications' && (
           <div>
             <h2 className="text-base font-semibold text-slate-900">Notifications</h2>
             <p className="mt-1 text-sm text-slate-500">Notification settings will appear here.</p>
           </div>
         )}
 
-        {activeTab === 'roles' && (
+        {activeView === 'roles' && (
           <div>
             <h2 className="text-base font-semibold text-slate-900">Roles and Permissions</h2>
             <p className="mt-1 text-sm text-slate-500">

@@ -171,3 +171,23 @@ body {
 .dark .tiptap p.is-empty::before {
   color: rgb(100 116 139);
 }
+
+/* Clipboard “Copied” feedback in syllabus/page sidebar actions */
+@keyframes copy-action-copied-fade {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  68% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.copy-action-copied-fade {
+  animation: copy-action-copied-fade 2s ease-out forwards;
+}

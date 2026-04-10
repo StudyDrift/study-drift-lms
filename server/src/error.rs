@@ -138,3 +138,68 @@ impl IntoResponse for AppError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::{IntoResponse, Response};
+    use http_body_util::BodyExt;
+
+    async fn body_json(resp: Response) -> serde_json::Value {
+        let b = resp.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&b).unwrap()
+    }
+
+    #[tokio::test]
+    async fn unauthorized_json_shape() {
+        let r = AppError::Unauthorized.into_response();
+        assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
+        let v = body_json(r).await;
+        assert_eq!(v["error"]["code"], "UNAUTHORIZED");
+    }
+
+    #[tokio::test]
+    async fn invalid_input_carries_message() {
+        let r = AppError::InvalidInput("bad".into()).into_response();
+        assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+        let v = body_json(r).await;
+        assert_eq!(v["error"]["code"], "INVALID_INPUT");
+        assert_eq!(v["error"]["message"], "bad");
+    }
+
+    #[tokio::test]
+    async fn ai_not_configured_is_503() {
+        let r = AppError::AiNotConfigured.into_response();
+        assert_eq!(r.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn db_error_maps_to_500() {
+        let r = AppError::Db(sqlx::Error::RowNotFound).into_response();
+        assert_eq!(r.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn forbidden_not_found_and_ai_errors() {
+        for (err, code) in [
+            (AppError::Forbidden, "FORBIDDEN"),
+            (AppError::NotFound, "NOT_FOUND"),
+            (
+                AppError::AiGenerationFailed("x".into()),
+                "AI_GENERATION_FAILED",
+            ),
+            (AppError::InvalidCredentials, "INVALID_CREDENTIALS"),
+            (AppError::EmailTaken, "EMAIL_TAKEN"),
+        ] {
+            let r = err.into_response();
+            let v = body_json(r).await;
+            assert_eq!(v["error"]["code"], code);
+        }
+    }
+
+    #[tokio::test]
+    async fn jwt_error_maps_to_500() {
+        let r = AppError::Jwt(jsonwebtoken::errors::ErrorKind::InvalidToken.into()).into_response();
+        assert_eq!(r.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+}

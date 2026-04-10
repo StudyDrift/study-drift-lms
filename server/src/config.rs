@@ -44,3 +44,60 @@ impl Config {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    fn set(key: &str, val: Option<&str>) {
+        match val {
+            Some(v) => std::env::set_var(key, v),
+            None => std::env::remove_var(key),
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn requires_database_url() {
+        set("DATABASE_URL", None);
+        assert!(Config::from_env().is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn run_migrations_defaults_true_when_unset() {
+        set("DATABASE_URL", Some("postgres://localhost/x"));
+        set("RUN_MIGRATIONS", None);
+        let c = Config::from_env().unwrap();
+        assert!(c.run_migrations);
+    }
+
+    #[test]
+    #[serial]
+    fn run_migrations_false_when_off() {
+        set("DATABASE_URL", Some("postgres://localhost/x"));
+        set("RUN_MIGRATIONS", Some("off"));
+        let c = Config::from_env().unwrap();
+        assert!(!c.run_migrations);
+    }
+
+    #[test]
+    #[serial]
+    fn empty_run_migrations_enables_migrations() {
+        set("DATABASE_URL", Some("postgres://localhost/x"));
+        set("RUN_MIGRATIONS", Some(""));
+        let c = Config::from_env().unwrap();
+        assert!(c.run_migrations);
+    }
+
+    #[test]
+    #[serial]
+    fn open_router_key_from_either_env_name() {
+        set("DATABASE_URL", Some("postgres://localhost/x"));
+        set("OPENROUTER_API_KEY", None);
+        set("OPEN_ROUTER_API_KEY", Some(" k "));
+        let c = Config::from_env().unwrap();
+        assert_eq!(c.open_router_api_key.as_deref(), Some("k"));
+    }
+}

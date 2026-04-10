@@ -8,11 +8,15 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::models::course_structure::CourseStructureItemResponse;
 use crate::repos::course_structure;
+use crate::repos::system_prompts;
 use crate::services::ai::{OpenRouterClient, OpenRouterError, ToolCall};
 
 const MAX_AI_STEPS: usize = 24;
 
-const SYSTEM_PROMPT: &str = r#"You are an assistant that edits LMS course module structure. You MUST call the provided tools to make changes; do not claim changes were applied without calling tools.
+const COURSE_STRUCTURE_PROMPT_KEY: &str = "course_structure";
+
+/// Fallback if `settings.system_prompts` has no row (migration not applied).
+const FALLBACK_COURSE_STRUCTURE_SYSTEM_PROMPT: &str = r#"You are an assistant that edits LMS course module structure. You MUST call the provided tools to make changes; do not claim changes were applied without calling tools.
 
 Rules:
 - Use only UUIDs from the CURRENT STRUCTURE JSON in the user message for module_id and reorder operations.
@@ -268,6 +272,16 @@ pub async fn run_course_structure_ai(
     course_id: Uuid,
     user_request: &str,
 ) -> Result<(Vec<CourseStructureItemResponse>, Option<String>), AppError> {
+    let system_prompt = match system_prompts::get_content_by_key(pool, COURSE_STRUCTURE_PROMPT_KEY).await
+    {
+        Ok(Some(s)) if !s.trim().is_empty() => s,
+        Ok(_) => FALLBACK_COURSE_STRUCTURE_SYSTEM_PROMPT.to_string(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to load system prompt row");
+            FALLBACK_COURSE_STRUCTURE_SYSTEM_PROMPT.to_string()
+        }
+    };
+
     let tools = ai_tools();
     let mut tail: Vec<Value> = Vec::new();
 
@@ -283,7 +297,7 @@ pub async fn run_course_structure_ai(
         );
 
         let mut messages = vec![
-            json!({ "role": "system", "content": SYSTEM_PROMPT }),
+            json!({ "role": "system", "content": system_prompt }),
             json!({ "role": "user", "content": user_body }),
         ];
         messages.extend(tail.clone());
@@ -318,4 +332,19 @@ pub async fn run_course_structure_ai(
     Err(AppError::AiGenerationFailed(
         "The assistant took too many steps. Try a smaller request.".into(),
     ))
+}
+
+#[cfg(test)]
+mod err_tests {
+    use super::map_open_router_err;
+    use crate::error::AppError;
+    use crate::services::ai::OpenRouterError;
+
+    #[test]
+    fn maps_open_router_errors() {
+        let e = map_open_router_err(OpenRouterError::NoImageInResponse);
+        assert!(matches!(e, AppError::AiGenerationFailed(_)));
+        let e2 = map_open_router_err(OpenRouterError::ApiStatus(400, "{}".into()));
+        assert!(matches!(e2, AppError::AiGenerationFailed(_)));
+    }
 }

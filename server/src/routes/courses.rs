@@ -4,6 +4,7 @@ use crate::models::course::{
     CoursePublic, CoursesResponse, CreateCourseRequest, MarkdownThemeCustom, SetHeroImageRequest,
     UpdateCourseRequest, UpdateMarkdownThemeRequest, GRADING_SCALES, MARKDOWN_THEME_PRESETS,
 };
+use crate::models::course_export::{CourseExportV1, CourseImportRequest};
 use crate::models::course_grading::{
     CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
 };
@@ -11,7 +12,10 @@ use crate::models::course_module_content::{
     CreateCourseContentPageRequest, ModuleContentPageResponse, UpdateModuleContentPageRequest,
 };
 use crate::models::course_module_quiz::{
-    CreateCourseQuizRequest, ModuleQuizResponse, QuizQuestion, UpdateModuleQuizRequest,
+    validate_adaptive_quiz_settings, validate_quiz_questions, AdaptiveQuizNextRequest,
+    AdaptiveQuizNextResponse, CreateCourseQuizRequest, GenerateModuleQuizQuestionsRequest,
+    GenerateModuleQuizQuestionsResponse, ModuleQuizResponse, UpdateModuleQuizRequest,
+    ADAPTIVE_SOURCE_KINDS,
 };
 use crate::models::course_structure::{
     CourseStructureAiRequest, CourseStructureAiResponse, CourseStructureItemResponse,
@@ -19,7 +23,8 @@ use crate::models::course_structure::{
     CreateCourseModuleRequest, PatchCourseModuleRequest, ReorderCourseStructureRequest,
 };
 use crate::models::course_syllabus::{
-    CourseSyllabusResponse, SyllabusSection, UpdateCourseSyllabusRequest,
+    CourseSyllabusResponse, GenerateSyllabusSectionRequest, GenerateSyllabusSectionResponse,
+    SyllabusSection, UpdateCourseSyllabusRequest,
 };
 use crate::models::enrollment::{
     AddEnrollmentsRequest, AddEnrollmentsResponse, CourseEnrollmentsResponse,
@@ -43,7 +48,11 @@ use crate::repos::user_ai_settings;
 use crate::repos::user_audit;
 use crate::services::ai::OpenRouterError;
 use crate::services::auth;
+use crate::services::adaptive_quiz_ai;
+use crate::services::course_export_import;
 use crate::services::course_structure_ai;
+use crate::services::quiz_generation_ai;
+use crate::services::syllabus_section_ai;
 use crate::state::AppState;
 use axum::{
     extract::{Path, State},
@@ -96,6 +105,14 @@ pub fn router() -> Router<AppState> {
             get(module_quiz_get_handler).patch(module_quiz_patch_handler),
         )
         .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/generate-questions",
+            post(module_quiz_generate_questions_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/adaptive-next",
+            post(module_quiz_adaptive_next_handler),
+        )
+        .route(
             "/api/v1/courses/{course_code}/structure",
             get(structure_list_handler),
         )
@@ -128,12 +145,24 @@ pub fn router() -> Router<AppState> {
             get(syllabus_get_handler).patch(syllabus_patch_handler),
         )
         .route(
+            "/api/v1/courses/{course_code}/syllabus/generate-section",
+            post(syllabus_generate_section_handler),
+        )
+        .route(
             "/api/v1/courses/{course_code}/markdown-theme",
             patch(update_markdown_theme_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/course-context",
             post(post_course_context_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/export",
+            get(course_export_get_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/import",
+            post(course_import_post_handler),
         )
         .route(
             "/api/v1/courses/{course_code}",
@@ -245,59 +274,34 @@ const MAX_SYLLABUS_SECTIONS: usize = 50;
 const MAX_SYLLABUS_HEADING_LEN: usize = 512;
 const MAX_SYLLABUS_MARKDOWN_LEN: usize = 200_000;
 const MAX_MODULE_CONTENT_MARKDOWN_LEN: usize = 200_000;
-const MAX_QUIZ_QUESTIONS: usize = 300;
-const MAX_QUIZ_PROMPT_LEN: usize = 10_000;
-const MAX_QUIZ_CHOICES_PER_QUESTION: usize = 20;
-const MAX_QUIZ_CHOICE_LEN: usize = 2_000;
-const QUIZ_QUESTION_TYPES: &[&str] = &[
-    "multiple_choice",
-    "fill_in_blank",
-    "essay",
-    "true_false",
-    "short_answer",
-];
+const MAX_QUIZ_GENERATION_PROMPT_LEN: usize = 8_000;
+const MAX_SYLLABUS_SECTION_INSTRUCTIONS_LEN: usize = 8_000;
+const MIN_QUIZ_GENERATION_COUNT: i32 = 1;
+const MAX_QUIZ_GENERATION_COUNT: i32 = 30;
 
-fn validate_quiz_questions(questions: &[QuizQuestion]) -> Result<(), AppError> {
-    if questions.len() > MAX_QUIZ_QUESTIONS {
-        return Err(AppError::InvalidInput(format!(
-            "Too many quiz questions (max {MAX_QUIZ_QUESTIONS})."
-        )));
+fn module_quiz_response_for_api(
+    item_id: Uuid,
+    row: &course_module_quizzes::CourseItemQuizRow,
+    show_adaptive_details: bool,
+) -> ModuleQuizResponse {
+    ModuleQuizResponse {
+        item_id,
+        title: row.title.clone(),
+        markdown: row.markdown.clone(),
+        due_at: row.due_at,
+        available_from: row.available_from,
+        available_until: row.available_until,
+        unlimited_attempts: row.unlimited_attempts,
+        one_question_at_a_time: row.one_question_at_a_time,
+        questions: row.questions_json.0.clone(),
+        updated_at: row.updated_at,
+        is_adaptive: row.is_adaptive,
+        adaptive_system_prompt: (show_adaptive_details && row.is_adaptive)
+            .then(|| row.adaptive_system_prompt.clone()),
+        adaptive_source_item_ids: (show_adaptive_details && row.is_adaptive)
+            .then(|| row.adaptive_source_item_ids.0.clone()),
+        adaptive_question_count: row.adaptive_question_count,
     }
-    for q in questions {
-        if q.id.trim().is_empty() {
-            return Err(AppError::InvalidInput(
-                "Each quiz question needs an id.".into(),
-            ));
-        }
-        if q.prompt.len() > MAX_QUIZ_PROMPT_LEN {
-            return Err(AppError::InvalidInput(
-                "A quiz question prompt is too long.".into(),
-            ));
-        }
-        if !QUIZ_QUESTION_TYPES.contains(&q.question_type.as_str()) {
-            return Err(AppError::InvalidInput("Unsupported quiz question type.".into()));
-        }
-        if q.choices.len() > MAX_QUIZ_CHOICES_PER_QUESTION {
-            return Err(AppError::InvalidInput(
-                "A quiz question has too many choices.".into(),
-            ));
-        }
-        for c in &q.choices {
-            if c.len() > MAX_QUIZ_CHOICE_LEN {
-                return Err(AppError::InvalidInput(
-                    "A quiz answer choice is too long.".into(),
-                ));
-            }
-        }
-        if let Some(idx) = q.correct_choice_index {
-            if idx >= q.choices.len() {
-                return Err(AppError::InvalidInput(
-                    "A quiz correct answer index is out of range.".into(),
-                ));
-            }
-        }
-    }
-    Ok(())
 }
 
 fn validate_syllabus_sections(sections: &[SyllabusSection]) -> Result<(), AppError> {
@@ -347,6 +351,60 @@ async fn syllabus_get_handler(
         sections,
         updated_at,
     }))
+}
+
+async fn syllabus_generate_section_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<GenerateSyllabusSectionRequest>,
+) -> Result<Json<GenerateSyllabusSectionResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let instructions = req.instructions.trim();
+    if instructions.is_empty() {
+        return Err(AppError::InvalidInput("Instructions are required.".into()));
+    }
+    if instructions.len() > MAX_SYLLABUS_SECTION_INSTRUCTIONS_LEN {
+        return Err(AppError::InvalidInput(format!(
+            "Instructions are too long (max {MAX_SYLLABUS_SECTION_INSTRUCTIONS_LEN} characters)."
+        )));
+    }
+
+    let client = state
+        .open_router
+        .as_ref()
+        .ok_or(AppError::AiNotConfigured)?;
+
+    let Some(_course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let model = user_ai_settings::get_course_setup_model_id(&state.pool, user.user_id).await?;
+
+    let markdown = syllabus_section_ai::generate_section_markdown(
+        &state.pool,
+        client.as_ref(),
+        &model,
+        instructions,
+        &req.section_heading,
+        &req.existing_markdown,
+    )
+    .await?;
+
+    if markdown.len() > MAX_SYLLABUS_MARKDOWN_LEN {
+        return Err(AppError::AiGenerationFailed(
+            "Generated content is too long for a section. Try narrower instructions.".into(),
+        ));
+    }
+
+    Ok(Json(GenerateSyllabusSectionResponse { markdown }))
 }
 
 async fn syllabus_patch_handler(
@@ -956,20 +1014,12 @@ async fn module_quiz_get_handler(
         }
     }
 
-    let Some((title, markdown, due_at, questions, updated_at)) =
-        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(row) = course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
 
-    Ok(Json(ModuleQuizResponse {
-        item_id,
-        title,
-        markdown,
-        due_at,
-        questions: questions.0,
-        updated_at,
-    }))
+    Ok(Json(module_quiz_response_for_api(item_id, &row, can_edit)))
 }
 
 async fn module_quiz_patch_handler(
@@ -999,6 +1049,17 @@ async fn module_quiz_patch_handler(
         return Err(AppError::NotFound);
     };
 
+    if let Some(title) = &req.title {
+        let title = title.trim();
+        if title.is_empty() {
+            return Err(AppError::InvalidInput("Quiz title is required.".into()));
+        }
+        let updated = course_module_quizzes::update_title(&state.pool, course_id, item_id, title).await?;
+        if updated.is_none() {
+            return Err(AppError::NotFound);
+        }
+    }
+
     if let Some(markdown) = req.markdown {
         let updated =
             course_module_quizzes::update_markdown(&state.pool, course_id, item_id, markdown.trim_end())
@@ -1026,20 +1087,245 @@ async fn module_quiz_patch_handler(
             })?;
     }
 
-    let Some((title, markdown, due_at, questions, updated_at)) =
-        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    if req.available_from.is_some()
+        || req.available_until.is_some()
+        || req.unlimited_attempts.is_some()
+        || req.one_question_at_a_time.is_some()
+    {
+        let updated = course_module_quizzes::update_delivery_settings(
+            &state.pool,
+            course_id,
+            item_id,
+            req.available_from,
+            req.available_until,
+            req.unlimited_attempts,
+            req.one_question_at_a_time,
+        )
+        .await?;
+        if updated.is_none() {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    let adaptive_keys = req.is_adaptive.is_some()
+        || req.adaptive_system_prompt.is_some()
+        || req.adaptive_source_item_ids.is_some()
+        || req.adaptive_question_count.is_some();
+
+    if adaptive_keys {
+        let Some(cur) =
+            course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+        else {
+            return Err(AppError::NotFound);
+        };
+        let next_is = req.is_adaptive.unwrap_or(cur.is_adaptive);
+        let next_prompt = req
+            .adaptive_system_prompt
+            .clone()
+            .unwrap_or_else(|| cur.adaptive_system_prompt.clone());
+        let next_ids = req
+            .adaptive_source_item_ids
+            .clone()
+            .unwrap_or_else(|| cur.adaptive_source_item_ids.0.clone());
+        let next_count = req
+            .adaptive_question_count
+            .unwrap_or(cur.adaptive_question_count);
+
+        if next_is {
+            validate_adaptive_quiz_settings(true, &next_prompt, &next_ids, next_count)?;
+            let n = course_structure::count_structure_items_with_kinds(
+                &state.pool,
+                course_id,
+                &next_ids,
+                ADAPTIVE_SOURCE_KINDS,
+            )
+            .await?;
+            if n != next_ids.len() as i64 {
+                return Err(AppError::InvalidInput(
+                    "One or more adaptive source items are invalid for this course.".into(),
+                ));
+            }
+            let updated = course_module_quizzes::update_adaptive_config(
+                &state.pool,
+                course_id,
+                item_id,
+                true,
+                next_prompt.trim(),
+                &next_ids,
+                next_count,
+            )
+            .await?;
+            if updated.is_none() {
+                return Err(AppError::NotFound);
+            }
+        } else {
+            let updated = course_module_quizzes::update_adaptive_config(
+                &state.pool,
+                course_id,
+                item_id,
+                false,
+                "",
+                &[],
+                5,
+            )
+            .await?;
+            if updated.is_none() {
+                return Err(AppError::NotFound);
+            }
+        }
+    }
+
+    let Some(row) = course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
 
-    Ok(Json(ModuleQuizResponse {
-        item_id,
-        title,
-        markdown,
-        due_at,
-        questions: questions.0,
-        updated_at,
+    Ok(Json(module_quiz_response_for_api(item_id, &row, true)))
+}
+
+async fn module_quiz_adaptive_next_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<AdaptiveQuizNextRequest>,
+) -> Result<Json<AdaptiveQuizNextResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    if !can_edit {
+        let visible = course_structure::quiz_visible_to_student(
+            &state.pool,
+            course_id,
+            item_id,
+            Utc::now(),
+        )
+        .await?;
+        if !visible {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    let Some(row) = course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    if !row.is_adaptive {
+        return Err(AppError::InvalidInput(
+            "This quiz is not configured for adaptive mode.".into(),
+        ));
+    }
+
+    let total = row.adaptive_question_count;
+    if req.history.len() >= total as usize {
+        return Ok(Json(AdaptiveQuizNextResponse {
+            finished: true,
+            question: None,
+            message: Some("You have completed all questions in this adaptive quiz.".into()),
+        }));
+    }
+
+    for turn in &req.history {
+        if turn.choice_weights.len() != turn.choices.len() {
+            return Err(AppError::InvalidInput(
+                "Each history entry must have choiceWeights aligned with choices.".into(),
+            ));
+        }
+    }
+
+    let bundle = course_module_quizzes::reference_markdown_for_items(
+        &state.pool,
+        course_id,
+        &row.adaptive_source_item_ids.0,
+    )
+    .await?;
+
+    let client = state
+        .open_router
+        .as_ref()
+        .ok_or(AppError::AiNotConfigured)?;
+
+    let model = user_ai_settings::get_course_setup_model_id(&state.pool, user.user_id).await?;
+
+    let question = adaptive_quiz_ai::generate_adaptive_next_question(
+        &state.pool,
+        client.as_ref(),
+        &model,
+        &bundle,
+        &row.adaptive_system_prompt,
+        total,
+        &req.history,
+    )
+    .await?;
+
+    Ok(Json(AdaptiveQuizNextResponse {
+        finished: false,
+        question: Some(question),
+        message: None,
     }))
+}
+
+async fn module_quiz_generate_questions_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<GenerateModuleQuizQuestionsRequest>,
+) -> Result<Json<GenerateModuleQuizQuestionsResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let prompt = req.prompt.trim();
+    if prompt.is_empty() {
+        return Err(AppError::InvalidInput("Prompt is required.".into()));
+    }
+    if prompt.len() > MAX_QUIZ_GENERATION_PROMPT_LEN {
+        return Err(AppError::InvalidInput("Prompt is too long.".into()));
+    }
+    if req.question_count < MIN_QUIZ_GENERATION_COUNT || req.question_count > MAX_QUIZ_GENERATION_COUNT {
+        return Err(AppError::InvalidInput(format!(
+            "questionCount must be between {MIN_QUIZ_GENERATION_COUNT} and {MAX_QUIZ_GENERATION_COUNT}."
+        )));
+    }
+
+    let client = state
+        .open_router
+        .as_ref()
+        .ok_or(AppError::AiNotConfigured)?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let exists = course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?;
+    if exists.is_none() {
+        return Err(AppError::NotFound);
+    }
+
+    let model = user_ai_settings::get_course_setup_model_id(&state.pool, user.user_id).await?;
+
+    let questions = quiz_generation_ai::generate_quiz_questions(
+        &state.pool,
+        client.as_ref(),
+        &model,
+        prompt,
+        req.question_count as usize,
+    )
+    .await?;
+
+    validate_quiz_questions(&questions)?;
+
+    Ok(Json(GenerateModuleQuizQuestionsResponse { questions }))
 }
 
 async fn grading_get_handler(
@@ -1166,6 +1452,41 @@ async fn get_handler(
         .await?
         .ok_or(AppError::NotFound)?;
     Ok(Json(row))
+}
+
+async fn course_export_get_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<CourseExportV1>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let ex = course_export_import::build_export(&state.pool, &course_code).await?;
+    Ok(Json(ex))
+}
+
+async fn course_import_post_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<CourseImportRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    course_export_import::apply_import(&state.pool, &course_code, req.mode, &req.export).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn enrollments_handler(
@@ -1442,4 +1763,20 @@ async fn set_hero_image_handler(
             .await?
             .ok_or(AppError::NotFound)?;
     Ok(Json(row))
+}
+
+#[cfg(test)]
+mod parse_email_list_tests {
+    use super::parse_email_list;
+
+    #[test]
+    fn splits_and_dedupes() {
+        let v = parse_email_list("a@b.com, A@b.com ; c@d.org");
+        assert_eq!(v, vec!["a@b.com".to_string(), "c@d.org".to_string()]);
+    }
+
+    #[test]
+    fn skips_invalid_tokens() {
+        assert!(parse_email_list("not-an-email").is_empty());
+    }
 }

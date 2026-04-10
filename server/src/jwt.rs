@@ -54,3 +54,28 @@ impl JwtSigner {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn sign_verify_round_trip() {
+        let signer = JwtSigner::new("unit-test-secret");
+        let id = Uuid::new_v4();
+        let tok = signer.sign(id, "a@b.com").unwrap();
+        let u = signer.verify(&tok).unwrap();
+        assert_eq!(u.user_id, id);
+        assert_eq!(u.email, "a@b.com");
+    }
+
+    #[test]
+    fn wrong_secret_fails_verify() {
+        let a = JwtSigner::new("secret-a");
+        let b = JwtSigner::new("secret-b");
+        let id = Uuid::new_v4();
+        let tok = a.sign(id, "x@y.z").unwrap();
+        assert!(b.verify(&tok).is_err());
+    }
+}

@@ -183,8 +183,8 @@ export default function CourseModuleContentPage() {
 
   const description =
     updatedAt == null
-      ? `Course ${courseCode}`
-      : `Course ${courseCode} · Updated ${new Date(updatedAt).toLocaleString(undefined, {
+      ? ''
+      : `Updated ${new Date(updatedAt).toLocaleString(undefined, {
           dateStyle: 'medium',
           timeStyle: 'short',
         })}`
@@ -286,6 +286,7 @@ export default function CourseModuleContentPage() {
           )}
           <div className="px-4 md:px-8">
             <SyllabusBlockEditor
+              courseCode={courseCode}
               sections={draft}
               onChange={setDraft}
               disabled={saving}

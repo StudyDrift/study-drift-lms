@@ -319,3 +319,28 @@ pub async fn update_markdown_theme(
     .fetch_optional(pool)
     .await
 }
+
+pub async fn update_hero_fields_optional(
+    pool: &PgPool,
+    course_code: &str,
+    hero_image_url: Option<&str>,
+    hero_image_object_position: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        r#"
+        UPDATE {}
+        SET
+            hero_image_url = $1,
+            hero_image_object_position = $2,
+            updated_at = NOW()
+        WHERE course_code = $3
+        "#,
+        schema::COURSES
+    ))
+    .bind(hero_image_url)
+    .bind(hero_image_object_position)
+    .bind(course_code)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
