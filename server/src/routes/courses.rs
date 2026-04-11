@@ -16,8 +16,8 @@ use crate::models::course_module_content::{
     CreateCourseContentPageRequest, ModuleContentPageResponse, UpdateModuleContentPageRequest,
 };
 use crate::models::course_module_quiz::{
-    validate_adaptive_quiz_settings, validate_quiz_comprehensive_settings, validate_quiz_questions,
-    AdaptiveQuizNextRequest, AdaptiveQuizNextResponse, CreateCourseQuizRequest,
+    validate_adaptive_quiz_settings, validate_item_points_worth, validate_quiz_comprehensive_settings,
+    validate_quiz_questions, AdaptiveQuizNextRequest, AdaptiveQuizNextResponse, CreateCourseQuizRequest,
     GenerateModuleQuizQuestionsRequest, GenerateModuleQuizQuestionsResponse, ModuleQuizResponse,
     UpdateModuleQuizRequest, ADAPTIVE_SOURCE_KINDS,
 };
@@ -361,6 +361,7 @@ fn module_quiz_response_for_api(
         max_attempts: row.max_attempts,
         grade_attempt_policy: row.grade_attempt_policy.clone(),
         passing_score_percent: row.passing_score_percent,
+        points_worth: row.points_worth,
         late_submission_policy: row.late_submission_policy.clone(),
         late_penalty_percent: row.late_penalty_percent,
         time_limit_minutes: row.time_limit_minutes,
@@ -387,6 +388,7 @@ fn module_quiz_response_for_api(
         adaptive_source_item_ids: (show_adaptive_details && row.is_adaptive)
             .then(|| row.adaptive_source_item_ids.0.clone()),
         adaptive_question_count: row.adaptive_question_count,
+        assignment_group_id: row.assignment_group_id,
     }
 }
 
@@ -414,6 +416,7 @@ fn quiz_settings_patch_requested(req: &UpdateModuleQuizRequest) -> bool {
         || req.adaptive_topic_balance.is_some()
         || req.adaptive_stop_rule.is_some()
         || req.random_question_pool_count.is_some()
+        || req.points_worth.is_some()
 }
 
 fn merge_quiz_settings_write(
@@ -492,6 +495,9 @@ fn merge_quiz_settings_write(
     }
     if let Some(v) = &req.random_question_pool_count {
         s.random_question_pool_count = *v;
+    }
+    if let Some(v) = &req.points_worth {
+        s.points_worth = *v;
     }
     s
 }
@@ -1176,6 +1182,8 @@ async fn module_content_page_get_handler(
         title,
         markdown,
         due_at,
+        points_worth: None,
+        assignment_group_id: None,
         updated_at,
     }))
 }
@@ -1234,6 +1242,8 @@ async fn module_content_page_patch_handler(
         title,
         markdown,
         due_at,
+        points_worth: None,
+        assignment_group_id: None,
         updated_at,
     }))
 }
@@ -1347,7 +1357,7 @@ async fn module_assignment_get_handler(
         }
     }
 
-    let Some((title, markdown, mut due_at, updated_at)) =
+    let Some((title, markdown, mut due_at, points_worth, assignment_group_id, updated_at)) =
         course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
@@ -1362,6 +1372,8 @@ async fn module_assignment_get_handler(
         title,
         markdown,
         due_at,
+        points_worth,
+        assignment_group_id,
         updated_at,
     }))
 }
@@ -1388,11 +1400,24 @@ async fn module_assignment_patch_handler(
         return Err(AppError::NotFound);
     };
 
-    let updated = course_module_assignments::update_markdown(
+    let Some((_, _, _, cur_points, _, _)) =
+        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    let merged_points = match &req.points_worth {
+        None => cur_points,
+        Some(pw) => *pw,
+    };
+    validate_item_points_worth(merged_points)?;
+
+    let updated = course_module_assignments::update_markdown_and_points(
         &state.pool,
         course_id,
         item_id,
         req.markdown.trim_end(),
+        merged_points,
     )
     .await?;
 
@@ -1409,7 +1434,7 @@ async fn module_assignment_patch_handler(
             })?;
     }
 
-    let Some((title, markdown, due_at, updated_at)) =
+    let Some((title, markdown, due_at, points_worth, assignment_group_id, updated_at)) =
         course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
@@ -1420,6 +1445,8 @@ async fn module_assignment_patch_handler(
         title,
         markdown,
         due_at,
+        points_worth,
+        assignment_group_id,
         updated_at,
     }))
 }
@@ -1524,6 +1551,7 @@ async fn module_quiz_patch_handler(
             merged.random_question_pool_count,
             merged.quiz_access_code.as_deref(),
         )?;
+        validate_item_points_worth(merged.points_worth)?;
         quiz_settings_write = Some(merged);
     }
 
@@ -1965,9 +1993,9 @@ async fn structure_item_assignment_group_patch_handler(
     let Some(row) = course_structure::get_item_row(&state.pool, course_id, item_id).await? else {
         return Err(AppError::NotFound);
     };
-    if row.kind != "content_page" && row.kind != "assignment" {
+    if row.kind != "content_page" && row.kind != "assignment" && row.kind != "quiz" {
         return Err(AppError::InvalidInput(
-            "Only content pages and assignments can belong to an assignment group.".into(),
+            "Only content pages, assignments, and quizzes can belong to an assignment group.".into(),
         ));
     }
 

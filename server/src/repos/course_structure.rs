@@ -82,13 +82,34 @@ pub async fn rows_to_responses_with_quiz_adaptive(
     rows: Vec<CourseStructureItemRow>,
 ) -> Result<Vec<CourseStructureItemResponse>, sqlx::Error> {
     let quiz_ids: Vec<Uuid> = rows.iter().filter(|r| r.kind == "quiz").map(|r| r.id).collect();
-    let flags = course_module_quizzes::is_adaptive_flags_for_structure_items(pool, course_id, &quiz_ids).await?;
+    let assignment_ids: Vec<Uuid> = rows
+        .iter()
+        .filter(|r| r.kind == "assignment")
+        .map(|r| r.id)
+        .collect();
+    let outlines =
+        course_module_quizzes::quiz_outline_for_structure_items(pool, course_id, &quiz_ids).await?;
+    let assignment_points =
+        course_module_assignments::points_worth_for_structure_items(pool, course_id, &assignment_ids)
+            .await?;
     Ok(rows
         .into_iter()
         .map(|row| {
             let mut item: CourseStructureItemResponse = row.into();
             if item.kind == "quiz" {
-                item.is_adaptive = Some(flags.get(&item.id).copied().unwrap_or(false));
+                if let Some(o) = outlines.get(&item.id) {
+                    item.is_adaptive = Some(o.is_adaptive);
+                    item.points_worth = o.points_worth;
+                    if !o.is_adaptive {
+                        item.points_possible = Some(o.question_points_total);
+                    }
+                } else {
+                    item.is_adaptive = Some(false);
+                    item.points_possible = Some(0);
+                }
+            }
+            if item.kind == "assignment" {
+                item.points_worth = assignment_points.get(&item.id).copied().flatten();
             }
             item
         })
@@ -1071,7 +1092,7 @@ pub async fn archive_child_structure_item(
     .ok_or(sqlx::Error::RowNotFound)
 }
 
-/// Sets `assignment_group_id` for a gradable module item (`content_page` or `assignment`).
+/// Sets `assignment_group_id` for a gradable module item (`content_page`, `assignment`, or `quiz`).
 pub async fn set_item_assignment_group(
     pool: &PgPool,
     course_id: Uuid,
@@ -1082,7 +1103,7 @@ pub async fn set_item_assignment_group(
         r#"
         UPDATE {}
         SET assignment_group_id = $3, updated_at = NOW()
-        WHERE id = $1 AND course_id = $2 AND kind IN ('content_page', 'assignment')
+        WHERE id = $1 AND course_id = $2 AND kind IN ('content_page', 'assignment', 'quiz')
         "#,
         schema::COURSE_STRUCTURE_ITEMS
     ))

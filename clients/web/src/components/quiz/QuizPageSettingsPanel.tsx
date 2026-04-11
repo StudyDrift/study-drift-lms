@@ -23,6 +23,14 @@ export type QuizPageSettingsPanelProps = {
   onUnlimitedAttemptsChange: (value: boolean) => void
   oneQuestionAtATime: boolean
   onOneQuestionAtATimeChange: (value: boolean) => void
+  pointsWorth: number | null
+  onPointsWorthChange: (value: number | null) => void
+  /** Saved assignment groups (with server ids). */
+  gradingGroups: { id: string; name: string }[]
+  assignmentGroupId: string | null
+  onAssignmentGroupChange: (groupId: string | null) => void
+  /** When true, only the assignment-group control is locked (e.g. patch in flight). */
+  assignmentGroupSelectDisabled?: boolean
   advanced: QuizAdvancedSettings
   onAdvancedChange: (next: QuizAdvancedSettings) => void
   showAdaptiveSection: boolean
@@ -132,6 +140,12 @@ export function QuizPageSettingsPanel({
   onUnlimitedAttemptsChange,
   oneQuestionAtATime,
   onOneQuestionAtATimeChange,
+  pointsWorth,
+  onPointsWorthChange,
+  gradingGroups,
+  assignmentGroupId,
+  onAssignmentGroupChange,
+  assignmentGroupSelectDisabled,
   advanced,
   onAdvancedChange,
   showAdaptiveSection,
@@ -255,6 +269,34 @@ export function QuizPageSettingsPanel({
               </Field>
             </div>
             <div className="py-3">
+              <Field
+                label="Points worth"
+                htmlFor="quiz-points-worth"
+                hint="How many points this quiz counts for. Leave empty if not set (use 0 for explicitly no points)."
+              >
+                <input
+                  id="quiz-points-worth"
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  placeholder="Not set"
+                  value={pointsWorth ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value.trim()
+                    if (v === '') {
+                      onPointsWorthChange(null)
+                      return
+                    }
+                    const n = Math.floor(Number(v))
+                    if (!Number.isFinite(n)) return
+                    onPointsWorthChange(Math.min(1_000_000, Math.max(0, n)))
+                  }}
+                  disabled={disabled}
+                  className={`max-w-[10rem] ${inputClass}`}
+                />
+              </Field>
+            </div>
+            <div className="py-3">
               <Field label="Late submission (after due)" htmlFor="quiz-late-policy">
                 <select
                   id="quiz-late-policy"
@@ -287,6 +329,39 @@ export function QuizPageSettingsPanel({
                   />
                 </Field>
               </div>
+            ) : null}
+          </div>
+        </SettingsAccordion>
+
+        <SettingsAccordion title="Grading">
+          <div className="space-y-3 pt-1">
+            <Field
+              label="Assignment group"
+              htmlFor="quiz-assignment-group"
+              hint="Used with weighted assignment groups in course grading settings. Saves immediately when changed."
+            >
+              <select
+                id="quiz-assignment-group"
+                value={assignmentGroupId ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value
+                  onAssignmentGroupChange(v === '' ? null : v)
+                }}
+                disabled={disabled || Boolean(assignmentGroupSelectDisabled)}
+                className={inputClass}
+              >
+                <option value="">— None —</option>
+                {gradingGroups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {gradingGroups.length === 0 ? (
+              <p className="text-[11px] leading-snug text-slate-400 dark:text-neutral-500">
+                Add groups under Course Settings → Assignment groups & weights.
+              </p>
             ) : null}
           </div>
         </SettingsAccordion>

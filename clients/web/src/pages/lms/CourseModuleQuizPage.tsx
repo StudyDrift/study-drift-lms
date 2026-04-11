@@ -8,9 +8,11 @@ import { usePermissions } from '../../context/usePermissions'
 import {
   defaultQuizAdvancedSettings,
   fetchCourse,
+  fetchCourseGradingSettings,
   fetchCourseStructure,
   fetchModuleQuiz,
   generateModuleQuizQuestions,
+  patchCourseStructureItemAssignmentGroup,
   patchModuleQuiz,
   quizAdvancedSettingsFromPayload,
   type CourseStructureItem,
@@ -51,6 +53,12 @@ function datetimeLocalValueToIso(value: string): string | null {
   return d.toISOString()
 }
 
+function quizDateTimeIsSet(iso: string | null): boolean {
+  if (!iso) return false
+  const d = new Date(iso)
+  return !Number.isNaN(d.getTime())
+}
+
 function formatQuizDateTime(iso: string | null): string {
   if (!iso) return 'Not set'
   const d = new Date(iso)
@@ -64,6 +72,20 @@ function formatGradePolicyShort(p: string): string {
   if (p === 'first') return 'First attempt'
   if (p === 'average') return 'Average'
   return p
+}
+
+function formatItemPointsWorth(p: number | null): string {
+  if (p == null) return 'Not set'
+  return String(p)
+}
+
+function assignmentGroupDisplayName(
+  groupId: string | null,
+  groups: { id: string; name: string }[],
+): string {
+  if (!groupId) return 'Not set'
+  const g = groups.find((x) => x.id === groupId)
+  return g?.name ?? 'Unknown group'
 }
 
 function newLocalId(): string {
@@ -281,6 +303,12 @@ export default function CourseModuleQuizPage() {
   const [draftAvailableUntilLocal, setDraftAvailableUntilLocal] = useState('')
   const [draftUnlimitedAttempts, setDraftUnlimitedAttempts] = useState(false)
   const [draftOneQuestionAtATime, setDraftOneQuestionAtATime] = useState(false)
+  const [pointsWorth, setPointsWorth] = useState<number | null>(null)
+  const [draftPointsWorth, setDraftPointsWorth] = useState<number | null>(null)
+  const [gradingGroups, setGradingGroups] = useState<{ id: string; name: string }[]>([])
+  const [assignmentGroupId, setAssignmentGroupId] = useState<string | null>(null)
+  const [assignmentGroupPatching, setAssignmentGroupPatching] = useState(false)
+  const [assignmentGroupPatchError, setAssignmentGroupPatchError] = useState<string | null>(null)
   const [quizAdvanced, setQuizAdvanced] = useState<QuizAdvancedSettings>(() => defaultQuizAdvancedSettings())
   const [draftQuizAdvanced, setDraftQuizAdvanced] = useState<QuizAdvancedSettings>(() => defaultQuizAdvancedSettings())
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -314,6 +342,16 @@ export default function CourseModuleQuizPage() {
     setLoadError(null)
     try {
       const [data, courseRow] = await Promise.all([fetchModuleQuiz(courseCode, itemId), fetchCourse(courseCode)])
+      setAssignmentGroupId(data.assignmentGroupId ?? null)
+      setAssignmentGroupPatchError(null)
+      try {
+        const grading = await fetchCourseGradingSettings(courseCode)
+        setGradingGroups(
+          grading.assignmentGroups.filter((g) => g.id.trim()).map((g) => ({ id: g.id, name: g.name })),
+        )
+      } catch {
+        setGradingGroups([])
+      }
       setTitle(data.title)
       setMarkdown(data.markdown)
       setDueAt(data.dueAt)
@@ -321,6 +359,8 @@ export default function CourseModuleQuizPage() {
       setAvailableUntilAt(data.availableUntil ?? null)
       setUnlimitedAttempts(Boolean(data.unlimitedAttempts))
       setOneQuestionAtATime(Boolean(data.oneQuestionAtATime))
+      setPointsWorth(data.pointsWorth ?? null)
+      setDraftPointsWorth(data.pointsWorth ?? null)
       const adv = quizAdvancedSettingsFromPayload(data)
       setQuizAdvanced(adv)
       setDraftQuizAdvanced(adv)
@@ -342,6 +382,8 @@ export default function CourseModuleQuizPage() {
       setAvailableUntilAt(null)
       setUnlimitedAttempts(false)
       setOneQuestionAtATime(false)
+      setPointsWorth(null)
+      setDraftPointsWorth(null)
       const blankAdv = defaultQuizAdvancedSettings()
       setQuizAdvanced(blankAdv)
       setDraftQuizAdvanced(blankAdv)
@@ -351,6 +393,8 @@ export default function CourseModuleQuizPage() {
       setAdaptiveSystemPrompt('')
       setAdaptiveSourceItemIds([])
       setAdaptiveQuestionCount(5)
+      setGradingGroups([])
+      setAssignmentGroupId(null)
     } finally {
       setLoading(false)
     }
@@ -424,11 +468,15 @@ export default function CourseModuleQuizPage() {
     availableUntilAt,
     unlimitedAttempts,
     oneQuestionAtATime,
+    pointsWorth,
+    assignmentGroupId,
+    gradingGroups,
     updatedAt,
   ])
 
   function beginEditContent() {
     setSaveError(null)
+    setAssignmentGroupPatchError(null)
     setDraft(markdownToSectionsForEditor(markdown, newLocalId))
     setDraftTitle(title)
     setDraftDueLocal(isoToDatetimeLocalValue(dueAt))
@@ -436,12 +484,14 @@ export default function CourseModuleQuizPage() {
     setDraftAvailableUntilLocal(isoToDatetimeLocalValue(availableUntilAt))
     setDraftUnlimitedAttempts(unlimitedAttempts)
     setDraftOneQuestionAtATime(oneQuestionAtATime)
+    setDraftPointsWorth(pointsWorth)
     setDraftQuizAdvanced(quizAdvanced)
     setEditingContent(true)
   }
 
   function cancelEditContent() {
     setSaveError(null)
+    setAssignmentGroupPatchError(null)
     setEditingContent(false)
     setDraft([])
     setDraftTitle(title)
@@ -450,7 +500,24 @@ export default function CourseModuleQuizPage() {
     setDraftAvailableUntilLocal(isoToDatetimeLocalValue(availableUntilAt))
     setDraftUnlimitedAttempts(unlimitedAttempts)
     setDraftOneQuestionAtATime(oneQuestionAtATime)
+    setDraftPointsWorth(pointsWorth)
     setDraftQuizAdvanced(quizAdvanced)
+  }
+
+  async function onQuizAssignmentGroupChange(next: string | null) {
+    if (!courseCode || !itemId || !canEdit) return
+    setAssignmentGroupPatchError(null)
+    setAssignmentGroupPatching(true)
+    try {
+      const updated = await patchCourseStructureItemAssignmentGroup(courseCode, itemId, next)
+      setAssignmentGroupId(updated.assignmentGroupId ?? null)
+    } catch (e) {
+      setAssignmentGroupPatchError(
+        e instanceof Error ? e.message : 'Could not update assignment group.',
+      )
+    } finally {
+      setAssignmentGroupPatching(false)
+    }
   }
 
   async function saveContent() {
@@ -476,6 +543,7 @@ export default function CourseModuleQuizPage() {
         maxAttempts: draftQuizAdvanced.maxAttempts,
         gradeAttemptPolicy: draftQuizAdvanced.gradeAttemptPolicy,
         passingScorePercent: draftQuizAdvanced.passingScorePercent,
+        pointsWorth: draftPointsWorth,
         lateSubmissionPolicy: draftQuizAdvanced.lateSubmissionPolicy,
         latePenaltyPercent: draftQuizAdvanced.latePenaltyPercent,
         timeLimitMinutes: draftQuizAdvanced.timeLimitMinutes,
@@ -500,6 +568,9 @@ export default function CourseModuleQuizPage() {
       setAvailableUntilAt(data.availableUntil ?? null)
       setUnlimitedAttempts(Boolean(data.unlimitedAttempts))
       setOneQuestionAtATime(Boolean(data.oneQuestionAtATime))
+      setPointsWorth(data.pointsWorth ?? null)
+      setDraftPointsWorth(data.pointsWorth ?? null)
+      setAssignmentGroupId(data.assignmentGroupId ?? null)
       const adv = quizAdvancedSettingsFromPayload(data)
       setQuizAdvanced(adv)
       setDraftQuizAdvanced(adv)
@@ -549,6 +620,9 @@ export default function CourseModuleQuizPage() {
           typeof data.adaptiveQuestionCount === 'number' ? data.adaptiveQuestionCount : adaptiveCount,
         )
         setQuizAdvanced(quizAdvancedSettingsFromPayload(data))
+        setPointsWorth(data.pointsWorth ?? null)
+        setDraftPointsWorth(data.pointsWorth ?? null)
+        setAssignmentGroupId(data.assignmentGroupId ?? null)
         setUpdatedAt(data.updatedAt)
       } else {
         const payload = questionsDraft.map((q) => ({
@@ -569,6 +643,9 @@ export default function CourseModuleQuizPage() {
         setAdaptiveSourceItemIds(data.adaptiveSourceItemIds ?? [])
         setAdaptiveQuestionCount(5)
         setQuizAdvanced(quizAdvancedSettingsFromPayload(data))
+        setPointsWorth(data.pointsWorth ?? null)
+        setDraftPointsWorth(data.pointsWorth ?? null)
+        setAssignmentGroupId(data.assignmentGroupId ?? null)
         setUpdatedAt(data.updatedAt)
       }
       setQuestionsOpen(false)
@@ -780,22 +857,28 @@ export default function CourseModuleQuizPage() {
                   )}
                 </p>
                 <dl className="mt-4 space-y-2 border-t border-slate-200/80 pt-3 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <dt className="shrink-0 text-slate-500">Due date</dt>
-                    <dd className="min-w-0 text-right font-medium text-slate-900">{formatQuizDateTime(dueAt)}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="shrink-0 text-slate-500">Visibility start</dt>
-                    <dd className="min-w-0 text-right font-medium text-slate-900">
-                      {formatQuizDateTime(availableFromAt)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="shrink-0 text-slate-500">Visibility end</dt>
-                    <dd className="min-w-0 text-right font-medium text-slate-900">
-                      {formatQuizDateTime(availableUntilAt)}
-                    </dd>
-                  </div>
+                  {quizDateTimeIsSet(dueAt) ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500">Due date</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900">{formatQuizDateTime(dueAt)}</dd>
+                    </div>
+                  ) : null}
+                  {quizDateTimeIsSet(availableFromAt) ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500">Visibility start</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                        {formatQuizDateTime(availableFromAt)}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {quizDateTimeIsSet(availableUntilAt) ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500">Visibility end</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                        {formatQuizDateTime(availableUntilAt)}
+                      </dd>
+                    </div>
+                  ) : null}
                   <div className="flex justify-between gap-4">
                     <dt className="shrink-0 text-slate-500">Unlimited attempts</dt>
                     <dd className="min-w-0 text-right font-medium text-slate-900">
@@ -820,32 +903,50 @@ export default function CourseModuleQuizPage() {
                       {formatGradePolicyShort(quizAdvanced.gradeAttemptPolicy)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="shrink-0 text-slate-500">Passing score</dt>
-                    <dd className="min-w-0 text-right font-medium text-slate-900">
-                      {quizAdvanced.passingScorePercent != null ? `${quizAdvanced.passingScorePercent}%` : 'Not set'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="shrink-0 text-slate-500">Time limit</dt>
-                    <dd className="min-w-0 text-right font-medium text-slate-900">
-                      {quizAdvanced.timeLimitMinutes != null
-                        ? `${quizAdvanced.timeLimitMinutes} min`
-                        : 'Not set'}
-                    </dd>
-                  </div>
+                  {pointsWorth != null ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500">Points</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                        {formatItemPointsWorth(pointsWorth)}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {assignmentGroupId ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500">Assignment group</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                        {assignmentGroupDisplayName(assignmentGroupId, gradingGroups)}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {quizAdvanced.passingScorePercent != null ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500">Passing score</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                        {`${quizAdvanced.passingScorePercent}%`}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {quizAdvanced.timeLimitMinutes != null ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500">Time limit</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                        {`${quizAdvanced.timeLimitMinutes} min`}
+                      </dd>
+                    </div>
+                  ) : null}
                   <div className="flex justify-between gap-4">
                     <dt className="shrink-0 text-slate-500">Shuffle questions</dt>
                     <dd className="min-w-0 text-right font-medium text-slate-900">
                       {quizAdvanced.shuffleQuestions ? 'Yes' : 'No'}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="shrink-0 text-slate-500">Access code</dt>
-                    <dd className="min-w-0 text-right font-medium text-slate-900">
-                      {quizAdvanced.requiresQuizAccessCode ? 'Required' : 'None'}
-                    </dd>
-                  </div>
+                  {quizAdvanced.requiresQuizAccessCode ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500">Access code</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900">Required</dd>
+                    </div>
+                  ) : null}
                   {isAdaptive ? (
                     <div className="flex justify-between gap-4">
                       <dt className="shrink-0 text-slate-500">Adaptive difficulty</dt>
@@ -866,6 +967,11 @@ export default function CourseModuleQuizPage() {
           {saveError && (
             <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-800 md:px-8">
               {saveError}
+            </p>
+          )}
+          {assignmentGroupPatchError && (
+            <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-800 md:px-8">
+              {assignmentGroupPatchError}
             </p>
           )}
           <div className="px-4 md:px-8">
@@ -889,6 +995,12 @@ export default function CourseModuleQuizPage() {
                     onUnlimitedAttemptsChange={setDraftUnlimitedAttempts}
                     oneQuestionAtATime={draftOneQuestionAtATime}
                     onOneQuestionAtATimeChange={setDraftOneQuestionAtATime}
+                    pointsWorth={draftPointsWorth}
+                    onPointsWorthChange={setDraftPointsWorth}
+                    gradingGroups={gradingGroups}
+                    assignmentGroupId={assignmentGroupId}
+                    onAssignmentGroupChange={(gid) => void onQuizAssignmentGroupChange(gid)}
+                    assignmentGroupSelectDisabled={assignmentGroupPatching}
                     advanced={draftQuizAdvanced}
                     onAdvancedChange={setDraftQuizAdvanced}
                     showAdaptiveSection={isAdaptive}

@@ -12,7 +12,9 @@ use crate::models::course_export::{
     ExportedContentPageBody, ExportedQuizBody,
 };
 use crate::models::course_grading::{AssignmentGroupInput, CourseGradingSettingsResponse};
-use crate::models::course_module_quiz::{validate_adaptive_quiz_settings, validate_quiz_questions};
+use crate::models::course_module_quiz::{
+    validate_adaptive_quiz_settings, validate_item_points_worth, validate_quiz_questions,
+};
 use crate::models::course_structure::CourseStructureItemResponse;
 use crate::models::course_syllabus::SyllabusSection;
 use crate::repos::course;
@@ -51,6 +53,7 @@ fn quiz_settings_from_export(body: &ExportedQuizBody) -> QuizSettingsWrite {
         adaptive_topic_balance: body.adaptive_topic_balance,
         adaptive_stop_rule: body.adaptive_stop_rule.clone(),
         random_question_pool_count: body.random_question_pool_count,
+        points_worth: body.points_worth,
     }
 }
 const MAX_SYLLABUS_SECTIONS: usize = 50;
@@ -154,12 +157,14 @@ fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
                 "Assignment {id} markdown is too long."
             )));
         }
+        validate_item_points_worth(body.points_worth)?;
     }
     for (id, body) in &ex.quizzes {
         if body.markdown.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
             return Err(AppError::InvalidInput(format!("Quiz {id} markdown is too long.")));
         }
         validate_quiz_questions(&body.questions)?;
+        validate_item_points_worth(body.points_worth)?;
         if body.is_adaptive {
             validate_adaptive_quiz_settings(
                 true,
@@ -331,6 +336,7 @@ async fn apply_module_bodies(
                         course_id,
                         it.id,
                         &body.markdown,
+                        body.points_worth,
                     )
                     .await?;
                     course_structure::set_assignment_due_at(pool, course_id, it.id, body.due_at)
@@ -402,6 +408,7 @@ async fn apply_module_bodies_for_new_items_only(
                         course_id,
                         it.id,
                         &body.markdown,
+                        body.points_worth,
                     )
                     .await?;
                     course_structure::set_assignment_due_at(pool, course_id, it.id, body.due_at)
@@ -562,7 +569,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                 }
             }
             "assignment" => {
-                if let Some((title, markdown, due_at, _)) =
+                if let Some((title, markdown, due_at, points_worth, _, _)) =
                     course_module_assignments::get_for_course_item(pool, course_id, it.id).await?
                 {
                     let _ = title;
@@ -571,6 +578,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                         ExportedAssignmentBody {
                             markdown,
                             due_at,
+                            points_worth,
                         },
                     );
                 }
@@ -590,6 +598,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                             max_attempts: row.max_attempts,
                             grade_attempt_policy: row.grade_attempt_policy.clone(),
                             passing_score_percent: row.passing_score_percent,
+                            points_worth: row.points_worth,
                             late_submission_policy: row.late_submission_policy.clone(),
                             late_penalty_percent: row.late_penalty_percent,
                             time_limit_minutes: row.time_limit_minutes,

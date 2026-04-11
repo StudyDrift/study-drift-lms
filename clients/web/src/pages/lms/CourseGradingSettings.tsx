@@ -94,7 +94,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
     let moduleTitle = ''
     for (const it of structure) {
       if (it.kind === 'module') moduleTitle = it.title
-      else if (it.kind === 'content_page' || it.kind === 'assignment') {
+      else if (it.kind === 'content_page' || it.kind === 'assignment' || it.kind === 'quiz') {
         out.push({ item: it, moduleTitle })
       }
     }
@@ -342,13 +342,13 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
         <h2 className="text-sm font-semibold text-slate-900">Gradable items</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Assign each assignment or content page to an assignment group. Items without a group do not
-          count toward weighted categories until you assign one.
+          Assign each quiz, assignment, or gradable content page to an assignment group. Items without a
+          group do not count toward weighted categories until you assign one.
         </p>
 
         {gradableRows.length === 0 ? (
           <p className="mt-4 text-sm text-slate-500">
-            No assignments or content pages yet. Add them in{' '}
+            No quizzes, assignments, or gradable content pages yet. Add them in{' '}
             <span className="font-medium text-slate-700">Modules</span>.
           </p>
         ) : (
@@ -369,7 +369,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                       <div className="font-medium text-slate-900">{item.title}</div>
                     </td>
                     <td className="py-2 pr-3 capitalize text-slate-600">
-                      {item.kind === 'content_page' ? 'Content' : 'Assignment'}
+                      {item.kind === 'content_page' ? 'Content' : item.kind === 'quiz' ? 'Quiz' : 'Assignment'}
                     </td>
                     <td className="py-2">
                       <select

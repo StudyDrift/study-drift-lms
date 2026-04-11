@@ -9,6 +9,9 @@ pub struct ModuleContentPageResponse {
     pub title: String,
     pub markdown: String,
     pub due_at: Option<DateTime<Utc>>,
+    pub points_worth: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assignment_group_id: Option<Uuid>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -25,4 +28,7 @@ pub struct UpdateModuleContentPageRequest {
     /// Omit to leave unchanged; JSON `null` clears; ISO-8601 string sets the due time.
     #[serde(default)]
     pub due_at: Option<Option<DateTime<Utc>>>,
+    /// Omit unchanged; JSON `null` clears.
+    #[serde(default)]
+    pub points_worth: Option<Option<i32>>,
 }

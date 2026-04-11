@@ -62,6 +62,53 @@ export type CourseGradingSettings = {
   assignmentGroups: AssignmentGroup[]
 }
 
+/** Normalizes GET/PUT `/grading` JSON (camelCase or snake_case) without throwing on odd shapes. */
+export function parseCourseGradingSettings(raw: unknown): CourseGradingSettings {
+  if (!raw || typeof raw !== 'object') {
+    return { gradingScale: 'letter_standard', assignmentGroups: [] }
+  }
+  const o = raw as Record<string, unknown>
+  const gradingScale =
+    typeof o.gradingScale === 'string'
+      ? o.gradingScale
+      : typeof o.grading_scale === 'string'
+        ? o.grading_scale
+        : 'letter_standard'
+  const rawGroups = o.assignmentGroups ?? o.assignment_groups
+  const assignmentGroups: AssignmentGroup[] = []
+  if (Array.isArray(rawGroups)) {
+    for (const item of rawGroups) {
+      if (!item || typeof item !== 'object') continue
+      const g = item as Record<string, unknown>
+      const idVal = g.id
+      const id =
+        typeof idVal === 'string'
+          ? idVal.trim()
+          : idVal != null && typeof idVal !== 'object'
+            ? String(idVal).trim()
+            : ''
+      const name = typeof g.name === 'string' ? g.name.trim() : ''
+      const sortOrder =
+        typeof g.sortOrder === 'number' && Number.isFinite(g.sortOrder)
+          ? g.sortOrder
+          : typeof g.sort_order === 'number' && Number.isFinite(g.sort_order)
+            ? g.sort_order
+            : 0
+      const weightRaw = g.weightPercent ?? g.weight_percent
+      let weightPercent = 0
+      if (typeof weightRaw === 'number' && Number.isFinite(weightRaw)) {
+        weightPercent = weightRaw
+      } else if (typeof weightRaw === 'string') {
+        const n = Number.parseFloat(weightRaw)
+        weightPercent = Number.isFinite(n) ? n : 0
+      }
+      if (!id || !name) continue
+      assignmentGroups.push({ id, name, sortOrder, weightPercent })
+    }
+  }
+  return { gradingScale, assignmentGroups }
+}
+
 export async function fetchCourse(courseCode: string): Promise<Course> {
   const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}`)
   const raw = await parseJson(res)
@@ -205,6 +252,10 @@ export type CourseStructureItem = {
   assignmentGroupId: string | null
   /** Quiz items only: true when the quiz is in adaptive mode. */
   isAdaptive?: boolean
+  /** Non-adaptive quizzes only: sum of per-question points from the course structure API. */
+  pointsPossible?: number
+  /** Quizzes and assignments: instructor-set gradebook points when set. */
+  pointsWorth?: number | null
   createdAt: string
   updatedAt: string
 }
@@ -347,7 +398,24 @@ export type ModuleContentPagePayload = {
   title: string
   markdown: string
   dueAt: string | null
+  /** Present for assignments; always null for content pages. */
+  pointsWorth: number | null
+  /** Present for assignments; null when unset. */
+  assignmentGroupId: string | null
   updatedAt: string
+}
+
+function normalizeModuleContentPagePayload(raw: unknown): ModuleContentPagePayload {
+  const r = raw as Record<string, unknown>
+  return {
+    itemId: String(r.itemId ?? ''),
+    title: String(r.title ?? ''),
+    markdown: String(r.markdown ?? ''),
+    dueAt: (r.dueAt as string | null | undefined) ?? null,
+    pointsWorth: typeof r.pointsWorth === 'number' ? r.pointsWorth : null,
+    assignmentGroupId: typeof r.assignmentGroupId === 'string' ? r.assignmentGroupId : null,
+    updatedAt: String(r.updatedAt ?? ''),
+  }
 }
 
 export async function createModuleAssignment(
@@ -436,6 +504,8 @@ export type ModuleQuizPayload = {
   maxAttempts: number
   gradeAttemptPolicy: GradeAttemptPolicy
   passingScorePercent: number | null
+  /** Total points this quiz counts for; null if unset. */
+  pointsWorth: number | null
   lateSubmissionPolicy: LateSubmissionPolicy
   latePenaltyPercent: number | null
   timeLimitMinutes: number | null
@@ -462,6 +532,8 @@ export type ModuleQuizPayload = {
   adaptiveSystemPrompt: string | null
   adaptiveSourceItemIds: string[] | null
   adaptiveQuestionCount: number
+  /** Course grading category; null when unset. */
+  assignmentGroupId: string | null
 }
 
 /** Editable advanced quiz options (editor draft); `quizAccessCode` is plain text for the form. */
@@ -552,6 +624,7 @@ export function normalizeModuleQuizPayload(raw: unknown): ModuleQuizPayload {
     maxAttempts: typeof r.maxAttempts === 'number' ? r.maxAttempts : 1,
     gradeAttemptPolicy: (r.gradeAttemptPolicy as GradeAttemptPolicy) ?? 'latest',
     passingScorePercent: typeof r.passingScorePercent === 'number' ? r.passingScorePercent : null,
+    pointsWorth: typeof r.pointsWorth === 'number' ? r.pointsWorth : null,
     lateSubmissionPolicy: (r.lateSubmissionPolicy as LateSubmissionPolicy) ?? 'allow',
     latePenaltyPercent: typeof r.latePenaltyPercent === 'number' ? r.latePenaltyPercent : null,
     timeLimitMinutes: typeof r.timeLimitMinutes === 'number' ? r.timeLimitMinutes : null,
@@ -580,6 +653,7 @@ export function normalizeModuleQuizPayload(raw: unknown): ModuleQuizPayload {
       ? (r.adaptiveSourceItemIds as string[])
       : null,
     adaptiveQuestionCount: typeof r.adaptiveQuestionCount === 'number' ? r.adaptiveQuestionCount : 5,
+    assignmentGroupId: typeof r.assignmentGroupId === 'string' ? r.assignmentGroupId : null,
   }
 }
 
@@ -605,6 +679,7 @@ export async function patchModuleQuiz(
     maxAttempts?: number
     gradeAttemptPolicy?: GradeAttemptPolicy
     passingScorePercent?: number | null
+    pointsWorth?: number | null
     lateSubmissionPolicy?: LateSubmissionPolicy
     latePenaltyPercent?: number | null
     timeLimitMinutes?: number | null
@@ -714,7 +789,7 @@ export async function fetchModuleContentPage(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as ModuleContentPagePayload
+  return normalizeModuleContentPagePayload(raw)
 }
 
 export async function patchModuleContentPage(
@@ -732,7 +807,7 @@ export async function patchModuleContentPage(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as ModuleContentPagePayload
+  return normalizeModuleContentPagePayload(raw)
 }
 
 export type ContentPageMarkup = {
@@ -804,13 +879,13 @@ export async function fetchModuleAssignment(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as ModuleContentPagePayload
+  return normalizeModuleContentPagePayload(raw)
 }
 
 export async function patchModuleAssignment(
   courseCode: string,
   itemId: string,
-  body: { markdown: string; dueAt?: string | null },
+  body: { markdown: string; dueAt?: string | null; pointsWorth?: number | null },
 ): Promise<ModuleContentPagePayload> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}`,
@@ -822,7 +897,7 @@ export async function patchModuleAssignment(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as ModuleContentPagePayload
+  return normalizeModuleContentPagePayload(raw)
 }
 
 /** Matches server `AppRole` for course-scoped roles dropdown (course creator only). */
@@ -932,7 +1007,7 @@ export async function fetchCourseGradingSettings(courseCode: string): Promise<Co
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseGradingSettings
+  return parseCourseGradingSettings(raw)
 }
 
 export async function putCourseGradingSettings(
@@ -952,7 +1027,7 @@ export async function putCourseGradingSettings(
   })
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseGradingSettings
+  return parseCourseGradingSettings(raw)
 }
 
 export async function patchCourseStructureItemAssignmentGroup(

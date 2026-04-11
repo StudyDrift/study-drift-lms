@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
-import { fetchCourseStructure } from '../../lib/coursesApi'
+import { fetchCourseStructure, type CourseStructureItem } from '../../lib/coursesApi'
 import { CourseCalendar, type CourseCalendarAssignment } from './CourseCalendar'
 import { LmsPage } from './LmsPage'
 
@@ -30,13 +30,21 @@ export default function CourseCalendarPage() {
 
   const assignments: CourseCalendarAssignment[] = useMemo(() => {
     if (!items) return []
-    return items
-      .filter((i) => i.kind === 'content_page' && i.dueAt)
-      .map((i) => ({
-        id: i.id,
-        title: i.title,
-        dueAt: i.dueAt as string,
-      }))
+    const isDueCalendarItem = (
+      i: CourseStructureItem,
+    ): i is CourseStructureItem & {
+      kind: 'content_page' | 'assignment' | 'quiz'
+      dueAt: string
+    } =>
+      (i.kind === 'content_page' || i.kind === 'assignment' || i.kind === 'quiz') &&
+      Boolean(i.dueAt)
+
+    return items.filter(isDueCalendarItem).map((i) => ({
+      id: i.id,
+      title: i.title,
+      dueAt: i.dueAt,
+      kind: i.kind,
+    }))
   }, [items])
 
   if (!courseCode) {

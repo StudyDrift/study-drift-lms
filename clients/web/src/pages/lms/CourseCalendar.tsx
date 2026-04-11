@@ -4,7 +4,6 @@ import { CalendarDays, ChevronLeft, ChevronRight, LayoutList, ListTodo } from 'l
 import {
   addMonths,
   dateKeyLocal,
-  countByDateKey,
   endOfWeekMondayExclusive,
   formatDueShort,
   isInTodoWindow,
@@ -17,6 +16,8 @@ export type CourseCalendarAssignment = {
   id: string
   title: string
   dueAt: string
+  /** Drives the correct module URL (`content`, `assignment`, or `quiz`). */
+  kind: 'content_page' | 'assignment' | 'quiz'
 }
 
 type ViewId = 'month' | 'week' | 'todo'
@@ -41,9 +42,15 @@ export function CourseCalendar({ courseCode, assignments }: CourseCalendarProps)
   const now = new Date()
 
   const monthCells = useMemo(() => monthGridCells(monthAnchor), [monthAnchor])
-  const countsByDay = useMemo(() => {
-    const keys = sorted.map((a) => dateKeyLocal(new Date(a.dueAt)))
-    return countByDateKey(keys)
+  const itemsByDay = useMemo(() => {
+    const m = new Map<string, CourseCalendarAssignment[]>()
+    for (const a of sorted) {
+      const key = dateKeyLocal(new Date(a.dueAt))
+      const list = m.get(key)
+      if (list) list.push(a)
+      else m.set(key, [a])
+    }
+    return m
   }, [sorted])
 
   const { weekStart, weekEnd, weekItems } = useMemo(() => {
@@ -61,13 +68,19 @@ export function CourseCalendar({ courseCode, assignments }: CourseCalendarProps)
     return sorted.filter((a) => isInTodoWindow(new Date(a.dueAt), t))
   }, [sorted])
 
-  const contentBase = `/courses/${encodeURIComponent(courseCode)}/modules/content`
+  const modulesBase = `/courses/${encodeURIComponent(courseCode)}/modules`
+
+  function itemPath(a: CourseCalendarAssignment) {
+    if (a.kind === 'assignment') return `${modulesBase}/assignment/${encodeURIComponent(a.id)}`
+    if (a.kind === 'quiz') return `${modulesBase}/quiz/${encodeURIComponent(a.id)}`
+    return `${modulesBase}/content/${encodeURIComponent(a.id)}`
+  }
 
   function assignmentRow(a: CourseCalendarAssignment) {
     return (
       <li key={a.id}>
         <Link
-          to={`${contentBase}/${encodeURIComponent(a.id)}`}
+          to={itemPath(a)}
           className="group flex flex-col gap-0.5 rounded-xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50/40 dark:border-neutral-600 dark:bg-neutral-800/80 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-950/40"
         >
           <span className="text-sm font-semibold tracking-tight text-slate-950 group-hover:text-indigo-800 dark:text-neutral-100 dark:group-hover:text-indigo-300">
@@ -143,16 +156,16 @@ export function CourseCalendar({ courseCode, assignments }: CourseCalendarProps)
             {monthCells.map((cell) => {
               const inMonth = cell.getMonth() === monthAnchor.getMonth()
               const key = dateKeyLocal(cell)
-              const n = countsByDay.get(key) ?? 0
+              const dayItems = itemsByDay.get(key) ?? []
               const isToday = dateKeyLocal(cell) === dateKeyLocal(now)
               return (
                 <div
                   key={cell.toISOString()}
-                  className={`min-h-[4.5rem] bg-white p-1.5 text-left dark:bg-neutral-900/95 ${
+                  className={`flex min-h-[5rem] flex-col bg-white p-1.5 text-left dark:bg-neutral-900/95 ${
                     inMonth ? '' : 'bg-slate-50/90 text-slate-400 dark:bg-neutral-950/80 dark:text-neutral-500'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-1">
+                  <div className="flex shrink-0 items-start">
                     <span
                       className={`inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded-lg text-sm font-medium ${
                         isToday
@@ -164,21 +177,28 @@ export function CourseCalendar({ courseCode, assignments }: CourseCalendarProps)
                     >
                       {cell.getDate()}
                     </span>
-                    {n > 0 ? (
-                      <span
-                        className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-indigo-100 px-1.5 py-0.5 text-xs font-bold text-indigo-800 dark:bg-indigo-950/90 dark:text-indigo-200"
-                        title={`${n} assignment${n === 1 ? '' : 's'} due`}
-                      >
-                        {n}
-                      </span>
-                    ) : null}
                   </div>
+                  {dayItems.length > 0 ? (
+                    <ul className="mt-1 min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain">
+                      {dayItems.map((a) => (
+                        <li key={a.id} className="min-w-0">
+                          <Link
+                            to={itemPath(a)}
+                            title={`${a.title || 'Untitled'} — ${formatDueShort(a.dueAt)}`}
+                            className="block w-full truncate rounded-md bg-indigo-50/90 px-1 py-0.5 text-left text-[11px] font-semibold leading-tight text-indigo-900 transition hover:bg-indigo-100 hover:ring-1 hover:ring-indigo-200/80 dark:bg-indigo-950/50 dark:text-indigo-100 dark:hover:bg-indigo-900/60 dark:hover:ring-indigo-500/40"
+                          >
+                            {a.title || 'Untitled'}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </div>
               )
             })}
           </div>
           <p className="mt-4 text-xs text-slate-500 dark:text-neutral-400">
-            Numbers show how many assignments are due that day (course time zone: your local time).
+            Each label is a due item; click to open it. Times use your local time zone.
           </p>
         </div>
       )}

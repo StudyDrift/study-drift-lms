@@ -63,6 +63,8 @@ pub struct ExportedAssignmentBody {
     pub markdown: String,
     #[serde(default)]
     pub due_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub points_worth: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +85,8 @@ pub struct ExportedQuizBody {
     pub grade_attempt_policy: String,
     #[serde(default)]
     pub passing_score_percent: Option<i32>,
+    #[serde(default)]
+    pub points_worth: Option<i32>,
     #[serde(default = "default_export_late_submission_policy")]
     pub late_submission_policy: String,
     #[serde(default)]

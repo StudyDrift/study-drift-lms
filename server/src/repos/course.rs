@@ -138,6 +138,16 @@ pub async fn create_course(
                     &item_perm,
                 )
                 .await?;
+                sqlx::query(&format!(
+                    r#"
+                    INSERT INTO {} (course_id, sort_order, name, weight_percent)
+                    VALUES ($1, 0, 'Assignments', 100.0)
+                    "#,
+                    schema::ASSIGNMENT_GROUPS
+                ))
+                .bind(row.id)
+                .execute(&mut *tx)
+                .await?;
                 tx.commit().await?;
                 rbac::assign_user_role_by_name(pool, created_by_user_id, "Teacher").await?;
                 return Ok(row);

@@ -35,6 +35,8 @@ describe('courseItemRefTokens', () => {
       title: 'Page',
       markdown: '# Hello',
       dueAt: null,
+      pointsWorth: null,
+      assignmentGroupId: null,
       updatedAt: new Date().toISOString(),
     })
     const fetchAssign = vi.spyOn(coursesApi, 'fetchModuleAssignment').mockResolvedValue({
@@ -42,6 +44,8 @@ describe('courseItemRefTokens', () => {
       title: 'A',
       markdown: 'Body',
       dueAt: null,
+      pointsWorth: null,
+      assignmentGroupId: null,
       updatedAt: new Date().toISOString(),
     })
     const id1 = 'a1b2c3d4-e5f6-4789-a012-345678901234'

@@ -7,7 +7,9 @@ import { markdownToSectionsForEditor, sectionsToMarkdown } from '../../component
 import { usePermissions } from '../../context/usePermissions'
 import {
   fetchCourse,
+  fetchCourseGradingSettings,
   fetchModuleAssignment,
+  patchCourseStructureItemAssignmentGroup,
   patchModuleAssignment,
   type SyllabusSection,
 } from '../../lib/coursesApi'
@@ -36,6 +38,27 @@ function datetimeLocalValueToIso(value: string): string | null {
   return d.toISOString()
 }
 
+function formatOptionalDateTime(iso: string | null): string {
+  if (!iso) return 'Not set'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return 'Not set'
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function formatPointsWorth(p: number | null): string {
+  if (p == null) return 'Not set'
+  return String(p)
+}
+
+function assignmentGroupDisplayName(
+  groupId: string | null,
+  groups: { id: string; name: string }[],
+): string {
+  if (!groupId) return 'Not set'
+  const g = groups.find((x) => x.id === groupId)
+  return g?.name ?? 'Unknown group'
+}
+
 function newLocalId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
@@ -50,7 +73,13 @@ export default function CourseModuleAssignmentPage() {
   const [title, setTitle] = useState('')
   const [markdown, setMarkdown] = useState('')
   const [dueAt, setDueAt] = useState<string | null>(null)
+  const [pointsWorth, setPointsWorth] = useState<number | null>(null)
   const [draftDueLocal, setDraftDueLocal] = useState('')
+  const [draftPointsWorth, setDraftPointsWorth] = useState<number | null>(null)
+  const [gradingGroups, setGradingGroups] = useState<{ id: string; name: string }[]>([])
+  const [assignmentGroupId, setAssignmentGroupId] = useState<string | null>(null)
+  const [assignmentGroupPatching, setAssignmentGroupPatching] = useState(false)
+  const [assignmentGroupPatchError, setAssignmentGroupPatchError] = useState<string | null>(null)
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -83,6 +112,17 @@ export default function CourseModuleAssignmentPage() {
       setTitle(data.title)
       setMarkdown(data.markdown)
       setDueAt(data.dueAt)
+      setPointsWorth(data.pointsWorth ?? null)
+      setAssignmentGroupId(data.assignmentGroupId ?? null)
+      setAssignmentGroupPatchError(null)
+      try {
+        const grading = await fetchCourseGradingSettings(courseCode)
+        setGradingGroups(
+          grading.assignmentGroups.filter((g) => g.id.trim()).map((g) => ({ id: g.id, name: g.name })),
+        )
+      } catch {
+        setGradingGroups([])
+      }
       setUpdatedAt(data.updatedAt)
       setMdPreset(courseRow.markdownThemePreset)
       setMdCustom(courseRow.markdownThemeCustom)
@@ -91,6 +131,9 @@ export default function CourseModuleAssignmentPage() {
       setTitle('')
       setMarkdown('')
       setDueAt(null)
+      setPointsWorth(null)
+      setGradingGroups([])
+      setAssignmentGroupId(null)
       setUpdatedAt(null)
     } finally {
       setLoading(false)
@@ -103,16 +146,36 @@ export default function CourseModuleAssignmentPage() {
 
   function beginEdit() {
     setSaveError(null)
+    setAssignmentGroupPatchError(null)
     setDraft(markdownToSectionsForEditor(markdown, newLocalId))
     setDraftDueLocal(isoToDatetimeLocalValue(dueAt))
+    setDraftPointsWorth(pointsWorth)
     setEditing(true)
   }
 
   function cancelEdit() {
     setSaveError(null)
+    setAssignmentGroupPatchError(null)
     setEditing(false)
     setDraft([])
-    setDraftDueLocal('')
+    setDraftDueLocal(isoToDatetimeLocalValue(dueAt))
+    setDraftPointsWorth(pointsWorth)
+  }
+
+  async function onAssignmentGroupChange(next: string | null) {
+    if (!courseCode || !itemId || !canEdit) return
+    setAssignmentGroupPatchError(null)
+    setAssignmentGroupPatching(true)
+    try {
+      const updated = await patchCourseStructureItemAssignmentGroup(courseCode, itemId, next)
+      setAssignmentGroupId(updated.assignmentGroupId ?? null)
+    } catch (e) {
+      setAssignmentGroupPatchError(
+        e instanceof Error ? e.message : 'Could not update assignment group.',
+      )
+    } finally {
+      setAssignmentGroupPatching(false)
+    }
   }
 
   async function save() {
@@ -124,9 +187,12 @@ export default function CourseModuleAssignmentPage() {
       const data = await patchModuleAssignment(courseCode, itemId, {
         markdown: body,
         dueAt: datetimeLocalValueToIso(draftDueLocal),
+        pointsWorth: draftPointsWorth,
       })
       setMarkdown(data.markdown)
       setDueAt(data.dueAt)
+      setPointsWorth(data.pointsWorth ?? null)
+      setAssignmentGroupId(data.assignmentGroupId ?? null)
       setUpdatedAt(data.updatedAt)
       setEditing(false)
       setDraft([])
@@ -208,12 +274,24 @@ export default function CourseModuleAssignmentPage() {
 
         {!loading && !loadError && !editing && (
           <div className="mt-8 space-y-6">
-            {dueAt && (
-              <p className="text-sm text-slate-600">
-                <span className="font-medium text-slate-800">Due:</span>{' '}
-                {new Date(dueAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-              </p>
-            )}
+            <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4">
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="shrink-0 text-slate-500">Due date</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900">{formatOptionalDateTime(dueAt)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="shrink-0 text-slate-500">Points</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900">{formatPointsWorth(pointsWorth)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="shrink-0 text-slate-500">Assignment group</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900">
+                    {assignmentGroupDisplayName(assignmentGroupId, gradingGroups)}
+                  </dd>
+                </div>
+              </dl>
+            </div>
             <MarkdownArticleView
               markdown={markdown}
               emptyMessage="No instructions yet. Select Edit to add Markdown."
@@ -231,24 +309,93 @@ export default function CourseModuleAssignmentPage() {
               {saveError}
             </p>
           )}
-          {canEdit && (
-            <div className="mb-4 px-4 md:px-8">
-              <label className="block text-sm font-medium text-slate-800 dark:text-neutral-200" htmlFor="assignment-due-at">
-                Due date (optional)
-              </label>
-              <input
-                id="assignment-due-at"
-                type="datetime-local"
-                value={draftDueLocal}
-                onChange={(e) => setDraftDueLocal(e.target.value)}
-                disabled={saving}
-                className="mt-2 w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500"
-              />
-              <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
-                Shown on the course calendar. Clear the field to remove.
-              </p>
-            </div>
+          {assignmentGroupPatchError && (
+            <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200 md:px-8">
+              {assignmentGroupPatchError}
+            </p>
           )}
+          {canEdit ? (
+            <>
+              <div className="mb-4 px-4 md:px-8">
+                <label
+                  className="block text-sm font-medium text-slate-800 dark:text-neutral-200"
+                  htmlFor="assignment-due-at"
+                >
+                  Due date (optional)
+                </label>
+                <input
+                  id="assignment-due-at"
+                  type="datetime-local"
+                  value={draftDueLocal}
+                  onChange={(e) => setDraftDueLocal(e.target.value)}
+                  disabled={saving}
+                  className="mt-2 w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500"
+                />
+                <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+                  Shown on the course calendar. Clear the field to remove.
+                </p>
+              </div>
+              <div className="mb-4 px-4 md:px-8">
+                <label
+                  className="block text-sm font-medium text-slate-800 dark:text-neutral-200"
+                  htmlFor="assignment-points-worth"
+                >
+                  Points (optional)
+                </label>
+                <input
+                  id="assignment-points-worth"
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  placeholder="Not set"
+                  value={draftPointsWorth ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value.trim()
+                    if (v === '') {
+                      setDraftPointsWorth(null)
+                      return
+                    }
+                    const n = Math.floor(Number(v))
+                    if (!Number.isFinite(n)) return
+                    setDraftPointsWorth(Math.min(1_000_000, Math.max(0, n)))
+                  }}
+                  disabled={saving}
+                  className="mt-2 w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500"
+                />
+                <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+                  How many points this assignment counts for. Leave empty if not set (use 0 for no points).
+                </p>
+              </div>
+              <div className="mb-4 px-4 md:px-8">
+                <label
+                  className="block text-sm font-medium text-slate-800 dark:text-neutral-200"
+                  htmlFor="assignment-group"
+                >
+                  Assignment group
+                </label>
+                <select
+                  id="assignment-group"
+                  value={assignmentGroupId ?? ''}
+                  onChange={(e) => void onAssignmentGroupChange(e.target.value === '' ? null : e.target.value)}
+                  disabled={saving || assignmentGroupPatching}
+                  className="mt-2 w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500"
+                >
+                  <option value="">— None —</option>
+                  {gradingGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+                  Used with weighted assignment groups in course grading settings. Saves immediately when changed.
+                  {gradingGroups.length === 0
+                    ? ' Add groups under Course Settings → Assignment groups & weights.'
+                    : ''}
+                </p>
+              </div>
+            </>
+          ) : null}
           <div className="px-4 md:px-8">
             <SyllabusBlockEditor
               courseCode={courseCode}

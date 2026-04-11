@@ -53,6 +53,7 @@ import {
 } from '../../lib/coursesApi'
 import { useCourseViewAs } from '../../lib/courseViewAs'
 import { permCourseItemCreate } from '../../lib/rbacApi'
+import { formatDueShort } from '../../lib/courseCalendarUtils'
 
 const MODULE_SORT_ID = 'sortable-modules'
 
@@ -99,46 +100,88 @@ function buildReorderPayloadFromItems(items: CourseStructureItem[]): {
   return { moduleOrder, childOrderByModule }
 }
 
+const moduleChildMetaLineClasses =
+  'mt-0.5 text-xs font-normal leading-snug text-slate-500 dark:text-neutral-400'
+
+function formatPtsLabel(n: number): string {
+  return n === 1 ? '1 pt' : `${n} pts`
+}
+
+/** Gradebook points if set; otherwise traditional quiz question total. */
+function structureItemPointsLabel(child: CourseStructureItem): string | null {
+  if (typeof child.pointsWorth === 'number') {
+    return formatPtsLabel(child.pointsWorth)
+  }
+  if (child.kind === 'quiz' && !child.isAdaptive && typeof child.pointsPossible === 'number') {
+    return formatPtsLabel(child.pointsPossible)
+  }
+  return null
+}
+
+function moduleChildItemMetaLine(child: CourseStructureItem): string | null {
+  const parts: string[] = []
+  const pts = structureItemPointsLabel(child)
+  if (pts) parts.push(pts)
+  if (
+    child.dueAt &&
+    (child.kind === 'content_page' ||
+      child.kind === 'assignment' ||
+      child.kind === 'quiz' ||
+      child.kind === 'heading')
+  ) {
+    parts.push(`Due ${formatDueShort(child.dueAt)}`)
+  }
+  if (parts.length === 0) return null
+  return parts.join(' · ')
+}
+
 function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; courseCode: string }) {
+  const meta = moduleChildItemMetaLine(child)
   return (
     <>
       {child.kind === 'content_page' ? (
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-600 dark:border-indigo-500/35 dark:bg-indigo-950/60 dark:text-indigo-300"
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-600 dark:border-indigo-500/35 dark:bg-indigo-950/60 dark:text-indigo-300"
             aria-hidden
           >
             <FileText className="h-4 w-4" strokeWidth={2} />
           </span>
-          <Link
-            to={`/courses/${encodeURIComponent(courseCode)}/modules/content/${encodeURIComponent(child.id)}`}
-            className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-          >
-            {child.title}
-          </Link>
+          <div className="min-w-0 flex-1">
+            <Link
+              to={`/courses/${encodeURIComponent(courseCode)}/modules/content/${encodeURIComponent(child.id)}`}
+              className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+            >
+              {child.title}
+            </Link>
+            {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
+          </div>
         </div>
       ) : child.kind === 'assignment' ? (
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/90 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-200"
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/90 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-200"
             aria-hidden
           >
             <ClipboardList className="h-4 w-4" strokeWidth={2} />
           </span>
-          <Link
-            to={`/courses/${encodeURIComponent(courseCode)}/modules/assignment/${encodeURIComponent(child.id)}`}
-            className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-          >
-            {child.title}
-          </Link>
+          <div className="min-w-0 flex-1">
+            <Link
+              to={`/courses/${encodeURIComponent(courseCode)}/modules/assignment/${encodeURIComponent(child.id)}`}
+              className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+            >
+              {child.title}
+            </Link>
+            {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
+          </div>
         </div>
       ) : child.kind === 'quiz' ? (
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <span
             className={
               child.isAdaptive
-                ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/90 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200'
-                : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 dark:border-emerald-500/35 dark:bg-emerald-950/50 dark:text-emerald-200'
+                ? 'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/90 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200'
+                : 'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 dark:border-emerald-500/35 dark:bg-emerald-950/50 dark:text-emerald-200'
             }
             aria-hidden
           >
@@ -148,34 +191,40 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
               <CircleHelp className="h-4 w-4" strokeWidth={2} />
             )}
           </span>
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <Link
-              to={`/courses/${encodeURIComponent(courseCode)}/modules/quiz/${encodeURIComponent(child.id)}`}
-              className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-              aria-label={
-                child.isAdaptive ? `${child.title} (adaptive quiz)` : undefined
-              }
-            >
-              {child.title}
-            </Link>
-            {child.isAdaptive ? (
-              <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-800 dark:bg-violet-900/80 dark:text-violet-200">
-                Adaptive
-              </span>
-            ) : null}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                to={`/courses/${encodeURIComponent(courseCode)}/modules/quiz/${encodeURIComponent(child.id)}`}
+                className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+                aria-label={
+                  child.isAdaptive ? `${child.title} (adaptive quiz)` : undefined
+                }
+              >
+                {child.title}
+              </Link>
+              {child.isAdaptive ? (
+                <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-800 dark:bg-violet-900/80 dark:text-violet-200">
+                  Adaptive
+                </span>
+              ) : null}
+            </div>
+            {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
             aria-hidden
           >
             <Heading className="h-4 w-4" strokeWidth={2} />
           </span>
-          <p className="min-w-0 text-lg font-bold leading-snug tracking-tight text-slate-950 sm:text-xl dark:text-neutral-100">
-            {child.title}
-          </p>
+          <div className="min-w-0 flex-1">
+            <p className="min-w-0 text-lg font-bold leading-snug tracking-tight text-slate-950 sm:text-xl dark:text-neutral-100">
+              {child.title}
+            </p>
+            {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
+          </div>
         </div>
       )}
     </>

@@ -1,7 +1,11 @@
 import type { CSSProperties } from 'react'
 import { useEffect, useState } from 'react'
 import { authorizedFetch } from '../../lib/api'
-import { needsAuthenticatedCourseImageSrc, resolveAuthorizedFetchPath } from '../../lib/courseFileImage'
+import {
+  needsAuthenticatedCourseImageSrc,
+  resolveAuthorizedFetchPath,
+  stripImageDisplayFragment,
+} from '../../lib/courseFileImage'
 
 type CourseFileMarkdownImageProps = {
   src?: string | null
@@ -57,5 +61,18 @@ export function CourseFileMarkdownImage({ src, alt, className, style }: CourseFi
       </span>
     )
   }
-  return <img src={url} alt={alt ?? ''} className={className} style={style} loading="lazy" />
+  const { displayWidth, displayHeight } = stripImageDisplayFragment(src ?? '')
+  const dimStyle: CSSProperties | undefined =
+    displayWidth != null && displayHeight != null
+      ? { width: displayWidth, height: displayHeight, objectFit: 'contain' }
+      : undefined
+  return (
+    <img
+      src={url}
+      alt={alt ?? ''}
+      className={className}
+      style={{ ...dimStyle, ...style }}
+      loading="lazy"
+    />
+  )
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import {
   closestCorners,
@@ -8,7 +8,6 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
-  type DraggableAttributes,
 } from '@dnd-kit/core'
 import {
   arrayMove,
@@ -18,7 +17,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, HelpCircle, Info, MoreHorizontal, Plus, User } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { LmsPage } from './LmsPage'
 import { RequirePermission } from '../../components/RequirePermission'
 import { authorizedFetch } from '../../lib/api'
@@ -43,72 +42,19 @@ function formatEditedAgo(iso: string): string {
   return `Edited ${days}d ago`
 }
 
-function hashPercent(seed: string, n: number): number {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
-  return 35 + ((h + n * 17) % 50)
-}
-
-function RingStat({
-  label,
-  percent,
-  strokeClass,
-}: {
-  label: string
-  percent: number
-  strokeClass: string
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="relative h-[3.25rem] w-[3.25rem]">
-        <svg className="-rotate-90" viewBox="0 0 36 36" aria-hidden>
-          <circle
-            cx="18"
-            cy="18"
-            r="15.5"
-            pathLength={100}
-            fill="none"
-            className="stroke-slate-100"
-            strokeWidth="3"
-          />
-          <circle
-            cx="18"
-            cy="18"
-            r="15.5"
-            pathLength={100}
-            fill="none"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeDasharray={100}
-            strokeDashoffset={100 - percent}
-            className={strokeClass}
-          />
-        </svg>
-        <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold tabular-nums text-slate-800">
-          {percent}%
-        </span>
-      </div>
-      <div className="flex items-center gap-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-        {label}
-        <Info className="h-3 w-3 text-slate-400" aria-hidden />
-      </div>
-    </div>
-  )
-}
-
-function statusLabel(c: Course): string {
+/** Catalog pill: draft vs published schedule window (uses real `published`, `startsAt`, `endsAt`). */
+function courseStatusBadgeLabel(c: Course): string {
+  if (!c.published) return 'Draft'
   const now = Date.now()
-  if (c.endsAt && new Date(c.endsAt).getTime() < now) return 'Ended'
-  if (c.startsAt && new Date(c.startsAt).getTime() > now) return 'Upcoming'
+  if (c.endsAt) {
+    const end = new Date(c.endsAt).getTime()
+    if (!Number.isNaN(end) && end < now) return 'Ended'
+  }
+  if (c.startsAt) {
+    const start = new Date(c.startsAt).getTime()
+    if (!Number.isNaN(start) && start > now) return 'Upcoming'
+  }
   return 'Active'
-}
-
-function tagFromCode(courseCode: string): string {
-  const m = /^C-([A-Z0-9]{6})$/i.exec(courseCode.trim())
-  if (m) return m[1].slice(0, 4).toUpperCase()
-  const prefix = courseCode.split(/[-\s]/)[0]?.toUpperCase() ?? 'Course'
-  if (prefix.length <= 4) return prefix
-  return prefix.slice(0, 4)
 }
 
 function CourseCard({
@@ -116,105 +62,85 @@ function CourseCard({
   sortable,
 }: {
   course: Course
-  sortable?: { attributes: DraggableAttributes; listeners: Record<string, unknown> }
+  sortable?: {
+    listeners: Record<string, unknown>
+    setNodeRef: (node: HTMLElement | null) => void
+    style: CSSProperties
+    isDragging: boolean
+  }
 }) {
-  const acc = hashPercent(course.id, 1)
-  const comp = hashPercent(course.id, 2)
-  const tag = tagFromCode(course.courseCode)
   const courseHref = `/courses/${encodeURIComponent(course.courseCode)}`
+  const badgeLabel = courseStatusBadgeLabel(course)
+  const descriptionBlurb = course.description.trim() || 'No description yet.'
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5">
+    <article
+      ref={sortable?.setNodeRef}
+      style={sortable?.style}
+      className={[
+        'flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5 transition-shadow',
+        sortable ? 'touch-none cursor-grab active:cursor-grabbing' : '',
+        sortable?.isDragging ? 'shadow-md shadow-slate-900/10 ring-2 ring-indigo-400/40' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      {...(sortable ? sortable.listeners : {})}
+    >
       <Link
         to={courseHref}
-        className="relative block focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+        className="relative block focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
         aria-label={`Open ${course.title}`}
       >
         <img
           src={course.heroImageUrl ?? '/course-card-hero.png'}
           alt=""
-          className="h-36 w-full object-cover"
+          draggable={false}
+          className="h-40 w-full object-cover"
           style={heroImageObjectStyle(course.heroImageObjectPosition)}
         />
+        <div
+          className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"
+          aria-hidden
+        />
         <span className="absolute left-3 top-3 rounded-full bg-slate-900/70 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
-          {statusLabel(course)}
+          {badgeLabel}
         </span>
+        <div className="absolute inset-x-0 bottom-0 p-4 pt-10">
+          <h2 className="text-lg font-semibold leading-snug tracking-tight text-white drop-shadow-sm line-clamp-2">
+            {course.title}
+          </h2>
+        </div>
       </Link>
 
-      <div className="flex flex-1 flex-col p-5">
-        <Link
-          to={courseHref}
-          className="text-base font-semibold leading-snug text-slate-900 hover:text-indigo-600"
-        >
-          {course.title}
-        </Link>
-
-        <div className="mt-5 flex justify-center gap-8 border-t border-slate-100 pt-5">
-          <RingStat label="Accuracy" percent={acc} strokeClass="stroke-teal-500" />
-          <RingStat label="Completion" percent={comp} strokeClass="stroke-emerald-500" />
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-            {tag}
-          </span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-            {course.published ? 'Published' : 'Draft'}
-          </span>
-          <span
-            className="ml-auto flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500"
-            aria-hidden
-          >
-            <User className="h-4 w-4" />
-          </span>
-        </div>
-
-        <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500">
-          {sortable ? (
-            <button
-              type="button"
-              className="touch-none flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm hover:bg-slate-50 hover:text-slate-600 active:cursor-grabbing"
-              aria-label={`Reorder: ${course.title}`}
-              {...sortable.attributes}
-              {...sortable.listeners}
-            >
-              <GripVertical className="h-4 w-4" aria-hidden />
-            </button>
-          ) : null}
-          <span className="min-w-0 flex-1 truncate">{formatEditedAgo(course.updatedAt)}</span>
-          <span className="inline-flex items-center gap-1 tabular-nums">
-            <HelpCircle className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-            —
-          </span>
-          <button
-            type="button"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50"
-            aria-label="More options"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-        </div>
+      <div className="flex flex-1 flex-col justify-end px-5 pb-4 pt-3">
+        <p className="text-left text-sm leading-snug text-slate-600 line-clamp-4">{descriptionBlurb}</p>
+        <p className="mt-3 text-left text-xs text-slate-400">{formatEditedAgo(course.updatedAt)}</p>
       </div>
     </article>
   )
 }
 
 function SortableCourseCard({ course }: { course: Course }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: course.id,
   })
-  const style = {
+  const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.88 : undefined,
+    opacity: isDragging ? 0.92 : undefined,
     zIndex: isDragging ? 20 : undefined,
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="h-full min-h-0">
+    <div className="h-full min-h-0">
       <CourseCard
         course={course}
-        sortable={{ attributes, listeners: listeners as Record<string, unknown> }}
+        sortable={{
+          listeners: listeners as Record<string, unknown>,
+          setNodeRef,
+          style,
+          isDragging,
+        }}
       />
     </div>
   )
@@ -251,7 +177,7 @@ export default function Courses() {
   }, [])
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
@@ -279,7 +205,7 @@ export default function Courses() {
   return (
     <LmsPage
       title="Courses"
-      description="Browse and open your enrolled courses. Drag the grip on a card to reorder your catalog."
+      description="Browse and open your enrolled courses. Drag a card to reorder your catalog."
       actions={
         <RequirePermission permission={PERM_COURSE_CREATE} fallback={null}>
           <Link

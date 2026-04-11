@@ -40,6 +40,12 @@ pub struct CourseStructureItemResponse {
     /// Present for quiz items when loaded from the API: adaptive vs traditional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_adaptive: Option<bool>,
+    /// Present for non-adaptive quizzes: sum of per-question point values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub points_possible: Option<i32>,
+    /// Present for quizzes and assignments: instructor-set gradebook points; omitted when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub points_worth: Option<i32>,
 }
 
 impl From<CourseStructureItemRow> for CourseStructureItemResponse {
@@ -58,6 +64,8 @@ impl From<CourseStructureItemRow> for CourseStructureItemResponse {
             created_at: row.created_at,
             updated_at: row.updated_at,
             is_adaptive: None,
+            points_possible: None,
+            points_worth: None,
         }
     }
 }

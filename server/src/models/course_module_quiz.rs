@@ -37,6 +37,18 @@ pub const ADAPTIVE_STOP_RULES: &[&str] = &["fixed_count", "mastery_estimate"];
 pub const MAX_QUIZ_ACCESS_CODE_LEN: usize = 128;
 pub const MIN_MAX_ATTEMPTS: i32 = 1;
 pub const MAX_MAX_ATTEMPTS: i32 = 100;
+pub const MAX_ITEM_POINTS_WORTH: i32 = 1_000_000;
+
+pub fn validate_item_points_worth(points_worth: Option<i32>) -> Result<(), AppError> {
+    if let Some(p) = points_worth {
+        if !(0..=MAX_ITEM_POINTS_WORTH).contains(&p) {
+            return Err(AppError::InvalidInput(format!(
+                "pointsWorth must be between 0 and {MAX_ITEM_POINTS_WORTH}."
+            )));
+        }
+    }
+    Ok(())
+}
 
 pub fn validate_quiz_comprehensive_settings(
     unlimited_attempts: bool,
@@ -285,6 +297,7 @@ pub struct ModuleQuizResponse {
     pub max_attempts: i32,
     pub grade_attempt_policy: String,
     pub passing_score_percent: Option<i32>,
+    pub points_worth: Option<i32>,
     pub late_submission_policy: String,
     pub late_penalty_percent: Option<i32>,
     pub time_limit_minutes: Option<i32>,
@@ -316,6 +329,8 @@ pub struct ModuleQuizResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub adaptive_source_item_ids: Option<Vec<Uuid>>,
     pub adaptive_question_count: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assignment_group_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -355,6 +370,9 @@ pub struct UpdateModuleQuizRequest {
     pub grade_attempt_policy: Option<String>,
     #[serde(default)]
     pub passing_score_percent: Option<Option<i32>>,
+    /// Omit unchanged; JSON `null` clears.
+    #[serde(default)]
+    pub points_worth: Option<Option<i32>>,
     #[serde(default)]
     pub late_submission_policy: Option<String>,
     #[serde(default)]
