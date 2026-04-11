@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ArrowLeft, Bell, Bot, ChevronDown, Shield, User } from 'lucide-react'
+import { usePermissions } from '../../context/usePermissions'
+import { PERM_RBAC_MANAGE } from '../../lib/rbacApi'
 import { settingsViewFromPathname } from './sideNavPathUtils'
 import { sideNavActiveClass, sideNavLinkClass } from './sideNavStyles'
 
 export function SideNavSettingsLinks() {
+  const { allows, loading: permLoading } = usePermissions()
+  const canManageRbac = !permLoading && allows(PERM_RBAC_MANAGE)
   const location = useLocation()
   const view = settingsViewFromPathname(location.pathname)
   const aiSectionActive = view === 'ai-models' || view === 'ai-prompts'
@@ -43,16 +47,20 @@ export function SideNavSettingsLinks() {
         <Bell className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Notifications
       </NavLink>
-      <p className="px-3 pb-1 pt-4 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
-        System Settings
-      </p>
-      <NavLink
-        to="/settings/roles"
-        className={() => `${sideNavLinkClass} ${view === 'roles' ? sideNavActiveClass : ''}`}
-      >
-        <Shield className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Roles and Permissions
-      </NavLink>
+      {canManageRbac && (
+        <>
+          <p className="px-3 pb-1 pt-4 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
+            System Settings
+          </p>
+          <NavLink
+            to="/settings/roles"
+            className={() => `${sideNavLinkClass} ${view === 'roles' ? sideNavActiveClass : ''}`}
+          >
+            <Shield className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+            Roles and Permissions
+          </NavLink>
+        </>
+      )}
       <div className="flex flex-col gap-0.5">
         <button
           type="button"
@@ -86,14 +94,16 @@ export function SideNavSettingsLinks() {
               >
                 Models
               </NavLink>
-              <NavLink
-                to="/settings/ai/system-prompts"
-                className={() =>
-                  `${sideNavLinkClass} ${view === 'ai-prompts' ? sideNavActiveClass : ''}`
-                }
-              >
-                System Prompts
-              </NavLink>
+              {canManageRbac && (
+                <NavLink
+                  to="/settings/ai/system-prompts"
+                  className={() =>
+                    `${sideNavLinkClass} ${view === 'ai-prompts' ? sideNavActiveClass : ''}`
+                  }
+                >
+                  System Prompts
+                </NavLink>
+              )}
             </div>
           </div>
         </div>

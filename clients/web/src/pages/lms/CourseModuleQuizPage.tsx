@@ -14,6 +14,7 @@ import {
   generateModuleQuizQuestions,
   patchCourseStructureItemAssignmentGroup,
   patchModuleQuiz,
+  runAdaptiveQuizToCompletion,
   quizAdvancedSettingsFromPayload,
   type CourseStructureItem,
   type QuizAdvancedSettings,
@@ -21,7 +22,7 @@ import {
   type SyllabusSection,
 } from '../../lib/coursesApi'
 import { type ResolvedMarkdownTheme, resolveMarkdownTheme } from '../../lib/markdownTheme'
-import { permCourseItemCreate } from '../../lib/rbacApi'
+import { permCourseItemCreate, permCourseItemsCreate } from '../../lib/rbacApi'
 import { CourseItemPromptEditor } from '../../components/CourseItemPromptEditor'
 import { expandQuizPromptWithRefs } from '../../lib/courseItemRefTokens'
 import { QuizPageSettingsPanel } from '../../components/quiz/QuizPageSettingsPanel'
@@ -282,6 +283,9 @@ export default function CourseModuleQuizPage() {
   const { courseCode, itemId } = useParams<{ courseCode: string; itemId: string }>()
   const { allows, loading: permLoading } = usePermissions()
   const canEdit = Boolean(courseCode && itemId && !permLoading && allows(permCourseItemCreate(courseCode)))
+  const canEditQuizItems = Boolean(
+    courseCode && itemId && !permLoading && allows(permCourseItemsCreate(courseCode)),
+  )
 
   const [title, setTitle] = useState('')
   const [markdown, setMarkdown] = useState('')
@@ -332,6 +336,8 @@ export default function CourseModuleQuizPage() {
   const [generateBusy, setGenerateBusy] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [studentQuizBusy, setStudentQuizBusy] = useState(false)
+  const [studentQuizBanner, setStudentQuizBanner] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [mdTheme, setMdTheme] = useState<ResolvedMarkdownTheme>(() =>
     resolveMarkdownTheme('classic', null),
   )
@@ -585,6 +591,7 @@ export default function CourseModuleQuizPage() {
   }
 
   function openQuestionsEditor() {
+    if (!canEditQuizItems) return
     setQuestionsError(null)
     setQuestionsDraft(questions.map((q) => ({ ...q, choices: [...q.choices] })))
     setQeAdaptiveOn(isAdaptive)
@@ -595,7 +602,7 @@ export default function CourseModuleQuizPage() {
   }
 
   async function saveQuestions() {
-    if (!courseCode || !itemId) return
+    if (!courseCode || !itemId || !canEditQuizItems) return
     if (qeAdaptiveOn && qeAdaptiveSources.length === 0) {
       setQuestionsError('Choose at least one course item to use as reference material.')
       return
@@ -658,6 +665,7 @@ export default function CourseModuleQuizPage() {
   }
 
   function openGenerateModal() {
+    if (!canEditQuizItems) return
     setGenerateError(null)
     setGeneratePrompt('')
     setGenerateCount(5)
@@ -665,7 +673,7 @@ export default function CourseModuleQuizPage() {
   }
 
   async function runGenerateQuestions() {
-    if (!courseCode || !itemId) return
+    if (!courseCode || !itemId || !canEditQuizItems) return
     const prompt = generatePrompt.trim()
     if (!prompt) {
       setGenerateError('Describe what the quiz should cover.')
@@ -696,6 +704,34 @@ export default function CourseModuleQuizPage() {
       setGenerateError(e instanceof Error ? e.message : 'Could not generate questions.')
     } finally {
       setGenerateBusy(false)
+    }
+  }
+
+  async function handleStudentStartQuiz() {
+    if (!courseCode || !itemId) return
+    setStudentQuizBanner(null)
+    if (!isAdaptive) {
+      setPreviewOpen(true)
+      return
+    }
+    setStudentQuizBusy(true)
+    try {
+      const maxQ = Math.min(30, Math.max(1, adaptiveQuestionCount))
+      const result = await runAdaptiveQuizToCompletion(courseCode, itemId, maxQ)
+      const tail = result.message?.trim()
+      setStudentQuizBanner({
+        kind: 'success',
+        text: tail
+          ? `Submitted ${result.answeredCount} answer${result.answeredCount === 1 ? '' : 's'}. ${tail}`
+          : `Submitted ${result.answeredCount} answer${result.answeredCount === 1 ? '' : 's'}. Quiz complete.`,
+      })
+    } catch (e) {
+      setStudentQuizBanner({
+        kind: 'error',
+        text: e instanceof Error ? e.message : 'Could not complete the quiz.',
+      })
+    } finally {
+      setStudentQuizBusy(false)
     }
   }
 
@@ -768,31 +804,32 @@ export default function CourseModuleQuizPage() {
         ) : (
           <div className="flex flex-wrap items-center justify-end gap-2">
             {canEdit ? (
-              <>
-                <QuizEditorMoreMenu
-                  disabled={loading}
-                  onPreview={() => setPreviewOpen(true)}
-                  onEditIntro={beginEditContent}
-                  onGenerate={openGenerateModal}
-                />
-                <button
-                  type="button"
-                  onClick={openQuestionsEditor}
-                  disabled={loading}
-                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Edit questions
-                </button>
-              </>
+              canEditQuizItems ? (
+                <>
+                  <QuizEditorMoreMenu
+                    disabled={loading}
+                    onPreview={() => setPreviewOpen(true)}
+                    onEditIntro={beginEditContent}
+                    onGenerate={openGenerateModal}
+                  />
+                  <button
+                    type="button"
+                    onClick={openQuestionsEditor}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Edit questions
+                  </button>
+                </>
+              ) : null
             ) : (
               <button
                 type="button"
-                onClick={() => setPreviewOpen(true)}
-                disabled={loading}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleStudentStartQuiz()}
+                disabled={loading || studentQuizBusy}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Eye className="h-4 w-4" aria-hidden />
-                Preview
+                {studentQuizBusy ? 'Running…' : 'Start Quiz'}
               </button>
             )}
           </div>
@@ -804,6 +841,19 @@ export default function CourseModuleQuizPage() {
           ← Back to modules
         </Link>
       </p>
+
+      {!canEdit && studentQuizBanner ? (
+        <p
+          className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+            studentQuizBanner.kind === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-rose-200 bg-rose-50 text-rose-800'
+          }`}
+          role="status"
+        >
+          {studentQuizBanner.text}
+        </p>
+      ) : null}
 
       <div className="mx-auto w-full max-w-5xl min-w-0">
         {loadError && (

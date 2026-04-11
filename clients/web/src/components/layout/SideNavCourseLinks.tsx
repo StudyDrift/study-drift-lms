@@ -11,7 +11,7 @@ import {
   Users,
 } from 'lucide-react'
 import { usePermissions } from '../../context/usePermissions'
-import { courseGradebookViewPermission } from '../../lib/coursesApi'
+import { courseEnrollmentsReadPermission, courseGradebookViewPermission } from '../../lib/coursesApi'
 import { sideNavActiveClass, sideNavLinkClass } from './sideNavStyles'
 
 type SideNavCourseLinksProps = {
@@ -23,6 +23,8 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
   const base = `/courses/${encodeURIComponent(courseCode)}`
   const canViewGradebook =
     !permLoading && allows(courseGradebookViewPermission(courseCode))
+  const canViewEnrollments =
+    !permLoading && allows(courseEnrollmentsReadPermission(courseCode))
 
   return (
     <>
@@ -81,13 +83,15 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
           Gradebook
         </NavLink>
       )}
-      <NavLink
-        to={`${base}/enrollments`}
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <Users className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Enrollments
-      </NavLink>
+      {canViewEnrollments && (
+        <NavLink
+          to={`${base}/enrollments`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <Users className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Enrollments
+        </NavLink>
+      )}
       <NavLink
         to={`${base}/settings`}
         className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}

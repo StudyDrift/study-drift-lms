@@ -1,4 +1,4 @@
-import { courseGradebookViewPermission } from './coursesApi'
+import { courseEnrollmentsReadPermission, courseGradebookViewPermission } from './coursesApi'
 import type { SearchCourseItem, SearchPersonItem } from './searchApi'
 import { PERM_COURSE_CREATE, PERM_RBAC_MANAGE, PERM_REPORTS_VIEW } from './rbacApi'
 
@@ -45,6 +45,9 @@ export function buildSearchItems(
   }
 
   for (const p of people) {
+    if (!allows(courseEnrollmentsReadPermission(p.courseCode))) {
+      continue
+    }
     const label = personLabel(p)
     const subtitle = `${p.role} · ${p.courseTitle}`
     const path = `/courses/${enc(p.courseCode)}/enrollments`
@@ -143,7 +146,12 @@ export function buildSearchItems(
       hint: 'gradebook grades scores',
       requiredPermission: courseGradebookViewPermission,
     },
-    { suffix: '/enrollments', title: 'Enrollments', hint: 'enrollments people roster students' },
+    {
+      suffix: '/enrollments',
+      title: 'Enrollments',
+      hint: 'enrollments people roster students',
+      requiredPermission: courseEnrollmentsReadPermission,
+    },
     { suffix: '/settings', title: 'Course settings', hint: 'settings configuration' },
   ]
 
@@ -177,6 +185,9 @@ export function buildSearchItems(
   }
 
   for (const c of courses) {
+    if (!allows(courseEnrollmentsReadPermission(c.courseCode))) {
+      continue
+    }
     const path = `/courses/${enc(c.courseCode)}/enrollments`
     items.push({
       id: `action:${path}:add`,

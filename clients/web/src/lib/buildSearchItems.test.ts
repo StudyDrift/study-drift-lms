@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { courseGradebookViewPermission } from './coursesApi'
+import { courseEnrollmentsReadPermission, courseGradebookViewPermission } from './coursesApi'
 import { buildSearchItems, filterSearchItems, SEARCH_GROUP_LABEL } from './buildSearchItems'
 import { PERM_COURSE_CREATE, PERM_RBAC_MANAGE } from './rbacApi'
 import type { SearchCourseItem, SearchPersonItem } from './searchApi'
@@ -33,7 +33,8 @@ describe('buildSearchItems', () => {
   ]
 
   it('includes course and person rows with expected paths and haystack', () => {
-    const items = buildSearchItems(courses, people, allowsNone)
+    const allowsRoster = (p: string) => p === courseEnrollmentsReadPermission('CS-101')
+    const items = buildSearchItems(courses, people, allowsRoster)
     const course = items.find((i) => i.id === 'course:CS-101')
     expect(course).toMatchObject({
       group: 'course',
@@ -92,7 +93,8 @@ describe('buildSearchItems', () => {
   })
 
   it('adds per-course page shortcuts and enrollment actions', () => {
-    const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsNone)
+    const allowsRosterX = (p: string) => p === courseEnrollmentsReadPermission('X')
+    const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsRosterX)
     expect(items.some((i) => i.path === '/courses/X/syllabus')).toBe(true)
     expect(items.some((i) => i.path === '/courses/X/notebook')).toBe(true)
     const add = items.find((i) => i.id === 'action:/courses/X/enrollments:add')
@@ -101,8 +103,15 @@ describe('buildSearchItems', () => {
   })
 
   it('omits gradebook page without per-course gradebook permission', () => {
-    const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsNone)
+    const allowsRosterX = (p: string) => p === courseEnrollmentsReadPermission('X')
+    const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsRosterX)
     expect(items.some((i) => i.path === '/courses/X/gradebook')).toBe(false)
+  })
+
+  it('omits enrollments page and add-people action without roster permission', () => {
+    const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsNone)
+    expect(items.some((i) => i.path === '/courses/X/enrollments')).toBe(false)
+    expect(items.some((i) => i.id === 'action:/courses/X/enrollments:add')).toBe(false)
   })
 
   it('includes gradebook page only for courses where gradebook view is granted', () => {

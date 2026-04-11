@@ -43,11 +43,13 @@ async fn get_my_permissions(
                     ));
                 }
             };
-            if view_as_student {
-                let ok = enrollment::user_has_access(&state.pool, cc, user.user_id).await?;
-                if !ok {
+            let in_course = enrollment::user_has_access(&state.pool, cc, user.user_id).await?;
+            if !in_course {
+                if view_as_student {
                     return Err(AppError::NotFound);
                 }
+                rbac::list_granted_permission_strings(&state.pool, user.user_id).await?
+            } else if view_as_student {
                 if !enrollment::user_has_enrollment_role(&state.pool, cc, user.user_id, "student")
                     .await?
                 {
@@ -62,8 +64,16 @@ async fn get_my_permissions(
                     true,
                 )
                 .await?
-            } else {
+            } else if enrollment::user_is_course_staff(&state.pool, cc, user.user_id).await? {
                 rbac::list_granted_permission_strings(&state.pool, user.user_id).await?
+            } else {
+                rbac::list_granted_permission_strings_course_view(
+                    &state.pool,
+                    user.user_id,
+                    cc,
+                    true,
+                )
+                .await?
             }
         }
         None => {

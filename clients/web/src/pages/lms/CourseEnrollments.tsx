@@ -1,10 +1,11 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Navigate, useParams } from 'react-router-dom'
 import { GraduationCap, Trash2, UserPlus, X } from 'lucide-react'
 import { LmsPage } from './LmsPage'
 import { usePermission, usePermissions } from '../../context/usePermissions'
 import { authorizedFetch } from '../../lib/api'
 import {
+  courseEnrollmentsReadPermission,
   courseEnrollmentsUpdatePermission,
   fetchCourseScopedRoles,
   type CourseScopedAppRole,
@@ -39,7 +40,7 @@ function enrollmentRoleRank(roleDisplay: string): number {
 
 export default function CourseEnrollments() {
   const { courseCode } = useParams<{ courseCode: string }>()
-  const { refresh: refreshPermissions } = usePermissions()
+  const { allows, loading: permLoading, refresh: refreshPermissions } = usePermissions()
   const canUpdateEnrollments = usePermission(
     courseCode ? courseEnrollmentsUpdatePermission(courseCode) : 'global:app:noop:noop',
   )
@@ -103,11 +104,13 @@ export default function CourseEnrollments() {
   }, [courseCode])
 
   useEffect(() => {
+    if (!courseCode || permLoading) return
+    if (!allows(courseEnrollmentsReadPermission(courseCode))) return
     const id = window.setTimeout(() => {
       void loadEnrollments()
     }, 0)
     return () => window.clearTimeout(id)
-  }, [loadEnrollments])
+  }, [allows, courseCode, loadEnrollments, permLoading])
 
   const closeModal = useCallback(() => {
     setModalOpen(false)
@@ -282,6 +285,18 @@ export default function CourseEnrollments() {
     addStatus === 'loading' ||
     !emailListText.trim() ||
     (isCourseCreator && (rolesLoading || !selectedAppRoleId || !!rolesError))
+
+  if (!courseCode) {
+    return <Navigate to="/courses" replace />
+  }
+
+  if (permLoading) {
+    return null
+  }
+
+  if (!allows(courseEnrollmentsReadPermission(courseCode))) {
+    return <Navigate to={`/courses/${encodeURIComponent(courseCode)}`} replace />
+  }
 
   return (
     <LmsPage

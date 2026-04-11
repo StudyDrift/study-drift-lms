@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use sqlx::{Executor, PgPool, Postgres};
 use uuid::Uuid;
 
@@ -7,6 +9,30 @@ use crate::repos::rbac;
 /// Four-segment permission for creating course items in a single course (`course:<course_code>:item:create`).
 pub fn course_item_create_permission(course_code: &str) -> String {
     format!("course:{course_code}:item:create")
+}
+
+/// Quiz question bank and related editor surfaces (`course:<course_code>:items:create`).
+pub fn course_items_create_permission(course_code: &str) -> String {
+    format!("course:{course_code}:items:create")
+}
+
+/// For every `course:…:item:create` in `out`, also insert `course:…:items:create` (quiz bank sibling).
+pub fn add_items_create_sibling_grants(out: &mut BTreeSet<String>) {
+    let sources: Vec<String> = out
+        .iter()
+        .filter(|p| p.starts_with("course:") && p.ends_with(":item:create"))
+        .cloned()
+        .collect();
+    for p in sources {
+        if let Some(prefix) = p.strip_suffix(":item:create") {
+            out.insert(format!("{prefix}:items:create"));
+        }
+    }
+}
+
+/// `course:<course_code>:enrollments:read` — view roster rows for that course.
+pub fn course_enrollments_read_permission(course_code: &str) -> String {
+    format!("course:{course_code}:enrollments:read")
 }
 
 /// `course:<course_code>:enrollments:update` — add/remove enrollment rows for that course (e.g. drop a duplicate role).
@@ -115,6 +141,33 @@ mod tests {
         assert_eq!(
             course_item_create_permission("C-XYZ"),
             "course:C-XYZ:item:create"
+        );
+    }
+
+    #[test]
+    fn course_items_create_permission_formats() {
+        assert_eq!(
+            course_items_create_permission("C-XYZ"),
+            "course:C-XYZ:items:create"
+        );
+    }
+
+    #[test]
+    fn add_items_create_sibling_grants_adds_quiz_pair() {
+        let mut out = BTreeSet::from([
+            "course:C-1:item:create".to_string(),
+            "course:C-1:other:read".to_string(),
+        ]);
+        add_items_create_sibling_grants(&mut out);
+        assert!(out.contains("course:C-1:items:create"));
+        assert!(out.contains("course:C-1:item:create"));
+    }
+
+    #[test]
+    fn course_enrollments_read_permission_formats() {
+        assert_eq!(
+            course_enrollments_read_permission("C-XYZ"),
+            "course:C-XYZ:enrollments:read"
         );
     }
 

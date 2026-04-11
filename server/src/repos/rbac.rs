@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::authz::any_grant_matches;
+use crate::authz::{any_grant_matches, permission_matches};
 use crate::db::schema;
 use crate::models::rbac::{AppRole, Permission, RoleWithPermissions, UserBrief};
 use crate::repos::course_grants;
@@ -284,25 +284,77 @@ pub async fn list_permission_strings_for_role_name(
     .await
 }
 
-fn filter_course_concrete_for_student_view(
+/// Treat `course:…:item:create` and `course:…:items:create` as equivalent when comparing to a role
+/// catalog (so view-as-student hides both when only teachers hold `item:create`).
+fn course_item_pair_matches_catalog(catalog: &[String], p: &str) -> bool {
+    if any_grant_matches(catalog, p) {
+        return true;
+    }
+    if let Some(prefix) = p.strip_suffix(":items:create") {
+        if prefix.starts_with("course:") {
+            let alt = format!("{prefix}:item:create");
+            if any_grant_matches(catalog, &alt) {
+                return true;
+            }
+        }
+    }
+    if let Some(prefix) = p.strip_suffix(":item:create") {
+        if prefix.starts_with("course:") {
+            let alt = format!("{prefix}:items:create");
+            if any_grant_matches(catalog, &alt) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Whether `catalog` (role permission strings, possibly `course:<courseCode>:…` or `course:*:…`)
+/// authorizes concrete permission `p` for `course_code`.
+fn course_role_catalog_matches_concrete(
+    catalog: &[String],
+    p: &str,
+    course_code: &str,
+) -> bool {
+    if course_item_pair_matches_catalog(catalog, p) {
+        return true;
+    }
+    for entry in catalog {
+        if let Some(expanded) = course_grants::expand_course_permission_for_course(entry, course_code)
+        {
+            if permission_matches(&expanded, p) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// While viewing a course as a non-staff enrollee (or explicit “view as student”), drop
+/// staff-only grants for **this** `course_code`, and drop **global** grants the Student app role
+/// does not carry (so Teacher-only globals like reports do not leak during student context).
+fn filter_grants_for_student_course_view(
     course_code: &str,
     grants: BTreeSet<String>,
     teacher_catalog: &[String],
     student_catalog: &[String],
 ) -> BTreeSet<String> {
-    let prefix = format!("course:{}:", course_code);
     grants
         .into_iter()
         .filter(|p| {
-            if !p.starts_with(&prefix) {
+            let parts: Vec<&str> = p.trim().split(':').collect();
+            if parts.len() == 4 && parts[0] == "course" {
+                if parts[1] == course_code {
+                    let teacher_match =
+                        course_role_catalog_matches_concrete(teacher_catalog, p, course_code);
+                    let student_match =
+                        course_role_catalog_matches_concrete(student_catalog, p, course_code);
+                    return !(teacher_match && !student_match);
+                }
+                // Different course — keep (may be staff or student elsewhere).
                 return true;
             }
-            let teacher_match = any_grant_matches(teacher_catalog, p);
-            let student_match = any_grant_matches(student_catalog, p);
-            if teacher_match && !student_match {
-                return false;
-            }
-            true
+            any_grant_matches(student_catalog, p)
         })
         .collect()
 }
@@ -314,9 +366,10 @@ pub async fn list_granted_permission_strings(
     list_granted_permission_strings_inner(pool, user_id, None).await
 }
 
-/// Like [`list_granted_permission_strings`], but when `view_as_student` is true, course-scoped
-/// permissions for `course_code` are reduced to those also granted to the Student role (or shared
-/// with Student), and staff-only placeholder expansion for that course is skipped.
+/// Like [`list_granted_permission_strings`], but when `view_as_student` is true, effective grants
+/// for this `course_code` follow the student experience: staff-only **course** grants for this
+/// code are removed, **global** grants not present on the Student app role are removed, and
+/// staff-only placeholder expansion for this course is skipped.
 pub async fn list_granted_permission_strings_course_view(
     pool: &PgPool,
     user_id: Uuid,
@@ -384,11 +437,13 @@ async fn list_granted_permission_strings_inner(
         }
     }
 
+    course_grants::add_items_create_sibling_grants(&mut out);
+
     let out = if let Some(ref cv) = course_view {
         if cv.view_as_student {
             let teacher = list_permission_strings_for_role_name(pool, "Teacher").await?;
             let student = list_permission_strings_for_role_name(pool, "Student").await?;
-            filter_course_concrete_for_student_view(&cv.course_code, out, &teacher, &student)
+            filter_grants_for_student_course_view(&cv.course_code, out, &teacher, &student)
         } else {
             out
         }
@@ -596,4 +651,86 @@ pub async fn list_permission_strings_for_role(
     .bind(role_id)
     .fetch_all(pool)
     .await
+}
+
+#[cfg(test)]
+mod course_role_catalog_match_tests {
+    use super::course_role_catalog_matches_concrete;
+
+    #[test]
+    fn placeholder_catalog_matches_concrete_enrollments_read() {
+        let catalog = vec!["course:<courseCode>:enrollments:read".to_string()];
+        assert!(course_role_catalog_matches_concrete(
+            &catalog,
+            "course:C-1:enrollments:read",
+            "C-1"
+        ));
+    }
+
+    #[test]
+    fn star_area_catalog_matches_concrete() {
+        let catalog = vec!["course:*:enrollments:read".to_string()];
+        assert!(course_role_catalog_matches_concrete(
+            &catalog,
+            "course:C-1:enrollments:read",
+            "C-1"
+        ));
+    }
+
+    #[test]
+    fn unrelated_catalog_does_not_match() {
+        let catalog = vec!["global:app:course:create".to_string()];
+        assert!(!course_role_catalog_matches_concrete(
+            &catalog,
+            "course:C-1:enrollments:read",
+            "C-1"
+        ));
+    }
+}
+
+#[cfg(test)]
+mod filter_grants_for_student_course_view_tests {
+    use std::collections::BTreeSet;
+
+    use super::filter_grants_for_student_course_view;
+
+    #[test]
+    fn removes_staff_only_grants_for_this_course() {
+        let grants = BTreeSet::from([
+            "course:C-1:enrollments:read".to_string(),
+            "course:C-1:modules:read".to_string(),
+        ]);
+        let teacher = vec!["course:<courseCode>:enrollments:read".to_string()];
+        let student = vec!["course:<courseCode>:modules:read".to_string()];
+        let out = filter_grants_for_student_course_view("C-1", grants, &teacher, &student);
+        assert!(!out.contains("course:C-1:enrollments:read"));
+        assert!(out.contains("course:C-1:modules:read"));
+    }
+
+    #[test]
+    fn removes_global_not_granted_to_student_role() {
+        let grants = BTreeSet::from([
+            "global:app:reports:view".to_string(),
+            "global:app:course:create".to_string(),
+        ]);
+        let out = filter_grants_for_student_course_view("C-1", grants, &[], &[]);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn keeps_other_course_grants() {
+        let grants = BTreeSet::from(["course:C-2:enrollments:read".to_string()]);
+        let teacher = vec!["course:<courseCode>:enrollments:read".to_string()];
+        let student: Vec<String> = vec![];
+        let out = filter_grants_for_student_course_view("C-1", grants, &teacher, &student);
+        assert!(out.contains("course:C-2:enrollments:read"));
+    }
+
+    #[test]
+    fn keeps_global_on_student_catalog() {
+        let grants = BTreeSet::from(["global:app:custom:thing".to_string()]);
+        let student = vec!["global:app:custom:thing".to_string()];
+        let out = filter_grants_for_student_course_view("C-1", grants, &[], &student);
+        assert!(out.contains("global:app:custom:thing"));
+    }
 }

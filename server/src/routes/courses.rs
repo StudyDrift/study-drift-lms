@@ -2102,6 +2102,15 @@ async fn enrollments_handler(
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_read_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
     let enrollments = enrollment::list_for_course_code(&state.pool, &course_code).await?;
     let viewer_enrollment_roles =
         enrollment::user_roles_in_course(&state.pool, &course_code, user.user_id).await?;
@@ -2118,6 +2127,10 @@ async fn delete_enrollment_handler(
 ) -> Result<StatusCode, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
 
     let required = course_grants::course_enrollments_update_permission(&course_code);
     if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
@@ -2177,6 +2190,10 @@ async fn add_enrollments_handler(
 ) -> Result<Json<AddEnrollmentsResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
 
     let parsed = parse_email_list(&req.emails);
     if parsed.is_empty() {

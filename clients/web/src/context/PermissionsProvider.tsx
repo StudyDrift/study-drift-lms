@@ -46,8 +46,10 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
           if (typeof localStorage !== 'undefined') {
             localStorage.removeItem(courseViewStorageKey(courseCode))
           }
-          list = await fetchMyPermissionStrings()
+          list = await fetchMyPermissionStrings({ courseCode })
         }
+      } else if (courseCode) {
+        list = await fetchMyPermissionStrings({ courseCode })
       } else {
         list = await fetchMyPermissionStrings()
       }

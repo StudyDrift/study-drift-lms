@@ -13,8 +13,14 @@ export const PERM_REPORTS_VIEW = 'global:app:reports:view' as const
 /** Re-export: per-course item create (`course:<courseCode>:item:create`), merged into `/me/permissions` via course grants. */
 export { courseItemCreatePermission as permCourseItemCreate } from './coursesApi'
 
+/** Re-export: quiz / module items editor (`course:<courseCode>:items:create`), merged into `/me/permissions` via course grants. */
+export { courseItemsCreatePermission as permCourseItemsCreate } from './coursesApi'
+
 /** Re-export: view course gradebook (`course:<courseCode>:gradebook:view`). */
 export { courseGradebookViewPermission as permCourseGradebookView } from './coursesApi'
+
+/** Re-export: view course enrollments / roster (`course:<courseCode>:enrollments:read`). */
+export { courseEnrollmentsReadPermission as permCourseEnrollmentsRead } from './coursesApi'
 
 export type Permission = {
   id: string
@@ -45,10 +51,13 @@ async function parseJson(res: Response): Promise<unknown> {
   return res.json().catch(() => ({}))
 }
 
-/** Effective permission strings for the signed-in user (from all assigned roles). */
+/**
+ * Effective permission strings for the signed-in user (from all assigned roles).
+ * With `courseCode`, non-staff course enrollees receive the student-filtered grant set; staff keep
+ * full grants. Use `viewAs: 'student'` when course staff preview the student experience.
+ */
 export async function fetchMyPermissionStrings(options?: {
   courseCode?: string
-  /** When `student`, the server filters course-scoped grants for that course to match a student experience. */
   viewAs?: 'teacher' | 'student'
 }): Promise<string[]> {
   const params = new URLSearchParams()

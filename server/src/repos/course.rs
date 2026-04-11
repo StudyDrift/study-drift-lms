@@ -138,6 +138,22 @@ pub async fn create_course(
                     &item_perm,
                 )
                 .await?;
+                let items_perm = course_grants::course_items_create_permission(&row.course_code);
+                course_grants::grant_course_permission_string(
+                    &mut *tx,
+                    created_by_user_id,
+                    row.id,
+                    &items_perm,
+                )
+                .await?;
+                let enroll_read = course_grants::course_enrollments_read_permission(&row.course_code);
+                course_grants::grant_course_permission_string(
+                    &mut *tx,
+                    created_by_user_id,
+                    row.id,
+                    &enroll_read,
+                )
+                .await?;
                 sqlx::query(&format!(
                     r#"
                     INSERT INTO {} (course_id, sort_order, name, weight_percent)

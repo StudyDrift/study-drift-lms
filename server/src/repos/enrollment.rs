@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::db::schema;
 use crate::models::enrollment::CourseEnrollmentPublic;
+use crate::repos::course_grants;
 use crate::models::search::SearchPersonItem;
 
 /// Whether this user created the course (`courses.created_by_user_id`).
@@ -71,6 +72,16 @@ pub async fn student_enrollment_started_at(
     .await
 }
 
+/// Enrolled as course staff (`teacher` or `instructor`) for this course code.
+pub async fn user_is_course_staff(
+    pool: &PgPool,
+    course_code: &str,
+    user_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let roles = user_roles_in_course(pool, course_code, user_id).await?;
+    Ok(roles.iter().any(|r| r == "teacher" || r == "instructor"))
+}
+
 pub async fn user_roles_in_course(
     pool: &PgPool,
     course_code: &str,
@@ -125,6 +136,20 @@ pub async fn user_has_enrollment_role(
     Ok(ok)
 }
 
+async fn grant_course_enrollments_read_if_staff(
+    pool: &PgPool,
+    course_code: &str,
+    course_id: Uuid,
+    user_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    let roles = user_roles_in_course(pool, course_code, user_id).await?;
+    if roles.iter().any(|r| r == "teacher" || r == "instructor") {
+        let perm = course_grants::course_enrollments_read_permission(course_code);
+        course_grants::grant_course_permission_string(pool, user_id, course_id, &perm).await?;
+    }
+    Ok(())
+}
+
 /// Enrolls a user as `instructor` if missing; if already enrolled, upgrades non-`teacher` to instructor.
 /// Does not change the course creator row (`teacher`).
 pub async fn upsert_instructor_enrollment(
@@ -135,9 +160,11 @@ pub async fn upsert_instructor_enrollment(
 ) -> Result<(), sqlx::Error> {
     let roles = user_roles_in_course(pool, course_code, user_id).await?;
     if roles.iter().any(|r| r == "teacher") {
+        grant_course_enrollments_read_if_staff(pool, course_code, course_id, user_id).await?;
         return Ok(());
     }
     if roles.iter().any(|r| r == "instructor") {
+        grant_course_enrollments_read_if_staff(pool, course_code, course_id, user_id).await?;
         return Ok(());
     }
     if roles.iter().any(|r| r == "student") {
@@ -153,6 +180,7 @@ pub async fn upsert_instructor_enrollment(
         .bind(user_id)
         .execute(pool)
         .await?;
+        grant_course_enrollments_read_if_staff(pool, course_code, course_id, user_id).await?;
         return Ok(());
     }
     sqlx::query(&format!(
@@ -166,6 +194,7 @@ pub async fn upsert_instructor_enrollment(
     .bind(user_id)
     .execute(pool)
     .await?;
+    grant_course_enrollments_read_if_staff(pool, course_code, course_id, user_id).await?;
     Ok(())
 }
 

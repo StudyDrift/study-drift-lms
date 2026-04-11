@@ -223,9 +223,22 @@ export function courseItemCreatePermission(courseId: string): string {
   return `course:${courseId}:item:create`
 }
 
+/**
+ * `course:<courseCode>:items:create` — quiz question bank and related editor actions (More menu,
+ * Edit questions), merged via `user_course_grants` like `courseItemCreatePermission`.
+ */
+export function courseItemsCreatePermission(courseCode: string): string {
+  return `course:${courseCode}:items:create`
+}
+
 /** `course:<courseCode>:gradebook:view` — course gradebook access for that course. */
 export function courseGradebookViewPermission(courseCode: string): string {
   return `course:${courseCode}:gradebook:view`
+}
+
+/** `course:<courseCode>:enrollments:read` — view course roster (names and roles). */
+export function courseEnrollmentsReadPermission(courseCode: string): string {
+  return `course:${courseCode}:enrollments:read`
 }
 
 /** `course:<courseCode>:enrollments:update` — change roster rows for that course (e.g. remove a role). */
@@ -778,6 +791,71 @@ export async function postAdaptiveQuizNext(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as AdaptiveQuizNextResponse
+}
+
+/** Pick a choice index for automated adaptive runs (highest model weight, tie-break first). */
+export function autoPickAdaptiveChoiceIndex(q: AdaptiveQuizGeneratedQuestion): number | null {
+  if (q.questionType !== 'multiple_choice' && q.questionType !== 'true_false') {
+    return null
+  }
+  if (q.choices.length === 0) return null
+  let best = 0
+  for (let i = 1; i < q.choices.length; i++) {
+    const w = q.choiceWeights[i] ?? 0
+    const wb = q.choiceWeights[best] ?? 0
+    if (w > wb) best = i
+  }
+  return best
+}
+
+/**
+ * Walks an adaptive quiz to completion by submitting one answer per step, matching the
+ * client prefetch behavior used in the student preview panel.
+ */
+export async function runAdaptiveQuizToCompletion(
+  courseCode: string,
+  itemId: string,
+  maxQuestions: number,
+): Promise<{ answeredCount: number; finished: boolean; message: string | null }> {
+  const history: AdaptiveQuizHistoryTurn[] = []
+  let pending: AdaptiveQuizGeneratedQuestion[] = []
+  const cap = Math.min(30, Math.max(1, Math.floor(maxQuestions) || 1))
+
+  while (history.length < cap) {
+    const remainingSlots = cap - history.length
+    const need = Math.min(2, remainingSlots)
+    if (pending.length < need) {
+      const res = await postAdaptiveQuizNext(courseCode, itemId, { history })
+      if (res.finished) {
+        return {
+          answeredCount: history.length,
+          finished: true,
+          message: res.message ?? null,
+        }
+      }
+      const batch = res.questions
+      if (!batch.length) {
+        throw new Error('The server returned no questions.')
+      }
+      pending = [...pending, ...batch]
+    }
+    const q = pending[0]
+    if (!q) break
+    const selectedIdx = autoPickAdaptiveChoiceIndex(q)
+    if ((q.questionType === 'multiple_choice' || q.questionType === 'true_false') && selectedIdx == null) {
+      throw new Error('A question had no answer choices to submit.')
+    }
+    history.push({
+      prompt: q.prompt,
+      questionType: q.questionType,
+      choices: q.choices,
+      choiceWeights: q.choiceWeights,
+      selectedChoiceIndex: selectedIdx,
+    })
+    pending = pending.slice(1)
+  }
+
+  return { answeredCount: history.length, finished: true, message: null }
 }
 
 export async function fetchModuleContentPage(
