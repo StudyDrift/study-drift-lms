@@ -23,6 +23,7 @@ services:
       - server_target:/app/target
       - server_cargo_registry:/usr/local/cargo/registry
       - server_cargo_git:/usr/local/cargo/git
+      - ./data/course-files:/var/course-files
     environment:
       # Explicit so the dev override never drops the DB URL from the base compose file.
       DATABASE_URL: postgres://studydrift:studydrift@postgres:5432/studydrift?sslmode=disable
@@ -31,15 +32,17 @@ services:
       RUN_MIGRATIONS: true
       # Set in `.env` next to this file, e.g. OPEN_ROUTER_API_KEY=sk-or-v1-...
       OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
+      COURSE_FILES_ROOT: /var/course-files
 
   web:
     build:
       context: ./clients/web
       dockerfile: Dockerfile.dev
     # Source from host; node_modules is a named volume (see docker-entrypoint.dev.sh — npm ci when
-    # package.json / package-lock.json change). After adding npm dependencies, rebuild this image and
-    # restart so the entrypoint updates; if Vite still cannot resolve a package, remove the volume
-    # `web_node_modules` once (`docker volume rm …` or `docker compose down -v` if safe) then `up --build`.
+    # package.json / package-lock.json change, or when expected packages like mark.js are missing).
+    # After adding npm dependencies: `docker compose -f docker-compose.dev.yml build web && up`, or
+    # one-shot `docker compose exec web npm ci`. If Vite still cannot resolve a package, remove the
+    # volume `web_node_modules` once (`docker volume rm …` or `docker compose down -v` if safe) then `up --build`.
     volumes:
       - ./clients/web:/app
       - web_node_modules:/app/node_modules

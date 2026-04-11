@@ -8,7 +8,12 @@ WORKDIR /app
 # Warm the dependency cache (real sources come from the bind mount at runtime).
 COPY Cargo.toml Cargo.lock ./
 COPY migrations ./migrations
-RUN mkdir -p src && printf 'fn main() {}\n' > src/main.rs && cargo build && rm -rf src
+# Crate has both [lib] and default binary; stubs must satisfy both for dependency caching.
+RUN mkdir -p src \
+    && printf '#![allow(dead_code)]\npub fn dummy() {}\n' > src/lib.rs \
+    && printf 'fn main() {}\n' > src/main.rs \
+    && cargo build \
+    && rm -rf src
 
 ENV RUST_LOG=debug
 EXPOSE 8080

@@ -266,7 +266,7 @@ export function TopBar() {
   const { mobileNavOpen, setMobileNavOpen } = useShellNav()
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 shadow-sm shadow-slate-900/5 sm:gap-3 sm:px-4 md:gap-4 md:px-6 dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-black/20">
+    <header className="flex h-14 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-2 shadow-sm shadow-slate-900/5 sm:gap-3 sm:px-4 md:gap-4 md:px-6 dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-black/20">
       <button
         type="button"
         className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 md:hidden dark:text-neutral-300 dark:hover:bg-neutral-800"
@@ -280,17 +280,19 @@ export function TopBar() {
       <div className="relative min-w-0 flex-1 max-w-xl">
         <button
           type="button"
+          aria-label="Search courses, people, pages, and actions"
           onClick={() => open()}
           className="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-100 py-2 pl-3 pr-4 text-left text-sm text-slate-500 outline-none transition hover:border-slate-300 hover:bg-slate-50 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-500 dark:hover:bg-neutral-700/50 dark:focus:bg-neutral-800"
         >
           <Search className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">Search courses, people, pages…</span>
+          <span className="min-w-0 flex-1 truncate sm:hidden">Search…</span>
+          <span className="hidden min-w-0 flex-1 truncate sm:inline">Search courses, people, pages…</span>
           <kbd className="hidden shrink-0 rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] text-slate-500 sm:inline dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
             {shortcutHint()}
           </kbd>
         </button>
       </div>
-      <div className="ml-auto flex shrink-0 items-center gap-3">
+      <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
         <CourseEnrollmentViewDropdown />
         <UserMenu />
       </div>

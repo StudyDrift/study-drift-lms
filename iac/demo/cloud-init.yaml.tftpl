@@ -44,6 +44,10 @@ write_files:
       chown -R 70:70 "$MNT/postgres"
       chmod 700 "$MNT/postgres"
 
+      mkdir -p "$MNT/course-files"
+      chown 65534:65534 "$MNT/course-files"
+      chmod 755 "$MNT/course-files"
+
 runcmd:
   - /usr/local/bin/lextures-mount-db-volume.sh
   - curl -fsSL https://get.docker.com | sh

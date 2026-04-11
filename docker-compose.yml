@@ -60,8 +60,12 @@ services:
       JWT_SECRET: change-me-in-production-use-a-long-random-string
       RUN_MIGRATIONS: "true"
       OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
+      # Uploaded course images and other files; host path is ignored in .git
+      COURSE_FILES_ROOT: /var/course-files
     ports:
       - "8080:8080"
+    volumes:
+      - ./data/course-files:/var/course-files
     depends_on:
       postgres:
         condition: service_healthy

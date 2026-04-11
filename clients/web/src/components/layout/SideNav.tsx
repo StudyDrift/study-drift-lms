@@ -73,10 +73,10 @@ export function SideNav() {
           mobileNavOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'
         } max-md:fixed max-md:left-0 max-md:top-0 max-md:z-40 max-md:shadow-2xl max-md:transition-transform max-md:duration-200 max-md:ease-out max-md:pt-[env(safe-area-inset-top)] max-md:pb-[env(safe-area-inset-bottom)]`}
       >
-        <div className="border-b border-slate-200 px-4 py-5 dark:border-neutral-800">
+        <div className="flex h-14 shrink-0 items-center border-b border-slate-200 px-4 dark:border-neutral-700">
           <NavLink
             to="/"
-            className="flex items-center gap-3 rounded-xl outline-none ring-indigo-500/40 focus-visible:ring-2"
+            className="flex min-h-0 min-w-0 items-center gap-3 rounded-xl outline-none ring-indigo-500/40 focus-visible:ring-2"
             end
           >
             <BrandLogo className="mx-0 h-9 w-auto shrink-0 object-contain object-left drop-shadow-sm" />

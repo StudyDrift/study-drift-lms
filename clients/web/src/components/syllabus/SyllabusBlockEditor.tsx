@@ -2,7 +2,11 @@ import { FileText, Plus } from 'lucide-react'
 import { marked } from 'marked'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/core'
-import { generateSyllabusSectionMarkdown, type SyllabusSection } from '../../lib/coursesApi'
+import {
+  generateSyllabusSectionMarkdown,
+  uploadCourseFile,
+  type SyllabusSection,
+} from '../../lib/coursesApi'
 import { sectionsToMarkdown } from './syllabusSectionMarkdown'
 import {
   BlockCanvas,
@@ -322,10 +326,43 @@ function SyllabusBlockEditorInner({
   const [generateSubmittingId, setGenerateSubmittingId] = useState<string | null>(null)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const generateInputRef = useRef<HTMLInputElement>(null)
+  const toolbarImageInputRef = useRef<HTMLInputElement>(null)
+  const pendingToolbarImageSectionRef = useRef<string | null>(null)
 
   const handleEditorChange = useCallback((sectionId: string, editor: Editor | null) => {
     editorRefs.current[sectionId] = editor
   }, [])
+
+  const insertImagesIntoSection = useCallback(
+    (sectionId: string, files: File[]) => {
+      const editor = editorRefs.current[sectionId]
+      if (!editor || !courseCode) return
+      void (async () => {
+        let pos = editor.state.selection.from
+        for (const file of files) {
+          if (!file.type.startsWith('image/')) continue
+          try {
+            const path = await uploadCourseFile(courseCode, file).then((r) => r.contentPath)
+            editor
+              .chain()
+              .focus()
+              .insertContentAt(pos, {
+                type: 'image',
+                attrs: {
+                  src: path,
+                  alt: (file.name || 'Image').replace(/[[\]]/g, '').slice(0, 200),
+                },
+              })
+              .run()
+            pos = editor.state.selection.to
+          } catch {
+            /* ignore */
+          }
+        }
+      })()
+    },
+    [courseCode],
+  )
 
   /** Ignore stale field state when another block is selected (no sync effect). */
   const activeFieldResolved = useMemo((): ActiveField | null => {
@@ -473,6 +510,25 @@ function SyllabusBlockEditorInner({
             <MarkdownFormatToolbar
               disabled={disabled || genBusy}
               onApply={(kind) => applyMarkdownForSection(section.id, kind)}
+              courseImage={
+                courseCode
+                  ? {
+                      onPickClick: () => {
+                        pendingToolbarImageSectionRef.current = section.id
+                        setSelectedId(section.id)
+                        setActiveField({ blockId: section.id, field: 'markdown' })
+                        editorRefs.current[section.id]?.chain().focus().run()
+                        requestAnimationFrame(() => toolbarImageInputRef.current?.click())
+                      },
+                      onFiles: (files) => {
+                        setSelectedId(section.id)
+                        setActiveField({ blockId: section.id, field: 'markdown' })
+                        editorRefs.current[section.id]?.chain().focus().run()
+                        insertImagesIntoSection(section.id, files)
+                      },
+                    }
+                  : undefined
+              }
             />
             {courseCode ? (
               <>
@@ -510,6 +566,23 @@ function SyllabusBlockEditorInner({
       }
     >
       <BlockCanvas className="pt-10">
+        <input
+          ref={toolbarImageInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+          multiple
+          className="sr-only"
+          aria-hidden
+          tabIndex={-1}
+          onChange={(e) => {
+            const sid = pendingToolbarImageSectionRef.current ?? selectedId
+            pendingToolbarImageSectionRef.current = null
+            const list = e.target.files
+            e.target.value = ''
+            if (!sid || !list?.length) return
+            insertImagesIntoSection(sid, [...list])
+          }}
+        />
         {sections.map((section, index) => (
           <BlockFrame key={section.id} blockId={section.id} toolbar={renderToolbar(section, index)}>
             <div className="pb-8 pt-0.5">
@@ -599,6 +672,9 @@ function SyllabusBlockEditorInner({
                   placeholder="Write this section in Markdown…"
                   onEditorChange={handleEditorChange}
                   courseCode={courseCode}
+                  uploadCourseImage={
+                    courseCode ? (file) => uploadCourseFile(courseCode, file).then((r) => r.contentPath) : undefined
+                  }
                 />
               </div>
             </div>

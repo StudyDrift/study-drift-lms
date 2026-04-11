@@ -1,15 +1,35 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { HelpCircle, Info, MoreHorizontal, Plus, User } from 'lucide-react'
+import {
+  closestCorners,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DraggableAttributes,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  rectSortingStrategy,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { GripVertical, HelpCircle, Info, MoreHorizontal, Plus, User } from 'lucide-react'
 import { LmsPage } from './LmsPage'
 import { RequirePermission } from '../../components/RequirePermission'
 import { authorizedFetch } from '../../lib/api'
-import { type Course } from '../../lib/coursesApi'
+import { putCourseCatalogOrder, type Course } from '../../lib/coursesApi'
 import { readApiErrorMessage } from '../../lib/errors'
-import { PERM_COURSE_CREATE } from '../../lib/rbacApi'
 import { heroImageObjectStyle } from '../../lib/heroImagePosition'
+import { PERM_COURSE_CREATE } from '../../lib/rbacApi'
 
 export type { Course } from '../../lib/coursesApi'
+
+const COURSE_GRID_SORT_ID = 'course-catalog-grid'
 
 function formatEditedAgo(iso: string): string {
   const d = new Date(iso)
@@ -91,14 +111,20 @@ function tagFromCode(courseCode: string): string {
   return prefix.slice(0, 4)
 }
 
-function CourseCard({ course }: { course: Course }) {
+function CourseCard({
+  course,
+  sortable,
+}: {
+  course: Course
+  sortable?: { attributes: DraggableAttributes; listeners: Record<string, unknown> }
+}) {
   const acc = hashPercent(course.id, 1)
   const comp = hashPercent(course.id, 2)
   const tag = tagFromCode(course.courseCode)
   const courseHref = `/courses/${encodeURIComponent(course.courseCode)}`
 
   return (
-    <article className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5">
+    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5">
       <Link
         to={courseHref}
         className="relative block focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
@@ -143,7 +169,18 @@ function CourseCard({ course }: { course: Course }) {
           </span>
         </div>
 
-        <div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500">
+        <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500">
+          {sortable ? (
+            <button
+              type="button"
+              className="touch-none flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm hover:bg-slate-50 hover:text-slate-600 active:cursor-grabbing"
+              aria-label={`Reorder: ${course.title}`}
+              {...sortable.attributes}
+              {...sortable.listeners}
+            >
+              <GripVertical className="h-4 w-4" aria-hidden />
+            </button>
+          ) : null}
           <span className="min-w-0 flex-1 truncate">{formatEditedAgo(course.updatedAt)}</span>
           <span className="inline-flex items-center gap-1 tabular-nums">
             <HelpCircle className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
@@ -159,6 +196,27 @@ function CourseCard({ course }: { course: Course }) {
         </div>
       </div>
     </article>
+  )
+}
+
+function SortableCourseCard({ course }: { course: Course }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: course.id,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.88 : undefined,
+    zIndex: isDragging ? 20 : undefined,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} className="h-full min-h-0">
+      <CourseCard
+        course={course}
+        sortable={{ attributes, listeners: listeners as Record<string, unknown> }}
+      />
+    </div>
   )
 }
 
@@ -192,10 +250,36 @@ export default function Courses() {
     }
   }, [])
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const courseIds = useMemo(() => (courses ?? []).map((c) => c.id), [courses])
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id || !courses?.length) return
+      setError(null)
+      const oldIndex = courses.findIndex((c) => c.id === active.id)
+      const newIndex = courses.findIndex((c) => c.id === over.id)
+      if (oldIndex < 0 || newIndex < 0) return
+      const previous = courses
+      const next = arrayMove(previous, oldIndex, newIndex)
+      setCourses(next)
+      void putCourseCatalogOrder(next.map((c) => c.id)).catch(() => {
+        setCourses(previous)
+        setError('Could not save course order. Try again.')
+      })
+    },
+    [courses],
+  )
+
   return (
     <LmsPage
       title="Courses"
-      description="Browse and open your enrolled courses."
+      description="Browse and open your enrolled courses. Drag the grip on a card to reorder your catalog."
       actions={
         <RequirePermission permission={PERM_COURSE_CREATE} fallback={null}>
           <Link
@@ -223,11 +307,20 @@ export default function Courses() {
       )}
 
       {courses && courses.length > 0 && (
-        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {courses.map((c) => (
-            <CourseCard key={c.id} course={c} />
-          ))}
-        </div>
+        <DndContext
+          id={COURSE_GRID_SORT_ID}
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={courseIds} strategy={rectSortingStrategy}>
+            <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {courses.map((c) => (
+                <SortableCourseCard key={c.id} course={c} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </LmsPage>
   )

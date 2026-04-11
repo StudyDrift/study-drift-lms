@@ -747,6 +747,7 @@ export default function CourseModuleQuizPage() {
                     : 'No quiz intro yet.'
                 }
                 theme={mdTheme}
+                courseCode={courseCode}
               />
             </div>
             <aside

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { BookLoader } from './BookLoader'
 import { MarkdownArticleView } from '../syllabus/SyllabusMarkdownView'
@@ -390,38 +390,79 @@ function AdaptivePreviewPanel({
   const [phase, setPhase] = useState<'loading' | 'question' | 'done' | 'error'>('loading')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [history, setHistory] = useState<AdaptiveQuizHistoryTurn[]>([])
-  const [current, setCurrent] = useState<AdaptiveQuizGeneratedQuestion | null>(null)
+  const [pendingQueue, setPendingQueue] = useState<AdaptiveQuizGeneratedQuestion[]>([])
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
+  const adaptiveSessionRef = useRef(0)
+  const historySeqRef = useRef(0)
+  const fetchInFlightRef = useRef(false)
 
-  const loadNext = useCallback(
-    async (nextHistory: AdaptiveQuizHistoryTurn[]) => {
-      setPhase('loading')
-      setErrorMessage(null)
+  const current = pendingQueue[0] ?? null
+
+  useEffect(() => {
+    adaptiveSessionRef.current += 1
+    historySeqRef.current += 1
+    fetchInFlightRef.current = false
+    setHistory([])
+    setPendingQueue([])
+    setSelectedIdx(null)
+    setErrorMessage(null)
+    setPhase('loading')
+  }, [courseCode, itemId])
+
+  useEffect(() => {
+    const answered = history.length
+    if (answered >= maxQuestions) {
+      setPhase('done')
+      return
+    }
+
+    const remainingSlots = maxQuestions - answered
+    const need = Math.min(2, remainingSlots)
+    if (pendingQueue.length >= need) {
+      if (pendingQueue.length > 0) {
+        setPhase((p) => (p === 'error' ? p : 'question'))
+      }
+      return
+    }
+
+    if (fetchInFlightRef.current) return
+    fetchInFlightRef.current = true
+
+    if (pendingQueue.length === 0) {
+      setPhase((p) => (p === 'error' ? p : 'loading'))
+    }
+
+    const sessionAtStart = adaptiveSessionRef.current
+    const historySeqAtStart = historySeqRef.current
+    const historyForRequest = history
+
+    void (async () => {
       try {
-        const res = await postAdaptiveQuizNext(courseCode, itemId, { history: nextHistory })
+        const res = await postAdaptiveQuizNext(courseCode, itemId, { history: historyForRequest })
+        if (sessionAtStart !== adaptiveSessionRef.current) return
+        if (historySeqAtStart !== historySeqRef.current) return
         if (res.finished) {
-          setCurrent(null)
           setPhase('done')
           return
         }
-        setCurrent(res.question)
-        setSelectedIdx(null)
+        const batch = res.questions
+        if (!batch.length) {
+          setErrorMessage('The server returned no questions.')
+          setPhase('error')
+          return
+        }
+        setPendingQueue((prev) => [...prev, ...batch])
         setPhase('question')
       } catch (e) {
+        if (sessionAtStart !== adaptiveSessionRef.current) return
+        if (historySeqAtStart !== historySeqRef.current) return
         setErrorMessage(e instanceof Error ? e.message : 'Could not load the next question.')
         setPhase('error')
+      } finally {
+        fetchInFlightRef.current = false
       }
-    },
-    [courseCode, itemId],
-  )
-
-  useEffect(() => {
-    setHistory([])
-    setCurrent(null)
-    setSelectedIdx(null)
-    setErrorMessage(null)
-    void loadNext([])
-  }, [courseCode, itemId, loadNext])
+    })()
+  }, [courseCode, itemId, history, pendingQueue.length, maxQuestions])
 
   async function submitAndContinue() {
     if (!current) return
@@ -439,16 +480,21 @@ function AdaptivePreviewPanel({
       selectedChoiceIndex: selectedIdx,
     }
     const nextHist = [...history, turn]
+    historySeqRef.current += 1
     setHistory(nextHist)
-    await loadNext(nextHist)
+    setPendingQueue((q) => q.slice(1))
+    setSelectedIdx(null)
+    if (nextHist.length >= maxQuestions) {
+      setPhase('done')
+    }
   }
 
   return (
     <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm">
       <p className="text-sm font-medium text-slate-800">Adaptive quiz preview</p>
       <p className="mt-1 text-xs text-slate-600">
-        Questions are generated one at a time (up to {maxQuestions} steps). Each answer informs the next question.
-        Nothing here is saved.
+        Questions are generated in pairs and kept one step ahead when possible (up to {maxQuestions} steps). Each
+        answer informs the next batch. Nothing here is saved.
       </p>
       {phase === 'loading' && (
         <div
@@ -584,6 +630,7 @@ export function QuizStudentPreviewModal({
                 markdown={markdown}
                 emptyMessage="This quiz does not include an introduction."
                 theme={theme}
+                courseCode={courseCode}
               />
             </div>
             {advanced.requiresQuizAccessCode ? (

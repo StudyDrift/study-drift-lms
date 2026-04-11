@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod communication;
+pub mod course_files;
 pub mod courses;
 pub mod health;
 pub mod me;

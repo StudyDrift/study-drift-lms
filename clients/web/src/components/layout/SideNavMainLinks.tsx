@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   BarChart3,
+  BookMarked,
   BookOpen,
   Calendar,
   Inbox,
@@ -33,6 +34,13 @@ export function SideNavMainLinks() {
       >
         <BookOpen className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Courses
+      </NavLink>
+      <NavLink
+        to="/notebooks"
+        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+      >
+        <BookMarked className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        My Notebooks
       </NavLink>
       <NavLink
         to="/calendar"

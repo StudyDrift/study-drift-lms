@@ -218,6 +218,7 @@ export default function CourseModuleAssignmentPage() {
               markdown={markdown}
               emptyMessage="No instructions yet. Select Edit to add Markdown."
               theme={mdTheme}
+              courseCode={courseCode}
             />
           </div>
         )}

@@ -13,6 +13,11 @@ output "postgres_data_mount" {
   value       = "/mnt/lextures-db/postgres"
 }
 
+output "course_files_mount" {
+  description = "Host path on the droplet for uploaded course files (same DO block volume; bind-mounted into the API container)."
+  value       = "/mnt/lextures-db/course-files"
+}
+
 output "droplet_ipv4" {
   description = "Ephemeral public IPv4 on the droplet NIC (not stable across recreates; prefer reserved_ipv4 for DNS)."
   value       = digitalocean_droplet.demo.ipv4_address

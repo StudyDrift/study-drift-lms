@@ -63,6 +63,8 @@ pub struct CoursePublic {
     pub markdown_theme_custom: Option<JsonValue>,
     /// Display grading scale id (see `GRADING_SCALES`).
     pub grading_scale: String,
+    /// When true, hidden from dashboards and search for all enrollments.
+    pub archived: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -116,6 +118,19 @@ pub struct UpdateMarkdownThemeRequest {
     pub preset: String,
     #[serde(default)]
     pub custom: Option<MarkdownThemeCustom>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchCourseArchivedRequest {
+    pub archived: bool,
+}
+
+/// Body for `PUT /api/v1/courses/catalog-order` — UUIDs in display order for the signed-in user's catalog.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PutCourseCatalogOrderRequest {
+    pub course_ids: Vec<Uuid>,
 }
 
 pub const MARKDOWN_THEME_PRESETS: &[&str] = &[

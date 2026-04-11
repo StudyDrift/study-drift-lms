@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Pencil } from 'lucide-react'
 import { SyllabusBlockEditor } from '../../components/syllabus/SyllabusBlockEditor'
-import { MarkdownArticleView } from '../../components/syllabus/SyllabusMarkdownView'
+import { ContentPageReader } from '../../components/content-page/ContentPageReader'
+import {
+  fetchContentPageMarkups,
+  type ContentPageMarkup,
+} from '../../lib/coursesApi'
 import { markdownToSectionsForEditor, sectionsToMarkdown } from '../../components/syllabus/syllabusSectionMarkdown'
 import { usePermissions } from '../../context/usePermissions'
 import {
@@ -55,6 +59,7 @@ export default function CourseModuleContentPage() {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [markups, setMarkups] = useState<ContentPageMarkup[]>([])
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<SyllabusSection[]>([])
@@ -75,6 +80,16 @@ export default function CourseModuleContentPage() {
     courseCode && itemId && !permLoading && allows(permCourseItemCreate(courseCode)),
   )
 
+  const loadMarkups = useCallback(async () => {
+    if (!courseCode || !itemId) return
+    try {
+      const list = await fetchContentPageMarkups(courseCode, itemId)
+      setMarkups(list)
+    } catch {
+      setMarkups([])
+    }
+  }, [courseCode, itemId])
+
   const load = useCallback(async () => {
     if (!courseCode || !itemId) return
     setLoading(true)
@@ -90,6 +105,7 @@ export default function CourseModuleContentPage() {
       setUpdatedAt(data.updatedAt)
       setMdPreset(courseRow.markdownThemePreset)
       setMdCustom(courseRow.markdownThemeCustom)
+      void loadMarkups()
       const openKey = `${courseCode}:${itemId}`
       if (contentOpenSentForRef.current !== openKey) {
         contentOpenSentForRef.current = openKey
@@ -107,7 +123,7 @@ export default function CourseModuleContentPage() {
     } finally {
       setLoading(false)
     }
-  }, [courseCode, itemId])
+  }, [courseCode, itemId, loadMarkups])
 
   useEffect(() => {
     void load()
@@ -166,6 +182,7 @@ export default function CourseModuleContentPage() {
       setUpdatedAt(data.updatedAt)
       setEditing(false)
       setDraft([])
+      void loadMarkups()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Could not save.')
     } finally {
@@ -250,10 +267,14 @@ export default function CourseModuleContentPage() {
                 {new Date(dueAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
             )}
-            <MarkdownArticleView
+            <ContentPageReader
               markdown={markdown}
-              emptyMessage="No content yet. Select Edit to add Markdown."
               theme={mdTheme}
+              markups={markups}
+              onMarkupsChange={loadMarkups}
+              courseCode={courseCode}
+              itemId={itemId}
+              contentTitle={title || 'Content page'}
             />
           </div>
         )}

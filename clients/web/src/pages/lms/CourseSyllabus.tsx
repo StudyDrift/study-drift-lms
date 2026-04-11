@@ -194,7 +194,9 @@ export default function CourseSyllabus() {
               )}
             </p>
           )}
-          {sections.length > 0 && <SyllabusMarkdownView sections={sections} theme={mdTheme} />}
+          {sections.length > 0 && (
+            <SyllabusMarkdownView sections={sections} theme={mdTheme} courseCode={courseCode} />
+          )}
         </div>
       )}
 

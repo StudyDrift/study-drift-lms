@@ -66,6 +66,7 @@ describe('buildSearchItems', () => {
     const dashboard = items.find((i) => i.path === '/')
     expect(dashboard?.group).toBe('page')
     expect(items.some((i) => i.path === '/courses')).toBe(true)
+    expect(items.some((i) => i.path === '/notebooks')).toBe(true)
     expect(items.some((i) => i.path === '/settings/ai/models')).toBe(true)
   })
 
@@ -93,6 +94,7 @@ describe('buildSearchItems', () => {
   it('adds per-course page shortcuts and enrollment actions', () => {
     const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsNone)
     expect(items.some((i) => i.path === '/courses/X/syllabus')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/X/notebook')).toBe(true)
     const add = items.find((i) => i.id === 'action:/courses/X/enrollments:add')
     expect(add?.group).toBe('action')
     expect(add?.path).toBe('/courses/X/enrollments')

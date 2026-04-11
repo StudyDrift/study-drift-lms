@@ -22,7 +22,7 @@ export function LmsPage({
 }: LmsPageProps) {
   return (
     <div className="px-4 py-5 sm:p-6 md:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0 flex-1">
           {titleContent ?? (
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-neutral-100">{title}</h1>
@@ -32,7 +32,10 @@ export function LmsPage({
           )}
         </div>
         {actions ? (
-          <div ref={actionsContainerRef} className="w-full shrink-0 pt-0.5 sm:w-auto">
+          <div
+            ref={actionsContainerRef}
+            className="flex w-full shrink-0 sm:w-auto sm:justify-end sm:pt-0.5"
+          >
             {actions}
           </div>
         ) : null}

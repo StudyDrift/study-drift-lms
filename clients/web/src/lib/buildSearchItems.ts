@@ -61,6 +61,12 @@ export function buildSearchItems(
   const globalPages: { title: string; subtitle: string; path: string; hint: string }[] = [
     { title: 'Dashboard', subtitle: 'Home', path: '/', hint: 'dashboard home' },
     { title: 'Courses', subtitle: 'All your courses', path: '/courses', hint: 'courses catalog' },
+    {
+      title: 'My Notebooks',
+      subtitle: 'Notes across courses',
+      path: '/notebooks',
+      hint: 'notebooks notes journal',
+    },
     { title: 'Calendar', subtitle: 'Your schedule', path: '/calendar', hint: 'calendar schedule' },
     { title: 'Inbox', subtitle: 'Messages', path: '/inbox', hint: 'inbox messages mail' },
     { title: 'Account', subtitle: 'User settings', path: '/settings/account', hint: 'account profile' },
@@ -129,6 +135,7 @@ export function buildSearchItems(
     { suffix: '', title: 'Course dashboard', hint: 'dashboard overview' },
     { suffix: '/syllabus', title: 'Syllabus', hint: 'syllabus outline' },
     { suffix: '/modules', title: 'Modules', hint: 'modules lessons content' },
+    { suffix: '/notebook', title: 'Notebook', hint: 'notes journal thoughts' },
     { suffix: '/calendar', title: 'Course calendar', hint: 'calendar schedule' },
     {
       suffix: '/gradebook',

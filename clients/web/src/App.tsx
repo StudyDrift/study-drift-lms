@@ -12,11 +12,13 @@ import CourseModuleAssignmentPage from './pages/lms/CourseModuleAssignmentPage'
 import CourseModuleContentPage from './pages/lms/CourseModuleContentPage'
 import CourseModuleQuizPage from './pages/lms/CourseModuleQuizPage.tsx'
 import CourseModules from './pages/lms/CourseModules'
+import CourseNotebookPage from './pages/lms/CourseNotebookPage'
 import CourseSettings from './pages/lms/CourseSettings'
 import CourseSyllabus from './pages/lms/CourseSyllabus'
 import Courses from './pages/lms/Courses'
 import Dashboard from './pages/lms/Dashboard'
 import Inbox from './pages/lms/Inbox'
+import MyNotebooksPage from './pages/lms/MyNotebooksPage'
 import Reports from './pages/lms/Reports'
 import Settings from './pages/lms/Settings'
 import Login from './pages/Login'
@@ -31,6 +33,7 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/courses" element={<Courses />} />
+          <Route path="/notebooks" element={<MyNotebooksPage />} />
           <Route path="/courses/create" element={<CourseCreate />} />
           <Route path="/courses/:courseCode" element={<CourseLayout />}>
             <Route path="settings/*" element={<CourseSettings />} />
@@ -39,6 +42,7 @@ export default function App() {
             <Route path="modules/assignment/:itemId" element={<CourseModuleAssignmentPage />} />
             <Route path="modules/quiz/:itemId" element={<CourseModuleQuizPage />} />
             <Route path="modules" element={<CourseModules />} />
+            <Route path="notebook" element={<CourseNotebookPage />} />
             <Route path="calendar" element={<CourseCalendarPage />} />
             <Route path="gradebook" element={<CourseGradebook />} />
             <Route path="enrollments" element={<CourseEnrollments />} />

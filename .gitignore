@@ -30,6 +30,11 @@ coverage/
 target/
 **/*.rs.bk
 
+# Local course file uploads (docker bind mount ./data/course-files)
+data/course-files/
+# Default COURSE_FILES_ROOT when running the server from ./server (relative path data/course-files)
+server/data/
+
 # IDE / editors
 .idea/
 *.swp

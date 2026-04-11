@@ -217,6 +217,52 @@ async fn full_http_walkthrough() {
     assert!(list["courses"].as_array().unwrap().len() >= 1);
 
     let r = client
+        .post(format!("{base}/api/v1/courses"))
+        .bearer_auth(token)
+        .json(&json!({ "title": "Zebra Second Course", "description": "Second" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+    let course2 = json_body(r).await;
+    let course2_id = course2["id"].as_str().unwrap();
+
+    let r = client
+        .get(format!("{base}/api/v1/courses"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+    let list_two = json_body(r).await;
+    let arr = list_two["courses"].as_array().unwrap();
+    assert_eq!(arr.len(), 2);
+    let id_first = arr[0]["id"].as_str().unwrap();
+    let id_second = arr[1]["id"].as_str().unwrap();
+    assert_eq!(id_second, course2_id);
+    let reversed = vec![id_second, id_first];
+    let r = client
+        .put(format!("{base}/api/v1/courses/catalog-order"))
+        .bearer_auth(token)
+        .json(&json!({ "courseIds": reversed }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::NO_CONTENT);
+
+    let r = client
+        .get(format!("{base}/api/v1/courses"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+    let list_ordered = json_body(r).await;
+    let arr_o = list_ordered["courses"].as_array().unwrap();
+    assert_eq!(arr_o[0]["id"].as_str().unwrap(), reversed[0]);
+    assert_eq!(arr_o[1]["id"].as_str().unwrap(), reversed[1]);
+
+    let r = client
         .get(format!("{base}/api/v1/courses/{course_code}"))
         .bearer_auth(token)
         .send()

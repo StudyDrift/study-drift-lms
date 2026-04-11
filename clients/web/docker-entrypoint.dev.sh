@@ -21,6 +21,9 @@ fi
 if grep -q '"@dnd-kit/core"' package.json 2>/dev/null && [ ! -d node_modules/@dnd-kit/core ]; then
   need_ci=1
 fi
+if grep -q '"mark.js"' package.json 2>/dev/null && [ ! -d node_modules/mark.js ]; then
+  need_ci=1
+fi
 
 if [ "$need_ci" = 1 ]; then
   echo "web: syncing node_modules with package.json / package-lock.json (npm ci)..."

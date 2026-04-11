@@ -28,7 +28,7 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
   }
 
   return (
-    <div ref={rootRef} className="relative inline-block text-left">
+    <div ref={rootRef} className="relative inline-block max-w-full text-left">
       <button
         type="button"
         disabled={disabled}
@@ -39,10 +39,11 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
           if (disabled) return
           setOpen((o) => !o)
         }}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/70 bg-white/90 px-2.5 py-1.5 text-sm font-medium text-slate-700 shadow-none transition hover:border-slate-300/80 hover:bg-slate-50/90 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-600/70 dark:bg-neutral-900/80 dark:text-neutral-200 dark:hover:border-neutral-500/80 dark:hover:bg-neutral-800/90"
+        className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-slate-200/70 bg-white/90 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-none transition hover:border-slate-300/80 hover:bg-slate-50/90 disabled:cursor-not-allowed disabled:opacity-60 sm:px-2.5 sm:text-sm dark:border-neutral-600/70 dark:bg-neutral-900/80 dark:text-neutral-200 dark:hover:border-neutral-500/80 dark:hover:bg-neutral-800/90"
       >
-        <Plus className="h-4 w-4" aria-hidden />
-        Add module item
+        <Plus className="h-4 w-4 shrink-0" aria-hidden />
+        <span className="truncate sm:hidden">Add item</span>
+        <span className="hidden truncate sm:inline">Add module item</span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 transition ${open ? 'rotate-180' : ''}`}
           aria-hidden
@@ -54,7 +55,7 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
           id={menuId}
           role="menu"
           aria-label="Module item types"
-          className="absolute right-0 z-50 mt-1 min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-neutral-600 dark:bg-neutral-800 dark:shadow-black/40"
+          className="absolute left-0 right-0 z-50 mt-1 min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 sm:left-auto sm:right-0 sm:min-w-[12rem] dark:border-neutral-600 dark:bg-neutral-800 dark:shadow-black/40"
         >
           <button
             type="button"

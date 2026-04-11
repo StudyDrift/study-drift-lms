@@ -267,7 +267,8 @@ pub async fn list_people_for_enrolled_courses(
         FROM {} ce
         INNER JOIN {} c ON c.id = ce.course_id
         INNER JOIN {} u ON u.id = ce.user_id
-        WHERE c.id IN (
+        WHERE c.archived = false
+          AND c.id IN (
             SELECT ce2.course_id
             FROM {} ce2
             WHERE ce2.user_id = $1

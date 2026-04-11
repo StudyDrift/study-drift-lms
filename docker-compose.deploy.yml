@@ -33,6 +33,9 @@ services:
       # Prefer: DELETE that row after verifying schema, or redeploy an image built from current main.
       SQLX_MIGRATIONS_IGNORE_MISSING: ${SQLX_MIGRATIONS_IGNORE_MISSING:-false}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      COURSE_FILES_ROOT: /mnt/lextures-db/course-files
+    volumes:
+      - /mnt/lextures-db/course-files:/mnt/lextures-db/course-files
     depends_on:
       postgres:
         condition: service_healthy

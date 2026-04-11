@@ -22,6 +22,8 @@ export type Course = {
   relativeHiddenAfter?: string | null
   relativeScheduleAnchorAt?: string | null
   published: boolean
+  /** When true, the course is omitted from `/api/v1/courses` and search. */
+  archived: boolean
   markdownThemePreset: string
   markdownThemeCustom: MarkdownThemeCustom | null
   /** Display grading scale id (matches server `GRADING_SCALES`). */
@@ -67,6 +69,35 @@ export async function fetchCourse(courseCode: string): Promise<Course> {
   return raw as Course
 }
 
+/** Persist display order for the signed-in user's course catalog (`PUT /api/v1/courses/catalog-order`). */
+export async function putCourseCatalogOrder(courseIds: string[]): Promise<void> {
+  const res = await authorizedFetch('/api/v1/courses/catalog-order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ courseIds }),
+  })
+  if (res.ok) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+export async function patchCourseArchived(
+  courseCode: string,
+  archived: boolean,
+): Promise<Course> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/archived`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as Course
+}
+
 export async function patchCourseMarkdownTheme(
   courseCode: string,
   body: { preset: string; custom?: MarkdownThemeCustom | null },
@@ -89,6 +120,38 @@ export async function patchCourseMarkdownTheme(
 
 async function parseJson(res: Response): Promise<unknown> {
   return res.json().catch(() => ({}))
+}
+
+export type CourseFileUploadResponse = {
+  id: string
+  /** Path-only URL (`/api/v1/courses/.../course-files/.../content`). */
+  contentPath: string
+  mimeType: string
+  byteSize: number
+}
+
+/** Multipart upload of an image into the course file store (`POST .../course-files`). */
+export async function uploadCourseFile(courseCode: string, file: File): Promise<CourseFileUploadResponse> {
+  const body = new FormData()
+  body.append('file', file)
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/course-files`,
+    { method: 'POST', body },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as {
+    id: string
+    content_path: string
+    mime_type: string
+    byte_size: number
+  }
+  return {
+    id: o.id,
+    contentPath: o.content_path,
+    mimeType: o.mime_type,
+    byteSize: o.byte_size,
+  }
 }
 
 export async function createCourse(body: {
@@ -621,8 +684,8 @@ export type AdaptiveQuizGeneratedQuestion = {
 }
 
 export type AdaptiveQuizNextResponse =
-  | { finished: true; message?: string | null }
-  | { finished: false; question: AdaptiveQuizGeneratedQuestion }
+  | { finished: true; message?: string | null; questions?: AdaptiveQuizGeneratedQuestion[] }
+  | { finished: false; questions: AdaptiveQuizGeneratedQuestion[] }
 
 export async function postAdaptiveQuizNext(
   courseCode: string,
@@ -670,6 +733,66 @@ export async function patchModuleContentPage(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as ModuleContentPagePayload
+}
+
+export type ContentPageMarkup = {
+  id: string
+  kind: 'highlight' | 'note'
+  quoteText: string
+  notebookPageId: string | null
+  commentText: string | null
+  createdAt: string
+}
+
+export async function fetchContentPageMarkups(
+  courseCode: string,
+  itemId: string,
+): Promise<ContentPageMarkup[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/content-pages/${encodeURIComponent(itemId)}/markups`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const body = raw as { markups?: ContentPageMarkup[] }
+  return body.markups ?? []
+}
+
+export async function postContentPageMarkup(
+  courseCode: string,
+  itemId: string,
+  body: {
+    kind: 'highlight' | 'note'
+    quoteText: string
+    notebookPageId?: string | null
+    commentText?: string | null
+  },
+): Promise<ContentPageMarkup> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/content-pages/${encodeURIComponent(itemId)}/markups`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as ContentPageMarkup
+}
+
+export async function deleteContentPageMarkup(
+  courseCode: string,
+  itemId: string,
+  markupId: string,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/content-pages/${encodeURIComponent(itemId)}/markups/${encodeURIComponent(markupId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
+  }
 }
 
 export async function fetchModuleAssignment(

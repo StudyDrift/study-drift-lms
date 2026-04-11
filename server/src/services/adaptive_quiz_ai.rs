@@ -1,4 +1,5 @@
-//! Single-question adaptive quiz steps via OpenRouter (`adaptive_quiz` system prompt).
+//! Adaptive quiz steps via OpenRouter (`adaptive_quiz` system prompt).
+//! Each call may return up to two upcoming questions so the client can stay one step ahead.
 
 use serde::Deserialize;
 use serde_json::json;
@@ -12,9 +13,12 @@ use crate::services::ai::{OpenRouterClient, OpenRouterError};
 
 const ADAPTIVE_QUIZ_PROMPT_KEY: &str = "adaptive_quiz";
 
-const FALLBACK_ADAPTIVE_QUIZ_SYSTEM_PROMPT: &str = r#"You generate ONE quiz question at a time for an adaptive LMS quiz. Respond with ONLY valid JSON (no markdown fences, no commentary).
+const FALLBACK_ADAPTIVE_QUIZ_SYSTEM_PROMPT: &str = r#"You generate quiz questions for an adaptive LMS quiz. Each learner request asks for a batch of 1 or 2 **new** questions (never duplicates of each other). Respond with ONLY valid JSON (no markdown fences, no commentary).
 
-The JSON must be a single object with camelCase keys:
+When asked for one question, respond with a JSON array containing exactly one object.
+When asked for two questions, respond with a JSON array containing exactly two objects, in the order the learner should see them.
+
+Each array element must be an object with camelCase keys:
 - prompt (string, required): the question text shown to the learner.
 - questionType (string, required): one of exactly: multiple_choice, true_false
 - choices (array of strings): for multiple_choice supply exactly 4 distinct plausible options; for true_false use ["True","False"] in that order.
@@ -46,10 +50,10 @@ fn map_open_router_err(e: OpenRouterError) -> AppError {
     }
 }
 
-fn extract_json_object(raw: &str) -> Option<&str> {
+fn extract_json_array(raw: &str) -> Option<&str> {
     let s = raw.trim();
-    let start = s.find('{')?;
-    let end = s.rfind('}')?;
+    let start = s.find('[')?;
+    let end = s.rfind(']')?;
     (end > start).then_some(&s[start..=end])
 }
 
@@ -150,24 +154,38 @@ fn normalize_question(mut raw: AiQuestionRaw) -> Result<AdaptiveQuizGeneratedQue
     })
 }
 
-fn parse_single_question(text: &str) -> Result<AdaptiveQuizGeneratedQuestion, AppError> {
-    let slice = extract_json_object(text).ok_or_else(|| {
-        AppError::AiGenerationFailed("Could not find JSON in the model response.".into())
+fn parse_question_batch(text: &str, expected: usize) -> Result<Vec<AdaptiveQuizGeneratedQuestion>, AppError> {
+    let slice = extract_json_array(text).ok_or_else(|| {
+        AppError::AiGenerationFailed(
+            "Could not find a JSON array in the model response (expected an array of questions)."
+                .into(),
+        )
     })?;
 
-    let raw: AiQuestionRaw = serde_json::from_str(slice).map_err(|e| {
-        AppError::AiGenerationFailed(format!("Could not parse adaptive quiz JSON: {e}"))
+    let raw_items: Vec<AiQuestionRaw> = serde_json::from_str(slice).map_err(|e| {
+        AppError::AiGenerationFailed(format!("Could not parse adaptive quiz JSON array: {e}"))
     })?;
 
-    normalize_question(raw)
+    if raw_items.len() != expected {
+        return Err(AppError::AiGenerationFailed(format!(
+            "Expected exactly {expected} question(s) in the JSON array; got {}.",
+            raw_items.len()
+        )));
+    }
+
+    let mut out = Vec::with_capacity(expected);
+    for raw in raw_items {
+        out.push(normalize_question(raw)?);
+    }
+    Ok(out)
 }
 
 fn history_json(history: &[AdaptiveQuizHistoryTurn]) -> serde_json::Value {
     serde_json::to_value(history).unwrap_or_else(|_| json!([]))
 }
 
-/// Generates the next question (`history` = completed steps; length 0 means first question).
-pub async fn generate_adaptive_next_question(
+/// Generates the next `batch_size` questions (1 or 2). `history` = completed steps only.
+pub async fn generate_adaptive_next_questions(
     pool: &sqlx::PgPool,
     client: &OpenRouterClient,
     model: &str,
@@ -178,7 +196,8 @@ pub async fn generate_adaptive_next_question(
     adaptive_stop_rule: &str,
     total_questions_allowed: i32,
     history: &[AdaptiveQuizHistoryTurn],
-) -> Result<AdaptiveQuizGeneratedQuestion, AppError> {
+    batch_size: i32,
+) -> Result<Vec<AdaptiveQuizGeneratedQuestion>, AppError> {
     let system = system_prompts::get_content_by_key(pool, ADAPTIVE_QUIZ_PROMPT_KEY)
         .await?
         .unwrap_or_else(|| FALLBACK_ADAPTIVE_QUIZ_SYSTEM_PROMPT.to_string());
@@ -187,6 +206,14 @@ pub async fn generate_adaptive_next_question(
     if answered >= total_questions_allowed {
         return Err(AppError::InvalidInput(
             "No more questions in this adaptive attempt.".into(),
+        ));
+    }
+
+    let expected = batch_size.clamp(1, 2) as usize;
+    let remaining_after_batch = (total_questions_allowed - answered) as usize;
+    if expected > remaining_after_batch {
+        return Err(AppError::InvalidInput(
+            "Adaptive batch size exceeds remaining questions.".into(),
         ));
     }
 
@@ -201,6 +228,13 @@ pub async fn generate_adaptive_next_question(
     } else {
         "Continue generating questions until the question cap is reached."
     };
+
+    let batch_instruction = if expected == 1 {
+        "Generate exactly 1 new question as a JSON array with one object (not a bare object)."
+    } else {
+        "Generate exactly 2 new questions as a JSON array with two objects, in presentation order. The second must adapt to the same learner history as the first (anticipate no further answers between them), but must not repeat the first question's stem or choices."
+    };
+
     let user_body = format!(
         "Reference course materials (for grounding only; do not quote long passages verbatim):\n\
          ---\n{reference_materials}\n---\n\n\
@@ -214,7 +248,7 @@ pub async fn generate_adaptive_next_question(
          Learner history (most recent last). Each entry includes what they saw and how they answered. \
          choiceWeights are internal correctness scores (0–1) you assigned for that question; use them to adapt difficulty and to detect shallow guessing:\n\
          {history}\n\n\
-         Generate the next single question as JSON (one object only) following your system instructions.",
+         {batch_instruction} following your system instructions.",
         reference_materials = reference_materials.trim(),
         instructor_system_prompt = instructor_system_prompt.trim(),
         adaptive_difficulty = adaptive_difficulty.trim(),
@@ -238,5 +272,5 @@ pub async fn generate_adaptive_next_question(
         ));
     }
 
-    parse_single_question(&text)
+    parse_question_batch(&text, expected)
 }

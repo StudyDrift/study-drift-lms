@@ -21,7 +21,7 @@ export function AddCourseItemMenu({ onAdd, disabled }: AddCourseItemMenuProps) {
   }, [open])
 
   return (
-    <div ref={rootRef} className="relative inline-block text-left">
+    <div ref={rootRef} className="relative block w-full text-left sm:inline-block sm:w-auto">
       <button
         type="button"
         disabled={disabled}
@@ -32,10 +32,11 @@ export function AddCourseItemMenu({ onAdd, disabled }: AddCourseItemMenuProps) {
           if (disabled) return
           setOpen((o) => !o)
         }}
-        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:justify-start sm:px-4"
       >
-        <Plus className="h-4 w-4" aria-hidden />
-        Add Course Item
+        <Plus className="h-4 w-4 shrink-0" aria-hidden />
+        <span className="sm:hidden">Add module</span>
+        <span className="hidden sm:inline">Add Course Item</span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 transition ${open ? 'rotate-180' : ''}`}
           aria-hidden
@@ -47,7 +48,7 @@ export function AddCourseItemMenu({ onAdd, disabled }: AddCourseItemMenuProps) {
           id={menuId}
           role="menu"
           aria-label="Course item types"
-          className="absolute right-0 z-50 mt-1 min-w-[14rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-neutral-600 dark:bg-neutral-800 dark:shadow-black/40"
+          className="absolute left-0 right-0 z-50 mt-1 min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 sm:left-auto sm:right-0 sm:min-w-[14rem] dark:border-neutral-600 dark:bg-neutral-800 dark:shadow-black/40"
         >
           <button
             type="button"

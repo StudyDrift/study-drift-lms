@@ -23,6 +23,10 @@ export const handlers = [
       relativeHiddenAfter: null,
       relativeScheduleAnchorAt: null,
       published: false,
+      archived: false,
+      markdownThemePreset: 'classic',
+      markdownThemeCustom: null,
+      gradingScale: 'letter_standard',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     })

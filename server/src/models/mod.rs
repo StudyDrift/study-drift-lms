@@ -1,8 +1,10 @@
 pub mod auth;
 pub mod communication;
 pub mod course;
+pub mod course_file;
 pub mod course_export;
 pub mod course_grading;
+pub mod content_page_markups;
 pub mod course_module_content;
 pub mod course_module_quiz;
 pub mod course_structure;

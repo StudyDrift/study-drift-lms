@@ -9,7 +9,7 @@ path = "src/lib.rs"
 [dependencies]
 anyhow = "1"
 argon2 = "0.5"
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["multipart", "ws"] }
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }

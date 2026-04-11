@@ -2,12 +2,15 @@ use crate::error::AppError;
 use crate::http_auth::{auth_user, require_permission};
 use crate::models::course::{
     CoursePublic, CourseWithViewerResponse, CoursesResponse, CreateCourseRequest, MarkdownThemeCustom,
-    SetHeroImageRequest, UpdateCourseRequest, UpdateMarkdownThemeRequest, GRADING_SCALES,
-    MARKDOWN_THEME_PRESETS,
+    PatchCourseArchivedRequest, PutCourseCatalogOrderRequest, SetHeroImageRequest, UpdateCourseRequest,
+    UpdateMarkdownThemeRequest, GRADING_SCALES, MARKDOWN_THEME_PRESETS,
 };
 use crate::models::course_export::{CourseExportV1, CourseImportRequest};
 use crate::models::course_grading::{
     CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
+};
+use crate::models::content_page_markups::{
+    ContentPageMarkupsListResponse, ContentPageMarkupResponse, CreateContentPageMarkupRequest,
 };
 use crate::models::course_module_content::{
     CreateCourseContentPageRequest, ModuleContentPageResponse, UpdateModuleContentPageRequest,
@@ -38,6 +41,7 @@ use crate::repos::course_grading;
 use crate::repos::course_grading::PutError;
 use crate::repos::course_grants;
 use crate::repos::course_module_assignments;
+use crate::repos::content_page_markups;
 use crate::repos::course_module_content;
 use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
 use crate::repos::course_structure;
@@ -56,6 +60,7 @@ use crate::services::quiz_generation_ai;
 use crate::services::relative_schedule;
 use crate::services::syllabus_section_ai;
 use crate::state::AppState;
+use std::collections::HashSet;
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
@@ -71,6 +76,10 @@ const PERM_COURSE_CREATE: &str = "global:app:course:create";
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/courses", get(list_handler).post(create_handler))
+        .route(
+            "/api/v1/courses/catalog-order",
+            put(put_course_catalog_order_handler),
+        )
         .route(
             "/api/v1/courses/{course_code}/structure/modules",
             post(create_course_module_handler),
@@ -98,6 +107,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/content-pages/{item_id}",
             get(module_content_page_get_handler).patch(module_content_page_patch_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/content-pages/{item_id}/markups",
+            get(list_content_page_markups_handler).post(create_content_page_markup_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/content-pages/{item_id}/markups/{markup_id}",
+            delete(delete_content_page_markup_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/assignments/{item_id}",
@@ -170,6 +187,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/markdown-theme",
             patch(update_markdown_theme_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/archived",
+            patch(patch_course_archived_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/course-context",
@@ -747,6 +768,30 @@ async fn list_handler(
     Ok(Json(CoursesResponse { courses }))
 }
 
+async fn put_course_catalog_order_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<PutCourseCatalogOrderRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let expected = course::catalog_course_ids_for_user(&state.pool, user.user_id).await?;
+
+    let got: HashSet<Uuid> = req.course_ids.iter().copied().collect();
+    if got.len() != req.course_ids.len() {
+        return Err(AppError::InvalidInput(
+            "courseIds must not contain duplicates.".into(),
+        ));
+    }
+    if req.course_ids.len() != expected.len() || got != expected {
+        return Err(AppError::InvalidInput(
+            "courseIds must list each catalog course exactly once.".into(),
+        ));
+    }
+
+    course::replace_user_course_catalog_order(&state.pool, user.user_id, &req.course_ids).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn create_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1065,32 +1110,28 @@ async fn create_module_quiz_handler(
     Ok(Json(item))
 }
 
-async fn module_content_page_get_handler(
-    State(state): State<AppState>,
-    Path((course_code, item_id)): Path<(String, Uuid)>,
-    headers: HeaderMap,
-) -> Result<Json<ModuleContentPageResponse>, AppError> {
-    let user = auth_user(&state, &headers)?;
-    require_course_access(&state, &course_code, user.user_id).await?;
+/// Course id after enrollment + (for students) published content page visibility checks.
+async fn ensure_user_can_view_content_page(
+    state: &AppState,
+    course_code: &str,
+    item_id: Uuid,
+    user_id: Uuid,
+) -> Result<Uuid, AppError> {
+    require_course_access(state, course_code, user_id).await?;
 
-    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+    let Some(course_row) = course::get_by_course_code(&state.pool, course_code).await? else {
         return Err(AppError::NotFound);
     };
     let course_id = course_row.id;
 
-    let required = course_grants::course_item_create_permission(&course_code);
-    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
-    let shift_ctx = if !can_edit {
-        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id).await?
-    } else {
-        None
-    };
+    let required = course_grants::course_item_create_permission(course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user_id, &required).await?;
     if !can_edit {
         let visible = course_structure::content_page_visible_to_student(
             &state.pool,
             course_id,
             item_id,
-            user.user_id,
+            user_id,
             Utc::now(),
         )
         .await?;
@@ -1098,6 +1139,27 @@ async fn module_content_page_get_handler(
             return Err(AppError::NotFound);
         }
     }
+    Ok(course_id)
+}
+
+async fn module_content_page_get_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<ModuleContentPageResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id = ensure_user_can_view_content_page(&state, &course_code, item_id, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    let shift_ctx = if !can_edit {
+        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id).await?
+    } else {
+        None
+    };
 
     let Some((title, markdown, mut due_at, updated_at)) =
         course_module_content::get_for_course_item(&state.pool, course_id, item_id).await?
@@ -1174,6 +1236,81 @@ async fn module_content_page_patch_handler(
         due_at,
         updated_at,
     }))
+}
+
+async fn list_content_page_markups_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<ContentPageMarkupsListResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id =
+        ensure_user_can_view_content_page(&state, &course_code, item_id, user.user_id).await?;
+    let markups =
+        content_page_markups::list_for_user_item(&state.pool, user.user_id, course_id, item_id)
+            .await?;
+    Ok(Json(ContentPageMarkupsListResponse { markups }))
+}
+
+async fn create_content_page_markup_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<CreateContentPageMarkupRequest>,
+) -> Result<Json<ContentPageMarkupResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id =
+        ensure_user_can_view_content_page(&state, &course_code, item_id, user.user_id).await?;
+
+    if let Err(msg) = content_page_markups::validate_markup_request(
+        &req.kind,
+        &req.quote_text,
+        &req.notebook_page_id,
+        &req.comment_text,
+    ) {
+        return Err(AppError::InvalidInput(msg));
+    }
+
+    let row = content_page_markups::insert(
+        &state.pool,
+        user.user_id,
+        course_id,
+        item_id,
+        &req.kind,
+        &req.quote_text,
+        req.notebook_page_id.as_deref(),
+        req.comment_text.as_deref(),
+    )
+    .await
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => AppError::NotFound,
+        _ => e.into(),
+    })?;
+
+    Ok(Json(row))
+}
+
+async fn delete_content_page_markup_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, markup_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id =
+        ensure_user_can_view_content_page(&state, &course_code, item_id, user.user_id).await?;
+
+    let deleted = content_page_markups::delete_owned(
+        &state.pool,
+        user.user_id,
+        course_id,
+        item_id,
+        markup_id,
+    )
+    .await?;
+    if !deleted {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn module_assignment_get_handler(
@@ -1561,7 +1698,7 @@ async fn module_quiz_adaptive_next_handler(
     if req.history.len() >= total as usize {
         return Ok(Json(AdaptiveQuizNextResponse {
             finished: true,
-            question: None,
+            questions: vec![],
             message: Some("You have completed all questions in this adaptive quiz.".into()),
         }));
     }
@@ -1588,7 +1725,11 @@ async fn module_quiz_adaptive_next_handler(
 
     let model = user_ai_settings::get_course_setup_model_id(&state.pool, user.user_id).await?;
 
-    let question = adaptive_quiz_ai::generate_adaptive_next_question(
+    let answered = req.history.len() as i32;
+    let remaining = total - answered;
+    let batch_size = remaining.clamp(1, 2);
+
+    let questions = adaptive_quiz_ai::generate_adaptive_next_questions(
         &state.pool,
         client.as_ref(),
         &model,
@@ -1599,12 +1740,13 @@ async fn module_quiz_adaptive_next_handler(
         &row.adaptive_stop_rule,
         total,
         &req.history,
+        batch_size,
     )
     .await?;
 
     Ok(Json(AdaptiveQuizNextResponse {
         finished: false,
-        question: Some(question),
+        questions,
         message: None,
     }))
 }
@@ -2124,6 +2266,26 @@ async fn update_markdown_theme_handler(
         course::update_markdown_theme(&state.pool, &course_code, preset, custom_store.as_ref())
             .await?
             .ok_or(AppError::NotFound)?;
+    Ok(Json(row))
+}
+
+async fn patch_course_archived_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<PatchCourseArchivedRequest>,
+) -> Result<Json<CoursePublic>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    if !rbac::user_has_permission(&state.pool, user.user_id, &required).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let row = course::set_course_archived(&state.pool, &course_code, req.archived)
+        .await?
+        .ok_or(AppError::NotFound)?;
     Ok(Json(row))
 }
 

@@ -2,6 +2,7 @@ import {
   Bold,
   Braces,
   Code,
+  Image as ImageIcon,
   Italic,
   Link as LinkIcon,
   List,
@@ -12,13 +13,18 @@ import type { MarkdownEditKind } from './markdownInsert'
 export type MarkdownFormatToolbarProps = {
   disabled?: boolean
   onApply: (kind: MarkdownEditKind) => void
+  /** Insert course image: file picker and drag-and-drop onto the button. */
+  courseImage?: {
+    onPickClick: () => void
+    onFiles: (files: File[]) => void
+  }
 }
 
 /**
  * Markdown formatting buttons for use inside BlockFloatingToolbar children.
  * Uses mousedown preventDefault so the textarea keeps focus while clicking.
  */
-export function MarkdownFormatToolbar({ disabled, onApply }: MarkdownFormatToolbarProps) {
+export function MarkdownFormatToolbar({ disabled, onApply, courseImage }: MarkdownFormatToolbarProps) {
   function preventBlur(e: React.MouseEvent) {
     e.preventDefault()
   }
@@ -103,6 +109,33 @@ export function MarkdownFormatToolbar({ disabled, onApply }: MarkdownFormatToolb
       >
         <LinkIcon className="h-4 w-4" />
       </button>
+      {courseImage ? (
+        <>
+          <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200 dark:bg-neutral-600" aria-hidden />
+          <button
+            type="button"
+            disabled={disabled}
+            onMouseDown={preventBlur}
+            onClick={() => courseImage.onPickClick()}
+            onDragOver={(e) => {
+              if (disabled) return
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'copy'
+            }}
+            onDrop={(e) => {
+              if (disabled) return
+              e.preventDefault()
+              const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'))
+              if (files.length) courseImage.onFiles(files)
+            }}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-700"
+            aria-label="Insert image"
+            title="Insert image (drop file here or click)"
+          >
+            <ImageIcon className="h-4 w-4" />
+          </button>
+        </>
+      ) : null}
     </>
   )
 }

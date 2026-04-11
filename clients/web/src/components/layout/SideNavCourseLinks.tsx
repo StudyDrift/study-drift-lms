@@ -6,6 +6,7 @@ import {
   FileText,
   Layers,
   LayoutDashboard,
+  NotebookPen,
   Settings,
   Users,
 } from 'lucide-react'
@@ -56,6 +57,13 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
       >
         <Layers className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Modules
+      </NavLink>
+      <NavLink
+        to={`${base}/notebook`}
+        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+      >
+        <NotebookPen className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        Notebook
       </NavLink>
       <NavLink
         to={`${base}/calendar`}

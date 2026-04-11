@@ -58,11 +58,11 @@ const MODULE_SORT_ID = 'sortable-modules'
 
 /** Quiet icon-only controls (no box borders) for module + item toolbars. */
 const iconGhost =
-  'rounded-md p-1.5 text-slate-500 transition hover:bg-slate-200/45 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-700/35 dark:hover:text-neutral-200'
+  'rounded-md p-2.5 text-slate-500 transition hover:bg-slate-200/45 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:p-1.5 dark:text-neutral-400 dark:hover:bg-neutral-700/35 dark:hover:text-neutral-200'
 const iconGhostPublished =
-  'rounded-md p-1.5 text-indigo-600 transition hover:bg-indigo-50/90 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-indigo-400 dark:hover:bg-indigo-950/45 dark:hover:text-indigo-300'
+  'rounded-md p-2.5 text-indigo-600 transition hover:bg-indigo-50/90 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 sm:p-1.5 dark:text-indigo-400 dark:hover:bg-indigo-950/45 dark:hover:text-indigo-300'
 const iconGhostDraft =
-  'rounded-md p-1.5 text-slate-400 transition hover:bg-slate-200/45 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-neutral-500 dark:hover:bg-neutral-700/35 dark:hover:text-neutral-300'
+  'rounded-md p-2.5 text-slate-400 transition hover:bg-slate-200/45 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 sm:p-1.5 dark:text-neutral-500 dark:hover:bg-neutral-700/35 dark:hover:text-neutral-300'
 
 function findModuleIdForChildItem(
   childId: string,
@@ -112,7 +112,7 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
           </span>
           <Link
             to={`/courses/${encodeURIComponent(courseCode)}/modules/content/${encodeURIComponent(child.id)}`}
-            className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+            className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
           >
             {child.title}
           </Link>
@@ -127,7 +127,7 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
           </span>
           <Link
             to={`/courses/${encodeURIComponent(courseCode)}/modules/assignment/${encodeURIComponent(child.id)}`}
-            className="min-w-0 pl-3 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+            className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
           >
             {child.title}
           </Link>
@@ -148,7 +148,7 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
               <CircleHelp className="h-4 w-4" strokeWidth={2} />
             )}
           </span>
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pl-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <Link
               to={`/courses/${encodeURIComponent(courseCode)}/modules/quiz/${encodeURIComponent(child.id)}`}
               className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
@@ -173,7 +173,7 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
           >
             <Heading className="h-4 w-4" strokeWidth={2} />
           </span>
-          <p className="min-w-0 text-xl font-bold leading-snug tracking-tight text-slate-950 dark:text-neutral-100">
+          <p className="min-w-0 text-lg font-bold leading-snug tracking-tight text-slate-950 sm:text-xl dark:text-neutral-100">
             {child.title}
           </p>
         </div>
@@ -211,7 +211,7 @@ function ModuleItemRowActions({
   }, [menuOpen])
 
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
+    <div className="flex shrink-0 items-center gap-1 sm:gap-0.5">
       <button
         type="button"
         onClick={() => onTogglePublished()}
@@ -321,19 +321,19 @@ function SortableChildRow({
 
   return (
     <li ref={setNodeRef} style={style} className="py-3 first:pt-0">
-      <div className="flex items-start gap-2">
-        {!disabled && (
-          <button
-            type="button"
-            className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing dark:text-neutral-500 dark:hover:text-neutral-300"
-            aria-label="Drag to reorder item"
-            {...listeners}
-            {...attributes}
-          >
-            <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
-          </button>
-        )}
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-2">
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          {!disabled && (
+            <button
+              type="button"
+              className="mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300"
+              aria-label="Drag to reorder item"
+              {...listeners}
+              {...attributes}
+            >
+              <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+          )}
           <div
             className={`min-w-0 flex-1 ${child.archived ? 'opacity-70' : ''}`}
           >
@@ -342,7 +342,11 @@ function SortableChildRow({
               <p className="mt-1 text-xs font-medium text-slate-500 dark:text-neutral-400">Archived</p>
             ) : null}
           </div>
-          {showRowChrome ? (
+        </div>
+        {showRowChrome ? (
+          <div
+            className={`flex shrink-0 justify-end sm:items-center sm:self-center sm:pl-0 ${!disabled ? 'pl-[3.25rem]' : 'pl-0'}`}
+          >
             <ModuleItemRowActions
               child={child}
               disabled={disabled}
@@ -351,8 +355,8 @@ function SortableChildRow({
               onEditTitle={() => onOpenEditChildTitle(child)}
               onArchive={() => onArchiveChild(child)}
             />
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
     </li>
   )
@@ -402,64 +406,62 @@ function ModuleCardBody({
         minified ? 'p-2.5' : 'p-4'
       }`}
     >
-      <div className="flex flex-wrap items-start gap-2 sm:gap-3">
-        {moduleDragHandle}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-950 dark:text-neutral-100">{item.title}</p>
-              {!minified && (
-                <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
-                  Course activities and items can be grouped under this module.
-                </p>
-              )}
-              {minified && children.length > 0 && (
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
-                  {children.length} {children.length === 1 ? 'item' : 'items'}
-                </p>
-              )}
-            </div>
-            {canEditModules && !minified && (
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-0.5 sm:gap-1">
-                <button
-                  type="button"
-                  onClick={() => onTogglePublished(item)}
-                  disabled={anyModalBusy || busyModuleId === item.id}
-                  title={
-                    item.published
-                      ? 'Published — visible to students when scheduled'
-                      : 'Draft — hidden from students'
-                  }
-                  aria-label={item.published ? 'Published to students' : 'Hidden from students'}
-                  aria-pressed={item.published}
-                  className={`flex shrink-0 items-center justify-center ${
-                    item.published ? iconGhostPublished : iconGhostDraft
-                  }`}
-                >
-                  {item.published ? (
-                    <Eye className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  ) : (
-                    <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onOpenModuleSettings(item)}
-                  disabled={anyModalBusy}
-                  title="Module settings"
-                  aria-label="Module settings"
-                  className={`flex shrink-0 items-center justify-center ${iconGhost}`}
-                >
-                  <Settings className="h-4 w-4" strokeWidth={2} aria-hidden />
-                </button>
-                <AddModuleItemMenu
-                  onAdd={(kind) => onModuleItemAdd(item.id, kind)}
-                  disabled={anyModalBusy}
-                />
-              </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
+          {moduleDragHandle}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-slate-950 dark:text-neutral-100">{item.title}</p>
+            {!minified && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+                Course activities and items can be grouped under this module.
+              </p>
+            )}
+            {minified && children.length > 0 && (
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
+                {children.length} {children.length === 1 ? 'item' : 'items'}
+              </p>
             )}
           </div>
         </div>
+        {canEditModules && !minified && (
+          <div className="flex w-full flex-wrap items-center justify-end gap-1 border-t border-slate-200/60 pt-3 sm:w-auto sm:shrink-0 sm:flex-nowrap sm:border-0 sm:pt-0 dark:border-neutral-600/60">
+            <button
+              type="button"
+              onClick={() => onTogglePublished(item)}
+              disabled={anyModalBusy || busyModuleId === item.id}
+              title={
+                item.published
+                  ? 'Published — visible to students when scheduled'
+                  : 'Draft — hidden from students'
+              }
+              aria-label={item.published ? 'Published to students' : 'Hidden from students'}
+              aria-pressed={item.published}
+              className={`flex shrink-0 items-center justify-center ${
+                item.published ? iconGhostPublished : iconGhostDraft
+              }`}
+            >
+              {item.published ? (
+                <Eye className="h-4 w-4" strokeWidth={2} aria-hidden />
+              ) : (
+                <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenModuleSettings(item)}
+              disabled={anyModalBusy}
+              title="Module settings"
+              aria-label="Module settings"
+              className={`flex shrink-0 items-center justify-center ${iconGhost}`}
+            >
+              <Settings className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+            <AddModuleItemMenu
+              onAdd={(kind) => onModuleItemAdd(item.id, kind)}
+              disabled={anyModalBusy}
+            />
+          </div>
+        )}
       </div>
       {!minified && children.length > 0 && childrenList}
     </div>
@@ -555,7 +557,7 @@ function SortableModuleCard({
           canEditModules ? (
             <button
               type="button"
-              className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing dark:text-neutral-500 dark:hover:text-neutral-300"
+              className="mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300"
               aria-label="Drag to reorder module"
               {...listeners}
               {...attributes}
@@ -1105,7 +1107,7 @@ export default function CourseModules() {
       description=""
       actions={
         courseCode && canEditModules ? (
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
             <AddCourseItemMenu onAdd={openAddModule} disabled={anyModalBusy} />
           </div>
         ) : null

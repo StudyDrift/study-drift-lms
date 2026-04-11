@@ -3,13 +3,16 @@ import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { Image as ImageIcon } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/core'
+import type { EditorView } from '@tiptap/pm/view'
 import { fetchCourseStructure, type CourseStructureItem } from '../../../lib/coursesApi'
 import { hrefForModuleCourseItem } from '../../../lib/courseItemRefTokens'
 import { filterTaggable, kindLabel } from '../../courseItemPromptMention'
 import { getBlockMentionRange } from './markdownBodyMention'
+import { CourseAwareTipTapImage } from './CourseAwareTipTapImage'
 
 const editorShellClass = [
   'tiptap',
@@ -39,7 +42,12 @@ const editorShellClass = [
   '[&_pre]:mt-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-slate-900 [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:text-slate-100',
   '[&_blockquote]:mt-3 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-600',
   '[&_blockquote]:dark:border-neutral-600 [&_blockquote]:dark:text-neutral-400',
+  '[&_figure]:my-3',
 ].join(' ')
+
+function sanitizeImageAlt(name: string): string {
+  return (name || 'Image').replace(/[[\]]/g, '').slice(0, 200)
+}
 
 export type MarkdownBodyEditorProps = {
   sectionId: string
@@ -53,6 +61,10 @@ export type MarkdownBodyEditorProps = {
   onEditorChange?: (sectionId: string, editor: Editor | null) => void
   /** When set, typing @ opens a picker to insert links to module content pages and assignments. */
   courseCode?: string
+  /** When set with `courseCode`, clipboard and drag-and-drop images upload and insert at the cursor. */
+  uploadCourseImage?: (file: File) => Promise<string>
+  /** Compact image control above the editor (e.g. student notebook without a block toolbar). */
+  showImagePickerRow?: boolean
 }
 
 type MentionUi = {
@@ -76,12 +88,19 @@ export function MarkdownBodyEditor({
   onBlur,
   onEditorChange,
   courseCode,
+  uploadCourseImage,
+  showImagePickerRow,
 }: MarkdownBodyEditorProps) {
   const skipEmit = useRef(false)
   const onChangeRef = useRef(onChange)
   const onFocusRef = useRef(onFocus)
   const onBlurRef = useRef(onBlur)
   const onEditorChangeRef = useRef(onEditorChange)
+  const uploadCourseImageRef = useRef(uploadCourseImage)
+  const courseCodeRef = useRef(courseCode)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const editorRefForImages = useRef<Editor | null>(null)
+  const disabledRef = useRef(!!disabled)
 
   const listId = useId()
   const [structure, setStructure] = useState<CourseStructureItem[]>([])
@@ -108,6 +127,106 @@ export function MarkdownBodyEditor({
   useEffect(() => {
     onEditorChangeRef.current = onEditorChange
   }, [onEditorChange])
+  useEffect(() => {
+    uploadCourseImageRef.current = uploadCourseImage
+  }, [uploadCourseImage])
+  useEffect(() => {
+    courseCodeRef.current = courseCode
+  }, [courseCode])
+  useEffect(() => {
+    disabledRef.current = !!disabled
+  }, [disabled])
+
+  const editorPasteDropProps = useMemo(
+    () => ({
+      handleDOMEvents: {
+        dragover: (_view: EditorView, e: Event) => {
+          const ev = e as DragEvent
+          if (disabledRef.current) return false
+          if (!uploadCourseImageRef.current || !courseCodeRef.current) return false
+          if (ev.dataTransfer?.types?.includes('Files')) {
+            ev.preventDefault()
+          }
+          return false
+        },
+      },
+      handlePaste(view: EditorView, event: ClipboardEvent) {
+        if (disabledRef.current) return false
+        const upload = uploadCourseImageRef.current
+        const code = courseCodeRef.current
+        if (!upload || !code) return false
+        const items = event.clipboardData?.items
+        if (!items?.length) return false
+        const files: File[] = []
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i]
+          if (it?.kind === 'file' && it.type.startsWith('image/')) {
+            const f = it.getAsFile()
+            if (f) files.push(f)
+          }
+        }
+        if (!files.length) return false
+        event.preventDefault()
+        const ed = editorRefForImages.current
+        if (!ed) return true
+        const from = view.state.selection.from
+        void (async () => {
+          let pos = from
+          for (const file of files) {
+            try {
+              const path = await upload(file)
+              ed.chain()
+                .focus()
+                .insertContentAt(pos, {
+                  type: 'image',
+                  attrs: { src: path, alt: sanitizeImageAlt(file.name) },
+                })
+                .run()
+              pos = ed.state.selection.to
+            } catch {
+              /* ignore failed upload */
+            }
+          }
+        })()
+        return true
+      },
+      handleDrop(view: EditorView, event: DragEvent) {
+        if (disabledRef.current) return false
+        const upload = uploadCourseImageRef.current
+        const code = courseCodeRef.current
+        if (!upload || !code) return false
+        const dt = event.dataTransfer
+        if (!dt?.files?.length) return false
+        const files = [...dt.files].filter((f) => f.type.startsWith('image/'))
+        if (!files.length) return false
+        event.preventDefault()
+        const ed = editorRefForImages.current
+        if (!ed) return true
+        const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
+        const pos = coords?.pos ?? view.state.selection.from
+        void (async () => {
+          let p = pos
+          for (const file of files) {
+            try {
+              const path = await upload(file)
+              ed.chain()
+                .focus()
+                .insertContentAt(p, {
+                  type: 'image',
+                  attrs: { src: path, alt: sanitizeImageAlt(file.name) },
+                })
+                .run()
+              p = ed.state.selection.to
+            } catch {
+              /* ignore */
+            }
+          }
+        })()
+        return true
+      },
+    }),
+    [],
+  )
 
   useEffect(() => {
     if (!courseCode) return
@@ -166,6 +285,10 @@ export function MarkdownBodyEditor({
               'font-medium text-indigo-600 underline decoration-indigo-200 underline-offset-2 hover:text-indigo-500 dark:text-indigo-400 dark:decoration-indigo-500/50 dark:hover:text-indigo-300',
           },
         }),
+        CourseAwareTipTapImage.configure({
+          inline: false,
+          allowBase64: false,
+        }),
         Placeholder.configure({
           placeholder: placeholder ?? 'Start writing…',
           emptyEditorClass: 'is-editor-empty',
@@ -179,6 +302,7 @@ export function MarkdownBodyEditor({
           class: editorShellClass,
           'aria-label': placeholder ?? 'Markdown content',
         },
+        ...editorPasteDropProps,
       },
       onUpdate: ({ editor: ed }) => {
         if (skipEmit.current) {
@@ -192,6 +316,10 @@ export function MarkdownBodyEditor({
     },
     [],
   )
+
+  useEffect(() => {
+    editorRefForImages.current = editor
+  }, [editor])
 
   const syncMention = useCallback(() => {
     if (!editor || disabled || !courseCode) {
@@ -325,6 +453,37 @@ export function MarkdownBodyEditor({
   }, [editor, sectionId])
 
   const listOpen = Boolean(mentionUi && !disabled && courseCode)
+  const canCourseImageUpload = Boolean(courseCode && uploadCourseImage)
+
+  const onImageInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files
+      e.target.value = ''
+      if (!files?.length || !editor || !uploadCourseImage) return
+      const from = editor.state.selection.from
+      void (async () => {
+        let pos = from
+        for (const file of [...files]) {
+          if (!file.type.startsWith('image/')) continue
+          try {
+            const path = await uploadCourseImage(file)
+            editor
+              .chain()
+              .focus()
+              .insertContentAt(pos, {
+                type: 'image',
+                attrs: { src: path, alt: sanitizeImageAlt(file.name) },
+              })
+              .run()
+            pos = editor.state.selection.to
+          } catch {
+            /* ignore */
+          }
+        }
+      })()
+    },
+    [editor, uploadCourseImage],
+  )
 
   if (!editor) {
     return (
@@ -338,6 +497,63 @@ export function MarkdownBodyEditor({
 
   return (
     <>
+      {showImagePickerRow && canCourseImageUpload ? (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+            className="sr-only"
+            aria-hidden
+            tabIndex={-1}
+            onChange={onImageInputChange}
+          />
+          <button
+            type="button"
+            disabled={disabled}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => imageInputRef.current?.click()}
+            onDragOver={(e) => {
+              if (disabled) return
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'copy'
+            }}
+            onDrop={(e) => {
+              if (disabled) return
+              e.preventDefault()
+              const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'))
+              if (!files.length || !editor || !uploadCourseImage) return
+              const from = editor.state.selection.from
+              void (async () => {
+                let pos = from
+                for (const file of files) {
+                  try {
+                    const path = await uploadCourseImage(file)
+                    editor
+                      .chain()
+                      .focus()
+                      .insertContentAt(pos, {
+                        type: 'image',
+                        attrs: { src: path, alt: sanitizeImageAlt(file.name) },
+                      })
+                      .run()
+                    pos = editor.state.selection.to
+                  } catch {
+                    /* ignore */
+                  }
+                }
+              })()
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+          >
+            <ImageIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Image
+          </button>
+          <span className="text-xs text-slate-500 dark:text-neutral-400">
+            Drop or paste images in the editor, or pick a file here.
+          </span>
+        </div>
+      ) : null}
       <div className="w-full [&_.ProseMirror]:min-h-[100px]">
         <EditorContent editor={editor} className="w-full" />
       </div>

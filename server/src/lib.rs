@@ -75,11 +75,26 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
 
     let (comm_tx, _comm_rx) = tokio::sync::broadcast::channel(256);
 
+    let course_files_root = config.course_files_root.clone();
+    if let Err(e) = tokio::fs::create_dir_all(&course_files_root).await {
+        tracing::warn!(
+            path = %course_files_root.display(),
+            error = %e,
+            "could not create course files root directory"
+        );
+    } else {
+        tracing::info!(
+            path = %course_files_root.display(),
+            "course files storage directory ready"
+        );
+    }
+
     Ok(AppState {
         pool,
         jwt,
         open_router,
         comm_events: comm_tx,
+        course_files_root,
     })
 }
 

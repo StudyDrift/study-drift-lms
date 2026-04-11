@@ -1,5 +1,7 @@
+pub mod content_page_markups;
 pub mod communication;
 pub mod course;
+pub mod course_files;
 pub mod course_grading;
 pub mod course_grants;
 pub mod course_module_assignments;

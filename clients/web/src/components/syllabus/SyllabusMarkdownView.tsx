@@ -1,6 +1,8 @@
 import type { Components } from 'react-markdown'
+import { forwardRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { CourseFileMarkdownImage } from './CourseFileMarkdownImage'
 import { normalizeMarkdownLists } from './normalizeMarkdownLists'
 import { remarkMergeAdjacentLists } from './remarkMergeAdjacentLists'
 import type { SyllabusSection } from '../../lib/coursesApi'
@@ -8,7 +10,10 @@ import type { ResolvedMarkdownTheme } from '../../lib/markdownTheme'
 import { resolveMarkdownTheme } from '../../lib/markdownTheme'
 import { sectionsToMarkdown } from './syllabusSectionMarkdown'
 
-function createMarkdownComponents(theme: ResolvedMarkdownTheme): Components {
+function createMarkdownComponents(
+  theme: ResolvedMarkdownTheme,
+  opts?: { useCourseFileImages?: boolean },
+): Components {
   const o = theme.styleOverrides
   const c = theme.classes
   return {
@@ -102,6 +107,21 @@ function createMarkdownComponents(theme: ResolvedMarkdownTheme): Components {
       </td>
     ),
     hr: () => <hr className={c.hr} style={o.hr} />,
+    img: ({ src, alt }) =>
+      opts?.useCourseFileImages ? (
+        <CourseFileMarkdownImage
+          src={src}
+          alt={alt}
+          className="max-h-[min(28rem,80vh)] w-auto max-w-full rounded-lg border border-slate-200 dark:border-neutral-700"
+        />
+      ) : (
+        <img
+          src={src ?? undefined}
+          alt={alt ?? ''}
+          className="max-h-[min(28rem,80vh)] w-auto max-w-full rounded-lg border border-slate-200 dark:border-neutral-700"
+          loading="lazy"
+        />
+      ),
   }
 }
 
@@ -111,41 +131,49 @@ type SyllabusMarkdownViewProps = {
   sections: SyllabusSection[]
   /** From GET course: `markdownThemePreset` + `markdownThemeCustom` */
   theme?: ResolvedMarkdownTheme
+  courseCode?: string
 }
 
 type MarkdownArticleViewProps = {
   markdown: string
   emptyMessage?: string
   theme?: ResolvedMarkdownTheme
+  /** When set, images under `/api/v1/.../course-files/.../content` load with the signed-in session. */
+  courseCode?: string
 }
 
 /** Renders a single Markdown document with the same styling as the syllabus. */
-export function MarkdownArticleView({
-  markdown,
-  emptyMessage = 'No content yet.',
-  theme = defaultResolved,
-}: MarkdownArticleViewProps) {
-  const src = markdown.trim()
-  if (!src) {
-    return <p className="text-sm leading-relaxed text-slate-500">{emptyMessage}</p>
-  }
-  const components = createMarkdownComponents(theme)
-  const normalized = normalizeMarkdownLists(markdown)
-  return (
-    <div className={`syllabus-md ${theme.classes.article}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMergeAdjacentLists]} components={components}>
-        {normalized}
-      </ReactMarkdown>
-    </div>
-  )
-}
+export const MarkdownArticleView = forwardRef<HTMLDivElement, MarkdownArticleViewProps>(
+  function MarkdownArticleView(
+    { markdown, emptyMessage = 'No content yet.', theme = defaultResolved, courseCode },
+    ref,
+  ) {
+    const src = markdown.trim()
+    if (!src) {
+      return (
+        <div ref={ref} className={`syllabus-md ${theme.classes.article}`}>
+          <p className="text-sm leading-relaxed text-slate-500">{emptyMessage}</p>
+        </div>
+      )
+    }
+    const components = createMarkdownComponents(theme, { useCourseFileImages: Boolean(courseCode) })
+    const normalized = normalizeMarkdownLists(markdown)
+    return (
+      <div ref={ref} className={`syllabus-md ${theme.classes.article}`}>
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMergeAdjacentLists]} components={components}>
+          {normalized}
+        </ReactMarkdown>
+      </div>
+    )
+  },
+)
 
-export function SyllabusMarkdownView({ sections, theme = defaultResolved }: SyllabusMarkdownViewProps) {
+export function SyllabusMarkdownView({ sections, theme = defaultResolved, courseCode }: SyllabusMarkdownViewProps) {
   const src = sectionsToMarkdown(sections)
   if (!src.trim()) {
     return <p className="text-sm leading-relaxed text-slate-500">No syllabus content yet.</p>
   }
-  const components = createMarkdownComponents(theme)
+  const components = createMarkdownComponents(theme, { useCourseFileImages: Boolean(courseCode) })
   const normalized = normalizeMarkdownLists(src)
   return (
     <div className={`syllabus-md ${theme.classes.article}`}>

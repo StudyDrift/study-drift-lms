@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
@@ -52,13 +53,17 @@ pub async fn list_for_enrolled_user(
             c.markdown_theme_preset,
             c.markdown_theme_custom,
             c.grading_scale,
+            c.archived,
             c.created_at,
             c.updated_at
         FROM {} c
+        LEFT JOIN {} o ON o.user_id = $1 AND o.course_id = c.id
         WHERE c.id IN (SELECT e.course_id FROM {} e WHERE e.user_id = $1)
-        ORDER BY c.title ASC
+          AND c.archived = false
+        ORDER BY o.sort_order NULLS LAST, c.title ASC
         "#,
         schema::COURSES,
+        schema::USER_COURSE_CATALOG_ORDER,
         schema::COURSE_ENROLLMENTS
     ))
     .bind(user_id)
@@ -104,6 +109,7 @@ pub async fn create_course(
                 markdown_theme_preset,
                 markdown_theme_custom,
                 grading_scale,
+                archived,
                 created_at,
                 updated_at
             "#,
@@ -177,6 +183,7 @@ pub async fn get_by_course_code(
             markdown_theme_preset,
             markdown_theme_custom,
             grading_scale,
+            archived,
             created_at,
             updated_at
         FROM {}
@@ -242,6 +249,7 @@ pub async fn update_course(
             markdown_theme_preset,
             markdown_theme_custom,
             grading_scale,
+            archived,
             created_at,
             updated_at
         "#,
@@ -296,6 +304,7 @@ pub async fn set_hero_image_fields(
             markdown_theme_preset,
             markdown_theme_custom,
             grading_scale,
+            archived,
             created_at,
             updated_at
         "#,
@@ -344,6 +353,7 @@ pub async fn update_markdown_theme(
             markdown_theme_preset,
             markdown_theme_custom,
             grading_scale,
+            archived,
             created_at,
             updated_at
         "#,
@@ -379,4 +389,103 @@ pub async fn update_hero_fields_optional(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Distinct non-archived course IDs shown in the user's course catalog (matches [`list_for_enrolled_user`]).
+pub async fn catalog_course_ids_for_user(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<HashSet<Uuid>, sqlx::Error> {
+    let rows = sqlx::query_scalar::<_, Uuid>(&format!(
+        r#"
+        SELECT DISTINCT c.id
+        FROM {} c
+        INNER JOIN {} e ON e.course_id = c.id AND e.user_id = $1
+        WHERE c.archived = false
+        "#,
+        schema::COURSES,
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// Replace the user's catalog sort order. `ordered_course_ids` must be a permutation of
+/// [`catalog_course_ids_for_user`].
+pub async fn replace_user_course_catalog_order(
+    pool: &PgPool,
+    user_id: Uuid,
+    ordered_course_ids: &[Uuid],
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE user_id = $1"#,
+        schema::USER_COURSE_CATALOG_ORDER
+    ))
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    for (sort_order, course_id) in ordered_course_ids.iter().enumerate() {
+        sqlx::query(&format!(
+            r#"
+            INSERT INTO {} (user_id, course_id, sort_order)
+            VALUES ($1, $2, $3)
+            "#,
+            schema::USER_COURSE_CATALOG_ORDER
+        ))
+        .bind(user_id)
+        .bind(course_id)
+        .bind(sort_order as i32)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn set_course_archived(
+    pool: &PgPool,
+    course_code: &str,
+    archived: bool,
+) -> Result<Option<CoursePublic>, sqlx::Error> {
+    sqlx::query_as::<_, CoursePublic>(&format!(
+        r#"
+        UPDATE {}
+        SET
+            archived = $1,
+            updated_at = NOW()
+        WHERE course_code = $2
+        RETURNING
+            id,
+            course_code,
+            title,
+            description,
+            hero_image_url,
+            hero_image_object_position,
+            starts_at,
+            ends_at,
+            visible_from,
+            hidden_at,
+            schedule_mode,
+            relative_end_after,
+            relative_hidden_after,
+            relative_schedule_anchor_at,
+            published,
+            markdown_theme_preset,
+            markdown_theme_custom,
+            grading_scale,
+            archived,
+            created_at,
+            updated_at
+        "#,
+        schema::COURSES
+    ))
+    .bind(archived)
+    .bind(course_code)
+    .fetch_optional(pool)
+    .await
 }

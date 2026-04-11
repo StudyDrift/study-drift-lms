@@ -24,6 +24,7 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::me::router())
         .merge(routes::search::router())
         .merge(routes::courses::router())
+        .merge(routes::course_files::router())
         .merge(routes::settings::router())
         .merge(routes::rbac::router())
         .merge(routes::reports::router())
@@ -47,6 +48,7 @@ mod tests {
             jwt,
             open_router: None,
             comm_events: comm_tx,
+            course_files_root: std::path::PathBuf::from("data/course-files"),
         }
     }
 

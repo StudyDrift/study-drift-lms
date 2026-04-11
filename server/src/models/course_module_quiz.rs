@@ -445,8 +445,8 @@ pub struct AdaptiveQuizGeneratedQuestion {
 #[serde(rename_all = "camelCase")]
 pub struct AdaptiveQuizNextResponse {
     pub finished: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub question: Option<AdaptiveQuizGeneratedQuestion>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub questions: Vec<AdaptiveQuizGeneratedQuestion>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }

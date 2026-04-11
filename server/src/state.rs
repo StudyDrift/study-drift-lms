@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use sqlx::PgPool;
@@ -14,4 +15,6 @@ pub struct AppState {
     pub open_router: Option<Arc<OpenRouterClient>>,
     /// Realtime mailbox updates keyed by user id.
     pub comm_events: tokio::sync::broadcast::Sender<(Uuid, String)>,
+    /// On-disk root for `course.course_files` blobs (`<root>/<course_code>/<storage_key>`).
+    pub course_files_root: PathBuf,
 }
