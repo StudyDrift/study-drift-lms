@@ -258,6 +258,31 @@ export function courseEnrollmentsUpdatePermission(courseCode: string): string {
   return `course:${courseCode}:enrollments:update`
 }
 
+/**
+ * Same idea as the server course GET `student_only` flag: the viewer is enrolled as `student`
+ * and has no teacher/instructor/ta enrollment in this course. Dual teacher+student rows are
+ * **not** learner-only. Role strings are compared case-insensitively. Empty/missing roles are
+ * treated as learner-only so roster UI stays hidden until we know otherwise.
+ */
+export function viewerIsLearnerOnlyCourseEnrollment(
+  viewerEnrollmentRoles: readonly string[] | null | undefined,
+): boolean {
+  if (!viewerEnrollmentRoles?.length) return true
+  const roles = viewerEnrollmentRoles.map((r) => r.trim().toLowerCase())
+  const hasStudent = roles.includes('student')
+  const hasStaff = roles.some((r) => r === 'teacher' || r === 'instructor' || r === 'ta')
+  return hasStudent && !hasStaff
+}
+
+/** Hide course roster / Enrollments navigation for learners and when staff preview as a student. */
+export function viewerShouldHideCourseEnrollmentsNav(
+  viewerEnrollmentRoles: readonly string[] | null | undefined,
+  courseViewPreview: 'teacher' | 'student',
+): boolean {
+  if (courseViewPreview === 'student') return true
+  return viewerIsLearnerOnlyCourseEnrollment(viewerEnrollmentRoles)
+}
+
 export type CourseStructureItem = {
   id: string
   sortOrder: number
@@ -430,6 +455,16 @@ export type ModuleContentPagePayload = {
   /** Present for assignments; null when unset. */
   assignmentGroupId: string | null
   updatedAt: string
+  /** Assignment: visibility start (ISO). */
+  availableFrom: string | null
+  /** Assignment: visibility end (ISO). */
+  availableUntil: string | null
+  requiresAssignmentAccessCode: boolean
+  /** Instructors only when set. */
+  assignmentAccessCode: string | null
+  submissionAllowText: boolean
+  submissionAllowFileUpload: boolean
+  submissionAllowUrl: boolean
 }
 
 function normalizeModuleContentPagePayload(raw: unknown): ModuleContentPagePayload {
@@ -442,6 +477,14 @@ function normalizeModuleContentPagePayload(raw: unknown): ModuleContentPagePaylo
     pointsWorth: typeof r.pointsWorth === 'number' ? r.pointsWorth : null,
     assignmentGroupId: typeof r.assignmentGroupId === 'string' ? r.assignmentGroupId : null,
     updatedAt: String(r.updatedAt ?? ''),
+    availableFrom: typeof r.availableFrom === 'string' ? r.availableFrom : null,
+    availableUntil: typeof r.availableUntil === 'string' ? r.availableUntil : null,
+    requiresAssignmentAccessCode: Boolean(r.requiresAssignmentAccessCode),
+    assignmentAccessCode:
+      typeof r.assignmentAccessCode === 'string' ? r.assignmentAccessCode : null,
+    submissionAllowText: r.submissionAllowText !== false,
+    submissionAllowFileUpload: Boolean(r.submissionAllowFileUpload),
+    submissionAllowUrl: Boolean(r.submissionAllowUrl),
   }
 }
 
@@ -1042,7 +1085,17 @@ export async function fetchModuleAssignment(
 export async function patchModuleAssignment(
   courseCode: string,
   itemId: string,
-  body: { markdown: string; dueAt?: string | null; pointsWorth?: number | null },
+  body: {
+    markdown: string
+    dueAt?: string | null
+    pointsWorth?: number | null
+    availableFrom?: string | null
+    availableUntil?: string | null
+    assignmentAccessCode?: string | null
+    submissionAllowText?: boolean
+    submissionAllowFileUpload?: boolean
+    submissionAllowUrl?: boolean
+  },
 ): Promise<ModuleContentPagePayload> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}`,

@@ -23,3 +23,7 @@ pub const ASSIGNMENT_GROUPS: &str = "course.assignment_groups";
 pub const SETTINGS_SYSTEM_PROMPTS: &str = "settings.system_prompts";
 pub const SETTINGS_SYSTEM_PROMPTS_AUDIT: &str = "settings.system_prompts_audit";
 pub const COURSE_FILES: &str = "course.course_files";
+pub const FEED_CHANNELS: &str = "course.feed_channels";
+pub const FEED_MESSAGES: &str = "course.feed_messages";
+pub const FEED_MESSAGE_LIKES: &str = "course.feed_message_likes";
+pub const FEED_MESSAGE_MENTIONS: &str = "course.feed_message_mentions";

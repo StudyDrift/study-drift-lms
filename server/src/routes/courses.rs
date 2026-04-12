@@ -13,6 +13,7 @@ use crate::models::course_export::{CourseCanvasImportRequest, CourseExportV1, Co
 use crate::models::course_grading::{
     CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
 };
+use crate::models::course_module_assignment::validate_assignment_delivery_settings;
 use crate::models::course_module_content::{
     CreateCourseContentPageRequest, ModuleContentPageResponse, UpdateModuleContentPageRequest,
 };
@@ -353,6 +354,99 @@ const MAX_QUIZ_GENERATION_PROMPT_LEN: usize = 8_000;
 const MAX_SYLLABUS_SECTION_INSTRUCTIONS_LEN: usize = 8_000;
 const MIN_QUIZ_GENERATION_COUNT: i32 = 1;
 const MAX_QUIZ_GENERATION_COUNT: i32 = 30;
+
+fn module_assignment_response_for_api(
+    item_id: uuid::Uuid,
+    row: &course_module_assignments::CourseItemAssignmentRow,
+    can_edit: bool,
+    shift: Option<&relative_schedule::RelativeShiftContext>,
+) -> ModuleContentPageResponse {
+    let due_at = match shift {
+        Some(ctx) => relative_schedule::shift_opt(ctx, row.due_at),
+        None => row.due_at,
+    };
+    let available_from = match shift {
+        Some(ctx) => relative_schedule::shift_opt(ctx, row.available_from),
+        None => row.available_from,
+    };
+    let available_until = match shift {
+        Some(ctx) => relative_schedule::shift_opt(ctx, row.available_until),
+        None => row.available_until,
+    };
+    let requires_assignment_access_code = row
+        .assignment_access_code
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    let assignment_access_code = can_edit
+        .then(|| row.assignment_access_code.clone())
+        .flatten()
+        .filter(|s| !s.trim().is_empty());
+    ModuleContentPageResponse {
+        item_id,
+        title: row.title.clone(),
+        markdown: row.markdown.clone(),
+        due_at,
+        points_worth: row.points_worth,
+        assignment_group_id: row.assignment_group_id,
+        updated_at: row.updated_at,
+        available_from,
+        available_until,
+        requires_assignment_access_code: Some(requires_assignment_access_code),
+        assignment_access_code,
+        submission_allow_text: Some(row.submission_allow_text),
+        submission_allow_file_upload: Some(row.submission_allow_file_upload),
+        submission_allow_url: Some(row.submission_allow_url),
+    }
+}
+
+fn merge_assignment_body_write(
+    cur: &course_module_assignments::CourseItemAssignmentRow,
+    req: &UpdateModuleContentPageRequest,
+) -> Result<course_module_assignments::AssignmentBodyWrite, AppError> {
+    let markdown = req.markdown.trim_end().to_string();
+    let points_worth = match &req.points_worth {
+        None => cur.points_worth,
+        Some(pw) => *pw,
+    };
+    let available_from = match &req.available_from {
+        None => cur.available_from,
+        Some(v) => *v,
+    };
+    let available_until = match &req.available_until {
+        None => cur.available_until,
+        Some(v) => *v,
+    };
+    let assignment_access_code = match &req.assignment_access_code {
+        None => cur.assignment_access_code.clone(),
+        Some(None) => None,
+        Some(Some(s)) => {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
+        }
+    };
+    let submission_allow_text = req
+        .submission_allow_text
+        .unwrap_or(cur.submission_allow_text);
+    let submission_allow_file_upload = req
+        .submission_allow_file_upload
+        .unwrap_or(cur.submission_allow_file_upload);
+    let submission_allow_url = req.submission_allow_url.unwrap_or(cur.submission_allow_url);
+    Ok(course_module_assignments::AssignmentBodyWrite {
+        markdown,
+        points_worth,
+        available_from,
+        available_until,
+        assignment_access_code,
+        submission_allow_text,
+        submission_allow_file_upload,
+        submission_allow_url,
+    })
+}
 
 fn module_quiz_response_for_api(
     item_id: Uuid,
@@ -1329,6 +1423,13 @@ async fn module_content_page_get_handler(
         points_worth: None,
         assignment_group_id: None,
         updated_at,
+        available_from: None,
+        available_until: None,
+        requires_assignment_access_code: None,
+        assignment_access_code: None,
+        submission_allow_text: None,
+        submission_allow_file_upload: None,
+        submission_allow_url: None,
     }))
 }
 
@@ -1387,6 +1488,13 @@ async fn module_content_page_patch_handler(
         points_worth: None,
         assignment_group_id: None,
         updated_at,
+        available_from: None,
+        available_until: None,
+        requires_assignment_access_code: None,
+        assignment_access_code: None,
+        submission_allow_text: None,
+        submission_allow_file_upload: None,
+        submission_allow_url: None,
     }))
 }
 
@@ -1500,25 +1608,17 @@ async fn module_assignment_get_handler(
         }
     }
 
-    let Some((title, markdown, mut due_at, points_worth, assignment_group_id, updated_at)) =
-        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(row) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
 
-    if let Some(ctx) = shift_ctx {
-        due_at = relative_schedule::shift_opt(&ctx, due_at);
-    }
-
-    Ok(Json(ModuleContentPageResponse {
+    Ok(Json(module_assignment_response_for_api(
         item_id,
-        title,
-        markdown,
-        due_at,
-        points_worth,
-        assignment_group_id,
-        updated_at,
-    }))
+        &row,
+        can_edit,
+        shift_ctx.as_ref(),
+    )))
 }
 
 async fn module_assignment_patch_handler(
@@ -1541,24 +1641,27 @@ async fn module_assignment_patch_handler(
         return Err(AppError::NotFound);
     };
 
-    let Some((_, _, _, cur_points, _, _)) =
-        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(cur) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
 
-    let merged_points = match &req.points_worth {
-        None => cur_points,
-        Some(pw) => *pw,
-    };
-    validate_item_points_worth(merged_points)?;
+    let merged_write = merge_assignment_body_write(&cur, &req)?;
+    validate_item_points_worth(merged_write.points_worth)?;
+    validate_assignment_delivery_settings(
+        merged_write.available_from,
+        merged_write.available_until,
+        merged_write.assignment_access_code.as_deref(),
+        merged_write.submission_allow_text,
+        merged_write.submission_allow_file_upload,
+        merged_write.submission_allow_url,
+    )?;
 
-    let updated = course_module_assignments::update_markdown_and_points(
+    let updated = course_module_assignments::write_assignment_body(
         &state.pool,
         course_id,
         item_id,
-        req.markdown.trim_end(),
-        merged_points,
+        &merged_write,
     )
     .await?;
 
@@ -1575,21 +1678,12 @@ async fn module_assignment_patch_handler(
             })?;
     }
 
-    let Some((title, markdown, due_at, points_worth, assignment_group_id, updated_at)) =
-        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(row) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
 
-    Ok(Json(ModuleContentPageResponse {
-        item_id,
-        title,
-        markdown,
-        due_at,
-        points_worth,
-        assignment_group_id,
-        updated_at,
-    }))
+    Ok(Json(module_assignment_response_for_api(item_id, &row, true, None)))
 }
 
 async fn module_quiz_get_handler(

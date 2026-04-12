@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -6,12 +7,20 @@ import {
   FileText,
   Layers,
   LayoutDashboard,
+  MessageSquare,
   NotebookPen,
   Settings,
   Users,
 } from 'lucide-react'
 import { usePermissions } from '../../context/usePermissions'
-import { courseEnrollmentsReadPermission, courseGradebookViewPermission } from '../../lib/coursesApi'
+import {
+  courseEnrollmentsReadPermission,
+  courseGradebookViewPermission,
+  courseItemCreatePermission,
+  fetchCourse,
+  viewerShouldHideCourseEnrollmentsNav,
+} from '../../lib/coursesApi'
+import { useCourseViewAs } from '../../lib/courseViewAs'
 import { sideNavActiveClass, sideNavLinkClass } from './sideNavStyles'
 
 type SideNavCourseLinksProps = {
@@ -20,11 +29,33 @@ type SideNavCourseLinksProps = {
 
 export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
   const { allows, loading: permLoading } = usePermissions()
+  const courseViewPreview = useCourseViewAs(courseCode)
+  const [viewerEnrollmentRoles, setViewerEnrollmentRoles] = useState<string[] | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchCourse(courseCode)
+      .then((c) => {
+        if (!cancelled) setViewerEnrollmentRoles(c.viewerEnrollmentRoles ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setViewerEnrollmentRoles([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [courseCode])
+
   const base = `/courses/${encodeURIComponent(courseCode)}`
   const canViewGradebook =
     !permLoading && allows(courseGradebookViewPermission(courseCode))
   const canViewEnrollments =
-    !permLoading && allows(courseEnrollmentsReadPermission(courseCode))
+    viewerEnrollmentRoles !== null &&
+    !viewerShouldHideCourseEnrollmentsNav(viewerEnrollmentRoles, courseViewPreview) &&
+    !permLoading &&
+    allows(courseEnrollmentsReadPermission(courseCode))
+  const canManageCourse =
+    !permLoading && allows(courseItemCreatePermission(courseCode))
 
   return (
     <>
@@ -45,6 +76,13 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
       >
         <LayoutDashboard className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Dashboard
+      </NavLink>
+      <NavLink
+        to={`${base}/feed`}
+        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+      >
+        <MessageSquare className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        Feed
       </NavLink>
       <NavLink
         to={`${base}/syllabus`}
@@ -92,13 +130,15 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
           Enrollments
         </NavLink>
       )}
-      <NavLink
-        to={`${base}/settings`}
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <Settings className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Settings
-      </NavLink>
+      {canManageCourse && (
+        <NavLink
+          to={`${base}/settings`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <Settings className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Settings
+        </NavLink>
+      )}
     </>
   )
 }

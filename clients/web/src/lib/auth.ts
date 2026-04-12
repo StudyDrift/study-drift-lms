@@ -36,3 +36,18 @@ export function clearAccessToken(): void {
   }
   notifyAuthTokenListeners()
 }
+
+/** JWT `sub` claim for the current access token, if parseable. */
+export function getJwtSubject(): string | null {
+  const t = getAccessToken()
+  if (!t) return null
+  const seg = t.split('.')[1]
+  if (!seg) return null
+  try {
+    const json = atob(seg.replace(/-/g, '+').replace(/_/g, '/'))
+    const o = JSON.parse(json) as { sub?: string }
+    return typeof o.sub === 'string' ? o.sub : null
+  } catch {
+    return null
+  }
+}

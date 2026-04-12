@@ -2,9 +2,10 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
 import { Check, ImageIcon, Move, Save, X } from 'lucide-react'
 import { LmsPage } from './LmsPage'
+import { usePermissions } from '../../context/usePermissions'
 import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
-import { patchCourseMarkdownTheme } from '../../lib/coursesApi'
+import { courseItemCreatePermission, patchCourseMarkdownTheme } from '../../lib/coursesApi'
 import type { Course } from './Courses'
 import {
   MARKDOWN_THEME_PRESET_META,
@@ -96,6 +97,7 @@ function parseSettingsSection(courseCode: string, pathname: string): SettingsSec
 
 export default function CourseSettings() {
   const { courseCode } = useParams<{ courseCode: string }>()
+  const { allows, loading: permLoading } = usePermissions()
   const location = useLocation()
   const [course, setCourse] = useState<Course | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -465,6 +467,14 @@ export default function CourseSettings() {
         <p className="mt-6 text-sm text-slate-500">Invalid link.</p>
       </LmsPage>
     )
+  }
+
+  if (permLoading) {
+    return null
+  }
+
+  if (!allows(courseItemCreatePermission(courseCode))) {
+    return <Navigate to={`/courses/${encodeURIComponent(courseCode)}`} replace />
   }
 
   const section = parseSettingsSection(courseCode, location.pathname)

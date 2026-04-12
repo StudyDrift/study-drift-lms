@@ -3,6 +3,7 @@ pub mod ai;
 pub mod auth;
 pub mod canvas_course_import;
 pub mod course_export_import;
+pub mod course_image_upload;
 pub mod quiz_generation_ai;
 pub mod relative_schedule;
 pub mod student_notebook_rag_ai;

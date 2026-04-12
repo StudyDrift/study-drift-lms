@@ -54,7 +54,7 @@ fn re_tags() -> &'static Regex {
     R.get_or_init(|| Regex::new(r"<[^>]+>").expect("regex"))
 }
 
-/// Canvas HTML descriptions → plain text suitable as markdown-ish body content.
+/// Strip Canvas HTML to plain text (fallback when HTML→Markdown conversion fails or is empty).
 fn html_to_plain(html: &str) -> String {
     let s = re_br().replace_all(html, "\n");
     let s = re_p_close().replace_all(&s, "\n\n");
@@ -76,6 +76,25 @@ fn html_to_plain(html: &str) -> String {
         out.push('\n');
     }
     out.trim().to_string()
+}
+
+/// Canvas HTML → Markdown (headings, emphasis, lists, links, etc.).
+/// Falls back to stripped plain text when conversion fails or returns nothing.
+fn html_to_markdown(html: &str) -> String {
+    if html.trim().is_empty() {
+        return String::new();
+    }
+    match htmd::convert(html) {
+        Ok(md) => {
+            let out = md.trim().to_string();
+            if out.is_empty() {
+                html_to_plain(html)
+            } else {
+                out
+            }
+        }
+        Err(_) => html_to_plain(html),
+    }
 }
 
 fn normalize_canvas_base_url(raw: &str) -> Result<String, AppError> {
@@ -293,7 +312,7 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
     let id = q.get("id")?.as_i64()?;
     let qtype = q.get("question_type")?.as_str()?;
     let prompt_html = q.get("question_text").and_then(|v| v.as_str()).unwrap_or("");
-    let mut prompt = html_to_plain(prompt_html);
+    let mut prompt = html_to_markdown(prompt_html);
     if prompt.is_empty() {
         prompt = q
             .get("question_name")
@@ -312,7 +331,7 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
         "multiple_choice_question" | "multiple_answers_question" => {
             let choices: Vec<String> = answers
                 .iter()
-                .filter_map(|a| a.get("text").and_then(|t| t.as_str()).map(html_to_plain))
+                .filter_map(|a| a.get("text").and_then(|t| t.as_str()).map(html_to_markdown))
                 .collect();
             if choices.is_empty() {
                 return Some(QuizQuestion {
@@ -459,9 +478,9 @@ pub async fn build_export_from_canvas(
         .unwrap_or("");
     let syllabus_html = course.get("syllabus_body").and_then(|v| v.as_str()).unwrap_or("");
     let description = if !desc_html.trim().is_empty() {
-        html_to_plain(desc_html)
+        html_to_markdown(desc_html)
     } else {
-        html_to_plain(syllabus_html)
+        html_to_markdown(syllabus_html)
     };
 
     let starts_at = json_datetime(course.get("start_at"));
@@ -477,14 +496,14 @@ pub async fn build_export_from_canvas(
         syllabus.push(SyllabusSection {
             id: "canvas-syllabus".into(),
             heading: "Syllabus".into(),
-            markdown: html_to_plain(syllabus_html),
+            markdown: html_to_markdown(syllabus_html),
         });
     } else if !desc_html.trim().is_empty() {
         // `syllabus_body` is omitted unless explicitly included; many courses only have `public_description`.
         syllabus.push(SyllabusSection {
             id: "canvas-course-overview".into(),
             heading: "Course overview".into(),
-            markdown: html_to_plain(desc_html),
+            markdown: html_to_markdown(desc_html),
         });
     }
 
@@ -729,7 +748,7 @@ pub async fn build_export_from_canvas(
                         .get("body")
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
-                    let markdown = html_to_plain(body_html);
+                    let markdown = html_to_markdown(body_html);
                     let pid = Uuid::new_v4();
                     structure.push(CourseStructureItemResponse {
                         id: pid,
@@ -776,8 +795,28 @@ pub async fn build_export_from_canvas(
                         Err(_) => continue,
                     };
                     let desc_html = aj.get("description").and_then(|v| v.as_str()).unwrap_or("");
-                    let markdown = html_to_plain(desc_html);
+                    let markdown = html_to_markdown(desc_html);
                     let due_at = json_datetime(aj.get("due_at"));
+                    let available_from = json_datetime(aj.get("unlock_at"));
+                    let available_until = json_datetime(aj.get("lock_at"));
+                    let mut submission_allow_text = false;
+                    let mut submission_allow_file_upload = false;
+                    let mut submission_allow_url = false;
+                    if let Some(arr) = aj.get("submission_types").and_then(|v| v.as_array()) {
+                        for v in arr {
+                            if let Some(s) = v.as_str() {
+                                match s {
+                                    "online_text_entry" => submission_allow_text = true,
+                                    "online_upload" => submission_allow_file_upload = true,
+                                    "online_url" => submission_allow_url = true,
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    if !submission_allow_text && !submission_allow_file_upload && !submission_allow_url {
+                        submission_allow_text = true;
+                    }
                     let points_worth = json_f64_as_i32_points(aj.get("points_possible"));
                     let canvas_gid = json_i64(aj.get("assignment_group_id"));
                     let assignment_group_id = canvas_gid
@@ -808,6 +847,12 @@ pub async fn build_export_from_canvas(
                             markdown,
                             due_at,
                             points_worth,
+                            available_from,
+                            available_until,
+                            assignment_access_code: None,
+                            submission_allow_text,
+                            submission_allow_file_upload,
+                            submission_allow_url,
                         },
                     );
                     sort_order += 1;
@@ -830,7 +875,7 @@ pub async fn build_export_from_canvas(
                         Err(_) => continue,
                     };
                     let desc_html = qj.get("description").and_then(|v| v.as_str()).unwrap_or("");
-                    let markdown = html_to_plain(desc_html);
+                    let markdown = html_to_markdown(desc_html);
                     let due_at = json_datetime(qj.get("due_at"));
                     let available_from = json_datetime(qj.get("unlock_at"));
                     let available_until = json_datetime(qj.get("lock_at"));
@@ -950,7 +995,7 @@ pub async fn build_export_from_canvas(
                         .as_ref()
                         .and_then(|v| v.get("message").and_then(|x| x.as_str()))
                         .unwrap_or("");
-                    let mut markdown = html_to_plain(msg);
+                    let mut markdown = html_to_markdown(msg);
                     if markdown.is_empty() {
                         markdown = if !html_url.is_empty() {
                             format!("**Discussion:** [{title}]({html_url})")

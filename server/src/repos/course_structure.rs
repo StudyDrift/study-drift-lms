@@ -426,6 +426,8 @@ pub async fn assignment_visible_to_student(
         String,
         Option<DateTime<Utc>>,
         Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
     )> = sqlx::query_as(&format!(
         r#"
         SELECT
@@ -436,18 +438,22 @@ pub async fn assignment_visible_to_student(
             m.visible_from,
             crs.schedule_mode,
             crs.relative_schedule_anchor_at,
-            stu.created_at
+            stu.created_at,
+            ma.available_from,
+            ma.available_until
         FROM {items} page
         INNER JOIN {items} m
             ON m.id = page.parent_id AND m.course_id = page.course_id AND m.kind = 'module'
         INNER JOIN {crs} crs ON crs.id = page.course_id
         LEFT JOIN {enu} stu
             ON stu.course_id = crs.id AND stu.user_id = $3 AND stu.role = 'student'
+        LEFT JOIN {ma} ma ON ma.structure_item_id = page.id
         WHERE page.id = $1 AND page.course_id = $2 AND page.kind = 'assignment'
         "#,
         items = schema::COURSE_STRUCTURE_ITEMS,
         crs = schema::COURSES,
         enu = schema::COURSE_ENROLLMENTS,
+        ma = schema::MODULE_ASSIGNMENTS,
     ))
     .bind(assignment_id)
     .bind(course_id)
@@ -457,7 +463,18 @@ pub async fn assignment_visible_to_student(
 
     Ok(row
         .map(
-            |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at)| {
+            |(
+                c_pub,
+                c_arch,
+                m_pub,
+                m_arch,
+                vf,
+                schedule_mode,
+                anchor,
+                enrolled_at,
+                available_from,
+                available_until,
+            )| {
                 let effective_vf = if schedule_mode == "relative" {
                     match (anchor, enrolled_at) {
                         (Some(anchor), Some(enrollment_start)) => {
@@ -472,7 +489,42 @@ pub async fn assignment_visible_to_student(
                 } else {
                     vf
                 };
-                c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now)
+                let eff_af = if schedule_mode == "relative" {
+                    match (anchor, enrolled_at) {
+                        (Some(anchor), Some(enrollment_start)) => {
+                            let ctx = RelativeShiftContext {
+                                enrollment_start,
+                                anchor,
+                            };
+                            relative_schedule::shift_opt(&ctx, available_from)
+                        }
+                        _ => available_from,
+                    }
+                } else {
+                    available_from
+                };
+                let eff_au = if schedule_mode == "relative" {
+                    match (anchor, enrolled_at) {
+                        (Some(anchor), Some(enrollment_start)) => {
+                            let ctx = RelativeShiftContext {
+                                enrollment_start,
+                                anchor,
+                            };
+                            relative_schedule::shift_opt(&ctx, available_until)
+                        }
+                        _ => available_until,
+                    }
+                } else {
+                    available_until
+                };
+                let within_availability = eff_af.map_or(true, |t| now >= t)
+                    && eff_au.map_or(true, |t| now <= t);
+                c_pub
+                    && !c_arch
+                    && m_pub
+                    && !m_arch
+                    && effective_vf.is_none_or(|t| t <= now)
+                    && within_availability
             },
         )
         .unwrap_or(false))

@@ -147,6 +147,7 @@ export function buildSearchItems(
     requiredPermission?: (courseCode: string) => string
   }[] = [
     { suffix: '', title: 'Course dashboard', hint: 'dashboard overview' },
+    { suffix: '/feed', title: 'Feed', hint: 'feed chat channels messages discussion' },
     { suffix: '/syllabus', title: 'Syllabus', hint: 'syllabus outline' },
     {
       suffix: '/modules',
@@ -167,7 +168,12 @@ export function buildSearchItems(
       hint: 'enrollments people roster students',
       requiredPermission: courseEnrollmentsReadPermission,
     },
-    { suffix: '/settings', title: 'Course settings', hint: 'settings configuration' },
+    {
+      suffix: '/settings',
+      title: 'Course settings',
+      hint: 'settings configuration',
+      requiredPermission: courseItemCreatePermission,
+    },
   ]
 
   for (const c of courses) {
@@ -198,11 +204,13 @@ export function buildSearchItems(
       suffix: '/settings/dates',
       title: 'Course dates',
       hint: 'dates schedule calendar visibility enrollment window relative fixed',
+      requiredPermission: courseItemCreatePermission,
     },
     {
       suffix: '/settings/branding',
       title: 'Course branding',
       hint: 'branding banner hero image appearance markdown theme',
+      requiredPermission: courseItemCreatePermission,
     },
     {
       suffix: '/settings/grading',

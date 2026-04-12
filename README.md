@@ -9,7 +9,7 @@
   Lextures
 </h1>
 <h3 align="center">
- The first truly adaptivive learning environment
+ The first truly adaptive learning environment
 </h3>
 <p align="center">
   Lextures uses AI to streamlines the process of course creation, quiz generation, and content management, enabling educators and learners to get to the content as quickly as possible

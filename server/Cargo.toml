@@ -12,6 +12,7 @@ argon2 = "0.5"
 axum = { version = "0.8", features = ["multipart", "ws"] }
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
+htmd = "0.5.4"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
 password-hash = "0.5"
 rand = "0.8"

@@ -14,6 +14,11 @@ export function apiUrl(path: string): string {
   return joinApiBase(base, path)
 }
 
+/** WebSocket URL for the same API host as {@link apiUrl}. */
+export function wsUrl(path: string): string {
+  return apiUrl(path).replace(/^http/, 'ws')
+}
+
 /** `fetch` to the API with `Authorization: Bearer` when a token exists. */
 export function authorizedFetch(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers)

@@ -74,6 +74,7 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
     }
 
     let (comm_tx, _comm_rx) = tokio::sync::broadcast::channel(256);
+    let (feed_tx, _feed_rx) = tokio::sync::broadcast::channel(512);
 
     let course_files_root = config.course_files_root.clone();
     if let Err(e) = tokio::fs::create_dir_all(&course_files_root).await {
@@ -94,6 +95,7 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         jwt,
         open_router,
         comm_events: comm_tx,
+        feed_events: feed_tx,
         course_files_root,
     })
 }

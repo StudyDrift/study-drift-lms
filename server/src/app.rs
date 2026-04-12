@@ -24,6 +24,7 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::me::router())
         .merge(routes::search::router())
         .merge(routes::courses::router())
+        .merge(routes::course_feed::router())
         .merge(routes::course_files::router())
         .merge(routes::settings::router())
         .merge(routes::rbac::router())
@@ -43,11 +44,13 @@ mod tests {
     fn dummy_state(pool: PgPool) -> AppState {
         let jwt = JwtSigner::new("test");
         let (comm_tx, _rx) = tokio::sync::broadcast::channel(4);
+        let (feed_tx, _frx) = tokio::sync::broadcast::channel(4);
         AppState {
             pool,
             jwt,
             open_router: None,
             comm_events: comm_tx,
+            feed_events: feed_tx,
             course_files_root: std::path::PathBuf::from("data/course-files"),
         }
     }

@@ -4,6 +4,7 @@ import { AppShell } from './components/layout/AppShell'
 import Calendar from './pages/lms/Calendar'
 import CourseCalendarPage from './pages/lms/CourseCalendarPage'
 import CourseEnrollments from './pages/lms/CourseEnrollments'
+import CourseFeedPage from './pages/lms/CourseFeedPage'
 import CourseGradebook from './pages/lms/CourseGradebook'
 import CourseCreate from './pages/lms/CourseCreate'
 import CourseDetail from './pages/lms/CourseDetail'
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/courses/create" element={<CourseCreate />} />
           <Route path="/courses/:courseCode" element={<CourseLayout />}>
             <Route path="settings/*" element={<CourseSettings />} />
+            <Route path="feed" element={<CourseFeedPage />} />
             <Route path="syllabus" element={<CourseSyllabus />} />
             <Route path="modules/content/:itemId" element={<CourseModuleContentPage />} />
             <Route path="modules/assignment/:itemId" element={<CourseModuleAssignmentPage />} />

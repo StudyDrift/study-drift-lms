@@ -65,6 +65,22 @@ pub struct ExportedAssignmentBody {
     pub due_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub points_worth: Option<i32>,
+    #[serde(default)]
+    pub available_from: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub available_until: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub assignment_access_code: Option<String>,
+    #[serde(default = "default_true")]
+    pub submission_allow_text: bool,
+    #[serde(default)]
+    pub submission_allow_file_upload: bool,
+    #[serde(default)]
+    pub submission_allow_url: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

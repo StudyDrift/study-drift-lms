@@ -360,6 +360,12 @@ async fn apply_module_bodies(
                         it.id,
                         &body.markdown,
                         body.points_worth,
+                        body.available_from,
+                        body.available_until,
+                        body.assignment_access_code.as_deref(),
+                        body.submission_allow_text,
+                        body.submission_allow_file_upload,
+                        body.submission_allow_url,
                     )
                     .await?;
                     course_structure::set_assignment_due_at(pool, course_id, it.id, body.due_at)
@@ -452,6 +458,12 @@ async fn apply_module_bodies_for_new_items_only(
                         it.id,
                         &body.markdown,
                         body.points_worth,
+                        body.available_from,
+                        body.available_until,
+                        body.assignment_access_code.as_deref(),
+                        body.submission_allow_text,
+                        body.submission_allow_file_upload,
+                        body.submission_allow_url,
                     )
                     .await?;
                     course_structure::set_assignment_due_at(pool, course_id, it.id, body.due_at)
@@ -623,16 +635,21 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                 }
             }
             "assignment" => {
-                if let Some((title, markdown, due_at, points_worth, _, _)) =
+                if let Some(row) =
                     course_module_assignments::get_for_course_item(pool, course_id, it.id).await?
                 {
-                    let _ = title;
                     assignments.insert(
                         it.id,
                         ExportedAssignmentBody {
-                            markdown,
-                            due_at,
-                            points_worth,
+                            markdown: row.markdown,
+                            due_at: row.due_at,
+                            points_worth: row.points_worth,
+                            available_from: row.available_from,
+                            available_until: row.available_until,
+                            assignment_access_code: row.assignment_access_code.clone(),
+                            submission_allow_text: row.submission_allow_text,
+                            submission_allow_file_upload: row.submission_allow_file_upload,
+                            submission_allow_url: row.submission_allow_url,
                         },
                     );
                 }

@@ -102,6 +102,7 @@ describe('buildSearchItems', () => {
     const allowsRosterX = (p: string) => p === courseEnrollmentsReadPermission('X')
     const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsRosterX)
     expect(items.some((i) => i.path === '/courses/X/syllabus')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/X/feed')).toBe(true)
     expect(items.some((i) => i.path === '/courses/X/notebook')).toBe(true)
     const add = items.find((i) => i.id === 'action:/courses/X/enrollments:add')
     expect(add?.group).toBe('action')
@@ -120,10 +121,14 @@ describe('buildSearchItems', () => {
     expect(items.some((i) => i.id === 'action:/courses/X/enrollments:add')).toBe(false)
   })
 
-  it('adds searchable course settings sections for dates and branding', () => {
-    const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsNone)
+  it('adds searchable course settings sections for dates and branding when staff may edit course', () => {
+    const allowsItemsX = (p: string) => p === courseItemCreatePermission('X')
+    const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsItemsX)
     expect(items.some((i) => i.path === '/courses/X/settings/dates')).toBe(true)
     expect(items.some((i) => i.path === '/courses/X/settings/branding')).toBe(true)
+    const noItems = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsNone)
+    expect(noItems.some((i) => i.path === '/courses/X/settings/dates')).toBe(false)
+    expect(noItems.some((i) => i.path === '/courses/X/settings/branding')).toBe(false)
   })
 
   it('includes grading settings page only when gradebook view is granted', () => {

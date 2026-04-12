@@ -4,6 +4,8 @@ import {
   courseGradebookViewPermission,
   courseItemCreatePermission,
   courseItemsCreatePermission,
+  viewerIsLearnerOnlyCourseEnrollment,
+  viewerShouldHideCourseEnrollmentsNav,
 } from './coursesApi'
 
 describe('courseItemCreatePermission', () => {
@@ -27,5 +29,37 @@ describe('courseGradebookViewPermission', () => {
 describe('courseEnrollmentsReadPermission', () => {
   it('builds the server-aligned permission string from course code', () => {
     expect(courseEnrollmentsReadPermission('C-ABC123')).toBe('course:C-ABC123:enrollments:read')
+  })
+})
+
+describe('viewerIsLearnerOnlyCourseEnrollment', () => {
+  it('is true for student without staff enrollment (case-insensitive)', () => {
+    expect(viewerIsLearnerOnlyCourseEnrollment(['student'])).toBe(true)
+    expect(viewerIsLearnerOnlyCourseEnrollment(['Student'])).toBe(true)
+    expect(viewerIsLearnerOnlyCourseEnrollment([])).toBe(true)
+    expect(viewerIsLearnerOnlyCourseEnrollment(null)).toBe(true)
+  })
+
+  it('is false when staff enrollment exists, including alongside student', () => {
+    expect(viewerIsLearnerOnlyCourseEnrollment(['student', 'teacher'])).toBe(false)
+    expect(viewerIsLearnerOnlyCourseEnrollment(['Teacher', 'student'])).toBe(false)
+    expect(viewerIsLearnerOnlyCourseEnrollment(['instructor'])).toBe(false)
+    expect(viewerIsLearnerOnlyCourseEnrollment(['ta'])).toBe(false)
+    expect(viewerIsLearnerOnlyCourseEnrollment(['teacher'])).toBe(false)
+  })
+})
+
+describe('viewerShouldHideCourseEnrollmentsNav', () => {
+  it('hides when previewing as student even with staff enrollment', () => {
+    expect(viewerShouldHideCourseEnrollmentsNav(['teacher', 'student'], 'student')).toBe(true)
+  })
+
+  it('hides for learner-only when previewing as teacher', () => {
+    expect(viewerShouldHideCourseEnrollmentsNav(['student'], 'teacher')).toBe(true)
+  })
+
+  it('does not hide for staff-only enrollment in teacher preview', () => {
+    expect(viewerShouldHideCourseEnrollmentsNav(['teacher'], 'teacher')).toBe(false)
+    expect(viewerShouldHideCourseEnrollmentsNav(['student', 'teacher'], 'teacher')).toBe(false)
   })
 })

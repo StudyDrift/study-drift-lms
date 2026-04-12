@@ -9,6 +9,8 @@ type LmsPageProps = {
   actions?: ReactNode
   /** Attached to the actions wrapper for layout measurements (e.g. aligning a content aside). */
   actionsContainerRef?: RefObject<HTMLDivElement | null>
+  /** Flex-fill main content so children can use flex-1 / min-h-0 (e.g. full-height course tools). */
+  fillHeight?: boolean
   children?: ReactNode
 }
 
@@ -18,10 +20,17 @@ export function LmsPage({
   description,
   actions,
   actionsContainerRef,
+  fillHeight,
   children,
 }: LmsPageProps) {
   return (
-    <div className="px-4 py-5 sm:p-6 md:p-8">
+    <div
+      className={
+        fillHeight
+          ? 'flex min-h-0 flex-1 flex-col px-4 py-5 sm:p-6 md:p-8'
+          : 'px-4 py-5 sm:p-6 md:p-8'
+      }
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0 flex-1">
           {titleContent ?? (
@@ -40,7 +49,11 @@ export function LmsPage({
           </div>
         ) : null}
       </div>
-      {children}
+      {fillHeight ? (
+        <div className="mt-4 flex min-h-0 flex-1 flex-col sm:mt-6">{children}</div>
+      ) : (
+        children
+      )}
     </div>
   )
 }

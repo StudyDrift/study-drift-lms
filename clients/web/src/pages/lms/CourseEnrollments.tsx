@@ -7,9 +7,12 @@ import { authorizedFetch } from '../../lib/api'
 import {
   courseEnrollmentsReadPermission,
   courseEnrollmentsUpdatePermission,
+  fetchCourse,
   fetchCourseScopedRoles,
+  viewerShouldHideCourseEnrollmentsNav,
   type CourseScopedAppRole,
 } from '../../lib/coursesApi'
+import { useCourseViewAs } from '../../lib/courseViewAs'
 import { readApiErrorMessage } from '../../lib/errors'
 
 export type CourseEnrollment = {
@@ -40,12 +43,17 @@ function enrollmentRoleRank(roleDisplay: string): number {
 
 export default function CourseEnrollments() {
   const { courseCode } = useParams<{ courseCode: string }>()
+  const courseViewPreview = useCourseViewAs(courseCode)
   const { allows, loading: permLoading, refresh: refreshPermissions } = usePermissions()
   const canUpdateEnrollments = usePermission(
     courseCode ? courseEnrollmentsUpdatePermission(courseCode) : 'global:app:noop:noop',
   )
   const [enrollments, setEnrollments] = useState<CourseEnrollment[] | null>(null)
   const [viewerRoles, setViewerRoles] = useState<string[]>([])
+  /** Used to gate the page before hitting the enrollments API (must match roster nav rules). */
+  const [courseViewerEnrollmentRoles, setCourseViewerEnrollmentRoles] = useState<string[] | null>(
+    null,
+  )
   const [error, setError] = useState<string | null>(null)
 
   const [modalOpen, setModalOpen] = useState(false)
@@ -59,6 +67,24 @@ export default function CourseEnrollments() {
   const [selfStudentStatus, setSelfStudentStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [selfStudentMessage, setSelfStudentMessage] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!courseCode) {
+      setCourseViewerEnrollmentRoles(null)
+      return
+    }
+    let cancelled = false
+    void fetchCourse(courseCode)
+      .then((c) => {
+        if (!cancelled) setCourseViewerEnrollmentRoles(c.viewerEnrollmentRoles ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setCourseViewerEnrollmentRoles([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [courseCode])
 
   const enrollmentMeta = useMemo(() => {
     if (!enrollments?.length) {
@@ -290,11 +316,15 @@ export default function CourseEnrollments() {
     return <Navigate to="/courses" replace />
   }
 
-  if (permLoading) {
+  if (permLoading || courseViewerEnrollmentRoles === null) {
     return null
   }
 
   if (!allows(courseEnrollmentsReadPermission(courseCode))) {
+    return <Navigate to={`/courses/${encodeURIComponent(courseCode)}`} replace />
+  }
+
+  if (viewerShouldHideCourseEnrollmentsNav(courseViewerEnrollmentRoles, courseViewPreview)) {
     return <Navigate to={`/courses/${encodeURIComponent(courseCode)}`} replace />
   }
 

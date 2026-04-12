@@ -1,6 +1,7 @@
 pub mod communication;
 pub mod content_page_markups;
 pub mod course;
+pub mod course_feed;
 pub mod course_files;
 pub mod course_grading;
 pub mod course_grants;
