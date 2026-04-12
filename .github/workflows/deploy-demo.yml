@@ -97,13 +97,37 @@ jobs:
           terraform_version: 1.9.0
           terraform_wrapper: false
 
+      # Registry provider installs occasionally fail with 5xx (e.g. GitHub 502 during
+      # signature fetch). Retries help both local init and remote-run init on HCP Terraform.
       - name: Terraform init
         working-directory: iac/demo
-        run: terraform init
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if terraform init; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              exit 1
+            fi
+            echo "terraform init failed (attempt ${attempt}/4); retrying in 30s..."
+            sleep 30
+          done
 
       - name: Terraform apply
         working-directory: iac/demo
-        run: terraform apply -auto-approve
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if terraform apply -auto-approve; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              exit 1
+            fi
+            echo "terraform apply failed (attempt ${attempt}/4); retrying in 45s..."
+            sleep 45
+          done
 
       - name: Terraform output (droplet IP)
         id: droplet
