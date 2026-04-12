@@ -83,10 +83,7 @@ mod tests {
             "global:app:other:read".to_string(),
             "course:*:enrollments:create".to_string(),
         ];
-        assert!(any_grant_matches(
-            &g,
-            "course:C-1:enrollments:create"
-        ));
+        assert!(any_grant_matches(&g, "course:C-1:enrollments:create"));
         assert!(!any_grant_matches(&g, "course:C-1:enrollments:delete"));
     }
 }

@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -56,4 +58,33 @@ pub async fn get_for_course(
     .bind(course_code)
     .fetch_optional(pool)
     .await
+}
+
+/// Matches on-disk layout under `course_files_root` used by course file upload routes.
+fn disk_course_dir_segment(course_code: &str) -> String {
+    let t = course_code.trim();
+    if t.is_empty() {
+        return "_unknown".into();
+    }
+    t.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(200)
+        .collect()
+}
+
+pub fn blob_disk_path(root: &Path, course_code: &str, storage_key: &str) -> PathBuf {
+    root.join(disk_course_dir_segment(course_code)).join(storage_key)
+}
+
+pub async fn remove_stored_blobs(root: &Path, course_code: &str, storage_keys: &[String]) {
+    for key in storage_keys {
+        let path = blob_disk_path(root, course_code, key);
+        let _ = tokio::fs::remove_file(path).await;
+    }
 }

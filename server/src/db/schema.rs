@@ -14,6 +14,7 @@ pub const COURSE_STRUCTURE_ITEMS: &str = "course.course_structure_items";
 pub const MODULE_CONTENT_PAGES: &str = "course.module_content_pages";
 pub const MODULE_ASSIGNMENTS: &str = "course.module_assignments";
 pub const MODULE_QUIZZES: &str = "course.module_quizzes";
+pub const MODULE_EXTERNAL_LINKS: &str = "course.module_external_links";
 pub const COURSE_SYLLABUS: &str = "course.course_syllabus";
 pub const SYLLABUS_ACCEPTANCES: &str = "course.syllabus_acceptances";
 pub const USER_COURSE_GRANTS: &str = "course.user_course_grants";

@@ -19,9 +19,9 @@ Rules:
 
 fn map_open_router_err(e: OpenRouterError) -> AppError {
     match e {
-        OpenRouterError::NoImageInResponse => AppError::AiGenerationFailed(
-            "The model returned an unexpected response.".into(),
-        ),
+        OpenRouterError::NoImageInResponse => {
+            AppError::AiGenerationFailed("The model returned an unexpected response.".into())
+        }
         OpenRouterError::ApiStatus(code, msg) => AppError::AiGenerationFailed(format!(
             "OpenRouter ({code}): {}",
             msg.chars().take(800).collect::<String>()
@@ -38,7 +38,10 @@ fn normalize_markdown_output(raw: &str) -> String {
         return s.to_string();
     }
     let mut lines: Vec<&str> = s.lines().collect();
-    if lines.first().is_some_and(|l| l.trim_start().starts_with("```")) {
+    if lines
+        .first()
+        .is_some_and(|l| l.trim_start().starts_with("```"))
+    {
         lines.remove(0);
     }
     while lines.last().is_some_and(|l| l.trim() == "```") {
@@ -55,15 +58,15 @@ pub async fn generate_section_markdown(
     section_heading: &str,
     existing_markdown: &str,
 ) -> Result<String, AppError> {
-    let system_prompt = match system_prompts::get_content_by_key(pool, SYLLABUS_SECTION_PROMPT_KEY).await
-    {
-        Ok(Some(s)) if !s.trim().is_empty() => s,
-        Ok(_) => FALLBACK_SYLLABUS_SECTION_SYSTEM_PROMPT.to_string(),
-        Err(e) => {
-            tracing::error!(error = %e, "failed to load syllabus_section system prompt row");
-            FALLBACK_SYLLABUS_SECTION_SYSTEM_PROMPT.to_string()
-        }
-    };
+    let system_prompt =
+        match system_prompts::get_content_by_key(pool, SYLLABUS_SECTION_PROMPT_KEY).await {
+            Ok(Some(s)) if !s.trim().is_empty() => s,
+            Ok(_) => FALLBACK_SYLLABUS_SECTION_SYSTEM_PROMPT.to_string(),
+            Err(e) => {
+                tracing::error!(error = %e, "failed to load syllabus_section system prompt row");
+                FALLBACK_SYLLABUS_SECTION_SYSTEM_PROMPT.to_string()
+            }
+        };
 
     let mut user_parts: Vec<String> = Vec::new();
     let heading = section_heading.trim();

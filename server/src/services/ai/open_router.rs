@@ -445,10 +445,9 @@ mod tests {
             502,
             "{}".into()
         )));
-        assert!(!is_retryable_openrouter_status(&OpenRouterError::ApiStatus(
-            400,
-            "{}".into()
-        )));
+        assert!(!is_retryable_openrouter_status(
+            &OpenRouterError::ApiStatus(400, "{}".into())
+        ));
     }
 
     #[test]
@@ -525,7 +524,8 @@ mod tests {
             .mount(&srv)
             .await;
 
-        let client = OpenRouterClient::new_with_base_url("k".into(), format!("{}/api/v1", srv.uri()));
+        let client =
+            OpenRouterClient::new_with_base_url("k".into(), format!("{}/api/v1", srv.uri()));
         let url = client.generate_image("gpt-4", "hi").await.unwrap();
         assert!(url.starts_with("data:image/png"));
     }
@@ -551,11 +551,9 @@ mod tests {
             .mount(&srv)
             .await;
 
-        let client = OpenRouterClient::new_with_base_url("k".into(), format!("{}/api/v1", srv.uri()));
-        let msg = client
-            .chat_completion("m", &[], &[])
-            .await
-            .unwrap();
+        let client =
+            OpenRouterClient::new_with_base_url("k".into(), format!("{}/api/v1", srv.uri()));
+        let msg = client.chat_completion("m", &[], &[]).await.unwrap();
         assert_eq!(msg.tool_calls.len(), 1);
         assert_eq!(msg.tool_calls[0].name, "create_module");
     }

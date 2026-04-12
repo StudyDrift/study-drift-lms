@@ -16,10 +16,10 @@ use crate::models::settings_ai::{
     AiModelOption, AiModelsListResponse, AiSettingsResponse, AiSettingsUpdateRequest,
 };
 use crate::models::settings_system_prompts::{
-    SystemPromptItem, SystemPromptsListResponse, SystemPromptUpdateRequest,
+    SystemPromptItem, SystemPromptUpdateRequest, SystemPromptsListResponse,
 };
-use crate::repos::user;
 use crate::repos::system_prompts;
+use crate::repos::user;
 use crate::repos::user_ai_settings;
 use crate::services::ai::OpenRouterError;
 use crate::services::ai::{list_image_models, list_text_models};
@@ -261,7 +261,7 @@ async fn get_ai_models_handler(
     headers: HeaderMap,
     Query(query): Query<AiModelsQuery>,
 ) -> Result<Json<AiModelsListResponse>, AppError> {
-    auth_user(&state, &headers)?;
+    require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
 
     let listed = match query.kind {
         AiModelsKind::Image => list_image_models().await,
@@ -296,7 +296,7 @@ async fn get_ai_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<AiSettingsResponse>, AppError> {
-    let user = auth_user(&state, &headers)?;
+    let user = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
     let image_model_id = user_ai_settings::get_image_model_id(&state.pool, user.user_id).await?;
     let course_setup_model_id =
         user_ai_settings::get_course_setup_model_id(&state.pool, user.user_id).await?;
@@ -311,7 +311,7 @@ async fn put_ai_handler(
     headers: HeaderMap,
     Json(req): Json<AiSettingsUpdateRequest>,
 ) -> Result<Json<AiSettingsResponse>, AppError> {
-    let user = auth_user(&state, &headers)?;
+    let user = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
     let image_model_id = req.image_model_id.trim();
     if image_model_id.is_empty() {
         return Err(AppError::InvalidInput("Choose an image model.".into()));

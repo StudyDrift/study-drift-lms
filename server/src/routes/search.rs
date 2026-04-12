@@ -29,7 +29,8 @@ async fn search_index_handler(
         })
         .collect();
 
-    let people_raw = enrollment::list_people_for_enrolled_courses(&state.pool, user.user_id).await?;
+    let people_raw =
+        enrollment::list_people_for_enrolled_courses(&state.pool, user.user_id).await?;
     let grants = rbac::list_granted_permission_strings(&state.pool, user.user_id).await?;
     let people: Vec<_> = people_raw
         .into_iter()

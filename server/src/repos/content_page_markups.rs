@@ -37,7 +37,11 @@ pub fn validate_markup_request(
             }
         }
         "note" => {
-            if notebook_page_id.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+            if notebook_page_id
+                .as_ref()
+                .map(|s| s.trim().is_empty())
+                .unwrap_or(true)
+            {
                 return Err("note requires notebookPageId.".into());
             }
         }

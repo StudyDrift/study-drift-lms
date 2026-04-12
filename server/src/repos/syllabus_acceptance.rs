@@ -3,7 +3,11 @@ use uuid::Uuid;
 
 use crate::db::schema;
 
-pub async fn has_accepted(pool: &PgPool, user_id: Uuid, course_id: Uuid) -> Result<bool, sqlx::Error> {
+pub async fn has_accepted(
+    pool: &PgPool,
+    user_id: Uuid,
+    course_id: Uuid,
+) -> Result<bool, sqlx::Error> {
     let n: (i64,) = sqlx::query_as(&format!(
         r#"
         SELECT COUNT(*)::bigint

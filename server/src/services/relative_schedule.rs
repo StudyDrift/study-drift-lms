@@ -23,10 +23,7 @@ impl IsoDuration {
 
     pub fn add_to(self, base: DateTime<Utc>) -> Option<DateTime<Utc>> {
         let mut t = base;
-        let total_months = self
-            .years
-            .checked_mul(12)?
-            .checked_add(self.months)?;
+        let total_months = self.years.checked_mul(12)?.checked_add(self.months)?;
         if total_months > 0 {
             t = t.checked_add_months(Months::new(total_months))?;
         }
@@ -107,7 +104,10 @@ pub struct RelativeShiftContext {
     pub anchor: DateTime<Utc>,
 }
 
-pub fn shift_opt(ctx: &RelativeShiftContext, stored: Option<DateTime<Utc>>) -> Option<DateTime<Utc>> {
+pub fn shift_opt(
+    ctx: &RelativeShiftContext,
+    stored: Option<DateTime<Utc>>,
+) -> Option<DateTime<Utc>> {
     let t = stored?;
     let delta = t.signed_duration_since(ctx.anchor);
     Some(ctx.enrollment_start + delta)
@@ -127,7 +127,10 @@ pub fn shift_structure_item_rows(
 }
 
 /// Course-level timestamps as experienced by a learner in relative mode.
-pub fn materialize_course_for_student(mut course: CoursePublic, enrollment_start: DateTime<Utc>) -> CoursePublic {
+pub fn materialize_course_for_student(
+    mut course: CoursePublic,
+    enrollment_start: DateTime<Utc>,
+) -> CoursePublic {
     course.starts_at = Some(enrollment_start);
     course.visible_from = Some(enrollment_start);
     course.ends_at = course

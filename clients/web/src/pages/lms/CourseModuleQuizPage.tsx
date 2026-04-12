@@ -426,6 +426,30 @@ export default function CourseModuleQuizPage() {
     }
   }, [questionsOpen, courseCode])
 
+  useEffect(() => {
+    if (!generateModalOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (generateBusy) return
+      e.preventDefault()
+      setGenerateModalOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [generateModalOpen, generateBusy])
+
+  useEffect(() => {
+    if (!questionsOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (questionsSaving) return
+      e.preventDefault()
+      setQuestionsOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [questionsOpen, questionsSaving])
+
   const quizActionsRef = useRef<HTMLDivElement>(null)
   const quizSummaryAsideRef = useRef<HTMLElement>(null)
 

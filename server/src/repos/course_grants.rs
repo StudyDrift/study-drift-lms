@@ -40,6 +40,11 @@ pub fn course_enrollments_update_permission(course_code: &str) -> String {
     format!("course:{course_code}:enrollments:update")
 }
 
+/// `course:<course_code>:gradebook:view` — read course grading settings (scale and assignment groups).
+pub fn course_gradebook_view_permission(course_code: &str) -> String {
+    format!("course:{course_code}:gradebook:view")
+}
+
 /// Second segment value in catalog permissions meaning “this course” when the role is applied per course.
 pub const COURSE_CODE_PLACEHOLDER: &str = "<courseCode>";
 
@@ -176,6 +181,14 @@ mod tests {
         assert_eq!(
             course_enrollments_update_permission("C-XYZ"),
             "course:C-XYZ:enrollments:update"
+        );
+    }
+
+    #[test]
+    fn course_gradebook_view_permission_formats() {
+        assert_eq!(
+            course_gradebook_view_permission("C-XYZ"),
+            "course:C-XYZ:gradebook:view"
         );
     }
 }

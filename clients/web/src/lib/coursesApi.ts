@@ -1,4 +1,5 @@
 import { authorizedFetch } from './api'
+import { getAccessToken } from './auth'
 import { readApiErrorMessage } from './errors'
 
 import type { MarkdownThemeCustom } from './markdownTheme'
@@ -145,6 +146,17 @@ export async function patchCourseArchived(
   return raw as Course
 }
 
+/** Permanently removes module content, syllabus, files, and related data; course shell remains. */
+export async function postFactoryResetCourse(courseCode: string): Promise<Course> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/factory-reset`,
+    { method: 'POST' },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as Course
+}
+
 export async function patchCourseMarkdownTheme(
   courseCode: string,
   body: { preset: string; custom?: MarkdownThemeCustom | null },
@@ -249,7 +261,7 @@ export function courseEnrollmentsUpdatePermission(courseCode: string): string {
 export type CourseStructureItem = {
   id: string
   sortOrder: number
-  kind: 'module' | 'heading' | 'content_page' | 'assignment' | 'quiz'
+  kind: 'module' | 'heading' | 'content_page' | 'assignment' | 'quiz' | 'external_link'
   title: string
   /** Set when this row is nested under a module. */
   parentId: string | null
@@ -269,6 +281,8 @@ export type CourseStructureItem = {
   pointsPossible?: number
   /** Quizzes and assignments: instructor-set gradebook points when set. */
   pointsWorth?: number | null
+  /** External link module items: destination URL when set. */
+  externalUrl?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -483,6 +497,71 @@ export async function createModuleQuiz(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as CourseStructureItem
+}
+
+export async function createModuleExternalLink(
+  courseCode: string,
+  moduleId: string,
+  body: { title: string; url: string },
+): Promise<CourseStructureItem> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/modules/${encodeURIComponent(moduleId)}/external-links`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as CourseStructureItem
+}
+
+export type ModuleExternalLinkPayload = {
+  itemId: string
+  title: string
+  url: string
+  updatedAt: string
+}
+
+function normalizeModuleExternalLinkPayload(raw: unknown): ModuleExternalLinkPayload {
+  const r = raw as Record<string, unknown>
+  return {
+    itemId: String(r.itemId ?? ''),
+    title: String(r.title ?? ''),
+    url: String(r.url ?? ''),
+    updatedAt: String(r.updatedAt ?? ''),
+  }
+}
+
+export async function fetchModuleExternalLink(
+  courseCode: string,
+  itemId: string,
+): Promise<ModuleExternalLinkPayload> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/external-links/${encodeURIComponent(itemId)}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return normalizeModuleExternalLinkPayload(raw)
+}
+
+export async function patchModuleExternalLink(
+  courseCode: string,
+  itemId: string,
+  body: { url: string },
+): Promise<ModuleExternalLinkPayload> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/external-links/${encodeURIComponent(itemId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return normalizeModuleExternalLinkPayload(raw)
 }
 
 export type QuizQuestion = {
@@ -1187,4 +1266,96 @@ export async function postCourseImport(
     const raw = await res.json().catch(() => ({}))
     throw new Error(readApiErrorMessage(raw))
   }
+}
+
+export type PostCourseImportCanvasBody = {
+  mode: CourseBundleImportMode
+  canvasBaseUrl: string
+  canvasCourseId: string
+  accessToken: string
+}
+
+function courseCanvasImportWebSocketUrl(courseCode: string): string | null {
+  const token = getAccessToken()
+  if (!token) return null
+  const base = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+  const u = new URL(base)
+  u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
+  const qs = new URLSearchParams({ token })
+  return `${u.origin}/api/v1/courses/${encodeURIComponent(courseCode)}/import/canvas/ws?${qs.toString()}`
+}
+
+/**
+ * Pulls course data from the Canvas REST API (via our server) and applies it like a JSON import.
+ * Uses a WebSocket for progress messages (`onProgress`); the Canvas token is sent once and is not stored.
+ */
+export async function postCourseImportCanvas(
+  courseCode: string,
+  body: PostCourseImportCanvasBody,
+  onProgress?: (message: string) => void,
+): Promise<void> {
+  const url = courseCanvasImportWebSocketUrl(courseCode)
+  if (!url) {
+    throw new Error('Sign in to import from Canvas.')
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const ws = new WebSocket(url)
+    let settled = false
+
+    const fail = (msg: string) => {
+      if (settled) return
+      settled = true
+      reject(new Error(msg))
+    }
+
+    ws.onopen = () => {
+      ws.send(
+        JSON.stringify({
+          mode: body.mode,
+          canvasBaseUrl: body.canvasBaseUrl,
+          canvasCourseId: body.canvasCourseId,
+          accessToken: body.accessToken,
+        }),
+      )
+    }
+
+    ws.onmessage = (ev) => {
+      let raw: unknown
+      try {
+        raw = JSON.parse(String(ev.data))
+      } catch {
+        fail('Unexpected message from server.')
+        ws.close()
+        return
+      }
+      const o = raw as { type?: string; message?: string }
+      if (o.type === 'progress' && typeof o.message === 'string') {
+        onProgress?.(o.message)
+        return
+      }
+      if (o.type === 'complete') {
+        if (!settled) {
+          settled = true
+          ws.close()
+          resolve()
+        }
+        return
+      }
+      if (o.type === 'error') {
+        fail(typeof o.message === 'string' ? o.message : 'Canvas import failed.')
+        ws.close()
+      }
+    }
+
+    ws.onerror = () => {
+      fail('Connection error during Canvas import.')
+    }
+
+    ws.onclose = () => {
+      if (!settled) {
+        fail('Connection closed before import finished.')
+      }
+    }
+  })
 }

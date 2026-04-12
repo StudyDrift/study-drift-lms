@@ -59,55 +59,53 @@ export function SideNavSettingsLinks() {
             <Shield className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
             Roles and Permissions
           </NavLink>
-        </>
-      )}
-      <div className="flex flex-col gap-0.5">
-        <button
-          type="button"
-          onClick={() => setAiOpen((o) => !o)}
-          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:bg-white hover:text-slate-900 hover:shadow-sm dark:text-neutral-300 dark:hover:bg-neutral-800/80 dark:hover:text-neutral-50 ${
-            aiSectionActive ? sideNavActiveClass : 'text-slate-600'
-          }`}
-          aria-expanded={aiOpen}
-        >
-          <Bot className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-          <span className="min-w-0 flex-1">Intelligence</span>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-current opacity-70 transition-transform duration-200 ease-out ${
-              aiOpen ? 'rotate-180' : 'rotate-0'
-            }`}
-            aria-hidden
-          />
-        </button>
-        <div
-          className={`grid transition-[grid-template-rows] duration-200 ease-out ${
-            aiOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-          }`}
-        >
-          <div className="min-h-0 overflow-hidden">
-            <div className="flex flex-col gap-0.5 border-l border-slate-200/80 pl-2 dark:border-neutral-600/80">
-              <NavLink
-                to="/settings/ai/models"
-                className={() =>
-                  `${sideNavLinkClass} ${view === 'ai-models' ? sideNavActiveClass : ''}`
-                }
-              >
-                Models
-              </NavLink>
-              {canManageRbac && (
-                <NavLink
-                  to="/settings/ai/system-prompts"
-                  className={() =>
-                    `${sideNavLinkClass} ${view === 'ai-prompts' ? sideNavActiveClass : ''}`
-                  }
-                >
-                  System Prompts
-                </NavLink>
-              )}
+          <div className="flex flex-col gap-0.5">
+            <button
+              type="button"
+              onClick={() => setAiOpen((o) => !o)}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:bg-white hover:text-slate-900 hover:shadow-sm dark:text-neutral-300 dark:hover:bg-neutral-800/80 dark:hover:text-neutral-50 ${
+                aiSectionActive ? sideNavActiveClass : 'text-slate-600'
+              }`}
+              aria-expanded={aiOpen}
+            >
+              <Bot className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+              <span className="min-w-0 flex-1">Intelligence</span>
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 text-current opacity-70 transition-transform duration-200 ease-out ${
+                  aiOpen ? 'rotate-180' : 'rotate-0'
+                }`}
+                aria-hidden
+              />
+            </button>
+            <div
+              className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                aiOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+              }`}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <div className="flex flex-col gap-0.5 border-l border-slate-200/80 pl-2 dark:border-neutral-600/80">
+                  <NavLink
+                    to="/settings/ai/models"
+                    className={() =>
+                      `${sideNavLinkClass} ${view === 'ai-models' ? sideNavActiveClass : ''}`
+                    }
+                  >
+                    Models
+                  </NavLink>
+                  <NavLink
+                    to="/settings/ai/system-prompts"
+                    className={() =>
+                      `${sideNavLinkClass} ${view === 'ai-prompts' ? sideNavActiveClass : ''}`
+                    }
+                  >
+                    System Prompts
+                  </NavLink>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </>
   )
 }

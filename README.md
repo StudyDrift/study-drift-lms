@@ -9,7 +9,7 @@
   Lextures
 </h1>
 <h3 align="center">
- The first truely adaptivive learning environment
+ The first truly adaptivive learning environment
 </h3>
 <p align="center">
   Lextures uses AI to streamlines the process of course creation, quiz generation, and content management, enabling educators and learners to get to the content as quickly as possible
@@ -18,12 +18,15 @@
   <a href="/LICENSE">
     <img src="https://img.shields.io/badge/license-AGPL_3.0-blue" alt="Lextures is released under the AGPL 3.0 license." />
   </a>
+  <a href="/CODE_OF_CONDUCT.md">
+    <img src="https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg" alt="Contributor Covenant 2.1" />
+  </a>
   <a href="https://github.com/StudyDrift/lextures/actions/workflows/deploy-demo.yml">
     <img src="https://github.com/StudyDrift/lextures/actions/workflows/deploy-demo.yml/badge.svg" alt="Deploy Demo GitHub Action status." />
   </a>
 </p>
 <p align="center">
-  <a href="https://ambitious-wave-0d94edc10.5.azurestaticapps.net">Live Demo</a>
+  <a href="https://demo.lextures.com/">Live Demo</a>
 </p>
 <!-- TEXT_SECTION:header:END -->
 
@@ -63,7 +66,7 @@ See **[Getting started](docs/getting-started.md)** for prerequisites, Docker com
 
 ## Contributing
 
-Contributions are welcome.
+Contributions are welcome. Everyone who participates is expected to follow the **[Code of Conduct](CODE_OF_CONDUCT.md)** (Contributor Covenant 2.1).
 
 1. Fork the repository and create a branch for your change.
 2. Make focused commits with clear messages.

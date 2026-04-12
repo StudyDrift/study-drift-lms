@@ -311,16 +311,13 @@ fn course_item_pair_matches_catalog(catalog: &[String], p: &str) -> bool {
 
 /// Whether `catalog` (role permission strings, possibly `course:<courseCode>:…` or `course:*:…`)
 /// authorizes concrete permission `p` for `course_code`.
-fn course_role_catalog_matches_concrete(
-    catalog: &[String],
-    p: &str,
-    course_code: &str,
-) -> bool {
+fn course_role_catalog_matches_concrete(catalog: &[String], p: &str, course_code: &str) -> bool {
     if course_item_pair_matches_catalog(catalog, p) {
         return true;
     }
     for entry in catalog {
-        if let Some(expanded) = course_grants::expand_course_permission_for_course(entry, course_code)
+        if let Some(expanded) =
+            course_grants::expand_course_permission_for_course(entry, course_code)
         {
             if permission_matches(&expanded, p) {
                 return true;

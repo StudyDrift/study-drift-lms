@@ -1,7 +1,20 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { ChevronDown, CircleHelp, ClipboardList, FileText, Heading, Plus } from 'lucide-react'
+import {
+  ChevronDown,
+  CircleHelp,
+  ClipboardList,
+  ExternalLink,
+  FileText,
+  Heading,
+  Plus,
+} from 'lucide-react'
 
-export type ModuleItemKind = 'heading' | 'content_page' | 'assignment' | 'quiz'
+export type ModuleItemKind =
+  | 'heading'
+  | 'content_page'
+  | 'assignment'
+  | 'quiz'
+  | 'external_link'
 
 type AddModuleItemMenuProps = {
   onAdd: (kind: ModuleItemKind) => void
@@ -55,7 +68,7 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
           id={menuId}
           role="menu"
           aria-label="Module item types"
-          className="absolute left-0 right-0 z-50 mt-1 min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 sm:left-auto sm:right-0 sm:min-w-[12rem] dark:border-neutral-600 dark:bg-neutral-800 dark:shadow-black/40"
+          className="absolute right-0 z-50 mt-1 w-max min-w-[min(22rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-neutral-600 dark:bg-neutral-800 dark:shadow-black/40"
         >
           <button
             type="button"
@@ -103,14 +116,32 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
             type="button"
             role="menuitem"
             onClick={() => pick('quiz')}
-            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50"
+            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700/80"
           >
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-200/90 bg-emerald-50 text-emerald-700">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-200/90 bg-emerald-50 text-emerald-700 dark:border-emerald-500/35 dark:bg-emerald-950/50 dark:text-emerald-200">
               <CircleHelp className="h-4 w-4" aria-hidden />
             </span>
             <span className="min-w-0 flex flex-col gap-0.5">
-              <span className="font-semibold text-slate-900">Quiz</span>
-              <span className="text-xs text-slate-500">Questions and auto-graded checks</span>
+              <span className="font-semibold text-slate-950 dark:text-neutral-100">Quiz</span>
+              <span className="text-xs text-slate-500 dark:text-neutral-400">
+                Questions and auto-graded checks
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => pick('external_link')}
+            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700/80"
+          >
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-200/90 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200">
+              <ExternalLink className="h-4 w-4" aria-hidden />
+            </span>
+            <span className="min-w-0 flex flex-col gap-0.5">
+              <span className="font-semibold text-slate-950 dark:text-neutral-100">External link</span>
+              <span className="text-xs text-slate-500 dark:text-neutral-400">
+                Opens a URL in a new tab
+              </span>
             </span>
           </button>
         </div>

@@ -1,4 +1,8 @@
-import { courseEnrollmentsReadPermission, courseGradebookViewPermission } from './coursesApi'
+import {
+  courseEnrollmentsReadPermission,
+  courseGradebookViewPermission,
+  courseItemCreatePermission,
+} from './coursesApi'
 import type { SearchCourseItem, SearchPersonItem } from './searchApi'
 import { PERM_COURSE_CREATE, PERM_RBAC_MANAGE, PERM_REPORTS_VIEW } from './rbacApi'
 
@@ -72,18 +76,17 @@ export function buildSearchItems(
     },
     { title: 'Calendar', subtitle: 'Your schedule', path: '/calendar', hint: 'calendar schedule' },
     { title: 'Inbox', subtitle: 'Messages', path: '/inbox', hint: 'inbox messages mail' },
-    { title: 'Account', subtitle: 'User settings', path: '/settings/account', hint: 'account profile' },
+    {
+      title: 'Account',
+      subtitle: 'User settings',
+      path: '/settings/account',
+      hint: 'account profile settings user preferences theme',
+    },
     {
       title: 'Notifications',
       subtitle: 'User settings',
       path: '/settings/notifications',
-      hint: 'notifications alerts',
-    },
-    {
-      title: 'AI models',
-      subtitle: 'System settings',
-      path: '/settings/ai/models',
-      hint: 'ai intelligence openrouter models',
+      hint: 'notifications alerts email preferences',
     },
   ]
 
@@ -99,6 +102,14 @@ export function buildSearchItems(
   }
 
   if (allows(PERM_RBAC_MANAGE)) {
+    items.push({
+      id: 'page:/settings/ai/models',
+      group: 'page',
+      title: 'AI models',
+      subtitle: 'System settings',
+      path: '/settings/ai/models',
+      haystack: 'ai intelligence openrouter models system settings page'.toLowerCase(),
+    })
     items.push({
       id: 'page:/settings/ai/system-prompts',
       group: 'page',
@@ -137,7 +148,11 @@ export function buildSearchItems(
   }[] = [
     { suffix: '', title: 'Course dashboard', hint: 'dashboard overview' },
     { suffix: '/syllabus', title: 'Syllabus', hint: 'syllabus outline' },
-    { suffix: '/modules', title: 'Modules', hint: 'modules lessons content' },
+    {
+      suffix: '/modules',
+      title: 'Modules',
+      hint: 'modules lessons content pages assignments quizzes external links',
+    },
     { suffix: '/notebook', title: 'Notebook', hint: 'notes journal thoughts' },
     { suffix: '/calendar', title: 'Course calendar', hint: 'calendar schedule' },
     {
@@ -169,6 +184,60 @@ export function buildSearchItems(
         subtitle: c.courseCode,
         path,
         haystack: `${def.title} ${c.title} ${c.courseCode} ${def.hint} page`.toLowerCase(),
+      })
+    }
+  }
+
+  const courseSettingsSectionDefs: {
+    suffix: string
+    title: string
+    hint: string
+    requiredPermission?: (courseCode: string) => string
+  }[] = [
+    {
+      suffix: '/settings/dates',
+      title: 'Course dates',
+      hint: 'dates schedule calendar visibility enrollment window relative fixed',
+    },
+    {
+      suffix: '/settings/branding',
+      title: 'Course branding',
+      hint: 'branding banner hero image appearance markdown theme',
+    },
+    {
+      suffix: '/settings/grading',
+      title: 'Grading settings',
+      hint: 'grading scale assignment groups weights categories',
+      requiredPermission: courseGradebookViewPermission,
+    },
+    {
+      suffix: '/settings/export-import',
+      title: 'Export / import',
+      hint: 'export import backup canvas migrate course package',
+      requiredPermission: courseItemCreatePermission,
+    },
+    {
+      suffix: '/settings/archived',
+      title: 'Archived modules',
+      hint: 'archived deleted restore trash unarchive structure',
+      requiredPermission: courseItemCreatePermission,
+    },
+  ]
+
+  for (const c of courses) {
+    const base = `/courses/${enc(c.courseCode)}`
+    for (const def of courseSettingsSectionDefs) {
+      if (def.requiredPermission && !allows(def.requiredPermission(c.courseCode))) {
+        continue
+      }
+      const path = `${base}${def.suffix}`
+      items.push({
+        id: `page:${path}`,
+        group: 'page',
+        title: `${def.title} — ${c.title}`,
+        subtitle: c.courseCode,
+        path,
+        haystack: `${def.title} ${c.title} ${c.courseCode} course settings ${def.hint} page`.toLowerCase(),
       })
     }
   }

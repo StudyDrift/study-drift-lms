@@ -171,9 +171,8 @@ fn parse_model_json(text: &str, expected_count: usize) -> Result<Vec<QuizQuestio
         AppError::AiGenerationFailed("Could not find JSON in the model response.".into())
     })?;
 
-    let env: AiQuestionsEnvelope = serde_json::from_str(slice).map_err(|e| {
-        AppError::AiGenerationFailed(format!("Could not parse quiz JSON: {e}"))
-    })?;
+    let env: AiQuestionsEnvelope = serde_json::from_str(slice)
+        .map_err(|e| AppError::AiGenerationFailed(format!("Could not parse quiz JSON: {e}")))?;
 
     if env.questions.len() != expected_count {
         return Err(AppError::AiGenerationFailed(format!(

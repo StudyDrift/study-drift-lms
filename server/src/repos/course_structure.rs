@@ -6,9 +6,10 @@ use uuid::Uuid;
 use crate::db::schema;
 use crate::models::course_structure::{CourseStructureItemResponse, CourseStructureItemRow};
 use crate::repos::course_module_assignments;
-use crate::services::relative_schedule::{self, RelativeShiftContext};
 use crate::repos::course_module_content;
+use crate::repos::course_module_external_links;
 use crate::repos::course_module_quizzes;
+use crate::services::relative_schedule::{self, RelativeShiftContext};
 
 /// Counts how many of `ids` exist in this course with `kind` in `kinds`.
 pub async fn count_structure_items_with_kinds(
@@ -81,16 +82,31 @@ pub async fn rows_to_responses_with_quiz_adaptive(
     course_id: Uuid,
     rows: Vec<CourseStructureItemRow>,
 ) -> Result<Vec<CourseStructureItemResponse>, sqlx::Error> {
-    let quiz_ids: Vec<Uuid> = rows.iter().filter(|r| r.kind == "quiz").map(|r| r.id).collect();
+    let quiz_ids: Vec<Uuid> = rows
+        .iter()
+        .filter(|r| r.kind == "quiz")
+        .map(|r| r.id)
+        .collect();
     let assignment_ids: Vec<Uuid> = rows
         .iter()
         .filter(|r| r.kind == "assignment")
         .map(|r| r.id)
         .collect();
+    let external_link_ids: Vec<Uuid> = rows
+        .iter()
+        .filter(|r| r.kind == "external_link")
+        .map(|r| r.id)
+        .collect();
     let outlines =
         course_module_quizzes::quiz_outline_for_structure_items(pool, course_id, &quiz_ids).await?;
-    let assignment_points =
-        course_module_assignments::points_worth_for_structure_items(pool, course_id, &assignment_ids)
+    let assignment_points = course_module_assignments::points_worth_for_structure_items(
+        pool,
+        course_id,
+        &assignment_ids,
+    )
+    .await?;
+    let external_urls =
+        course_module_external_links::urls_for_structure_items(pool, course_id, &external_link_ids)
             .await?;
     Ok(rows
         .into_iter()
@@ -110,6 +126,13 @@ pub async fn rows_to_responses_with_quiz_adaptive(
             }
             if item.kind == "assignment" {
                 item.points_worth = assignment_points.get(&item.id).copied().flatten();
+            }
+            if item.kind == "external_link" {
+                if let Some(u) = external_urls.get(&item.id) {
+                    if !u.is_empty() {
+                        item.external_url = Some(u.clone());
+                    }
+                }
             }
             item
         })
@@ -153,15 +176,14 @@ fn order_structure_rows(rows: Vec<CourseStructureItemRow>) -> Vec<CourseStructur
 }
 
 fn module_visible_to_student_now(m: &CourseStructureItemRow, now: DateTime<Utc>) -> bool {
-    m.kind == "module"
-        && m.published
-        && !m.archived
-        && m.visible_from.is_none_or(|t| t <= now)
+    m.kind == "module" && m.published && !m.archived && m.visible_from.is_none_or(|t| t <= now)
 }
 
 /// Strips archived outline rows and any child whose parent module is archived.
 /// Applied to the main course structure API so clients never receive archived items in that payload.
-pub fn filter_archived_items_from_structure_list(rows: Vec<CourseStructureItemRow>) -> Vec<CourseStructureItemRow> {
+pub fn filter_archived_items_from_structure_list(
+    rows: Vec<CourseStructureItemRow>,
+) -> Vec<CourseStructureItemRow> {
     let archived_module_ids: HashSet<Uuid> = rows
         .iter()
         .filter(|r| r.kind == "module" && r.archived)
@@ -195,7 +217,7 @@ pub async fn list_archived_staff_structure(
         WHERE course_id = $1
           AND archived = true
           AND parent_id IS NOT NULL
-          AND kind IN ('heading', 'content_page', 'assignment', 'quiz')
+          AND kind IN ('heading', 'content_page', 'assignment', 'quiz', 'external_link')
         ORDER BY parent_id, sort_order
         "#,
         schema::COURSE_STRUCTURE_ITEMS
@@ -239,7 +261,7 @@ pub async fn list_archived_staff_structure(
 }
 
 /// Drops modules (and their children) that are not yet visible to enrolled students who are not staff.
-/// Excludes archived modules and archived child items (`heading`, `content_page`, `assignment`, `quiz`).
+/// Excludes archived modules and archived child items (module children of any supported kind).
 pub fn filter_structure_for_student_view(
     rows: Vec<CourseStructureItemRow>,
     now: DateTime<Utc>,
@@ -522,6 +544,74 @@ pub async fn quiz_visible_to_student(
         enu = schema::COURSE_ENROLLMENTS,
     ))
     .bind(quiz_id)
+    .bind(course_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row
+        .map(
+            |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at)| {
+                let effective_vf = if schedule_mode == "relative" {
+                    match (anchor, enrolled_at) {
+                        (Some(anchor), Some(enrollment_start)) => {
+                            let ctx = RelativeShiftContext {
+                                enrollment_start,
+                                anchor,
+                            };
+                            relative_schedule::shift_opt(&ctx, vf)
+                        }
+                        _ => vf,
+                    }
+                } else {
+                    vf
+                };
+                c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now)
+            },
+        )
+        .unwrap_or(false))
+}
+
+pub async fn external_link_visible_to_student(
+    pool: &PgPool,
+    course_id: Uuid,
+    link_id: Uuid,
+    user_id: Uuid,
+    now: DateTime<Utc>,
+) -> Result<bool, sqlx::Error> {
+    let row: Option<(
+        bool,
+        bool,
+        bool,
+        bool,
+        Option<DateTime<Utc>>,
+        String,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+    )> = sqlx::query_as(&format!(
+        r#"
+        SELECT
+            page.published,
+            page.archived,
+            m.published,
+            m.archived,
+            m.visible_from,
+            crs.schedule_mode,
+            crs.relative_schedule_anchor_at,
+            stu.created_at
+        FROM {items} page
+        INNER JOIN {items} m
+            ON m.id = page.parent_id AND m.course_id = page.course_id AND m.kind = 'module'
+        INNER JOIN {crs} crs ON crs.id = page.course_id
+        LEFT JOIN {enu} stu
+            ON stu.course_id = crs.id AND stu.user_id = $3 AND stu.role = 'student'
+        WHERE page.id = $1 AND page.course_id = $2 AND page.kind = 'external_link'
+        "#,
+        items = schema::COURSE_STRUCTURE_ITEMS,
+        crs = schema::COURSES,
+        enu = schema::COURSE_ENROLLMENTS,
+    ))
+    .bind(link_id)
     .bind(course_id)
     .bind(user_id)
     .fetch_optional(pool)
@@ -886,6 +976,73 @@ pub async fn insert_quiz_under_module(
     Ok(row)
 }
 
+/// Appends an external link under an existing module and stores the destination URL.
+pub async fn insert_external_link_under_module(
+    pool: &PgPool,
+    course_id: Uuid,
+    module_id: Uuid,
+    title: &str,
+    url: &str,
+) -> Result<CourseStructureItemRow, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query_scalar::<_, Uuid>(&format!(
+        "SELECT id FROM {} WHERE id = $1 FOR UPDATE",
+        schema::COURSES
+    ))
+    .bind(course_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| sqlx::Error::RowNotFound)?;
+
+    let parent_ok = sqlx::query_scalar::<_, bool>(&format!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM {}
+            WHERE id = $1 AND course_id = $2 AND kind = 'module'
+        )
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(module_id)
+    .bind(course_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    if !parent_ok {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    let new_id = Uuid::new_v4();
+
+    let row = sqlx::query_as::<_, CourseStructureItemRow>(&format!(
+        r#"
+        WITH mx AS (
+            SELECT COALESCE(MAX(sort_order), -1) AS max_ord
+            FROM {}
+            WHERE parent_id = $1
+        )
+        INSERT INTO {} (id, course_id, sort_order, kind, title, parent_id)
+        SELECT $2, $3, max_ord + 1, 'external_link', $4, $1
+        FROM mx
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(module_id)
+    .bind(new_id)
+    .bind(course_id)
+    .bind(title)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    course_module_external_links::insert_empty_for_item(&mut tx, new_id, url).await?;
+
+    tx.commit().await?;
+    Ok(row)
+}
+
 const REORDER_OFFSET: i32 = 10_000_000;
 
 /// Reassigns `sort_order` for top-level modules and each module's children. `module_ids_in_order`
@@ -1051,7 +1208,7 @@ pub async fn patch_child_structure_item(
         WHERE id = $1
           AND course_id = $2
           AND parent_id IS NOT NULL
-          AND kind IN ('heading', 'content_page', 'assignment', 'quiz')
+          AND kind IN ('heading', 'content_page', 'assignment', 'quiz', 'external_link')
         RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         "#,
         schema::COURSE_STRUCTURE_ITEMS
@@ -1080,7 +1237,7 @@ pub async fn archive_child_structure_item(
         WHERE id = $1
           AND course_id = $2
           AND parent_id IS NOT NULL
-          AND kind IN ('heading', 'content_page', 'assignment', 'quiz')
+          AND kind IN ('heading', 'content_page', 'assignment', 'quiz', 'external_link')
         RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         "#,
         schema::COURSE_STRUCTURE_ITEMS
@@ -1120,7 +1277,10 @@ pub async fn set_item_assignment_group(
 }
 
 /// Deletes all module outline rows for a course (children first). Cascades to module body tables.
-pub async fn delete_all_items_for_course(pool: &PgPool, course_id: Uuid) -> Result<(), sqlx::Error> {
+pub async fn delete_all_items_for_course(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"DELETE FROM {} WHERE course_id = $1 AND parent_id IS NOT NULL"#,
         schema::COURSE_STRUCTURE_ITEMS

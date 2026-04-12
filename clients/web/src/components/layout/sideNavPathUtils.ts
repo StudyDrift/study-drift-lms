@@ -13,7 +13,7 @@ export function settingsViewFromPathname(pathname: string): SettingsNavView {
   const m = matchPath({ path: '/settings/:tab', end: true }, pathname)
   const raw = m?.params.tab
   if (raw === 'account' || raw === 'notifications' || raw === 'roles') return raw
-  return 'ai-models'
+  return 'account'
 }
 
 export type CourseSettingsSection =

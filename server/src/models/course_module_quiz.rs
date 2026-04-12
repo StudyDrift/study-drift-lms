@@ -105,7 +105,8 @@ pub fn validate_quiz_comprehensive_settings(
     }
     if !REVIEW_VISIBILITIES.contains(&review_visibility) {
         return Err(AppError::InvalidInput(
-            "reviewVisibility must be one of: none, score_only, responses, correct_answers, full.".into(),
+            "reviewVisibility must be one of: none, score_only, responses, correct_answers, full."
+                .into(),
         ));
     }
     if !REVIEW_WHENS.contains(&review_when) {
@@ -220,7 +221,9 @@ pub fn validate_quiz_questions(questions: &[QuizQuestion]) -> Result<(), AppErro
             ));
         }
         if !QUIZ_QUESTION_TYPES.contains(&q.question_type.as_str()) {
-            return Err(AppError::InvalidInput("Unsupported quiz question type.".into()));
+            return Err(AppError::InvalidInput(
+                "Unsupported quiz question type.".into(),
+            ));
         }
         if q.choices.len() > MAX_QUIZ_CHOICES_PER_QUESTION {
             return Err(AppError::InvalidInput(

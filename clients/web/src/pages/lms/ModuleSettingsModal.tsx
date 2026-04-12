@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { X } from 'lucide-react'
 
 function isoToDatetimeLocalValue(iso: string | null): string {
@@ -48,6 +48,17 @@ function ModuleSettingsModalInner({
   const [title, setTitle] = useState(initialTitle)
   const [published, setPublished] = useState(initialPublished)
   const [visibleLocal, setVisibleLocal] = useState(() => isoToDatetimeLocalValue(initialVisibleFrom))
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (saving) return
+      e.preventDefault()
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, saving])
 
   return (
     <div

@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 use crate::db::schema;
 use crate::models::enrollment::CourseEnrollmentPublic;
-use crate::repos::course_grants;
 use crate::models::search::SearchPersonItem;
+use crate::repos::course_grants;
 
 /// Whether this user created the course (`courses.created_by_user_id`).
 pub async fn user_is_course_creator(

@@ -118,7 +118,10 @@ mod tests {
         set("DATABASE_URL", Some("postgres://localhost/x"));
         set("COURSE_FILES_ROOT", None);
         let c = Config::from_env().unwrap();
-        assert_eq!(c.course_files_root, std::path::PathBuf::from("data/course-files"));
+        assert_eq!(
+            c.course_files_root,
+            std::path::PathBuf::from("data/course-files")
+        );
     }
 
     #[test]

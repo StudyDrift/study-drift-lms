@@ -99,7 +99,13 @@ fn normalize_weights(raw: Option<Vec<f64>>, len: usize) -> Vec<f64> {
         w = vec![0.0; len];
     }
     w.into_iter()
-        .map(|x| if x.is_finite() { x.clamp(0.0, 1.0) } else { 0.0 })
+        .map(|x| {
+            if x.is_finite() {
+                x.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        })
         .collect()
 }
 
@@ -154,7 +160,10 @@ fn normalize_question(mut raw: AiQuestionRaw) -> Result<AdaptiveQuizGeneratedQue
     })
 }
 
-fn parse_question_batch(text: &str, expected: usize) -> Result<Vec<AdaptiveQuizGeneratedQuestion>, AppError> {
+fn parse_question_batch(
+    text: &str,
+    expected: usize,
+) -> Result<Vec<AdaptiveQuizGeneratedQuestion>, AppError> {
     let slice = extract_json_array(text).ok_or_else(|| {
         AppError::AiGenerationFailed(
             "Could not find a JSON array in the model response (expected an array of questions)."

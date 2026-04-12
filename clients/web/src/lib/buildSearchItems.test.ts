@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { courseEnrollmentsReadPermission, courseGradebookViewPermission } from './coursesApi'
+import {
+  courseEnrollmentsReadPermission,
+  courseGradebookViewPermission,
+  courseItemCreatePermission,
+} from './coursesApi'
 import { buildSearchItems, filterSearchItems, SEARCH_GROUP_LABEL } from './buildSearchItems'
 import { PERM_COURSE_CREATE, PERM_RBAC_MANAGE } from './rbacApi'
 import type { SearchCourseItem, SearchPersonItem } from './searchApi'
@@ -68,19 +72,21 @@ describe('buildSearchItems', () => {
     expect(dashboard?.group).toBe('page')
     expect(items.some((i) => i.path === '/courses')).toBe(true)
     expect(items.some((i) => i.path === '/notebooks')).toBe(true)
-    expect(items.some((i) => i.path === '/settings/ai/models')).toBe(true)
+    expect(items.some((i) => i.path === '/settings/ai/models')).toBe(false)
   })
 
-  it('adds Roles page when PERM_RBAC_MANAGE is allowed', () => {
+  it('adds system settings pages when PERM_RBAC_MANAGE is allowed', () => {
     const allowed = (p: string) => p === PERM_RBAC_MANAGE
     const items = buildSearchItems([], [], allowed)
     expect(items.some((i) => i.path === '/settings/roles')).toBe(true)
+    expect(items.some((i) => i.path === '/settings/ai/models')).toBe(true)
     expect(items.some((i) => i.path === '/settings/ai/system-prompts')).toBe(true)
   })
 
-  it('omits Roles page without rbac permission', () => {
+  it('omits system settings pages without rbac permission', () => {
     const items = buildSearchItems([], [], allowsNone)
     expect(items.some((i) => i.path === '/settings/roles')).toBe(false)
+    expect(items.some((i) => i.path === '/settings/ai/models')).toBe(false)
     expect(items.some((i) => i.path === '/settings/ai/system-prompts')).toBe(false)
   })
 
@@ -112,6 +118,33 @@ describe('buildSearchItems', () => {
     const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsNone)
     expect(items.some((i) => i.path === '/courses/X/enrollments')).toBe(false)
     expect(items.some((i) => i.id === 'action:/courses/X/enrollments:add')).toBe(false)
+  })
+
+  it('adds searchable course settings sections for dates and branding', () => {
+    const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsNone)
+    expect(items.some((i) => i.path === '/courses/X/settings/dates')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/X/settings/branding')).toBe(true)
+  })
+
+  it('includes grading settings page only when gradebook view is granted', () => {
+    const allowsGradeG = (p: string) => p === courseGradebookViewPermission('G')
+    const items = buildSearchItems([{ courseCode: 'G', title: 'H' }], [], allowsGradeG)
+    expect(items.some((i) => i.path === '/courses/G/settings/grading')).toBe(true)
+    const noGrade = buildSearchItems([{ courseCode: 'G', title: 'H' }], [], allowsNone)
+    expect(noGrade.some((i) => i.path === '/courses/G/settings/grading')).toBe(false)
+  })
+
+  it('includes export-import and archived settings when item:create is granted', () => {
+    const allowsItems = (p: string) => p === courseItemCreatePermission('Z')
+    const items = buildSearchItems([{ courseCode: 'Z', title: 'W' }], [], allowsItems)
+    expect(items.some((i) => i.path === '/courses/Z/settings/export-import')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/Z/settings/archived')).toBe(true)
+  })
+
+  it('omits export-import and archived settings without item:create', () => {
+    const items = buildSearchItems([{ courseCode: 'Z', title: 'W' }], [], allowsNone)
+    expect(items.some((i) => i.path === '/courses/Z/settings/export-import')).toBe(false)
+    expect(items.some((i) => i.path === '/courses/Z/settings/archived')).toBe(false)
   })
 
   it('includes gradebook page only for courses where gradebook view is granted', () => {
@@ -193,6 +226,7 @@ describe('buildSearchItems with full permissions', () => {
   it('includes rbac page and create course when allows returns true', () => {
     const items = buildSearchItems([], [], allowsAll)
     expect(items.some((i) => i.path === '/settings/roles')).toBe(true)
+    expect(items.some((i) => i.path === '/settings/ai/models')).toBe(true)
     expect(items.some((i) => i.id === 'action:/courses/create')).toBe(true)
   })
 })

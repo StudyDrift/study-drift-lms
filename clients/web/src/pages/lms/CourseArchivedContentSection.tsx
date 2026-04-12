@@ -6,6 +6,7 @@ import {
   courseItemCreatePermission,
   fetchCourseArchivedStructure,
   patchCourseArchived,
+  postFactoryResetCourse,
   unarchiveCourseStructureItem,
   type CourseStructureItem,
 } from '../../lib/coursesApi'
@@ -20,6 +21,8 @@ function kindLabel(kind: CourseStructureItem['kind']): string {
       return 'Assignment'
     case 'quiz':
       return 'Quiz'
+    case 'external_link':
+      return 'External link'
     default:
       return kind
   }
@@ -35,7 +38,9 @@ export function CourseArchivedContentSection({ courseCode }: { courseCode: strin
   const [busyId, setBusyId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [deleteCourseConfirmOpen, setDeleteCourseConfirmOpen] = useState(false)
+  const [factoryResetConfirmOpen, setFactoryResetConfirmOpen] = useState(false)
   const [archiveCourseBusy, setArchiveCourseBusy] = useState(false)
+  const [factoryResetBusy, setFactoryResetBusy] = useState(false)
 
   const load = useCallback(async () => {
     setLoadError(null)
@@ -51,6 +56,19 @@ export function CourseArchivedContentSection({ courseCode }: { courseCode: strin
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!deleteCourseConfirmOpen && !factoryResetConfirmOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (archiveCourseBusy || factoryResetBusy) return
+      e.preventDefault()
+      setDeleteCourseConfirmOpen(false)
+      setFactoryResetConfirmOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [deleteCourseConfirmOpen, factoryResetConfirmOpen, archiveCourseBusy, factoryResetBusy])
 
   const moduleTitleById = useMemo(() => {
     const m = new Map<string, string>()
@@ -72,7 +90,8 @@ export function CourseArchivedContentSection({ courseCode }: { courseCode: strin
         (i.kind === 'heading' ||
           i.kind === 'content_page' ||
           i.kind === 'assignment' ||
-          i.kind === 'quiz'),
+          i.kind === 'quiz' ||
+          i.kind === 'external_link'),
     )
   }, [items])
 
@@ -103,6 +122,20 @@ export function CourseArchivedContentSection({ courseCode }: { courseCode: strin
     }
   }
 
+  async function confirmFactoryReset() {
+    setActionError(null)
+    setFactoryResetBusy(true)
+    try {
+      await postFactoryResetCourse(courseCode)
+      setFactoryResetConfirmOpen(false)
+      navigate(`/courses/${encodeURIComponent(courseCode)}/modules`, { replace: true })
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Could not reset course.')
+    } finally {
+      setFactoryResetBusy(false)
+    }
+  }
+
   if (!canEdit) {
     return (
       <p className="text-sm text-slate-600 dark:text-neutral-400">
@@ -130,14 +163,24 @@ export function CourseArchivedContentSection({ courseCode }: { courseCode: strin
           Archived module items are hidden from students but stay in the course. Restoring an item
           returns it to the module outline.
         </p>
-        <button
-          type="button"
-          onClick={() => setDeleteCourseConfirmOpen(true)}
-          disabled={archiveCourseBusy}
-          className="shrink-0 self-start rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/60 dark:bg-neutral-900/40 dark:text-rose-300 dark:hover:bg-rose-950/40"
-        >
-          Delete Course
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-2 self-start">
+          <button
+            type="button"
+            onClick={() => setFactoryResetConfirmOpen(true)}
+            disabled={archiveCourseBusy || factoryResetBusy}
+            className="rounded-xl border border-amber-200 bg-white px-4 py-2.5 text-sm font-semibold text-amber-900 shadow-sm transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-900/50 dark:bg-neutral-900/40 dark:text-amber-200 dark:hover:bg-amber-950/30"
+          >
+            Factory Reset Course
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeleteCourseConfirmOpen(true)}
+            disabled={archiveCourseBusy || factoryResetBusy}
+            className="rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/60 dark:bg-neutral-900/40 dark:text-rose-300 dark:hover:bg-rose-950/40"
+          >
+            Delete Course
+          </button>
+        </div>
       </div>
       {actionError && (
         <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-200">
@@ -194,6 +237,69 @@ export function CourseArchivedContentSection({ courseCode }: { courseCode: strin
           </table>
         </div>
       )}
+
+      {factoryResetConfirmOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 dark:bg-black/50"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !factoryResetBusy) setFactoryResetConfirmOpen(false)
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="factory-reset-course-title"
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-neutral-700">
+              <h3
+                id="factory-reset-course-title"
+                className="text-sm font-semibold text-slate-900 dark:text-neutral-100"
+              >
+                Factory reset course
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!factoryResetBusy) setFactoryResetConfirmOpen(false)
+                }}
+                disabled={factoryResetBusy}
+                className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm leading-relaxed text-slate-600 dark:text-neutral-300">
+                This permanently deletes all modules, pages, assignments, quizzes, links, the
+                syllabus, uploaded course files, and archived items. Grading is reset to a single
+                default group. The course stays open with the same enrollments; title and schedule
+                settings are not changed.
+              </p>
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFactoryResetConfirmOpen(false)}
+                  disabled={factoryResetBusy}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700/80"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmFactoryReset()}
+                  disabled={factoryResetBusy}
+                  className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-amber-600 dark:hover:bg-amber-500"
+                >
+                  {factoryResetBusy ? 'Resetting…' : 'Reset course'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {deleteCourseConfirmOpen ? (
         <div

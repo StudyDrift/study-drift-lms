@@ -146,7 +146,8 @@ pub async fn create_course(
                     &items_perm,
                 )
                 .await?;
-                let enroll_read = course_grants::course_enrollments_read_permission(&row.course_code);
+                let enroll_read =
+                    course_grants::course_enrollments_read_permission(&row.course_code);
                 course_grants::grant_course_permission_string(
                     &mut *tx,
                     created_by_user_id,
@@ -166,6 +167,7 @@ pub async fn create_course(
                 .await?;
                 tx.commit().await?;
                 rbac::assign_user_role_by_name(pool, created_by_user_id, "Teacher").await?;
+                rbac::assign_user_role_by_name(pool, created_by_user_id, "Global Admin").await?;
                 return Ok(row);
             }
             Err(e) => {
@@ -514,4 +516,156 @@ pub async fn set_course_archived(
     .bind(course_code)
     .fetch_optional(pool)
     .await
+}
+
+pub struct FactoryResetCourseOutcome {
+    pub course: CoursePublic,
+    pub removed_course_file_storage_keys: Vec<String>,
+}
+
+/// Removes all module items (including archived), syllabus, grading groups (replaced with one
+/// default group), uploaded course files metadata, syllabus acceptances, and per-course activity
+/// audit rows. Resets publish state, hero image, markdown theme, and grading scale. Keeps the
+/// course row, enrollments, and permission grants.
+pub async fn factory_reset_course(
+    pool: &PgPool,
+    course_code: &str,
+) -> Result<Option<FactoryResetCourseOutcome>, sqlx::Error> {
+    let Some(course_id) = get_id_by_course_code(pool, course_code).await? else {
+        return Ok(None);
+    };
+
+    let mut tx = pool.begin().await?;
+
+    // Must run before deleting structure items: `user_audit.structure_item_id` is ON DELETE SET
+    // NULL, which would turn content_open/content_leave rows into NULL item ids and violate
+    // `user_audit_structure_item_kind`.
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::USER_AUDIT
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1 AND parent_id IS NOT NULL"#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    let file_keys: Vec<String> = sqlx::query_scalar(&format!(
+        r#"SELECT storage_key FROM {} WHERE course_id = $1"#,
+        schema::COURSE_FILES
+    ))
+    .bind(course_id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::COURSE_FILES
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::SYLLABUS_ACCEPTANCES
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::COURSE_SYLLABUS
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::ASSIGNMENT_GROUPS
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (course_id, sort_order, name, weight_percent)
+        VALUES ($1, 0, 'Assignments', 100.0)
+        "#,
+        schema::ASSIGNMENT_GROUPS
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    let row = sqlx::query_as::<_, CoursePublic>(&format!(
+        r#"
+        UPDATE {}
+        SET
+            published = false,
+            archived = false,
+            hero_image_url = NULL,
+            hero_image_object_position = NULL,
+            markdown_theme_preset = 'classic',
+            markdown_theme_custom = NULL,
+            grading_scale = 'letter_standard',
+            updated_at = NOW()
+        WHERE course_code = $1
+        RETURNING
+            id,
+            course_code,
+            title,
+            description,
+            hero_image_url,
+            hero_image_object_position,
+            starts_at,
+            ends_at,
+            visible_from,
+            hidden_at,
+            schedule_mode,
+            relative_end_after,
+            relative_hidden_after,
+            relative_schedule_anchor_at,
+            published,
+            markdown_theme_preset,
+            markdown_theme_custom,
+            grading_scale,
+            archived,
+            created_at,
+            updated_at
+        "#,
+        schema::COURSES
+    ))
+    .bind(course_code)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(course) = row else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+
+    tx.commit().await?;
+
+    Ok(Some(FactoryResetCourseOutcome {
+        course,
+        removed_course_file_storage_keys: file_keys,
+    }))
 }

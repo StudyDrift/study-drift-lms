@@ -1,5 +1,3 @@
-use std::path::{Path as FsPath, PathBuf};
-
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, Multipart, Path, State},
@@ -11,10 +9,11 @@ use axum::{
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::http_auth::auth_user;
+use crate::http_auth::{assert_permission, auth_user};
 use crate::models::course_file::CourseFileUploadResponse;
 use crate::repos::course;
 use crate::repos::course_files;
+use crate::repos::course_grants;
 use crate::repos::enrollment;
 use crate::state::AppState;
 
@@ -30,27 +29,6 @@ pub fn router() -> Router<AppState> {
             "/api/v1/courses/{course_code}/course-files/{file_id}/content",
             get(download_course_file_handler),
         )
-}
-
-fn course_dir_segment(course_code: &str) -> String {
-    let t = course_code.trim();
-    if t.is_empty() {
-        return "_unknown".into();
-    }
-    t.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .take(200)
-        .collect()
-}
-
-fn disk_path(root: &FsPath, course_code: &str, storage_key: &str) -> PathBuf {
-    root.join(course_dir_segment(course_code)).join(storage_key)
 }
 
 fn normalize_image_mime(raw: Option<&str>) -> Option<&'static str> {
@@ -94,6 +72,9 @@ async fn upload_course_file_handler(
         return Err(AppError::NotFound);
     }
 
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
     let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
@@ -110,7 +91,10 @@ async fn upload_course_file_handler(
         if field.name() != Some("file") {
             continue;
         }
-        let fname = field.file_name().map(truncate_filename).unwrap_or_else(|| "upload".into());
+        let fname = field
+            .file_name()
+            .map(truncate_filename)
+            .unwrap_or_else(|| "upload".into());
         let ct = field.content_type().map(|s| s.to_string());
         let bytes = field
             .bytes()
@@ -144,12 +128,12 @@ async fn upload_course_file_handler(
     let id = Uuid::new_v4();
     let ext = ext_for_mime(mime_type.as_str());
     let storage_key = format!("{id}.{ext}");
-    let path = disk_path(&state.course_files_root, &course_code, &storage_key);
+    let path = course_files::blob_disk_path(&state.course_files_root, &course_code, &storage_key);
 
     if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|e| AppError::InvalidInput(format!("could not create storage directory: {e}")))?;
+        tokio::fs::create_dir_all(parent).await.map_err(|e| {
+            AppError::InvalidInput(format!("could not create storage directory: {e}"))
+        })?;
     }
 
     tokio::fs::write(&path, &bytes)
@@ -220,7 +204,7 @@ async fn download_course_file_handler(
         return Err(AppError::NotFound);
     };
 
-    let path = disk_path(&state.course_files_root, &course_code, &row.storage_key);
+    let path = course_files::blob_disk_path(&state.course_files_root, &course_code, &row.storage_key);
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|_| AppError::NotFound)?;

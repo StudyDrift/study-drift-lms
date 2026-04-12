@@ -110,6 +110,18 @@ export default function Inbox() {
     void loadMessages()
   }, [loadMessages, mailboxRevision])
 
+  useEffect(() => {
+    if (!composeOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (composeBusy) return
+      e.preventDefault()
+      setComposeOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [composeOpen, composeBusy])
+
   const selected = useMemo(
     () => messages.find((m) => m.id === selectedId) ?? null,
     [messages, selectedId],

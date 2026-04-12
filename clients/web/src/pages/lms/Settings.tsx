@@ -1,9 +1,10 @@
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from 'react'
-import { matchPath, useLocation } from 'react-router-dom'
+import { matchPath, Navigate, useLocation } from 'react-router-dom'
 import { ImageIcon, Save, Upload, X } from 'lucide-react'
 import { ImageModelPicker } from '../../components/ImageModelPicker'
 import { RequirePermission } from '../../components/RequirePermission'
 import { RolesPermissionsPanel } from '../../components/settings/RolesPermissionsPanel'
+import { usePermissions } from '../../context/usePermissions'
 import { PERM_RBAC_MANAGE } from '../../lib/rbacApi'
 import { LmsPage } from './LmsPage'
 import { FALLBACK_IMAGE_MODEL_OPTIONS, FALLBACK_TEXT_MODEL_OPTIONS } from '../../lib/aiModels'
@@ -19,7 +20,12 @@ function settingsViewFromPathname(pathname: string): SettingsViewId {
   const m = matchPath({ path: '/settings/:tab', end: true }, pathname)
   const raw = m?.params.tab
   if (raw === 'account' || raw === 'notifications' || raw === 'roles') return raw
-  return 'ai-models'
+  return 'account'
+}
+
+function isSystemSettingsPath(pathname: string): boolean {
+  if (pathname.startsWith('/settings/ai/')) return true
+  return pathname === '/settings/roles'
 }
 
 type SystemPromptItem = {
@@ -106,6 +112,7 @@ async function fetchModelsForKind(kind: ModelKind): Promise<{
 
 export default function Settings() {
   const location = useLocation()
+  const { allows, loading: permLoading } = usePermissions()
   const activeView = settingsViewFromPathname(location.pathname)
 
   const [systemPrompts, setSystemPrompts] = useState<SystemPromptItem[]>([])
@@ -204,10 +211,14 @@ export default function Settings() {
 
   useEffect(() => {
     if (activeView !== 'ai-prompts') return
+    if (permLoading || !allows(PERM_RBAC_MANAGE)) return
     void loadSystemPrompts()
-  }, [activeView, loadSystemPrompts])
+  }, [activeView, allows, loadSystemPrompts, permLoading])
+
+  const canConfigureAi = !permLoading && allows(PERM_RBAC_MANAGE)
 
   useEffect(() => {
+    if (activeView !== 'ai-models' || !canConfigureAi) return
     let cancelled = false
     ;(async () => {
       setAiLoading(true)
@@ -240,7 +251,7 @@ export default function Settings() {
     return () => {
       cancelled = true
     }
-  }, [loadModels])
+  }, [activeView, canConfigureAi, loadModels])
 
   async function onSaveAi(e: FormEvent) {
     e.preventDefault()
@@ -301,6 +312,18 @@ export default function Settings() {
     if (activeView !== 'account') return
     void loadAccount()
   }, [activeView, loadAccount])
+
+  useEffect(() => {
+    if (!avatarModalOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (avatarGenStatus === 'loading') return
+      e.preventDefault()
+      setAvatarModalOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [avatarModalOpen, avatarGenStatus])
 
   async function onAvatarUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -474,6 +497,17 @@ export default function Settings() {
     setSystemPromptKey(key)
     const row = systemPrompts.find((p) => p.key === key)
     if (row) setSystemPromptDraft(row.content)
+  }
+
+  if (permLoading && isSystemSettingsPath(location.pathname)) {
+    return (
+      <LmsPage title="Settings" description="Account and learning preferences.">
+        <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400">Loading…</p>
+      </LmsPage>
+    )
+  }
+  if (!permLoading && isSystemSettingsPath(location.pathname) && !allows(PERM_RBAC_MANAGE)) {
+    return <Navigate to="/settings/account" replace />
   }
 
   return (

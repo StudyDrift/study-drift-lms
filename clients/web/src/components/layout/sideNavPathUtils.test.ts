@@ -16,8 +16,8 @@ describe('settingsViewFromPathname', () => {
     expect(settingsViewFromPathname('/settings/roles')).toBe('roles')
   })
 
-  it('defaults to ai-models for unknown settings paths', () => {
-    expect(settingsViewFromPathname('/settings/unknown')).toBe('ai-models')
+  it('defaults to account for unknown settings paths', () => {
+    expect(settingsViewFromPathname('/settings/unknown')).toBe('account')
   })
 })
 

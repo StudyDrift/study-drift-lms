@@ -6,21 +6,22 @@ use uuid::Uuid;
 use crate::db::schema;
 use crate::error::AppError;
 use crate::models::course::{MarkdownThemeCustom, GRADING_SCALES};
-use crate::repos::course::UpdateCourse;
 use crate::models::course_export::{
     CourseExportSnapshot, CourseExportV1, CourseImportMode, ExportedAssignmentBody,
     ExportedContentPageBody, ExportedQuizBody,
 };
-use crate::models::course_grading::{AssignmentGroupInput, CourseGradingSettingsResponse};
+use crate::models::course_grading::CourseGradingSettingsResponse;
 use crate::models::course_module_quiz::{
     validate_adaptive_quiz_settings, validate_item_points_worth, validate_quiz_questions,
 };
 use crate::models::course_structure::CourseStructureItemResponse;
 use crate::models::course_syllabus::SyllabusSection;
 use crate::repos::course;
-use crate::repos::course_grading::{self, PutError};
+use crate::repos::course::UpdateCourse;
+use crate::repos::course_grading;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
+use crate::repos::course_module_external_links;
 use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
@@ -72,29 +73,28 @@ fn validate_syllabus_sections(sections: &[SyllabusSection]) -> Result<(), AppErr
             return Err(AppError::InvalidInput("Each section needs an id.".into()));
         }
         if s.heading.len() > MAX_SYLLABUS_HEADING_LEN {
-            return Err(AppError::InvalidInput("Section heading is too long.".into()));
+            return Err(AppError::InvalidInput(
+                "Section heading is too long.".into(),
+            ));
         }
         if s.markdown.len() > MAX_SYLLABUS_MARKDOWN_LEN {
-            return Err(AppError::InvalidInput("Section content is too long.".into()));
+            return Err(AppError::InvalidInput(
+                "Section content is too long.".into(),
+            ));
         }
     }
     Ok(())
 }
 
-fn grading_to_inputs(g: &CourseGradingSettingsResponse) -> Vec<AssignmentGroupInput> {
-    g.assignment_groups
-        .iter()
-        .map(|ag| AssignmentGroupInput {
-            id: Some(ag.id),
-            name: ag.name.clone(),
-            sort_order: ag.sort_order,
-            weight_percent: ag.weight_percent,
-        })
-        .collect()
-}
-
 fn validate_structure_export(items: &[CourseStructureItemResponse]) -> Result<(), AppError> {
-    let allowed = ["module", "heading", "content_page", "assignment", "quiz"];
+    let allowed = [
+        "module",
+        "heading",
+        "content_page",
+        "assignment",
+        "quiz",
+        "external_link",
+    ];
     let mut seen: HashSet<Uuid> = HashSet::new();
     for it in items {
         if !allowed.contains(&it.kind.as_str()) {
@@ -116,7 +116,9 @@ fn validate_structure_export(items: &[CourseStructureItemResponse]) -> Result<()
             ));
         }
         if !seen.insert(it.id) {
-            return Err(AppError::InvalidInput("Duplicate structure item id.".into()));
+            return Err(AppError::InvalidInput(
+                "Duplicate structure item id.".into(),
+            ));
         }
     }
     Ok(())
@@ -129,11 +131,15 @@ fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
         ));
     }
     if ex.course_code.trim().is_empty() {
-        return Err(AppError::InvalidInput("Export is missing courseCode.".into()));
+        return Err(AppError::InvalidInput(
+            "Export is missing courseCode.".into(),
+        ));
     }
     // `courseCode` in the file records the source course; imports may target any course.
     if !GRADING_SCALES.contains(&ex.grading.grading_scale.as_str()) {
-        return Err(AppError::InvalidInput("Invalid grading scale in export.".into()));
+        return Err(AppError::InvalidInput(
+            "Invalid grading scale in export.".into(),
+        ));
     }
     for g in &ex.grading.assignment_groups {
         if g.name.trim().is_empty() {
@@ -161,7 +167,9 @@ fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
     }
     for (id, body) in &ex.quizzes {
         if body.markdown.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
-            return Err(AppError::InvalidInput(format!("Quiz {id} markdown is too long.")));
+            return Err(AppError::InvalidInput(format!(
+                "Quiz {id} markdown is too long."
+            )));
         }
         validate_quiz_questions(&body.questions)?;
         validate_item_points_worth(body.points_worth)?;
@@ -174,6 +182,17 @@ fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
             )?;
         }
     }
+    for it in &ex.structure {
+        if it.kind != "external_link" {
+            continue;
+        }
+        if let Some(ref u) = it.external_url {
+            let t = u.trim();
+            if !t.is_empty() {
+                course_module_external_links::validate_external_http_url(t)?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -183,7 +202,11 @@ async fn apply_course_snapshot(
     snap: &CourseExportSnapshot,
 ) -> Result<(), AppError> {
     let mode = snap.schedule_mode.trim();
-    let mode = if mode == "relative" { "relative" } else { "fixed" };
+    let mode = if mode == "relative" {
+        "relative"
+    } else {
+        "fixed"
+    };
     let (
         starts_at,
         ends_at,
@@ -266,22 +289,17 @@ async fn apply_grading_from_export(
     course_code: &str,
     grading: &CourseGradingSettingsResponse,
 ) -> Result<(), AppError> {
-    let inputs = grading_to_inputs(grading);
-    match course_grading::put_settings(
+    // Imports (Canvas or JSON) carry assignment group UUIDs that do not exist on the target
+    // course yet. `put_settings` only UPDATEs by id; use replace so groups are INSERTed with
+    // the bundle ids before structure rows reference them.
+    course_grading::replace_assignment_groups_for_import(
         pool,
         course_code,
         grading.grading_scale.trim(),
-        &inputs,
+        &grading.assignment_groups,
     )
-    .await
-    {
-        Ok(Some(_)) => Ok(()),
-        Ok(None) => Err(AppError::NotFound),
-        Err(PutError::UnknownGroupId(id)) => Err(AppError::InvalidInput(format!(
-            "Unknown assignment group id in export: {id}"
-        ))),
-        Err(PutError::Db(e)) => Err(e.into()),
-    }
+    .await?;
+    Ok(())
 }
 
 async fn merge_add_grading_groups(
@@ -317,14 +335,19 @@ async fn apply_module_bodies(
         match it.kind.as_str() {
             "content_page" => {
                 if let Some(body) = ex.content_pages.get(&it.id) {
-                    course_module_content::upsert_import_body(pool, course_id, it.id, &body.markdown)
-                        .await?;
+                    course_module_content::upsert_import_body(
+                        pool,
+                        course_id,
+                        it.id,
+                        &body.markdown,
+                    )
+                    .await?;
                     course_structure::set_content_page_due_at(pool, course_id, it.id, body.due_at)
                         .await
                         .map_err(|e| match e {
-                            sqlx::Error::RowNotFound => {
-                                AppError::InvalidInput("Content page due date update failed.".into())
-                            }
+                            sqlx::Error::RowNotFound => AppError::InvalidInput(
+                                "Content page due date update failed.".into(),
+                            ),
                             _ => e.into(),
                         })?;
                 }
@@ -375,6 +398,21 @@ async fn apply_module_bodies(
                         })?;
                 }
             }
+            "external_link" => {
+                let raw = it
+                    .external_url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("");
+                let stored = if raw.is_empty() {
+                    String::new()
+                } else {
+                    course_module_external_links::validate_external_http_url(raw)?
+                };
+                course_module_external_links::upsert_import_body(pool, course_id, it.id, &stored)
+                    .await?;
+            }
             _ => {}
         }
     }
@@ -394,8 +432,13 @@ async fn apply_module_bodies_for_new_items_only(
         match it.kind.as_str() {
             "content_page" => {
                 if let Some(body) = ex.content_pages.get(&it.id) {
-                    course_module_content::upsert_import_body(pool, course_id, it.id, &body.markdown)
-                        .await?;
+                    course_module_content::upsert_import_body(
+                        pool,
+                        course_id,
+                        it.id,
+                        &body.markdown,
+                    )
+                    .await?;
                     course_structure::set_content_page_due_at(pool, course_id, it.id, body.due_at)
                         .await
                         .map_err(AppError::from)?;
@@ -436,6 +479,21 @@ async fn apply_module_bodies_for_new_items_only(
                         .await
                         .map_err(AppError::from)?;
                 }
+            }
+            "external_link" => {
+                let raw = it
+                    .external_url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("");
+                let stored = if raw.is_empty() {
+                    String::new()
+                } else {
+                    course_module_external_links::validate_external_http_url(raw)?
+                };
+                course_module_external_links::upsert_import_body(pool, course_id, it.id, &stored)
+                    .await?;
             }
             _ => {}
         }
@@ -539,14 +597,16 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let (syllabus, require_syllabus_acceptance) = match course_syllabus::get_for_course(pool, course_id).await? {
-        Some((s, _, r)) => (s, r),
-        None => (Vec::new(), false),
-    };
+    let (syllabus, require_syllabus_acceptance) =
+        match course_syllabus::get_for_course(pool, course_id).await? {
+            Some((s, _, r)) => (s, r),
+            None => (Vec::new(), false),
+        };
 
     let structure_rows = course_structure::list_for_course(pool, course_id).await?;
     let structure =
-        course_structure::rows_to_responses_with_quiz_adaptive(pool, course_id, structure_rows).await?;
+        course_structure::rows_to_responses_with_quiz_adaptive(pool, course_id, structure_rows)
+            .await?;
 
     let mut content_pages: HashMap<Uuid, ExportedContentPageBody> = HashMap::new();
     let mut assignments: HashMap<Uuid, ExportedAssignmentBody> = HashMap::new();
@@ -559,13 +619,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                     course_module_content::get_for_course_item(pool, course_id, it.id).await?
                 {
                     let _ = title;
-                    content_pages.insert(
-                        it.id,
-                        ExportedContentPageBody {
-                            markdown,
-                            due_at,
-                        },
-                    );
+                    content_pages.insert(it.id, ExportedContentPageBody { markdown, due_at });
                 }
             }
             "assignment" => {
@@ -584,7 +638,8 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                 }
             }
             "quiz" => {
-                if let Some(row) = course_module_quizzes::get_for_course_item(pool, course_id, it.id).await?
+                if let Some(row) =
+                    course_module_quizzes::get_for_course_item(pool, course_id, it.id).await?
                 {
                     let _ = row.title;
                     quizzes.insert(
@@ -663,9 +718,14 @@ pub async fn apply_import(
                 .map_err(AppError::from)?;
             apply_grading_from_export(pool, target_course_code, &ex.grading).await?;
             apply_course_snapshot(pool, target_course_code, &ex.course).await?;
-            course_syllabus::upsert_syllabus(pool, course_id, &ex.syllabus, ex.require_syllabus_acceptance)
-                .await
-                .map_err(AppError::from)?;
+            course_syllabus::upsert_syllabus(
+                pool,
+                course_id,
+                &ex.syllabus,
+                ex.require_syllabus_acceptance,
+            )
+            .await
+            .map_err(AppError::from)?;
             for it in &ex.structure {
                 course_structure::import_upsert_structure_item(pool, course_id, it, false)
                     .await
@@ -690,9 +750,14 @@ pub async fn apply_import(
         CourseImportMode::Overwrite => {
             apply_grading_from_export(pool, target_course_code, &ex.grading).await?;
             apply_course_snapshot(pool, target_course_code, &ex.course).await?;
-            course_syllabus::upsert_syllabus(pool, course_id, &ex.syllabus, ex.require_syllabus_acceptance)
-                .await
-                .map_err(AppError::from)?;
+            course_syllabus::upsert_syllabus(
+                pool,
+                course_id,
+                &ex.syllabus,
+                ex.require_syllabus_acceptance,
+            )
+            .await
+            .map_err(AppError::from)?;
             let keep: HashSet<Uuid> = ex.structure.iter().map(|i| i.id).collect();
             delete_structure_not_in_export(pool, course_id, &keep).await?;
             for it in &ex.structure {

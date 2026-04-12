@@ -204,3 +204,16 @@ pub struct CourseImportRequest {
     #[serde(rename = "export")]
     pub export: CourseExportV1,
 }
+
+/// Import a Canvas course via the Canvas REST API (server-side proxy; token is not stored).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CourseCanvasImportRequest {
+    pub mode: CourseImportMode,
+    /// Canvas root URL, e.g. `https://school.instructure.com` (no `/api/v1` suffix).
+    pub canvas_base_url: String,
+    /// Canvas numeric course id (same as in the course URL).
+    pub canvas_course_id: String,
+    /// Short-lived Canvas access token with permission to read the course.
+    pub access_token: String,
+}

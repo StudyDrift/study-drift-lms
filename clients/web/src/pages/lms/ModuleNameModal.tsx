@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { X } from 'lucide-react'
 
 type ModuleNameModalProps = {
@@ -8,7 +8,7 @@ type ModuleNameModalProps = {
   saving?: boolean
   errorMessage?: string | null
   /** Adjusts labels only. */
-  mode?: 'module' | 'heading' | 'content_page' | 'assignment' | 'quiz'
+  mode?: 'module' | 'heading' | 'content_page' | 'assignment' | 'quiz' | 'external_link'
   /** Prefill the input (e.g. edit title). */
   initialTitle?: string
   /** Overrides the dialog heading (e.g. "Edit title"). */
@@ -45,6 +45,8 @@ function ModuleNameModalInner({
           ? 'New assignment'
           : mode === 'quiz'
             ? 'New quiz'
+            : mode === 'external_link'
+              ? 'External link'
           : 'New module'
   const fieldLabel =
     mode === 'heading'
@@ -55,6 +57,8 @@ function ModuleNameModalInner({
           ? 'Assignment name'
           : mode === 'quiz'
             ? 'Quiz name'
+            : mode === 'external_link'
+              ? 'Link title'
           : 'Module name'
   const placeholder =
     mode === 'heading'
@@ -65,6 +69,8 @@ function ModuleNameModalInner({
           ? 'e.g. Problem set 1'
           : mode === 'quiz'
             ? 'e.g. Week 1 check-in'
+            : mode === 'external_link'
+              ? 'e.g. Textbook website'
           : 'e.g. Week 1 — Introduction'
   const submitLabel =
     mode === 'heading'
@@ -75,10 +81,23 @@ function ModuleNameModalInner({
           ? 'Save assignment'
           : mode === 'quiz'
             ? 'Save quiz'
+            : mode === 'external_link'
+              ? 'Save title'
           : 'Save module'
 
   const headingText = dialogTitleOverride ?? dialogTitle
   const primarySubmitLabel = submitLabelOverride ?? submitLabel
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (saving) return
+      e.preventDefault()
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, saving])
 
   return (
     <div

@@ -218,6 +218,75 @@ pub async fn group_belongs_to_course(
 }
 
 /// Inserts a group with a fixed id when it is missing for this course.
+/// Deletes all assignment groups for the course, then inserts groups from an import/export bundle
+/// using the bundle's fixed UUIDs (so module items can reference `assignment_group_id`).
+pub async fn replace_assignment_groups_for_import(
+    pool: &PgPool,
+    course_code: &str,
+    grading_scale: &str,
+    groups: &[AssignmentGroupPublic],
+) -> Result<(), sqlx::Error> {
+    let Some(course_id) = course::get_id_by_course_code(pool, course_code).await? else {
+        return Ok(());
+    };
+
+    let mut tx = pool.begin().await?;
+
+    sqlx::query(&format!(
+        r#"
+        UPDATE {}
+        SET grading_scale = $1, updated_at = NOW()
+        WHERE course_code = $2
+        "#,
+        schema::COURSES
+    ))
+    .bind(grading_scale)
+    .bind(course_code)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::ASSIGNMENT_GROUPS
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    let mut sorted: Vec<&AssignmentGroupPublic> = groups.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.sort_order
+            .cmp(&b.sort_order)
+            .then_with(|| a.name.cmp(&b.name))
+    });
+
+    for (i, g) in sorted.into_iter().enumerate() {
+        let name = g.name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let w = g.weight_percent.clamp(0.0, 100.0);
+        let sort_order = (i + 1) as i32;
+        sqlx::query(&format!(
+            r#"
+            INSERT INTO {} (id, course_id, sort_order, name, weight_percent)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+            schema::ASSIGNMENT_GROUPS
+        ))
+        .bind(g.id)
+        .bind(course_id)
+        .bind(sort_order)
+        .bind(name)
+        .bind(w)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn insert_assignment_group_if_missing(
     pool: &PgPool,
     course_id: Uuid,

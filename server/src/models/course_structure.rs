@@ -46,6 +46,9 @@ pub struct CourseStructureItemResponse {
     /// Present for quizzes and assignments: instructor-set gradebook points; omitted when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub points_worth: Option<i32>,
+    /// Present for `external_link` items: destination URL (http/https).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_url: Option<String>,
 }
 
 impl From<CourseStructureItemRow> for CourseStructureItemResponse {
@@ -66,6 +69,7 @@ impl From<CourseStructureItemRow> for CourseStructureItemResponse {
             is_adaptive: None,
             points_possible: None,
             points_worth: None,
+            external_url: None,
         }
     }
 }
@@ -109,6 +113,28 @@ pub struct CreateCourseHeadingRequest {
 #[serde(rename_all = "camelCase")]
 pub struct CreateCourseAssignmentRequest {
     pub title: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateCourseExternalLinkRequest {
+    pub title: String,
+    pub url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchModuleExternalLinkRequest {
+    pub url: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModuleExternalLinkResponse {
+    pub item_id: Uuid,
+    pub title: String,
+    pub url: String,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]

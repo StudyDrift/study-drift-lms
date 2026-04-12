@@ -1,6 +1,8 @@
 //! Shared HTTP authentication helpers for API routes.
 
 use axum::http::{header::AUTHORIZATION, HeaderMap};
+use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::jwt::AuthUser;
@@ -31,6 +33,21 @@ pub async fn require_permission(
         return Err(AppError::Forbidden);
     }
     Ok(user)
+}
+
+/// After JWT identity is established (e.g. via [`auth_user`]), verifies `required` against stored grants.
+/// Prefer this over [`require_permission`] when you must run enrollment or other checks first on the same request.
+pub async fn assert_permission(
+    pool: &PgPool,
+    user_id: Uuid,
+    required: &str,
+) -> Result<(), AppError> {
+    rbac::validate_permission_string(required).map_err(AppError::InvalidInput)?;
+    let allowed = rbac::user_has_permission(pool, user_id, required).await?;
+    if !allowed {
+        return Err(AppError::Forbidden);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -20,13 +20,15 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
+  ChevronDown,
+  ChevronRight,
   CircleHelp,
   ClipboardList,
+  ExternalLink,
   Eye,
   EyeOff,
   FileText,
   GripVertical,
-  Heading,
   MoreVertical,
   Settings,
   Sparkles,
@@ -35,6 +37,7 @@ import {
 import { AddCourseItemMenu } from './AddCourseItemMenu'
 import { AddModuleItemMenu, type ModuleItemKind } from './AddModuleItemMenu'
 import { LmsPage } from './LmsPage'
+import { ModuleExternalLinkModal } from './ModuleExternalLinkModal'
 import { ModuleNameModal } from './ModuleNameModal'
 import { ModuleSettingsModal } from './ModuleSettingsModal'
 import { usePermissions } from '../../context/usePermissions'
@@ -44,6 +47,7 @@ import {
   createModuleContentPage,
   createModuleHeading,
   archiveCourseStructureItem,
+  createModuleExternalLink,
   createModuleQuiz,
   fetchCourseStructure,
   patchCourseModule,
@@ -92,7 +96,8 @@ function buildReorderPayloadFromItems(items: CourseStructureItem[]): {
           (i.kind === 'heading' ||
             i.kind === 'content_page' ||
             i.kind === 'assignment' ||
-            i.kind === 'quiz'),
+            i.kind === 'quiz' ||
+            i.kind === 'external_link'),
       )
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((c) => c.id)
@@ -211,20 +216,41 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
           </div>
         </div>
-      ) : (
+      ) : child.kind === 'external_link' ? (
         <div className="flex items-start gap-3">
           <span
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/90 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200"
             aria-hidden
           >
-            <Heading className="h-4 w-4" strokeWidth={2} />
+            <ExternalLink className="h-4 w-4" strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="min-w-0 text-lg font-bold leading-snug tracking-tight text-slate-950 sm:text-xl dark:text-neutral-100">
-              {child.title}
-            </p>
+            {child.externalUrl ? (
+              <a
+                href={child.externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                {child.title}
+              </a>
+            ) : (
+              <Link
+                to={`/courses/${encodeURIComponent(courseCode)}/modules/external-link/${encodeURIComponent(child.id)}`}
+                className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                {child.title}
+              </Link>
+            )}
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
           </div>
+        </div>
+      ) : (
+        <div className="min-w-0 flex-1">
+          <p className="min-w-0 text-lg font-bold leading-snug tracking-tight text-slate-950 sm:text-xl dark:text-neutral-100">
+            {child.title}
+          </p>
+          {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
         </div>
       )}
     </>
@@ -339,6 +365,7 @@ type SortableChildRowProps = {
   moduleId: string
   canManageItemRow: boolean
   busyChildItemId: string | null
+  dragHandlesVisible: boolean
   onChildTogglePublished: (child: CourseStructureItem) => void
   onOpenEditChildTitle: (child: CourseStructureItem) => void
   onArchiveChild: (child: CourseStructureItem) => void
@@ -351,6 +378,7 @@ function SortableChildRow({
   moduleId,
   canManageItemRow,
   busyChildItemId,
+  dragHandlesVisible,
   onChildTogglePublished,
   onOpenEditChildTitle,
   onArchiveChild,
@@ -375,6 +403,7 @@ function SortableChildRow({
           {!disabled && (
             <button
               type="button"
+              style={!dragHandlesVisible ? { display: 'none' } : undefined}
               className="mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300"
               aria-label="Drag to reorder item"
               {...listeners}
@@ -394,7 +423,7 @@ function SortableChildRow({
         </div>
         {showRowChrome ? (
           <div
-            className={`flex shrink-0 justify-end sm:items-center sm:self-center sm:pl-0 ${!disabled ? 'pl-[3.25rem]' : 'pl-0'}`}
+            className={`flex shrink-0 justify-end sm:items-center sm:self-center sm:pl-0 ${!disabled && dragHandlesVisible ? 'pl-[3.25rem]' : 'pl-0'}`}
           >
             <ModuleItemRowActions
               child={child}
@@ -428,6 +457,8 @@ type ModuleCardBodyProps = {
   anyModalBusy: boolean
   onModuleItemAdd: (moduleId: string, kind: ModuleItemKind) => void
   minified: boolean
+  collapsed: boolean
+  onToggleCollapsed: () => void
   busyModuleId: string | null
   onTogglePublished: (item: CourseStructureItem) => void
   onOpenModuleSettings: (item: CourseStructureItem) => void
@@ -442,6 +473,8 @@ function ModuleCardBody({
   anyModalBusy,
   onModuleItemAdd,
   minified,
+  collapsed,
+  onToggleCollapsed,
   busyModuleId,
   onTogglePublished,
   onOpenModuleSettings,
@@ -449,6 +482,8 @@ function ModuleCardBody({
   childrenList,
 }: ModuleCardBodyProps) {
   const children = moduleChildrenById.get(item.id) ?? []
+  const moduleItemsRegionId = `module-items-${item.id}`
+  const showAccordionToggle = !minified && children.length > 0
   return (
     <div
       className={`w-full rounded-2xl border border-slate-200/70 bg-slate-50/60 shadow-sm dark:border-neutral-700/80 dark:bg-neutral-800/85 ${
@@ -459,16 +494,55 @@ function ModuleCardBody({
         <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
           {moduleDragHandle}
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-slate-950 dark:text-neutral-100">{item.title}</p>
-            {!minified && (
-              <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
-                Course activities and items can be grouped under this module.
-              </p>
-            )}
-            {minified && children.length > 0 && (
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
-                {children.length} {children.length === 1 ? 'item' : 'items'}
-              </p>
+            {showAccordionToggle ? (
+              <button
+                type="button"
+                onClick={onToggleCollapsed}
+                aria-expanded={!collapsed}
+                aria-controls={moduleItemsRegionId}
+                className="w-full min-w-0 rounded-xl px-1 py-0.5 text-left transition hover:bg-slate-200/40 dark:hover:bg-neutral-700/50"
+              >
+                <span className="flex items-start gap-2">
+                  <span
+                    className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-slate-500 dark:text-neutral-400"
+                    aria-hidden
+                  >
+                    {collapsed ? (
+                      <ChevronRight className="h-4 w-4" strokeWidth={2} />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-slate-950 dark:text-neutral-100">
+                      {item.title}
+                    </span>
+                    {!collapsed ? (
+                      <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-neutral-400">
+                        Course activities and items can be grouped under this module.
+                      </span>
+                    ) : (
+                      <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-neutral-400">
+                        {children.length} {children.length === 1 ? 'item' : 'items'}
+                      </span>
+                    )}
+                  </span>
+                </span>
+              </button>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-slate-950 dark:text-neutral-100">{item.title}</p>
+                {!minified && (
+                  <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+                    Course activities and items can be grouped under this module.
+                  </p>
+                )}
+                {minified && children.length > 0 && (
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
+                    {children.length} {children.length === 1 ? 'item' : 'items'}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -512,7 +586,7 @@ function ModuleCardBody({
           </div>
         )}
       </div>
-      {!minified && children.length > 0 && childrenList}
+      {!minified && !collapsed && children.length > 0 && childrenList}
     </div>
   )
 }
@@ -525,8 +599,11 @@ type SortableModuleCardProps = {
   anyModalBusy: boolean
   onModuleItemAdd: (moduleId: string, kind: ModuleItemKind) => void
   minified: boolean
+  collapsed: boolean
+  onToggleCollapsed: (moduleId: string) => void
   busyModuleId: string | null
   busyChildItemId: string | null
+  dragHandlesVisible: boolean
   onTogglePublished: (item: CourseStructureItem) => void
   onOpenModuleSettings: (item: CourseStructureItem) => void
   onChildTogglePublished: (child: CourseStructureItem) => void
@@ -542,8 +619,11 @@ function SortableModuleCard({
   anyModalBusy,
   onModuleItemAdd,
   minified,
+  collapsed,
+  onToggleCollapsed,
   busyModuleId,
   busyChildItemId,
+  dragHandlesVisible,
   onTogglePublished,
   onOpenModuleSettings,
   onChildTogglePublished,
@@ -565,13 +645,16 @@ function SortableModuleCard({
   const childIds = children.map((c) => c.id)
 
   const childrenList =
-    !minified && children.length > 0 ? (
+    !minified && !collapsed && children.length > 0 ? (
       <SortableContext
         id={`module-children-${item.id}`}
         items={childIds}
         strategy={verticalListSortingStrategy}
       >
-        <ul className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-neutral-700/80 dark:border-neutral-700/80">
+        <ul
+          id={`module-items-${item.id}`}
+          className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-neutral-700/80 dark:border-neutral-700/80"
+        >
           {children.map((child) => (
             <SortableChildRow
               key={child.id}
@@ -581,6 +664,7 @@ function SortableModuleCard({
               disabled={!canEditModules || anyModalBusy}
               canManageItemRow={canEditModules}
               busyChildItemId={busyChildItemId}
+              dragHandlesVisible={dragHandlesVisible}
               onChildTogglePublished={onChildTogglePublished}
               onOpenEditChildTitle={onOpenEditChildTitle}
               onArchiveChild={onArchiveChild}
@@ -599,6 +683,8 @@ function SortableModuleCard({
         anyModalBusy={anyModalBusy}
         onModuleItemAdd={onModuleItemAdd}
         minified={minified}
+        collapsed={collapsed}
+        onToggleCollapsed={() => onToggleCollapsed(item.id)}
         busyModuleId={busyModuleId}
         onTogglePublished={onTogglePublished}
         onOpenModuleSettings={onOpenModuleSettings}
@@ -606,6 +692,7 @@ function SortableModuleCard({
           canEditModules ? (
             <button
               type="button"
+              style={!dragHandlesVisible ? { display: 'none' } : undefined}
               className="mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300"
               aria-label="Drag to reorder module"
               {...listeners}
@@ -630,10 +717,14 @@ function StaticModuleCard({
   courseCode: string
   moduleChildrenById: Map<string, CourseStructureItem[]>
 }) {
+  const [collapsed, setCollapsed] = useState(false)
   const children = moduleChildrenById.get(item.id) ?? []
   const childrenList =
-    children.length > 0 ? (
-      <ul className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-neutral-700/80 dark:border-neutral-700/80">
+    !collapsed && children.length > 0 ? (
+      <ul
+        id={`module-items-${item.id}`}
+        className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-neutral-700/80 dark:border-neutral-700/80"
+      >
         {children.map((child) => (
           <StaticChildRow key={child.id} child={child} courseCode={courseCode} />
         ))}
@@ -649,6 +740,8 @@ function StaticModuleCard({
         anyModalBusy={false}
         onModuleItemAdd={() => {}}
         minified={false}
+        collapsed={collapsed}
+        onToggleCollapsed={() => setCollapsed((c) => !c)}
         busyModuleId={null}
         onTogglePublished={() => {}}
         onOpenModuleSettings={() => {}}
@@ -696,6 +789,11 @@ export default function CourseModules() {
   const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
   const [quizSaving, setQuizSaving] = useState(false)
   const [quizSaveError, setQuizSaveError] = useState<string | null>(null)
+  const [externalLinkModalOpen, setExternalLinkModalOpen] = useState(false)
+  const [externalLinkModalKey, setExternalLinkModalKey] = useState(0)
+  const [externalLinkModuleId, setExternalLinkModuleId] = useState<string | null>(null)
+  const [externalLinkSaving, setExternalLinkSaving] = useState(false)
+  const [externalLinkSaveError, setExternalLinkSaveError] = useState<string | null>(null)
   const [busyModuleId, setBusyModuleId] = useState<string | null>(null)
   const [busyChildItemId, setBusyChildItemId] = useState<string | null>(null)
   const [moduleActionError, setModuleActionError] = useState<string | null>(null)
@@ -713,6 +811,17 @@ export default function CourseModules() {
 
   const [isDraggingModule, setIsDraggingModule] = useState(false)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
+  const [collapsedModuleIds, setCollapsedModuleIds] = useState<Set<string>>(() => new Set())
+  const [dragHandlesVisible, setDragHandlesVisible] = useState(false)
+
+  const toggleModuleCollapsed = useCallback((moduleId: string) => {
+    setCollapsedModuleIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(moduleId)) next.delete(moduleId)
+      else next.add(moduleId)
+      return next
+    })
+  }, [])
 
   /** `course:<courseCode>:item:create` — structure edit, reorder, and add items (server: `course_grants::course_item_create_permission`). */
   const itemCreatePerm = courseCode ? permCourseItemCreate(courseCode) : ''
@@ -741,6 +850,8 @@ export default function CourseModules() {
     assignmentModalOpen ||
     quizSaving ||
     quizModalOpen ||
+    externalLinkSaving ||
+    externalLinkModalOpen ||
     moduleSettingsSaving ||
     moduleSettingsOpen ||
     editItemSaving ||
@@ -773,6 +884,19 @@ export default function CourseModules() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!archiveConfirmItem) return
+    const archivingId = archiveConfirmItem.id
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (busyChildItemId === archivingId) return
+      e.preventDefault()
+      setArchiveConfirmItem(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [archiveConfirmItem, busyChildItemId])
 
   const saveModule = useCallback(
     async (title: string) => {
@@ -868,6 +992,25 @@ export default function CourseModules() {
     [courseCode, quizModuleId, load],
   )
 
+  const saveExternalLink = useCallback(
+    async (title: string, url: string) => {
+      if (!courseCode || !externalLinkModuleId) return
+      setExternalLinkSaveError(null)
+      setExternalLinkSaving(true)
+      try {
+        await createModuleExternalLink(courseCode, externalLinkModuleId, { title, url })
+        await load()
+        setExternalLinkModalOpen(false)
+        setExternalLinkModuleId(null)
+      } catch (e) {
+        setExternalLinkSaveError(e instanceof Error ? e.message : 'Could not save external link.')
+      } finally {
+        setExternalLinkSaving(false)
+      }
+    },
+    [courseCode, externalLinkModuleId, load],
+  )
+
   const openAddModule = useCallback(() => {
     if (!courseCode) return
     setModuleSaveError(null)
@@ -902,6 +1045,13 @@ export default function CourseModules() {
       setQuizModuleId(moduleId)
       setQuizModalKey((k) => k + 1)
       setQuizModalOpen(true)
+      return
+    }
+    if (kind === 'external_link') {
+      setExternalLinkSaveError(null)
+      setExternalLinkModuleId(moduleId)
+      setExternalLinkModalKey((k) => k + 1)
+      setExternalLinkModalOpen(true)
     }
   }, [])
 
@@ -1044,7 +1194,8 @@ export default function CourseModules() {
         (i.kind === 'heading' ||
           i.kind === 'content_page' ||
           i.kind === 'assignment' ||
-          i.kind === 'quiz') &&
+          i.kind === 'quiz' ||
+          i.kind === 'external_link') &&
         i.parentId
       ) {
         const list = m.get(i.parentId) ?? []
@@ -1157,7 +1308,12 @@ export default function CourseModules() {
       actions={
         courseCode && canEditModules ? (
           <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-            <AddCourseItemMenu onAdd={openAddModule} disabled={anyModalBusy} />
+            <AddCourseItemMenu
+              onAdd={openAddModule}
+              disabled={anyModalBusy}
+              dragHandlesVisible={dragHandlesVisible}
+              onToggleDragHandles={() => setDragHandlesVisible((v) => !v)}
+            />
           </div>
         ) : null
       }
@@ -1187,7 +1343,7 @@ export default function CourseModules() {
       {empty && canEditModules && (
         <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400">
           No course items yet. Use{' '}
-          <span className="font-medium text-slate-700 dark:text-neutral-300">Add Course Item</span> to add a module.
+          <span className="font-medium text-slate-700 dark:text-neutral-300">Actions</span>, then <span className="font-medium text-slate-700 dark:text-neutral-300">Add Module</span>, to add a module.
         </p>
       )}
       {empty && !canEditModules && (
@@ -1232,8 +1388,11 @@ export default function CourseModules() {
                     anyModalBusy={anyModalBusy}
                     onModuleItemAdd={onModuleItemAdd}
                     minified={isDraggingModule}
+                    collapsed={collapsedModuleIds.has(item.id)}
+                    onToggleCollapsed={toggleModuleCollapsed}
                     busyModuleId={busyModuleId}
                     busyChildItemId={busyChildItemId}
+                    dragHandlesVisible={dragHandlesVisible}
                     onTogglePublished={handleTogglePublished}
                     onOpenModuleSettings={handleOpenModuleSettings}
                     onChildTogglePublished={handleChildTogglePublished}
@@ -1258,7 +1417,9 @@ export default function CourseModules() {
                         ? activeItem.isAdaptive
                           ? 'Adaptive quiz'
                           : 'Quiz'
-                      : 'Heading'}
+                        : activeItem.kind === 'external_link'
+                          ? 'External link'
+                          : 'Heading'}
                 </p>
               </div>
             </DragOverlay>
@@ -1367,6 +1528,20 @@ export default function CourseModules() {
         mode="quiz"
       />
 
+      <ModuleExternalLinkModal
+        key={`external-link-${externalLinkModalKey}`}
+        open={externalLinkModalOpen}
+        onClose={() => {
+          if (!externalLinkSaving) {
+            setExternalLinkModalOpen(false)
+            setExternalLinkModuleId(null)
+          }
+        }}
+        onSave={(title, url) => void saveExternalLink(title, url)}
+        saving={externalLinkSaving}
+        errorMessage={externalLinkSaveError}
+      />
+
       <ModuleNameModal
         key={`edit-structure-item-${editItemModalKey}`}
         open={editItemModalOpen && editTargetItem !== null}
@@ -1388,6 +1563,8 @@ export default function CourseModules() {
                 ? 'assignment'
                 : editTargetItem?.kind === 'quiz'
                   ? 'quiz'
+                  : editTargetItem?.kind === 'external_link'
+                    ? 'external_link'
                   : 'content_page'
         }
         initialTitle={editTargetItem?.title ?? ''}

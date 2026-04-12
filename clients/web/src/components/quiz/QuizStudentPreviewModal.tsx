@@ -581,6 +581,17 @@ export function QuizStudentPreviewModal({
     }
   }, [open, advanced.requiresQuizAccessCode])
 
+  useEffect(() => {
+    if (!open) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
   if (!open) return null
 
   const adaptiveOn = Boolean(isAdaptive && courseCode && itemId)

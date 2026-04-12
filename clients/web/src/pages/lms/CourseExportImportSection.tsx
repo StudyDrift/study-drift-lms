@@ -1,10 +1,12 @@
 import { type ChangeEvent, useRef, useState } from 'react'
-import { Download, Upload } from 'lucide-react'
+import { Download, GraduationCap, Upload } from 'lucide-react'
+import { BookLoader } from '../../components/quiz/BookLoader'
 import { usePermissions } from '../../context/usePermissions'
 import {
   courseItemCreatePermission,
   fetchCourseExport,
   postCourseImport,
+  postCourseImportCanvas,
   type CourseBundleImportMode,
 } from '../../lib/coursesApi'
 export function CourseExportImportSection({ courseCode }: { courseCode: string }) {
@@ -12,8 +14,17 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
   const canEdit = !permLoading && allows(courseItemCreatePermission(courseCode))
   const fileRef = useRef<HTMLInputElement>(null)
   const [importMode, setImportMode] = useState<CourseBundleImportMode>('erase')
-  const [busy, setBusy] = useState<'idle' | 'exporting' | 'importing'>('idle')
+  const [busy, setBusy] = useState<
+    'idle' | 'exporting' | 'importing' | 'importingCanvas'
+  >('idle')
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [canvasBaseUrl, setCanvasBaseUrl] = useState('')
+  const [canvasCourseId, setCanvasCourseId] = useState('')
+  const [canvasToken, setCanvasToken] = useState('')
+  const [canvasImportStatus, setCanvasImportStatus] = useState<{
+    key: number
+    text: string
+  } | null>(null)
 
   async function onExport() {
     setFeedback(null)
@@ -68,6 +79,42 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
     }
   }
 
+  async function onCanvasImport() {
+    setFeedback(null)
+    setCanvasImportStatus(null)
+    setBusy('importingCanvas')
+    try {
+      await postCourseImportCanvas(
+        courseCode,
+        {
+          mode: importMode,
+          canvasBaseUrl: canvasBaseUrl.trim(),
+          canvasCourseId: canvasCourseId.trim(),
+          accessToken: canvasToken.trim(),
+        },
+        (message) => {
+          setCanvasImportStatus((prev) => ({
+            key: (prev?.key ?? 0) + 1,
+            text: message,
+          }))
+        },
+      )
+      setFeedback({
+        kind: 'ok',
+        text: 'Canvas course imported successfully. Reload the course if modules look stale.',
+      })
+      setCanvasToken('')
+    } catch (e) {
+      setFeedback({
+        kind: 'err',
+        text: e instanceof Error ? e.message : 'Canvas import failed.',
+      })
+    } finally {
+      setBusy('idle')
+      setCanvasImportStatus(null)
+    }
+  }
+
   if (!canEdit) {
     return (
       <p className="text-sm text-slate-600 dark:text-neutral-400">
@@ -101,9 +148,9 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-700 dark:bg-neutral-900/40">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Import</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
-          Choose a JSON file from any course export (including another server or environment). The
-          bundle is applied to this course; the <code className="text-xs">courseCode</code> in the
-          file is informational (where it was exported from).
+          Bring content into this course from Canvas (API) or from a JSON export file. The import
+          mode below applies to both paths. For JSON files, the{' '}
+          <code className="text-xs">courseCode</code> in the file is informational only.
         </p>
 
         <fieldset className="mt-4 space-y-3">
@@ -142,7 +189,8 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
               </span>
               <span className="mt-0.5 block text-sm text-slate-500 dark:text-neutral-400">
                 Keep existing content. Only add syllabus sections, assignment groups, and outline
-                items whose ids are not already present, with bodies for those new items only.
+                items whose ids are not already present, with bodies for those new items only. Existing
+                syllabus text is never replaced in this mode (use erase or overwrite to refresh it).
               </span>
             </span>
           </label>
@@ -167,23 +215,127 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
           </label>
         </fieldset>
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={(e) => void onPickImportFile(e)}
-        />
-        <div className="mt-4">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={busy !== 'idle'}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700"
-          >
-            <Upload className="h-4 w-4" aria-hidden />
-            {busy === 'importing' ? 'Importing…' : 'Choose JSON file…'}
-          </button>
+        <div className="mt-8 border-t border-slate-200 pt-8 dark:border-neutral-600">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
+            From Canvas LMS
+          </h3>
+          <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+            Use a Canvas personal access token. We fetch modules, wiki pages, assignments, quizzes
+            (and questions when exposed by Canvas), and discussions, then map them into this course.
+            The token is sent once for the import (HTTPS and WebSocket) and is not stored.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">
+                Canvas base URL
+              </span>
+              <input
+                type="url"
+                value={canvasBaseUrl}
+                onChange={(e) => setCanvasBaseUrl(e.target.value)}
+                placeholder="https://yourschool.instructure.com"
+                autoComplete="off"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-inner outline-none ring-indigo-500/0 transition focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">
+                Canvas course ID
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={canvasCourseId}
+                onChange={(e) => setCanvasCourseId(e.target.value)}
+                placeholder="e.g. 1234567"
+                autoComplete="off"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-inner outline-none ring-indigo-500/0 transition focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">
+                Access token
+              </span>
+              <input
+                type="password"
+                value={canvasToken}
+                onChange={(e) => setCanvasToken(e.target.value)}
+                placeholder="Canvas API token"
+                autoComplete="off"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-inner outline-none ring-indigo-500/0 transition focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+              />
+            </label>
+          </div>
+          <p className="mt-3 text-xs text-slate-500 dark:text-neutral-500">
+            In Canvas: Account or Profile → Settings → New access token. Use a token with
+            permission to read the course, assignments, pages, and quizzes.
+          </p>
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => void onCanvasImport()}
+              disabled={
+                busy !== 'idle' ||
+                !canvasBaseUrl.trim() ||
+                !canvasCourseId.trim() ||
+                !canvasToken.trim()
+              }
+              aria-busy={busy === 'importingCanvas'}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busy === 'importingCanvas' ? (
+                <span
+                  className="inline-flex shrink-0 items-center justify-center overflow-visible"
+                  aria-hidden
+                >
+                  <span className="inline-flex origin-center translate-y-[4px] scale-[0.3]">
+                    <BookLoader className="![--quiz-book-loader-color:rgba(255,255,255,0.92)]" />
+                  </span>
+                </span>
+              ) : (
+                <GraduationCap className="h-4 w-4 shrink-0" aria-hidden />
+              )}
+              {busy === 'importingCanvas' ? 'Importing from Canvas…' : 'Import from Canvas'}
+            </button>
+          </div>
+          {canvasImportStatus && (
+            <p
+              key={canvasImportStatus.key}
+              className="canvas-import-status-in mt-3 text-sm text-slate-600 dark:text-neutral-400"
+              role="status"
+              aria-live="polite"
+            >
+              {canvasImportStatus.text}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-8 border-t border-slate-200 pt-8 dark:border-neutral-600">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
+            From JSON export file
+          </h3>
+          <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+            Choose a JSON file produced by this app or another environment running the same export
+            format.
+          </p>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => void onPickImportFile(e)}
+          />
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={busy !== 'idle'}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700"
+            >
+              <Upload className="h-4 w-4" aria-hidden />
+              {busy === 'importing' ? 'Importing…' : 'Choose JSON file…'}
+            </button>
+          </div>
         </div>
       </section>
 

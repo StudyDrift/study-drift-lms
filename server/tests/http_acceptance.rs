@@ -57,7 +57,11 @@ async fn full_http_walkthrough() {
     let r = client.get(format!("{base}/health")).send().await.unwrap();
     assert_eq!(r.status(), reqwest::StatusCode::OK);
 
-    let r = client.get(format!("{base}/health/ready")).send().await.unwrap();
+    let r = client
+        .get(format!("{base}/health/ready"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(r.status(), reqwest::StatusCode::OK);
 
     let suf = std::time::SystemTime::now()
@@ -112,9 +116,7 @@ async fn full_http_walkthrough() {
     assert!(search["courses"].is_array());
 
     let r = client
-        .get(format!(
-            "{base}/api/v1/communication/messages?folder=inbox"
-        ))
+        .get(format!("{base}/api/v1/communication/messages?folder=inbox"))
         .bearer_auth(token)
         .send()
         .await
@@ -194,6 +196,8 @@ async fn full_http_walkthrough() {
         .await
         .unwrap();
     assert_eq!(r.status(), reqwest::StatusCode::OK);
+    let created_perm = json_body(r).await;
+    let perm_id = created_perm["id"].as_str().expect("created permission id");
 
     let r = client
         .post(format!("{base}/api/v1/courses"))
@@ -326,9 +330,7 @@ async fn full_http_walkthrough() {
     assert!(scoped_roles["roles"].is_array());
 
     let r = client
-        .get(format!(
-            "{base}/api/v1/courses/{course_code}/enrollments"
-        ))
+        .get(format!("{base}/api/v1/courses/{course_code}/enrollments"))
         .bearer_auth(token)
         .send()
         .await
@@ -565,6 +567,14 @@ async fn full_http_walkthrough() {
         ))
         .bearer_auth(token)
         .json(&json!({ "kind": "course_visit" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::NO_CONTENT);
+
+    let r = client
+        .delete(format!("{base}/api/v1/settings/permissions/{perm_id}"))
+        .bearer_auth(token)
         .send()
         .await
         .unwrap();

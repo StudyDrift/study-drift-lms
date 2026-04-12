@@ -21,6 +21,7 @@ import {
   useBlockEditor,
   type MarkdownEditKind,
 } from '../editor/block-editor'
+import { BookLoader } from '../quiz/BookLoader'
 
 function newLocalId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -595,33 +596,54 @@ function SyllabusBlockEditorInner({
                   <label htmlFor={`section-generate-input-${section.id}`} className="sr-only">
                     Instructions for generated section content
                   </label>
-                  <input
-                    ref={generateInputRef}
-                    id={`section-generate-input-${section.id}`}
-                    type="text"
-                    value={generateInstructions}
-                    maxLength={MAX_SECTION_GENERATE_INSTRUCTIONS}
-                    disabled={disabled || generateSubmittingId === section.id}
-                    onChange={(e) => setGenerateInstructions(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        void submitGenerate(section, index)
+                  <div className="relative">
+                    <input
+                      ref={generateInputRef}
+                      id={`section-generate-input-${section.id}`}
+                      type="text"
+                      value={generateInstructions}
+                      maxLength={MAX_SECTION_GENERATE_INSTRUCTIONS}
+                      disabled={disabled || generateSubmittingId === section.id}
+                      onChange={(e) => setGenerateInstructions(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          void submitGenerate(section, index)
+                        }
+                        if (e.key === 'Escape') {
+                          e.stopPropagation()
+                          setGenerateSectionId(null)
+                          setGenerateInstructions('')
+                          setGenerateError(null)
+                        }
+                      }}
+                      placeholder={
+                        generateSubmittingId === section.id
+                          ? 'Generating…'
+                          : 'Describe what this section should say… (Enter to generate)'
                       }
-                      if (e.key === 'Escape') {
-                        e.stopPropagation()
-                        setGenerateSectionId(null)
-                        setGenerateInstructions('')
-                        setGenerateError(null)
-                      }
-                    }}
-                    placeholder={
-                      generateSubmittingId === section.id
-                        ? 'Generating…'
-                        : 'Describe what this section should say… (Enter to generate)'
-                    }
-                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500"
-                  />
+                      className={[
+                        'w-full rounded-md border border-slate-200 bg-white py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500',
+                        generateSubmittingId === section.id ? 'pl-2.5 pr-14' : 'px-2.5',
+                      ].join(' ')}
+                      aria-busy={generateSubmittingId === section.id ? true : undefined}
+                    />
+                    {generateSubmittingId === section.id ? (
+                      <div
+                        className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center justify-end pr-[5px]"
+                        role="status"
+                        aria-live="polite"
+                        aria-label="Generating section"
+                      >
+                        {/* Loader paint extends above its layout box; nudge down for optical vertical center in the input */}
+                        <div className="translate-y-[10px]">
+                          <div className="inline-flex shrink-0 origin-center scale-[0.32]">
+                            <BookLoader />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                   {generateError ? (
                     <p className="mt-1.5 text-xs text-rose-600 dark:text-rose-400">{generateError}</p>
                   ) : null}

@@ -10,6 +10,7 @@ import CourseDetail from './pages/lms/CourseDetail'
 import CourseLayout from './pages/lms/CourseLayout'
 import CourseModuleAssignmentPage from './pages/lms/CourseModuleAssignmentPage'
 import CourseModuleContentPage from './pages/lms/CourseModuleContentPage'
+import CourseModuleExternalLinkPage from './pages/lms/CourseModuleExternalLinkPage'
 import CourseModuleQuizPage from './pages/lms/CourseModuleQuizPage.tsx'
 import CourseModules from './pages/lms/CourseModules'
 import CourseNotebookPage from './pages/lms/CourseNotebookPage'
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="modules/content/:itemId" element={<CourseModuleContentPage />} />
             <Route path="modules/assignment/:itemId" element={<CourseModuleAssignmentPage />} />
             <Route path="modules/quiz/:itemId" element={<CourseModuleQuizPage />} />
+            <Route path="modules/external-link/:itemId" element={<CourseModuleExternalLinkPage />} />
             <Route path="modules" element={<CourseModules />} />
             <Route path="notebook" element={<CourseNotebookPage />} />
             <Route path="calendar" element={<CourseCalendarPage />} />
@@ -51,7 +53,7 @@ export default function App() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/inbox" element={<Inbox />} />
-          <Route path="/settings" element={<Navigate to="/settings/ai/models" replace />} />
+          <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
           <Route path="/settings/ai" element={<Navigate to="/settings/ai/models" replace />} />
           <Route path="/settings/ai/:aiSection" element={<Settings />} />
           <Route path="/settings/:tab" element={<Settings />} />
