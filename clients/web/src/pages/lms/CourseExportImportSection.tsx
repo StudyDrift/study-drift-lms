@@ -129,8 +129,8 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
         <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Export</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
           Download the full course bundle as one JSON file: syllabus, modules, pages,
-          assignments, quizzes, grading groups, and course appearance settings (not enrollments or
-          learner data).
+          assignments, quizzes, grading groups, roster emails and roles, and course appearance
+          settings.
         </p>
         <div className="mt-4">
           <button
@@ -171,7 +171,9 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
               </span>
               <span className="mt-0.5 block text-sm text-slate-500 dark:text-neutral-400">
                 Remove all modules and related content, then apply the file. Also replaces
-                syllabus, grading groups, and course settings from the file.
+                syllabus, grading groups, and course settings from the file. If the bundle includes
+                an <code className="text-xs">enrollments</code> array, the roster is replaced except
+                for the course creator’s teacher enrollment.
               </span>
             </span>
           </label>
@@ -191,6 +193,8 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
                 Keep existing content. Only add syllabus sections, assignment groups, and outline
                 items whose ids are not already present, with bodies for those new items only. Existing
                 syllabus text is never replaced in this mode (use erase or overwrite to refresh it).
+                If the bundle includes enrollments, missing roster rows are added; new users are
+                created by email when needed.
               </span>
             </span>
           </label>
@@ -209,7 +213,8 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
               <span className="mt-0.5 block text-sm text-slate-500 dark:text-neutral-400">
                 Update this course from the file: replace syllabus and grading, refresh settings,
                 upsert every item in the file, remove outline items not listed in the file, and
-                refresh all module bodies from the file.
+                refresh all module bodies from the file. If the bundle includes enrollments, the
+                roster is replaced except for the course creator’s teacher enrollment.
               </span>
             </span>
           </label>
@@ -221,8 +226,11 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
           </h3>
           <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
             Use a Canvas personal access token. We fetch modules, wiki pages, assignments, quizzes
-            (and questions when exposed by Canvas), and discussions, then map them into this course.
-            The token is sent once for the import (HTTPS and WebSocket) and is not stored.
+            (and questions when exposed by Canvas), discussions, and enrollments (active and
+            invited), then map them into this course. Anyone with a matching email gets enrolled; if
+            they do not have a Lexters account yet, one is created with a random password (they can
+            use password reset to sign in, if your deployment offers it). The token is sent once for
+            the import (HTTPS and WebSocket) and is not stored.
           </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <label className="block sm:col-span-2">
@@ -268,7 +276,8 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
           </div>
           <p className="mt-3 text-xs text-slate-500 dark:text-neutral-500">
             In Canvas: Account or Profile → Settings → New access token. Use a token with
-            permission to read the course, assignments, pages, and quizzes.
+            permission to read the course, assignments, pages, quizzes, enrollments, and the course
+            user list (roster).
           </p>
           <div className="mt-4">
             <button

@@ -6,6 +6,10 @@ type AddCourseItemMenuProps = {
   disabled?: boolean
   dragHandlesVisible: boolean
   onToggleDragHandles: () => void
+  /** When true, show collapse/expand-all for the module list. */
+  moduleListActionsEnabled: boolean
+  allModulesCollapsed: boolean
+  onCollapseExpandAllModules: () => void
 }
 
 export function AddCourseItemMenu({
@@ -13,6 +17,9 @@ export function AddCourseItemMenu({
   disabled,
   dragHandlesVisible,
   onToggleDragHandles,
+  moduleListActionsEnabled,
+  allModulesCollapsed,
+  onCollapseExpandAllModules,
 }: AddCourseItemMenuProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -69,6 +76,30 @@ export function AddCourseItemMenu({
             <span className="text-xs text-slate-500 dark:text-neutral-400">Group course activities and items</span>
           </button>
           <div className="my-1 border-t border-slate-100 dark:border-neutral-700" role="separator" />
+          {moduleListActionsEnabled ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={disabled}
+                onClick={() => {
+                  onCollapseExpandAllModules()
+                  setOpen(false)
+                }}
+                className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-neutral-700/80"
+              >
+                <span className="font-semibold text-slate-950 dark:text-neutral-100">
+                  {allModulesCollapsed ? 'Expand all modules' : 'Collapse all modules'}
+                </span>
+                <span className="text-xs text-slate-500 dark:text-neutral-400">
+                  {allModulesCollapsed
+                    ? 'Show items under every module'
+                    : 'Hide module item lists'}
+                </span>
+              </button>
+              <div className="my-1 border-t border-slate-100 dark:border-neutral-700" role="separator" />
+            </>
+          ) : null}
           <button
             type="button"
             role="menuitemcheckbox"

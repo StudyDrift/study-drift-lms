@@ -15,6 +15,7 @@ pub mod enrollment;
 pub mod rbac;
 pub mod reports;
 pub mod syllabus_acceptance;
+pub mod syllabus_markups;
 pub mod system_prompts;
 pub mod user;
 pub mod user_ai_settings;

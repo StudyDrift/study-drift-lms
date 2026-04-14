@@ -14,12 +14,14 @@ import {
 } from '../../lib/coursesApi'
 import { useCourseViewAs } from '../../lib/courseViewAs'
 import { readApiErrorMessage } from '../../lib/errors'
+import { formatTimeAgoFromIso } from '../../lib/formatTimeAgo'
 
 export type CourseEnrollment = {
   id: string
   userId: string
   displayName: string | null
   role: string
+  lastCourseAccessAt?: string | null
 }
 
 type AddEnrollmentsResult = {
@@ -67,6 +69,8 @@ export default function CourseEnrollments() {
   const [selfStudentStatus, setSelfStudentStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [selfStudentMessage, setSelfStudentMessage] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  /** Recompute relative "last access" labels periodically while the roster is visible. */
+  const [relativeNowMs, setRelativeNowMs] = useState(() => Date.now())
 
   useEffect(() => {
     if (!courseCode) {
@@ -104,6 +108,12 @@ export default function CourseEnrollments() {
     }
     return { isPrimaryRoleRow }
   }, [enrollments])
+
+  useEffect(() => {
+    if (!enrollments?.length) return
+    const id = window.setInterval(() => setRelativeNowMs(Date.now()), 60_000)
+    return () => window.clearInterval(id)
+  }, [enrollments?.length])
 
   const loadEnrollments = useCallback(async () => {
     if (!courseCode) return
@@ -387,6 +397,7 @@ export default function CourseEnrollments() {
               <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Last access</th>
                 {canUpdateEnrollments && (
                   <th className="w-12 px-2 py-3 text-right font-normal" aria-label="Actions" />
                 )}
@@ -405,6 +416,9 @@ export default function CourseEnrollments() {
                       {e.displayName?.trim() || '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-700">{e.role}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {formatTimeAgoFromIso(e.lastCourseAccessAt, relativeNowMs)}
+                    </td>
                     {canUpdateEnrollments && (
                       <td className="px-2 py-3 text-right align-middle">
                         {showRemove ? (

@@ -273,7 +273,7 @@ export default function CourseModuleContentPage() {
               markups={markups}
               onMarkupsChange={loadMarkups}
               courseCode={courseCode}
-              itemId={itemId}
+              markupTarget={{ variant: 'content_page', itemId }}
               contentTitle={title || 'Content page'}
             />
           </div>

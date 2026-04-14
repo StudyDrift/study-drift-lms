@@ -254,7 +254,12 @@ pub async fn list_for_course_code(
             ce.id,
             ce.user_id,
             u.display_name,
-            ce.role
+            ce.role,
+            (
+                SELECT MAX(ua.occurred_at)
+                FROM {} ua
+                WHERE ua.user_id = ce.user_id AND ua.course_id = c.id
+            ) AS last_course_access_at
         FROM {} ce
         INNER JOIN {} c ON c.id = ce.course_id
         INNER JOIN {} u ON u.id = ce.user_id
@@ -267,6 +272,7 @@ pub async fn list_for_course_code(
             END,
             COALESCE(NULLIF(TRIM(u.display_name), ''), u.email) ASC
         "#,
+        schema::USER_AUDIT,
         schema::COURSE_ENROLLMENTS,
         schema::COURSES,
         schema::USERS
@@ -359,6 +365,7 @@ struct CourseEnrollmentRow {
     user_id: Uuid,
     display_name: Option<String>,
     role: String,
+    last_course_access_at: Option<DateTime<Utc>>,
 }
 
 impl CourseEnrollmentRow {
@@ -374,6 +381,7 @@ impl CourseEnrollmentRow {
             user_id: self.user_id,
             display_name: self.display_name,
             role: role_display.to_string(),
+            last_course_access_at: self.last_course_access_at,
         }
     }
 }
@@ -503,6 +511,74 @@ pub async fn insert_course_creator_teacher(
     .bind(course_id)
     .bind(user_id)
     .execute(tx.deref_mut())
+    .await?;
+    Ok(())
+}
+
+/// `(email, role, display_name)` rows for JSON export (one row per enrollment, including multiple roles per user).
+pub async fn list_email_roles_for_course_export(
+    pool: &PgPool,
+    course_code: &str,
+) -> Result<Vec<(String, String, Option<String>)>, sqlx::Error> {
+    sqlx::query_as::<_, (String, String, Option<String>)>(&format!(
+        r#"
+        SELECT
+            u.email,
+            ce.role,
+            NULLIF(TRIM(u.display_name), '') AS display_name
+        FROM {} ce
+        INNER JOIN {} c ON c.id = ce.course_id
+        INNER JOIN {} u ON u.id = ce.user_id
+        WHERE c.course_code = $1
+        ORDER BY lower(u.email) ASC, ce.role ASC
+        "#,
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES,
+        schema::USERS
+    ))
+    .bind(course_code)
+    .fetch_all(pool)
+    .await
+}
+
+/// Removes every enrollment except the course creator’s `teacher` row (used when replacing the roster from an export).
+pub async fn delete_enrollments_except_creator_teacher(
+    pool: &PgPool,
+    course_id: Uuid,
+    creator_user_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        r#"
+        DELETE FROM {}
+        WHERE course_id = $1
+          AND NOT (user_id = $2 AND role = 'teacher')
+        "#,
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(course_id)
+    .bind(creator_user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Ensures the creator holds a `teacher` enrollment row (idempotent).
+pub async fn ensure_teacher_enrollment(
+    pool: &PgPool,
+    course_id: Uuid,
+    user_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (course_id, user_id, role)
+        VALUES ($1, $2, 'teacher')
+        ON CONFLICT (course_id, user_id, role) DO NOTHING
+        "#,
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(course_id)
+    .bind(user_id)
+    .execute(pool)
     .await?;
     Ok(())
 }

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Pencil } from 'lucide-react'
+import { ContentPageReader } from '../../components/content-page/ContentPageReader'
 import { SyllabusBlockEditor } from '../../components/syllabus/SyllabusBlockEditor'
-import { SyllabusMarkdownView } from '../../components/syllabus/SyllabusMarkdownView'
+import { sectionsToMarkdown } from '../../components/syllabus/syllabusSectionMarkdown'
 import { usePermissions } from '../../context/usePermissions'
 import {
   fetchCourse,
   fetchCourseSyllabus,
+  fetchReaderMarkups,
   patchCourseSyllabus,
+  type ContentPageMarkup,
   type SyllabusSection,
 } from '../../lib/coursesApi'
 import {
@@ -43,6 +46,7 @@ export default function CourseSyllabus() {
   const [editing, setEditing] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [markups, setMarkups] = useState<ContentPageMarkup[]>([])
   const [mdPreset, setMdPreset] = useState<string>('classic')
   const [mdCustom, setMdCustom] = useState<MarkdownThemeCustom | null>(null)
   const lmsUiDark = useLmsDarkMode()
@@ -50,6 +54,20 @@ export default function CourseSyllabus() {
     (): ResolvedMarkdownTheme => resolveMarkdownTheme(mdPreset, mdCustom, { lmsUiDark }),
     [mdPreset, mdCustom, lmsUiDark],
   )
+
+  const syllabusMarkupTarget = useMemo(() => ({ variant: 'syllabus' as const }), [])
+
+  const syllabusMarkdown = useMemo(() => sectionsToMarkdown(sections), [sections])
+
+  const loadMarkups = useCallback(async () => {
+    if (!courseCode) return
+    try {
+      const list = await fetchReaderMarkups(courseCode, syllabusMarkupTarget)
+      setMarkups(list)
+    } catch {
+      setMarkups([])
+    }
+  }, [courseCode, syllabusMarkupTarget])
 
   const canEdit = Boolean(
     courseCode && !permLoading && allows(permCourseItemCreate(courseCode)),
@@ -69,15 +87,17 @@ export default function CourseSyllabus() {
       setUpdatedAt(data.updatedAt)
       setMdPreset(courseRow.markdownThemePreset)
       setMdCustom(courseRow.markdownThemeCustom)
+      void loadMarkups()
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load the syllabus.')
       setSections([])
       setRequireSyllabusAcceptance(false)
       setUpdatedAt(null)
+      setMarkups([])
     } finally {
       setLoading(false)
     }
-  }, [courseCode])
+  }, [courseCode, loadMarkups])
 
   useEffect(() => {
     void load()
@@ -113,6 +133,7 @@ export default function CourseSyllabus() {
       setUpdatedAt(data.updatedAt)
       setEditing(false)
       setDraft([])
+      void loadMarkups()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Could not save the syllabus.')
     } finally {
@@ -195,7 +216,15 @@ export default function CourseSyllabus() {
             </p>
           )}
           {sections.length > 0 && (
-            <SyllabusMarkdownView sections={sections} theme={mdTheme} courseCode={courseCode} />
+            <ContentPageReader
+              markdown={syllabusMarkdown}
+              theme={mdTheme}
+              markups={markups}
+              onMarkupsChange={loadMarkups}
+              courseCode={courseCode}
+              markupTarget={syllabusMarkupTarget}
+              contentTitle="Syllabus"
+            />
           )}
         </div>
       )}

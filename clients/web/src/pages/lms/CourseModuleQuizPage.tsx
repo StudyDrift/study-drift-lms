@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Check, ChevronDown, Eye, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { ContentPageReader } from '../../components/content-page/ContentPageReader'
 import { SyllabusBlockEditor } from '../../components/syllabus/SyllabusBlockEditor'
-import { MarkdownArticleView } from '../../components/syllabus/SyllabusMarkdownView'
 import { markdownToSectionsForEditor, sectionsToMarkdown } from '../../components/syllabus/syllabusSectionMarkdown'
 import { usePermissions } from '../../context/usePermissions'
 import {
@@ -11,11 +11,13 @@ import {
   fetchCourseGradingSettings,
   fetchCourseStructure,
   fetchModuleQuiz,
+  fetchReaderMarkups,
   generateModuleQuizQuestions,
   patchCourseStructureItemAssignmentGroup,
   patchModuleQuiz,
   runAdaptiveQuizToCompletion,
   quizAdvancedSettingsFromPayload,
+  type ContentPageMarkup,
   type CourseStructureItem,
   type QuizAdvancedSettings,
   type QuizQuestion,
@@ -298,6 +300,7 @@ export default function CourseModuleQuizPage() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [markups, setMarkups] = useState<ContentPageMarkup[]>([])
   const [editingContent, setEditingContent] = useState(false)
   const [draft, setDraft] = useState<SyllabusSection[]>([])
   const [draftTitle, setDraftTitle] = useState('')
@@ -342,6 +345,18 @@ export default function CourseModuleQuizPage() {
     resolveMarkdownTheme('classic', null),
   )
 
+  const quizMarkupTarget = useMemo(() => ({ variant: 'quiz' as const, itemId: itemId! }), [itemId])
+
+  const loadMarkups = useCallback(async () => {
+    if (!courseCode || !itemId) return
+    try {
+      const list = await fetchReaderMarkups(courseCode, quizMarkupTarget)
+      setMarkups(list)
+    } catch {
+      setMarkups([])
+    }
+  }, [courseCode, itemId, quizMarkupTarget])
+
   const load = useCallback(async () => {
     if (!courseCode || !itemId) return
     setLoading(true)
@@ -379,6 +394,7 @@ export default function CourseModuleQuizPage() {
         typeof data.adaptiveQuestionCount === 'number' ? data.adaptiveQuestionCount : 5,
       )
       setMdTheme(resolveMarkdownTheme(courseRow.markdownThemePreset, courseRow.markdownThemeCustom))
+      void loadMarkups()
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load this quiz.')
       setTitle('')
@@ -401,10 +417,11 @@ export default function CourseModuleQuizPage() {
       setAdaptiveQuestionCount(5)
       setGradingGroups([])
       setAssignmentGroupId(null)
+      setMarkups([])
     } finally {
       setLoading(false)
     }
-  }, [courseCode, itemId])
+  }, [courseCode, itemId, loadMarkups])
 
   useEffect(() => {
     void load()
@@ -607,6 +624,7 @@ export default function CourseModuleQuizPage() {
       setUpdatedAt(data.updatedAt)
       setEditingContent(false)
       setDraft([])
+      void loadMarkups()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Could not save.')
     } finally {
@@ -890,15 +908,19 @@ export default function CourseModuleQuizPage() {
         {!loading && !loadError && !editingContent && (
           <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
             <div className="min-w-0 flex-1">
-              <MarkdownArticleView
+              <ContentPageReader
                 markdown={markdown}
+                theme={mdTheme}
+                markups={markups}
+                onMarkupsChange={loadMarkups}
+                courseCode={courseCode}
+                markupTarget={quizMarkupTarget}
+                contentTitle={title || 'Quiz'}
                 emptyMessage={
                   canEdit
                     ? 'No quiz intro yet. Open More, then Edit, to add details.'
                     : 'No quiz intro yet.'
                 }
-                theme={mdTheme}
-                courseCode={courseCode}
               />
             </div>
             <aside

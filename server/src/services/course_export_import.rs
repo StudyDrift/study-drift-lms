@@ -8,7 +8,7 @@ use crate::error::AppError;
 use crate::models::course::{MarkdownThemeCustom, GRADING_SCALES};
 use crate::models::course_export::{
     CourseExportSnapshot, CourseExportV1, CourseImportMode, ExportedAssignmentBody,
-    ExportedContentPageBody, ExportedQuizBody,
+    ExportedContentPageBody, ExportedCourseEnrollment, ExportedQuizBody,
 };
 use crate::models::course_grading::CourseGradingSettingsResponse;
 use crate::models::course_module_quiz::{
@@ -25,9 +25,226 @@ use crate::repos::course_module_external_links;
 use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
+use crate::repos::course_grants;
+use crate::repos::enrollment;
+use crate::repos::rbac;
+use crate::repos::user;
+use crate::services::auth;
 use sqlx::PgPool;
 
 const EXPORT_FORMAT_VERSION: i32 = 1;
+const MAX_EXPORT_ENROLLMENTS: usize = 5000;
+const MAX_ENROLLMENT_EMAIL_LEN: usize = 320;
+const MAX_ENROLLMENT_DISPLAY_NAME_LEN: usize = 256;
+
+fn normalize_enrollment_email(raw: &str) -> String {
+    raw.trim().to_lowercase()
+}
+
+fn validate_export_enrollments(rows: &[ExportedCourseEnrollment]) -> Result<(), AppError> {
+    if rows.len() > MAX_EXPORT_ENROLLMENTS {
+        return Err(AppError::InvalidInput(format!(
+            "Too many enrollments in export (max {MAX_EXPORT_ENROLLMENTS})."
+        )));
+    }
+    for row in rows {
+        let e = normalize_enrollment_email(&row.email);
+        if e.is_empty() || !e.contains('@') || e.len() > MAX_ENROLLMENT_EMAIL_LEN {
+            return Err(AppError::InvalidInput(
+                "Each enrollment needs a valid email address.".into(),
+            ));
+        }
+        let role = row.role.trim();
+        if role != "student" && role != "instructor" && role != "teacher" {
+            return Err(AppError::InvalidInput(format!(
+                "Invalid enrollment role `{role}` (expected student, instructor, or teacher)."
+            )));
+        }
+        if let Some(ref g) = row.instructor_grant_role {
+            let g = g.trim();
+            if g != "Teacher" && g != "TA" {
+                return Err(AppError::InvalidInput(
+                    "instructorGrantRole must be Teacher or TA when set.".into(),
+                ));
+            }
+            if role != "instructor" {
+                return Err(AppError::InvalidInput(
+                    "instructorGrantRole may only be set when role is instructor.".into(),
+                ));
+            }
+        }
+        if let Some(ref d) = row.display_name {
+            if d.len() > MAX_ENROLLMENT_DISPLAY_NAME_LEN {
+                return Err(AppError::InvalidInput(format!(
+                    "Enrollment display name is too long (max {MAX_ENROLLMENT_DISPLAY_NAME_LEN})."
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn apply_course_staff_grants_from_catalog(
+    pool: &PgPool,
+    course_code: &str,
+    course_id: Uuid,
+    user_id: Uuid,
+    catalog_role_name: &str,
+) -> Result<(), AppError> {
+    let Some(role_id) = rbac::app_role_id_by_name(pool, catalog_role_name)
+        .await
+        .map_err(AppError::from)?
+    else {
+        return Err(AppError::InvalidInput(format!(
+            "Missing RBAC catalog role `{catalog_role_name}`."
+        )));
+    };
+    course_grants::apply_app_role_course_grants(pool, user_id, course_id, course_code, role_id)
+        .await
+        .map_err(AppError::from)?;
+    Ok(())
+}
+
+async fn apply_one_enrollment_from_export(
+    pool: &PgPool,
+    course_code: &str,
+    course_id: Uuid,
+    creator_user_id: Uuid,
+    row: &ExportedCourseEnrollment,
+    placeholder_password_hash: &str,
+) -> Result<(), AppError> {
+    let email = normalize_enrollment_email(&row.email);
+    let display_name = row
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let (u, created_user) =
+        user::find_or_create_user_for_import(pool, &email, display_name, placeholder_password_hash)
+            .await
+            .map_err(AppError::from)?;
+    if created_user {
+        rbac::assign_user_role_by_name(pool, u.id, "Student")
+            .await
+            .map_err(AppError::from)?;
+    }
+
+    let role = row.role.trim();
+    let is_creator = u.id == creator_user_id;
+
+    if enrollment::user_is_course_creator(pool, course_code, u.id).await? {
+        if role == "student" || role == "instructor" {
+            // Match roster API: do not add secondary student/instructor rows for the course creator.
+            return Ok(());
+        }
+    }
+
+    match role {
+        "student" => {
+            enrollment::insert_student_if_missing(pool, course_id, u.id)
+                .await
+                .map_err(AppError::from)?;
+        }
+        "instructor" => {
+            enrollment::upsert_instructor_enrollment(pool, course_code, course_id, u.id)
+                .await
+                .map_err(AppError::from)?;
+            let grant_as = row
+                .instructor_grant_role
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("TA");
+            apply_course_staff_grants_from_catalog(pool, course_code, course_id, u.id, grant_as)
+                .await?;
+        }
+        "teacher" => {
+            if is_creator {
+                enrollment::ensure_teacher_enrollment(pool, course_id, u.id)
+                    .await
+                    .map_err(AppError::from)?;
+                apply_course_staff_grants_from_catalog(
+                    pool,
+                    course_code,
+                    course_id,
+                    u.id,
+                    "Teacher",
+                )
+                .await?;
+            } else {
+                enrollment::upsert_instructor_enrollment(pool, course_code, course_id, u.id)
+                    .await
+                    .map_err(AppError::from)?;
+                apply_course_staff_grants_from_catalog(
+                    pool,
+                    course_code,
+                    course_id,
+                    u.id,
+                    "Teacher",
+                )
+                .await?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+async fn apply_enrollments_from_export(
+    pool: &PgPool,
+    target_course_code: &str,
+    course_id: Uuid,
+    mode: CourseImportMode,
+    rows: &[ExportedCourseEnrollment],
+) -> Result<(), AppError> {
+    if rows.is_empty() {
+        return Ok(());
+    }
+    let Some(creator_user_id) =
+        course::get_created_by_user_id(pool, target_course_code)
+            .await
+            .map_err(AppError::from)?
+    else {
+        return Err(AppError::InvalidInput(
+            "Course is missing a creator; cannot apply enrollments.".into(),
+        ));
+    };
+
+    let placeholder_password_hash = auth::hash_placeholder_password()?;
+
+    match mode {
+        CourseImportMode::Erase | CourseImportMode::Overwrite => {
+            enrollment::delete_enrollments_except_creator_teacher(pool, course_id, creator_user_id)
+                .await
+                .map_err(AppError::from)?;
+            for row in rows {
+                apply_one_enrollment_from_export(
+                    pool,
+                    target_course_code,
+                    course_id,
+                    creator_user_id,
+                    row,
+                    &placeholder_password_hash,
+                )
+                .await?;
+            }
+        }
+        CourseImportMode::MergeAdd => {
+            for row in rows {
+                apply_one_enrollment_from_export(
+                    pool,
+                    target_course_code,
+                    course_id,
+                    creator_user_id,
+                    row,
+                    &placeholder_password_hash,
+                )
+                .await?;
+            }
+        }
+    }
+    Ok(())
+}
 
 fn quiz_settings_from_export(body: &ExportedQuizBody) -> QuizSettingsWrite {
     QuizSettingsWrite {
@@ -193,6 +410,7 @@ fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
             }
         }
     }
+    validate_export_enrollments(&ex.enrollments)?;
     Ok(())
 }
 
@@ -701,6 +919,17 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         }
     }
 
+    let email_roles = enrollment::list_email_roles_for_course_export(pool, course_code).await?;
+    let enrollments: Vec<ExportedCourseEnrollment> = email_roles
+        .into_iter()
+        .map(|(email, role, display_name)| ExportedCourseEnrollment {
+            email,
+            role,
+            instructor_grant_role: None,
+            display_name,
+        })
+        .collect();
+
     Ok(CourseExportV1 {
         format_version: EXPORT_FORMAT_VERSION,
         exported_at: Utc::now(),
@@ -713,6 +942,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         content_pages,
         assignments,
         quizzes,
+        enrollments,
     })
 }
 
@@ -785,6 +1015,8 @@ pub async fn apply_import(
             apply_module_bodies(pool, course_id, ex).await?;
         }
     }
+
+    apply_enrollments_from_export(pool, target_course_code, course_id, mode, &ex.enrollments).await?;
 
     Ok(())
 }

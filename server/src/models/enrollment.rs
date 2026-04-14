@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -9,6 +10,8 @@ pub struct CourseEnrollmentPublic {
     pub display_name: Option<String>,
     /// One of: Teacher, Instructor, Student (PascalCase for API consumers).
     pub role: String,
+    /// Latest `user.user_audit.occurred_at` for this user in this course (any event kind).
+    pub last_course_access_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize)]

@@ -4,6 +4,7 @@ use argon2::{
 };
 use rand::rngs::OsRng;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::jwt::JwtSigner;
@@ -16,6 +17,12 @@ fn hash_password(raw: &str) -> Result<String, AppError> {
         .hash_password(raw.as_bytes(), &salt)
         .map(|h| h.to_string())
         .map_err(|_| AppError::InvalidInput("Could not process password.".into()))
+}
+
+/// Argon2 hash of a long random secret for accounts created without a known password (e.g. roster import).
+pub fn hash_placeholder_password() -> Result<String, AppError> {
+    let secret = format!("{}{}", Uuid::new_v4(), Uuid::new_v4());
+    hash_password(&secret)
 }
 
 fn verify_password(raw: &str, stored: &str) -> bool {

@@ -1019,17 +1019,77 @@ export type ContentPageMarkup = {
   createdAt: string
 }
 
-export async function fetchContentPageMarkups(
+/** Where highlight/note markups are stored for a Markdown reader surface. */
+export type ReaderMarkupTarget =
+  | { variant: 'content_page'; itemId: string }
+  | { variant: 'assignment'; itemId: string }
+  | { variant: 'quiz'; itemId: string }
+  | { variant: 'syllabus' }
+
+function readerMarkupsListPath(courseCode: string, target: ReaderMarkupTarget): string {
+  const cc = encodeURIComponent(courseCode)
+  switch (target.variant) {
+    case 'content_page':
+      return `/api/v1/courses/${cc}/content-pages/${encodeURIComponent(target.itemId)}/markups`
+    case 'assignment':
+      return `/api/v1/courses/${cc}/assignments/${encodeURIComponent(target.itemId)}/markups`
+    case 'quiz':
+      return `/api/v1/courses/${cc}/quizzes/${encodeURIComponent(target.itemId)}/markups`
+    case 'syllabus':
+      return `/api/v1/courses/${cc}/syllabus/markups`
+  }
+}
+
+export async function fetchReaderMarkups(
   courseCode: string,
-  itemId: string,
+  target: ReaderMarkupTarget,
 ): Promise<ContentPageMarkup[]> {
-  const res = await authorizedFetch(
-    `/api/v1/courses/${encodeURIComponent(courseCode)}/content-pages/${encodeURIComponent(itemId)}/markups`,
-  )
+  const res = await authorizedFetch(readerMarkupsListPath(courseCode, target))
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   const body = raw as { markups?: ContentPageMarkup[] }
   return body.markups ?? []
+}
+
+export async function postReaderMarkup(
+  courseCode: string,
+  target: ReaderMarkupTarget,
+  body: {
+    kind: 'highlight' | 'note'
+    quoteText: string
+    notebookPageId?: string | null
+    commentText?: string | null
+  },
+): Promise<ContentPageMarkup> {
+  const res = await authorizedFetch(readerMarkupsListPath(courseCode, target), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as ContentPageMarkup
+}
+
+export async function deleteReaderMarkup(
+  courseCode: string,
+  target: ReaderMarkupTarget,
+  markupId: string,
+): Promise<void> {
+  const base = readerMarkupsListPath(courseCode, target)
+  const url = `${base}/${encodeURIComponent(markupId)}`
+  const res = await authorizedFetch(url, { method: 'DELETE' })
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
+export async function fetchContentPageMarkups(
+  courseCode: string,
+  itemId: string,
+): Promise<ContentPageMarkup[]> {
+  return fetchReaderMarkups(courseCode, { variant: 'content_page', itemId })
 }
 
 export async function postContentPageMarkup(
@@ -1042,17 +1102,7 @@ export async function postContentPageMarkup(
     commentText?: string | null
   },
 ): Promise<ContentPageMarkup> {
-  const res = await authorizedFetch(
-    `/api/v1/courses/${encodeURIComponent(courseCode)}/content-pages/${encodeURIComponent(itemId)}/markups`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    },
-  )
-  const raw = await parseJson(res)
-  if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as ContentPageMarkup
+  return postReaderMarkup(courseCode, { variant: 'content_page', itemId }, body)
 }
 
 export async function deleteContentPageMarkup(
@@ -1060,14 +1110,7 @@ export async function deleteContentPageMarkup(
   itemId: string,
   markupId: string,
 ): Promise<void> {
-  const res = await authorizedFetch(
-    `/api/v1/courses/${encodeURIComponent(courseCode)}/content-pages/${encodeURIComponent(itemId)}/markups/${encodeURIComponent(markupId)}`,
-    { method: 'DELETE' },
-  )
-  if (!res.ok) {
-    const raw = await parseJson(res)
-    throw new Error(readApiErrorMessage(raw))
-  }
+  return deleteReaderMarkup(courseCode, { variant: 'content_page', itemId }, markupId)
 }
 
 export async function fetchModuleAssignment(

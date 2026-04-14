@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::models::course_export::{
     CourseExportSnapshot, CourseExportV1, ExportedAssignmentBody, ExportedContentPageBody,
-    ExportedQuizBody,
+    ExportedCourseEnrollment, ExportedQuizBody,
 };
 use crate::models::course_grading::{AssignmentGroupPublic, CourseGradingSettingsResponse};
 use crate::models::course_module_quiz::QuizQuestion;
@@ -162,6 +162,304 @@ fn json_string(v: Option<&Value>) -> Option<String> {
     v?.as_str().map(str::to_string)
 }
 
+fn normalize_canvas_email(raw: &str) -> String {
+    raw.trim().to_lowercase()
+}
+
+fn canvas_enrollment_state_importable(row: &Value) -> bool {
+    let s = row
+        .get("enrollment_state")
+        .and_then(|v| v.as_str())
+        .unwrap_or("active");
+    matches!(s, "active" | "invited" | "creation_pending")
+}
+
+/// Email/login on the small `user` object embedded on an enrollment (often has no email).
+fn canvas_email_from_enrollment_user_stub(row: &Value) -> Option<String> {
+    let user = row.get("user")?;
+    if user.is_null() {
+        return None;
+    }
+    json_string(user.get("email"))
+        .filter(|e| e.contains('@'))
+        .map(|e| normalize_canvas_email(&e))
+        .or_else(|| {
+            json_string(user.get("login_id"))
+                .filter(|e| e.contains('@'))
+                .map(|e| normalize_canvas_email(&e))
+        })
+}
+
+#[derive(Clone, Default)]
+struct CanvasRosterContact {
+    display_name: Option<String>,
+    email: Option<String>,
+    login_id: Option<String>,
+}
+
+impl CanvasRosterContact {
+    fn resolve_import_email(&self, canvas_user_id: i64) -> String {
+        if let Some(ref e) = self.email {
+            let e = normalize_canvas_email(e);
+            if !e.is_empty() && e.contains('@') {
+                return e;
+            }
+        }
+        if let Some(ref login) = self.login_id {
+            let t = login.trim();
+            if t.contains('@') {
+                return normalize_canvas_email(t);
+            }
+            if !t.is_empty() {
+                let frag = sanitize_canvas_login_for_email(t);
+                if !frag.is_empty() {
+                    return format!("{frag}-{canvas_user_id}@canvas-roster.imported");
+                }
+            }
+        }
+        format!("canvas-user-{canvas_user_id}@canvas-roster.imported")
+    }
+}
+
+fn sanitize_canvas_login_for_email(raw: &str) -> String {
+    let mut out: String = raw
+        .chars()
+        .map(|c| match c {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' | '+' => c.to_ascii_lowercase(),
+            _ => '_',
+        })
+        .take(72)
+        .collect();
+    while out.contains("__") {
+        out = out.replace("__", "_");
+    }
+    out.trim_matches('_').to_string()
+}
+
+fn canvas_user_row_to_contact(u: &Value) -> Option<(i64, CanvasRosterContact)> {
+    let id = json_i64(u.get("id"))?;
+    let email = json_string(u.get("email"))
+        .filter(|e| e.contains('@'))
+        .map(|e| normalize_canvas_email(&e));
+    let login_id = json_string(u.get("login_id")).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let display_name = json_string(u.get("name"))
+        .or_else(|| json_string(u.get("short_name")))
+        .or_else(|| json_string(u.get("sortable_name")))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    Some((
+        id,
+        CanvasRosterContact {
+            display_name,
+            email,
+            login_id,
+        },
+    ))
+}
+
+#[derive(Clone)]
+struct CanvasRoleGrant {
+    role: String,
+    instructor_grant_role: Option<String>,
+    display_hint: Option<String>,
+}
+
+fn canvas_enrollment_rows_to_role_map(rows: &[Value]) -> HashMap<i64, CanvasRoleGrant> {
+    let mut best: HashMap<i64, CanvasRoleGrant> = HashMap::new();
+    for row in rows {
+        if !canvas_enrollment_state_importable(row) {
+            continue;
+        }
+        let Some(user_id) = json_i64(row.get("user_id"))
+            .or_else(|| row.get("user").and_then(|u| json_i64(u.get("id"))))
+        else {
+            continue;
+        };
+        let type_str = row.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        let canvas_role = row.get("role").and_then(|v| v.as_str());
+        let Some((role, grant)) = canvas_enrollment_type_to_lex(type_str, canvas_role) else {
+            continue;
+        };
+
+        let incoming = CanvasRoleGrant {
+            role: role.to_string(),
+            instructor_grant_role: grant.map(str::to_string),
+            display_hint: canvas_enrollment_user_display_name(row),
+        };
+
+        best.entry(user_id)
+            .and_modify(|cur| {
+                let r_cur = lex_enrollment_rank(cur.role.as_str());
+                let r_new = lex_enrollment_rank(incoming.role.as_str());
+                if r_new < r_cur {
+                    *cur = incoming.clone();
+                } else if r_new == r_cur && incoming.role == "instructor" {
+                    if instructor_grant_rank(cur.instructor_grant_role.as_deref())
+                        > instructor_grant_rank(incoming.instructor_grant_role.as_deref())
+                    {
+                        *cur = incoming.clone();
+                    }
+                }
+                if cur.display_hint.is_none() {
+                    cur.display_hint.clone_from(&incoming.display_hint);
+                }
+            })
+            .or_insert(incoming);
+    }
+    best
+}
+
+fn canvas_build_enrollments_from_canvas_data(
+    enrollment_rows: &[Value],
+    course_user_rows: &[Value],
+) -> Vec<ExportedCourseEnrollment> {
+    let role_map = canvas_enrollment_rows_to_role_map(enrollment_rows);
+    let mut contacts: HashMap<i64, CanvasRosterContact> = HashMap::new();
+    for u in course_user_rows {
+        if let Some((id, c)) = canvas_user_row_to_contact(u) {
+            contacts.insert(id, c);
+        }
+    }
+
+    let mut keys: Vec<i64> = contacts
+        .keys()
+        .chain(role_map.keys())
+        .copied()
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+
+    let mut out: Vec<ExportedCourseEnrollment> = Vec::with_capacity(keys.len());
+    for uid in keys {
+        let contact = contacts.get(&uid).cloned().unwrap_or_default();
+        let rg = role_map.get(&uid);
+        let role = rg
+            .map(|r| r.role.as_str())
+            .unwrap_or("student")
+            .to_string();
+        let instructor_grant_role = rg.and_then(|r| r.instructor_grant_role.clone());
+        let display_from_role = rg.and_then(|r| r.display_hint.clone());
+
+        let email = if contacts.contains_key(&uid) {
+            contact.resolve_import_email(uid)
+        } else {
+            enrollment_rows
+                .iter()
+                .find(|r| json_i64(r.get("user_id")) == Some(uid))
+                .and_then(canvas_email_from_enrollment_user_stub)
+                .unwrap_or_else(|| format!("canvas-user-{uid}@canvas-roster.imported"))
+        };
+
+        let display_name = contact
+            .display_name
+            .clone()
+            .or(display_from_role);
+
+        out.push(ExportedCourseEnrollment {
+            email,
+            role,
+            instructor_grant_role,
+            display_name,
+        });
+    }
+    out.sort_by(|a, b| a.email.cmp(&b.email));
+    out
+}
+
+async fn canvas_fetch_course_users_for_roster(
+    client: &Client,
+    base: &str,
+    token: &str,
+    cid_str: &str,
+) -> Result<Vec<Value>, AppError> {
+    let base_query = [
+        ("enrollment_state[]", "active"),
+        ("enrollment_state[]", "invited"),
+    ];
+    match canvas_get_json_array_paginated(
+        client,
+        base,
+        token,
+        &["courses", cid_str, "users"],
+        &[base_query[0], base_query[1], ("include[]", "email")],
+    )
+    .await
+    {
+        Ok(v) => Ok(v),
+        Err(_) => {
+            canvas_get_json_array_paginated(
+                client,
+                base,
+                token,
+                &["courses", cid_str, "users"],
+                &base_query,
+            )
+            .await
+        }
+    }
+}
+
+fn canvas_enrollment_user_display_name(row: &Value) -> Option<String> {
+    let user = row.get("user")?;
+    if user.is_null() {
+        return None;
+    }
+    json_string(user.get("name"))
+        .or_else(|| json_string(user.get("short_name")))
+        .or_else(|| json_string(user.get("sortable_name")))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Canvas `type` (e.g. `TeacherEnrollment`) → Lexters enrollment role + optional RBAC catalog for staff grants.
+fn canvas_enrollment_type_to_lex(
+    type_str: &str,
+    canvas_role: Option<&str>,
+) -> Option<(&'static str, Option<&'static str>)> {
+    match type_str {
+        "StudentEnrollment" => Some(("student", None)),
+        "TaEnrollment" => Some(("instructor", Some("TA"))),
+        "TeacherEnrollment" => Some(("instructor", Some("Teacher"))),
+        "DesignerEnrollment" => Some(("instructor", Some("TA"))),
+        "ObserverEnrollment" => Some(("student", None)),
+        _ => {
+            let r = canvas_role.unwrap_or("").to_ascii_lowercase();
+            if r.contains("teacher") || r == "teacherenrollment" {
+                return Some(("instructor", Some("Teacher")));
+            }
+            if r.contains("ta") || r.contains("assistant") {
+                return Some(("instructor", Some("TA")));
+            }
+            if r.contains("designer") {
+                return Some(("instructor", Some("TA")));
+            }
+            if r.contains("observer") {
+                return Some(("student", None));
+            }
+            if r.contains("student") || r.contains("learner") {
+                return Some(("student", None));
+            }
+            None
+        }
+    }
+}
+
+fn lex_enrollment_rank(role: &str) -> i32 {
+    match role {
+        "instructor" | "teacher" => 0,
+        "student" => 1,
+        _ => 2,
+    }
+}
+
+fn instructor_grant_rank(grant: Option<&str>) -> i32 {
+    match grant {
+        Some("Teacher") => 0,
+        Some("TA") => 1,
+        _ => 2,
+    }
+}
+
 /// Canvas ids are usually JSON numbers; tolerate string ids.
 fn json_i64(v: Option<&Value>) -> Option<i64> {
     let v = v?;
@@ -211,7 +509,7 @@ async fn canvas_get_json_url(client: &Client, url: reqwest::Url, token: &str) ->
         let snippet = String::from_utf8_lossy(&bytes[..bytes.len().min(400)]);
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(AppError::InvalidInput(
-                "Canvas rejected the access token (401). Create a token with read access to courses and try again."
+                "Canvas rejected the access token (401). Create a token with read access to courses, modules, assignments, enrollments, and the course roster (users), then try again."
                     .into(),
             ));
         }
@@ -1160,6 +1458,58 @@ pub async fn build_export_from_canvas(
         }
     }
 
+    emit_progress(progress, "Loading Canvas enrollments (for roles)…");
+    let enrollment_rows = match canvas_get_json_array_paginated(
+        client,
+        &base,
+        token,
+        &["courses", &cid_str, "enrollments"],
+        &[
+            ("state[]", "active"),
+            ("state[]", "invited"),
+            ("state[]", "creation_pending"),
+        ],
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            emit_progress(
+                progress,
+                &format!(
+                    "Could not load Canvas enrollments ({}). Roster will use course users only.",
+                    e
+                ),
+            );
+            Vec::new()
+        }
+    };
+
+    emit_progress(progress, "Loading Canvas course users (for emails and names)…");
+    let course_user_rows = match canvas_fetch_course_users_for_roster(client, &base, token, &cid_str).await {
+        Ok(v) => v,
+        Err(e) => {
+            emit_progress(
+                progress,
+                &format!(
+                    "Could not load Canvas course users ({}). Roster will use enrollment data only.",
+                    e
+                ),
+            );
+            Vec::new()
+        }
+    };
+
+    let enrollments = canvas_build_enrollments_from_canvas_data(&enrollment_rows, &course_user_rows);
+    emit_progress(
+        progress,
+        &format!(
+            "Prepared {} roster row(s) from Canvas ({} enrollment(s), {} user profile(s)).",
+            enrollments.len(),
+            enrollment_rows.len(),
+            course_user_rows.len()
+        ),
+    );
     emit_progress(progress, "Building export bundle from Canvas data…");
 
     let snap = CourseExportSnapshot {
@@ -1192,6 +1542,7 @@ pub async fn build_export_from_canvas(
         content_pages,
         assignments,
         quizzes,
+        enrollments,
     })
 }
 

@@ -25,6 +25,49 @@ pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>
     .await
 }
 
+/// Case-insensitive email match (for roster import when upstream stores mixed casing).
+pub async fn find_by_email_ci(pool: &PgPool, email: &str) -> Result<Option<UserRow>, sqlx::Error> {
+    sqlx::query_as::<_, UserRow>(&format!(
+        r#"
+        SELECT id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme
+        FROM {}
+        WHERE lower(trim(email)) = lower(trim($1))
+        "#,
+        schema::USERS
+    ))
+    .bind(email)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Looks up by case-insensitive email; if missing, inserts a new user. On unique race, returns the existing row.
+pub async fn find_or_create_user_for_import(
+    pool: &PgPool,
+    email: &str,
+    display_name: Option<&str>,
+    placeholder_password_hash: &str,
+) -> Result<(UserRow, bool), sqlx::Error> {
+    if let Some(row) = find_by_email_ci(pool, email).await? {
+        return Ok((row, false));
+    }
+    let disp = display_name
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    match insert_user(pool, email, placeholder_password_hash, disp).await {
+        Ok(row) => Ok((row, true)),
+        Err(e) => {
+            if let sqlx::Error::Database(ref db) = e {
+                if db.code().as_deref() == Some("23505") {
+                    if let Some(row) = find_by_email_ci(pool, email).await? {
+                        return Ok((row, false));
+                    }
+                }
+            }
+            Err(e)
+        }
+    }
+}
+
 pub async fn insert_user(
     pool: &PgPool,
     email: &str,

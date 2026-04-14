@@ -460,18 +460,22 @@ pub async fn user_has_permission(
     Ok(any_grant_matches(&grants, required))
 }
 
-pub async fn assign_user_role_by_name(
-    pool: &PgPool,
-    user_id: Uuid,
-    role_name: &str,
-) -> Result<(), sqlx::Error> {
-    let role_id: Option<Uuid> = sqlx::query_scalar(&format!(
+pub async fn app_role_id_by_name(pool: &PgPool, role_name: &str) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(&format!(
         "SELECT id FROM {} WHERE name = $1",
         schema::APP_ROLES
     ))
     .bind(role_name)
     .fetch_optional(pool)
-    .await?;
+    .await
+}
+
+pub async fn assign_user_role_by_name(
+    pool: &PgPool,
+    user_id: Uuid,
+    role_name: &str,
+) -> Result<(), sqlx::Error> {
+    let role_id: Option<Uuid> = app_role_id_by_name(pool, role_name).await?;
     let Some(role_id) = role_id else {
         return Ok(());
     };

@@ -192,6 +192,22 @@ fn default_export_adaptive_stop_rule() -> String {
     "fixed_count".to_string()
 }
 
+/// One roster row for import/export (`role` is the DB enrollment role: `student`, `instructor`, or `teacher`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportedCourseEnrollment {
+    /// Email for matching an existing Lexters account (normalized to lowercase on import).
+    pub email: String,
+    pub role: String,
+    /// When `role` is `instructor`, RBAC catalog (`Teacher` or `TA`) used for per-course permission grants.
+    /// Omitted in legacy exports; importers default to `TA`.
+    #[serde(default)]
+    pub instructor_grant_role: Option<String>,
+    /// Optional display name when creating a new user from this row (e.g. from Canvas `user.name`).
+    #[serde(default)]
+    pub display_name: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CourseExportV1 {
@@ -210,6 +226,8 @@ pub struct CourseExportV1 {
     pub assignments: std::collections::HashMap<Uuid, ExportedAssignmentBody>,
     #[serde(default)]
     pub quizzes: std::collections::HashMap<Uuid, ExportedQuizBody>,
+    #[serde(default)]
+    pub enrollments: Vec<ExportedCourseEnrollment>,
 }
 
 #[derive(Debug, Deserialize)]

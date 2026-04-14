@@ -56,6 +56,7 @@ use crate::repos::course_syllabus;
 use crate::repos::enrollment;
 use crate::repos::rbac;
 use crate::repos::syllabus_acceptance;
+use crate::repos::syllabus_markups;
 use crate::repos::user;
 use crate::repos::user_ai_settings;
 use crate::repos::user_audit;
@@ -141,8 +142,24 @@ pub fn router() -> Router<AppState> {
             delete(delete_content_page_markup_handler),
         )
         .route(
+            "/api/v1/courses/{course_code}/assignments/{item_id}/markups",
+            get(list_assignment_markups_handler).post(create_assignment_markup_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/assignments/{item_id}/markups/{markup_id}",
+            delete(delete_assignment_markup_handler),
+        )
+        .route(
             "/api/v1/courses/{course_code}/assignments/{item_id}",
             get(module_assignment_get_handler).patch(module_assignment_patch_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/markups",
+            get(list_quiz_markups_handler).post(create_quiz_markup_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/markups/{markup_id}",
+            delete(delete_quiz_markup_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/quizzes/{item_id}",
@@ -207,6 +224,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/syllabus/generate-section",
             post(syllabus_generate_section_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/syllabus/markups",
+            get(list_syllabus_markups_handler).post(create_syllabus_markup_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/syllabus/markups/{markup_id}",
+            delete(delete_syllabus_markup_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/markdown-theme",
@@ -1384,6 +1409,70 @@ async fn ensure_user_can_view_content_page(
     Ok(course_id)
 }
 
+async fn ensure_user_can_view_assignment_for_markups(
+    state: &AppState,
+    course_code: &str,
+    item_id: Uuid,
+    user_id: Uuid,
+) -> Result<Uuid, AppError> {
+    require_course_access(state, course_code, user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let required = course_grants::course_item_create_permission(course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user_id, &required).await?;
+    if !can_edit {
+        let visible = course_structure::assignment_visible_to_student(
+            &state.pool,
+            course_id,
+            item_id,
+            user_id,
+            Utc::now(),
+        )
+        .await?;
+        if !visible {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    Ok(course_id)
+}
+
+async fn ensure_user_can_view_quiz_for_markups(
+    state: &AppState,
+    course_code: &str,
+    item_id: Uuid,
+    user_id: Uuid,
+) -> Result<Uuid, AppError> {
+    require_course_access(state, course_code, user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let required = course_grants::course_item_create_permission(course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user_id, &required).await?;
+    if !can_edit {
+        let visible = course_structure::quiz_visible_to_student(
+            &state.pool,
+            course_id,
+            item_id,
+            user_id,
+            Utc::now(),
+        )
+        .await?;
+        if !visible {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    Ok(course_id)
+}
+
 async fn module_content_page_get_handler(
     State(state): State<AppState>,
     Path((course_code, item_id)): Path<(String, Uuid)>,
@@ -1536,6 +1625,7 @@ async fn create_content_page_markup_handler(
         user.user_id,
         course_id,
         item_id,
+        "content_page",
         &req.kind,
         &req.quote_text,
         req.notebook_page_id.as_deref(),
@@ -1567,6 +1657,234 @@ async fn delete_content_page_markup_handler(
         markup_id,
     )
     .await?;
+    if !deleted {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn list_assignment_markups_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<ContentPageMarkupsListResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id =
+        ensure_user_can_view_assignment_for_markups(&state, &course_code, item_id, user.user_id)
+            .await?;
+    let markups =
+        content_page_markups::list_for_user_item(&state.pool, user.user_id, course_id, item_id)
+            .await?;
+    Ok(Json(ContentPageMarkupsListResponse { markups }))
+}
+
+async fn create_assignment_markup_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<CreateContentPageMarkupRequest>,
+) -> Result<Json<ContentPageMarkupResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id =
+        ensure_user_can_view_assignment_for_markups(&state, &course_code, item_id, user.user_id)
+            .await?;
+
+    if let Err(msg) = content_page_markups::validate_markup_request(
+        &req.kind,
+        &req.quote_text,
+        &req.notebook_page_id,
+        &req.comment_text,
+    ) {
+        return Err(AppError::InvalidInput(msg));
+    }
+
+    let row = content_page_markups::insert(
+        &state.pool,
+        user.user_id,
+        course_id,
+        item_id,
+        "assignment",
+        &req.kind,
+        &req.quote_text,
+        req.notebook_page_id.as_deref(),
+        req.comment_text.as_deref(),
+    )
+    .await
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => AppError::NotFound,
+        _ => e.into(),
+    })?;
+
+    Ok(Json(row))
+}
+
+async fn delete_assignment_markup_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, markup_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id =
+        ensure_user_can_view_assignment_for_markups(&state, &course_code, item_id, user.user_id)
+            .await?;
+
+    let deleted = content_page_markups::delete_owned(
+        &state.pool,
+        user.user_id,
+        course_id,
+        item_id,
+        markup_id,
+    )
+    .await?;
+    if !deleted {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn list_quiz_markups_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<ContentPageMarkupsListResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id =
+        ensure_user_can_view_quiz_for_markups(&state, &course_code, item_id, user.user_id).await?;
+    let markups =
+        content_page_markups::list_for_user_item(&state.pool, user.user_id, course_id, item_id)
+            .await?;
+    Ok(Json(ContentPageMarkupsListResponse { markups }))
+}
+
+async fn create_quiz_markup_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<CreateContentPageMarkupRequest>,
+) -> Result<Json<ContentPageMarkupResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id =
+        ensure_user_can_view_quiz_for_markups(&state, &course_code, item_id, user.user_id).await?;
+
+    if let Err(msg) = content_page_markups::validate_markup_request(
+        &req.kind,
+        &req.quote_text,
+        &req.notebook_page_id,
+        &req.comment_text,
+    ) {
+        return Err(AppError::InvalidInput(msg));
+    }
+
+    let row = content_page_markups::insert(
+        &state.pool,
+        user.user_id,
+        course_id,
+        item_id,
+        "quiz",
+        &req.kind,
+        &req.quote_text,
+        req.notebook_page_id.as_deref(),
+        req.comment_text.as_deref(),
+    )
+    .await
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => AppError::NotFound,
+        _ => e.into(),
+    })?;
+
+    Ok(Json(row))
+}
+
+async fn delete_quiz_markup_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, markup_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id =
+        ensure_user_can_view_quiz_for_markups(&state, &course_code, item_id, user.user_id).await?;
+
+    let deleted = content_page_markups::delete_owned(
+        &state.pool,
+        user.user_id,
+        course_id,
+        item_id,
+        markup_id,
+    )
+    .await?;
+    if !deleted {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn list_syllabus_markups_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<ContentPageMarkupsListResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let markups =
+        syllabus_markups::list_for_user_course(&state.pool, user.user_id, course_id).await?;
+    Ok(Json(ContentPageMarkupsListResponse { markups }))
+}
+
+async fn create_syllabus_markup_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<CreateContentPageMarkupRequest>,
+) -> Result<Json<ContentPageMarkupResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if let Err(msg) = content_page_markups::validate_markup_request(
+        &req.kind,
+        &req.quote_text,
+        &req.notebook_page_id,
+        &req.comment_text,
+    ) {
+        return Err(AppError::InvalidInput(msg));
+    }
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let row = syllabus_markups::insert(
+        &state.pool,
+        user.user_id,
+        course_id,
+        &req.kind,
+        &req.quote_text,
+        req.notebook_page_id.as_deref(),
+        req.comment_text.as_deref(),
+    )
+    .await?;
+
+    Ok(Json(row))
+}
+
+async fn delete_syllabus_markup_handler(
+    State(state): State<AppState>,
+    Path((course_code, markup_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let deleted =
+        syllabus_markups::delete_owned(&state.pool, user.user_id, course_id, markup_id).await?;
     if !deleted {
         return Err(AppError::NotFound);
     }

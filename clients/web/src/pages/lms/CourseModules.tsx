@@ -1187,6 +1187,15 @@ export default function CourseModules() {
     return sortedTopLevel.filter((i) => i.kind === 'module').map((m) => m.id)
   }, [sortedTopLevel])
 
+  const handleCollapseExpandAllModules = useCallback(() => {
+    setCollapsedModuleIds((prev) => {
+      const allCollapsed =
+        moduleIds.length > 0 && moduleIds.every((id) => prev.has(id))
+      if (allCollapsed) return new Set()
+      return new Set(moduleIds)
+    })
+  }, [moduleIds])
+
   const moduleChildrenById = useMemo(() => {
     const m = new Map<string, CourseStructureItem[]>()
     for (const i of items) {
@@ -1313,6 +1322,11 @@ export default function CourseModules() {
               disabled={anyModalBusy}
               dragHandlesVisible={dragHandlesVisible}
               onToggleDragHandles={() => setDragHandlesVisible((v) => !v)}
+              moduleListActionsEnabled={moduleIds.length > 0}
+              allModulesCollapsed={
+                moduleIds.length > 0 && moduleIds.every((id) => collapsedModuleIds.has(id))
+              }
+              onCollapseExpandAllModules={handleCollapseExpandAllModules}
             />
           </div>
         ) : null

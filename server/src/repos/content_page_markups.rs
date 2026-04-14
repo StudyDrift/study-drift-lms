@@ -98,6 +98,7 @@ pub async fn insert(
     user_id: Uuid,
     course_id: Uuid,
     structure_item_id: Uuid,
+    structure_kind: &str,
     kind: &str,
     quote_text: &str,
     notebook_page_id: Option<&str>,
@@ -110,7 +111,7 @@ pub async fn insert(
         )
         SELECT $1, $2, $3, $4, $5, $6, $7
         FROM course.course_structure_items si
-        WHERE si.id = $3 AND si.course_id = $2 AND si.kind = 'content_page'
+        WHERE si.id = $3 AND si.course_id = $2 AND si.kind = $8
         RETURNING id, kind, quote_text, notebook_page_id, comment_text, created_at
         "#,
     )
@@ -121,6 +122,7 @@ pub async fn insert(
     .bind(quote_text)
     .bind(notebook_page_id)
     .bind(comment_text)
+    .bind(structure_kind)
     .fetch_optional(pool)
     .await?;
 

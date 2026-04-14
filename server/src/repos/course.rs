@@ -237,6 +237,19 @@ pub async fn get_id_by_course_code(
     .await
 }
 
+pub async fn get_created_by_user_id(
+    pool: &PgPool,
+    course_code: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar::<_, Uuid>(&format!(
+        "SELECT created_by_user_id FROM {} WHERE course_code = $1",
+        schema::COURSES
+    ))
+    .bind(course_code)
+    .fetch_optional(pool)
+    .await
+}
+
 pub async fn update_course(
     pool: &PgPool,
     u: &UpdateCourse<'_>,

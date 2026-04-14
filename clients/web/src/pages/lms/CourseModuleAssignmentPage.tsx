@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Pencil } from 'lucide-react'
+import { ContentPageReader } from '../../components/content-page/ContentPageReader'
 import { SyllabusBlockEditor } from '../../components/syllabus/SyllabusBlockEditor'
-import { MarkdownArticleView } from '../../components/syllabus/SyllabusMarkdownView'
 import { markdownToSectionsForEditor, sectionsToMarkdown } from '../../components/syllabus/syllabusSectionMarkdown'
 import { usePermissions } from '../../context/usePermissions'
 import {
   fetchCourse,
   fetchCourseGradingSettings,
   fetchModuleAssignment,
+  fetchReaderMarkups,
   patchCourseStructureItemAssignmentGroup,
   patchModuleAssignment,
+  type ContentPageMarkup,
   type SyllabusSection,
 } from '../../lib/coursesApi'
 import {
@@ -111,6 +113,7 @@ export default function CourseModuleAssignmentPage() {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [markups, setMarkups] = useState<ContentPageMarkup[]>([])
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<SyllabusSection[]>([])
@@ -123,6 +126,21 @@ export default function CourseModuleAssignmentPage() {
     (): ResolvedMarkdownTheme => resolveMarkdownTheme(mdPreset, mdCustom, { lmsUiDark }),
     [mdPreset, mdCustom, lmsUiDark],
   )
+
+  const assignmentMarkupTarget = useMemo(
+    () => ({ variant: 'assignment' as const, itemId: itemId! }),
+    [itemId],
+  )
+
+  const loadMarkups = useCallback(async () => {
+    if (!courseCode || !itemId) return
+    try {
+      const list = await fetchReaderMarkups(courseCode, assignmentMarkupTarget)
+      setMarkups(list)
+    } catch {
+      setMarkups([])
+    }
+  }, [assignmentMarkupTarget, courseCode, itemId])
 
   const canEdit = Boolean(
     courseCode && itemId && !permLoading && allows(permCourseItemCreate(courseCode)),
@@ -161,6 +179,7 @@ export default function CourseModuleAssignmentPage() {
       setUpdatedAt(data.updatedAt)
       setMdPreset(courseRow.markdownThemePreset)
       setMdCustom(courseRow.markdownThemeCustom)
+      void loadMarkups()
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load this assignment.')
       setTitle('')
@@ -172,10 +191,11 @@ export default function CourseModuleAssignmentPage() {
       setGradingGroups([])
       setAssignmentGroupId(null)
       setUpdatedAt(null)
+      setMarkups([])
     } finally {
       setLoading(false)
     }
-  }, [courseCode, itemId])
+  }, [courseCode, itemId, loadMarkups])
 
   useEffect(() => {
     void load()
@@ -255,6 +275,7 @@ export default function CourseModuleAssignmentPage() {
       setUpdatedAt(data.updatedAt)
       setEditing(false)
       setDraft([])
+      void loadMarkups()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Could not save.')
     } finally {
@@ -375,11 +396,15 @@ export default function CourseModuleAssignmentPage() {
                 </div>
               </dl>
             </div>
-            <MarkdownArticleView
+            <ContentPageReader
               markdown={markdown}
-              emptyMessage="No instructions yet. Select Edit to add Markdown."
               theme={mdTheme}
+              markups={markups}
+              onMarkupsChange={loadMarkups}
               courseCode={courseCode}
+              markupTarget={assignmentMarkupTarget}
+              contentTitle={title || 'Assignment'}
+              emptyMessage="No instructions yet. Select Edit to add Markdown."
             />
           </div>
         )}

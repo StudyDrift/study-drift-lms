@@ -2,14 +2,197 @@ import Mark from 'mark.js'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Highlighter, StickyNote, Trash2, X } from 'lucide-react'
 import { MarkdownArticleView } from '../syllabus/SyllabusMarkdownView'
-import type { ContentPageMarkup } from '../../lib/coursesApi'
-import {
-  deleteContentPageMarkup,
-  postContentPageMarkup,
-} from '../../lib/coursesApi'
+import type { ContentPageMarkup, ReaderMarkupTarget } from '../../lib/coursesApi'
+import { deleteReaderMarkup, postReaderMarkup } from '../../lib/coursesApi'
 import { sortedChildren, type CourseNotebookPage } from '../../lib/courseNotebookTree'
 import { appendContentQuoteToNotebookPage, loadCourseNotebook } from '../../lib/studentNotebookStorage'
 import type { ResolvedMarkdownTheme } from '../../lib/markdownTheme'
+
+type SelectionOverlayRect = { left: number; top: number; width: number; height: number }
+
+type SelectionOverlaySnapshot = {
+  rects: SelectionOverlayRect[]
+  start: { left: number; top: number }
+  end: { left: number; top: number }
+}
+
+function unionClientRect(rects: SelectionOverlayRect[]): { left: number; top: number; width: number; height: number } {
+  let minL = Infinity
+  let minT = Infinity
+  let maxR = -Infinity
+  let maxB = -Infinity
+  for (const r of rects) {
+    minL = Math.min(minL, r.left)
+    minT = Math.min(minT, r.top)
+    maxR = Math.max(maxR, r.left + r.width)
+    maxB = Math.max(maxB, r.top + r.height)
+  }
+  if (!Number.isFinite(minL)) return { left: 0, top: 0, width: 0, height: 0 }
+  return { left: minL, top: minT, width: maxR - minL, height: maxB - minT }
+}
+
+function collectSelectionOverlayRects(range: Range): SelectionOverlayRect[] {
+  const raw = range.getClientRects()
+  const out: SelectionOverlayRect[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const r = raw[i]!
+    if (r.width < 0.5 && r.height < 0.5) continue
+    out.push({ left: r.left, top: r.top, width: r.width, height: r.height })
+  }
+  return out
+}
+
+function buildSelectionOverlaySnapshot(range: Range, root: HTMLElement): SelectionOverlaySnapshot | null {
+  if (!root.contains(range.commonAncestorContainer)) return null
+  const rects = collectSelectionOverlayRects(range)
+  if (rects.length === 0) return null
+  const first = rects[0]!
+  const last = rects[rects.length - 1]!
+  return {
+    rects,
+    start: { left: first.left, top: first.top + first.height / 2 },
+    end: { left: last.left + last.width, top: last.top + last.height / 2 },
+  }
+}
+
+/** Collapsed range at the caret closest to the viewport point (Chrome / Firefox). */
+function rangeFromClientPoint(root: HTMLElement, clientX: number, clientY: number): Range | null {
+  const doc = root.ownerDocument
+  if (!doc) return null
+  try {
+    const d = doc as Document & {
+      caretRangeFromPoint?: (x: number, y: number) => Range | null
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+    }
+    if (typeof d.caretRangeFromPoint === 'function') {
+      const r = d.caretRangeFromPoint(clientX, clientY)
+      if (r && root.contains(r.startContainer)) return r.cloneRange()
+    }
+    if (typeof d.caretPositionFromPoint === 'function') {
+      const p = d.caretPositionFromPoint(clientX, clientY)
+      if (p?.offsetNode && root.contains(p.offsetNode)) {
+        const r = doc.createRange()
+        r.setStart(p.offsetNode, p.offset)
+        r.collapse(true)
+        return r
+      }
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+function normalizeRangeEndpoints(range: Range): void {
+  if (range.collapsed) return
+  if (range.compareBoundaryPoints(Range.START_TO_END, range) <= 0) return
+  const ec = range.endContainer
+  const eo = range.endOffset
+  range.setEnd(range.startContainer, range.startOffset)
+  range.setStart(ec, eo)
+}
+
+function firstTextDescendant(n: Node): Text | null {
+  if (n.nodeType === Node.TEXT_NODE) return n as Text
+  for (let c = n.firstChild; c; c = c.nextSibling) {
+    const t = firstTextDescendant(c)
+    if (t) return t
+  }
+  return null
+}
+
+function lastTextDescendant(n: Node): Text | null {
+  if (n.nodeType === Node.TEXT_NODE) return n as Text
+  for (let c = n.lastChild; c; c = c.previousSibling) {
+    const t = lastTextDescendant(c)
+    if (t) return t
+  }
+  return null
+}
+
+/** Map a range boundary to a concrete text node + offset (0..length). */
+function resolveBoundaryToTextPoint(
+  container: Node,
+  offset: number,
+): { text: Text; offset: number } | null {
+  try {
+    if (container.nodeType === Node.TEXT_NODE) {
+      const t = container as Text
+      return { text: t, offset: Math.min(Math.max(0, offset), t.length) }
+    }
+    if (container.nodeType === Node.ELEMENT_NODE) {
+      const el = container as Element
+      if (offset < el.childNodes.length) {
+        const first = firstTextDescendant(el.childNodes[offset]!)
+        if (first) return { text: first, offset: 0 }
+      }
+      if (offset > 0 && offset <= el.childNodes.length) {
+        const last = lastTextDescendant(el.childNodes[offset - 1]!)
+        if (last) return { text: last, offset: last.length }
+      }
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+function isWordChar(ch: string): boolean {
+  return /[\p{L}\p{N}_]/u.test(ch)
+}
+
+/** Index of the first character in the word that contains the gap before `rangeOffset`. */
+function wordStartOffsetInText(s: string, rangeOffset: number): number {
+  if (s.length === 0) return 0
+  let i = Math.min(Math.max(0, rangeOffset), s.length)
+  if (i === s.length) i = s.length - 1
+  if (!isWordChar(s[i]!)) {
+    if (i > 0 && isWordChar(s[i - 1]!)) {
+      i -= 1
+    } else {
+      while (i < s.length && !isWordChar(s[i]!)) i++
+      if (i >= s.length) return s.length
+    }
+  }
+  while (i > 0 && isWordChar(s[i - 1]!)) i -= 1
+  return i
+}
+
+/** Exclusive end offset after the last character of the word touched by range end `rangeEndOffset`. */
+function wordEndExclusiveInText(s: string, rangeEndOffset: number): number {
+  if (s.length === 0) return 0
+  if (rangeEndOffset <= 0) return 0
+  let j = Math.min(rangeEndOffset, s.length) - 1
+  if (j < 0) return 0
+  while (j >= 0 && !isWordChar(s[j]!)) j -= 1
+  if (j < 0) return 0
+  while (j + 1 < s.length && isWordChar(s[j + 1]!)) j += 1
+  return j + 1
+}
+
+/** Snap range start to word start and end to exclusive end after the last word character. */
+function snapRangeToWordBoundaries(range: Range, root: HTMLElement): Range {
+  const out = range.cloneRange()
+  try {
+    if (!root.contains(out.commonAncestorContainer)) return out
+    const startP = resolveBoundaryToTextPoint(out.startContainer, out.startOffset)
+    const endP = resolveBoundaryToTextPoint(out.endContainer, out.endOffset)
+    if (!startP || !endP) return out
+
+    const ws = wordStartOffsetInText(startP.text.data, startP.offset)
+    const we = wordEndExclusiveInText(endP.text.data, endP.offset)
+
+    out.setStart(startP.text, ws)
+    out.setEnd(endP.text, we)
+    normalizeRangeEndpoints(out)
+    if (out.collapsed || !out.toString().trim()) {
+      return range.cloneRange()
+    }
+  } catch {
+    return range.cloneRange()
+  }
+  return out
+}
 
 function flattenNotebookPages(pages: CourseNotebookPage[]): { id: string; label: string }[] {
   const out: { id: string; label: string }[] = []
@@ -34,8 +217,10 @@ type ContentPageReaderProps = {
   markups: ContentPageMarkup[]
   onMarkupsChange: () => void | Promise<void>
   courseCode: string
-  itemId: string
+  markupTarget: ReaderMarkupTarget
   contentTitle: string
+  /** Passed through to the Markdown article when the document is empty. */
+  emptyMessage?: string
   disabled?: boolean
 }
 
@@ -45,12 +230,16 @@ export function ContentPageReader({
   markups,
   onMarkupsChange,
   courseCode,
-  itemId,
+  markupTarget,
   contentTitle,
+  emptyMessage,
   disabled = false,
 }: ContentPageReaderProps) {
   const articleRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
+  const pendingSelectionRangeRef = useRef<Range | null>(null)
+  const dragHandleRef = useRef<'start' | 'end' | null>(null)
+  const [selectionOverlay, setSelectionOverlay] = useState<SelectionOverlaySnapshot | null>(null)
   const [popover, setPopover] = useState<ReaderToolbar | null>(null)
   const [noteModal, setNoteModal] = useState(false)
   const [pendingQuote, setPendingQuote] = useState<string | null>(null)
@@ -92,30 +281,102 @@ export function ContentPageReader({
     }
   }, [markdown, highlightMarkups, disabled])
 
-  const closePopover = useCallback(() => setPopover(null), [])
+  const clearPendingSelectionVisual = useCallback(() => {
+    pendingSelectionRangeRef.current = null
+    setSelectionOverlay(null)
+  }, [])
+
+  const closePopover = useCallback(() => {
+    dragHandleRef.current = null
+    clearPendingSelectionVisual()
+    setPopover(null)
+  }, [clearPendingSelectionVisual])
+
+  const syncSelectionOverlayFromRef = useCallback(() => {
+    const root = articleRef.current
+    const range = pendingSelectionRangeRef.current
+    if (!root || !range || !root.contains(range.commonAncestorContainer)) {
+      setSelectionOverlay(null)
+      return
+    }
+    const snap = buildSelectionOverlaySnapshot(range, root)
+    setSelectionOverlay(snap)
+  }, [])
+
+  useEffect(() => {
+    if (!popover || popover.kind !== 'selection') return
+    const onScrollOrResize = () => {
+      syncSelectionOverlayFromRef()
+    }
+    window.addEventListener('scroll', onScrollOrResize, true)
+    window.addEventListener('resize', onScrollOrResize)
+    return () => {
+      window.removeEventListener('scroll', onScrollOrResize, true)
+      window.removeEventListener('resize', onScrollOrResize)
+    }
+  }, [popover, syncSelectionOverlayFromRef])
+
+  const applyRangeAfterPointer = useCallback((clientX: number, clientY: number) => {
+    const kind = dragHandleRef.current
+    const root = articleRef.current
+    const doc = root?.ownerDocument
+    const cur = pendingSelectionRangeRef.current
+    if (!kind || !root || !doc || !cur) return
+    const hit = rangeFromClientPoint(root, clientX, clientY)
+    if (!hit) return
+    const next = doc.createRange()
+    try {
+      if (kind === 'start') {
+        next.setStart(hit.startContainer, hit.startOffset)
+        next.setEnd(cur.endContainer, cur.endOffset)
+      } else {
+        next.setStart(cur.startContainer, cur.startOffset)
+        next.setEnd(hit.startContainer, hit.startOffset)
+      }
+      normalizeRangeEndpoints(next)
+      if (next.collapsed) return
+      const snapped = snapRangeToWordBoundaries(next, root)
+      const selected = snapped.toString().trim()
+      if (selected.length < 2) return
+      pendingSelectionRangeRef.current = snapped
+      const snap = buildSelectionOverlaySnapshot(snapped, root)
+      if (!snap) return
+      setSelectionOverlay(snap)
+      const u = unionClientRect(snap.rects)
+      setPopover((prev) =>
+        prev?.kind === 'selection'
+          ? { ...prev, x: u.left + u.width / 2, y: u.top + u.height + 6, text: selected }
+          : prev,
+      )
+    } catch {
+      /* invalid boundary */
+    }
+  }, [])
 
   useEffect(() => {
     if (!popover && !noteModal) return
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        setPopover(null)
+        closePopover()
         setNoteModal(false)
         setPendingQuote(null)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [popover, noteModal])
+  }, [popover, noteModal, closePopover])
 
   useEffect(() => {
     if (!popover) return
     function onDocMouseDown(e: MouseEvent) {
+      const el = e.target as HTMLElement | null
+      if (el?.closest?.('[data-reader-selection-ui]')) return
       if (popoverRef.current?.contains(e.target as Node)) return
-      setPopover(null)
+      closePopover()
     }
     document.addEventListener('mousedown', onDocMouseDown)
     return () => document.removeEventListener('mousedown', onDocMouseDown)
-  }, [popover])
+  }, [popover, closePopover])
 
   useEffect(() => {
     if (disabled) return
@@ -128,34 +389,49 @@ export function ContentPageReader({
       }
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
-        setPopover(null)
+        closePopover()
         return
       }
       const root = articleRef.current
       if (!root) return
-      const text = sel.toString().trim()
-      if (text.length < 2) {
-        setPopover(null)
+      if (!sel.toString().trim()) {
+        closePopover()
         return
       }
       const a = sel.anchorNode
       const f = sel.focusNode
       if (!a || !f || !root.contains(a) || !root.contains(f)) {
-        setPopover(null)
+        closePopover()
         return
       }
       const range = sel.getRangeAt(0)
-      const rect = range.getBoundingClientRect()
+      const clone = range.cloneRange()
+      const snapped = snapRangeToWordBoundaries(clone, root)
+      pendingSelectionRangeRef.current = snapped
+      window.getSelection()?.removeAllRanges()
+      const textSnapped = snapped.toString().trim()
+      if (textSnapped.length < 2) {
+        closePopover()
+        return
+      }
+      const snap = buildSelectionOverlaySnapshot(snapped, root)
+      if (!snap) {
+        closePopover()
+        return
+      }
+      setSelectionOverlay(snap)
+      const bounds = unionClientRect(snap.rects)
+      const bottom = bounds.top + bounds.height
       setPopover({
         kind: 'selection',
-        x: rect.left + rect.width / 2,
-        y: rect.bottom + 6,
-        text,
+        x: bounds.left + bounds.width / 2,
+        y: bottom + 6,
+        text: textSnapped,
       })
     }
     document.addEventListener('mouseup', onMouseUp)
     return () => document.removeEventListener('mouseup', onMouseUp)
-  }, [disabled])
+  }, [closePopover, disabled])
 
   useEffect(() => {
     if (disabled) return
@@ -181,6 +457,7 @@ export function ContentPageReader({
 
       const rect = markEl.getBoundingClientRect()
       e.stopPropagation()
+      clearPendingSelectionVisual()
       setPopover({
         kind: 'highlight',
         x: rect.left + rect.width / 2,
@@ -193,7 +470,7 @@ export function ContentPageReader({
     if (!root) return
     root.addEventListener('click', onArticleClick)
     return () => root.removeEventListener('click', onArticleClick)
-  }, [disabled, markups])
+  }, [clearPendingSelectionVisual, disabled, markups])
 
   const refresh = useCallback(async () => {
     await onMarkupsChange()
@@ -204,37 +481,40 @@ export function ContentPageReader({
     setBusy(true)
     setError(null)
     try {
-      await postContentPageMarkup(courseCode, itemId, {
+      const quoteText =
+        pendingSelectionRangeRef.current?.toString().trim() || popover.text
+      await postReaderMarkup(courseCode, markupTarget, {
         kind: 'highlight',
-        quoteText: popover.text,
+        quoteText,
       })
       window.getSelection()?.removeAllRanges()
-      setPopover(null)
+      closePopover()
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save highlight.')
     } finally {
       setBusy(false)
     }
-  }, [courseCode, itemId, popover, refresh])
+  }, [closePopover, courseCode, markupTarget, popover, refresh])
 
   const openNoteWithQuote = useCallback(
     (quote: string) => {
       setError(null)
       setPendingQuote(quote)
-      setPopover(null)
+      closePopover()
       window.getSelection()?.removeAllRanges()
       setNoteModal(true)
       setNoteComment('')
       const opts = flattenNotebookPages(loadCourseNotebook(courseCode).pages)
       setNotePageId(opts[0]?.id ?? '')
     },
-    [courseCode],
+    [closePopover, courseCode],
   )
 
   const openNoteModal = useCallback(() => {
     if (!popover || popover.kind !== 'selection') return
-    openNoteWithQuote(popover.text)
+    const quote = pendingSelectionRangeRef.current?.toString().trim() || popover.text
+    openNoteWithQuote(quote)
   }, [popover, openNoteWithQuote])
 
   const openNoteFromHighlightToolbar = useCallback(() => {
@@ -245,18 +525,18 @@ export function ContentPageReader({
   const removeCurrentHighlight = useCallback(async () => {
     if (!popover || popover.kind !== 'highlight') return
     const id = popover.markupId
-    setPopover(null)
+    closePopover()
     setBusy(true)
     setError(null)
     try {
-      await deleteContentPageMarkup(courseCode, itemId, id)
+      await deleteReaderMarkup(courseCode, markupTarget, id)
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not remove highlight.')
     } finally {
       setBusy(false)
     }
-  }, [courseCode, itemId, popover, refresh])
+  }, [closePopover, courseCode, markupTarget, popover, refresh])
 
   const notebookOptions = useMemo(
     () => flattenNotebookPages(loadCourseNotebook(courseCode).pages),
@@ -274,7 +554,7 @@ export function ContentPageReader({
         quoteText: quote,
         userNote: noteComment,
       })
-      await postContentPageMarkup(courseCode, itemId, {
+      await postReaderMarkup(courseCode, markupTarget, {
         kind: 'note',
         quoteText: quote,
         notebookPageId: notePageId,
@@ -288,14 +568,14 @@ export function ContentPageReader({
     } finally {
       setBusy(false)
     }
-  }, [courseCode, contentTitle, itemId, noteComment, notePageId, pendingQuote, refresh])
+  }, [courseCode, contentTitle, markupTarget, noteComment, notePageId, pendingQuote, refresh])
 
   const onDeleteMarkup = useCallback(
     async (id: string) => {
       setBusy(true)
       setError(null)
       try {
-        await deleteContentPageMarkup(courseCode, itemId, id)
+        await deleteReaderMarkup(courseCode, markupTarget, id)
         await refresh()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not remove.')
@@ -303,12 +583,20 @@ export function ContentPageReader({
         setBusy(false)
       }
     },
-    [courseCode, itemId, refresh],
+    [courseCode, markupTarget, refresh],
   )
 
   return (
     <div className="relative">
-      <MarkdownArticleView ref={articleRef} markdown={markdown} theme={theme} courseCode={courseCode} />
+      <div className="relative min-w-0">
+        <MarkdownArticleView
+          ref={articleRef}
+          markdown={markdown}
+          theme={theme}
+          courseCode={courseCode}
+          emptyMessage={emptyMessage}
+        />
+      </div>
 
       {error && (
         <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-200">
@@ -316,9 +604,98 @@ export function ContentPageReader({
         </p>
       )}
 
+      {selectionOverlay && popover?.kind === 'selection' && !disabled && (
+        <>
+          {/* Above article so rects are not fully covered by the markdown block; blend reads softer on type. */}
+          <div className="pointer-events-none fixed inset-0 z-[15]" aria-hidden>
+            {selectionOverlay.rects.map((r, i) => (
+              <div
+                key={`reader-sel-${i}`}
+                className="pointer-events-none fixed rounded-sm bg-amber-200/55 mix-blend-multiply ring-1 ring-amber-400/25 dark:bg-amber-400/40 dark:mix-blend-plus-lighter dark:ring-amber-500/30"
+                style={{
+                  left: `${r.left}px`,
+                  top: `${r.top}px`,
+                  width: `${r.width}px`,
+                  height: `${r.height}px`,
+                }}
+              />
+            ))}
+          </div>
+          <div data-reader-selection-ui className="pointer-events-none fixed inset-0 z-[18]">
+            <button
+              type="button"
+              aria-label="Adjust selection start"
+              className="pointer-events-auto fixed h-4 w-4 cursor-grab touch-none rounded-full border-2 border-indigo-600 bg-white shadow-md active:cursor-grabbing dark:border-indigo-400 dark:bg-neutral-900"
+              style={{
+                left: `${selectionOverlay.start.left}px`,
+                top: `${selectionOverlay.start.top}px`,
+                transform: 'translate(-50%, -50%)',
+              }}
+              onPointerDown={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                dragHandleRef.current = 'start'
+                e.currentTarget.setPointerCapture(e.pointerId)
+              }}
+              onPointerMove={(e) => {
+                if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+                if ((e.buttons & 1) === 0) return
+                e.preventDefault()
+                applyRangeAfterPointer(e.clientX, e.clientY)
+              }}
+              onPointerUp={(e) => {
+                dragHandleRef.current = null
+                try {
+                  e.currentTarget.releasePointerCapture(e.pointerId)
+                } catch {
+                  /* not captured */
+                }
+              }}
+              onLostPointerCapture={() => {
+                dragHandleRef.current = null
+              }}
+            />
+            <button
+              type="button"
+              aria-label="Adjust selection end"
+              className="pointer-events-auto fixed h-4 w-4 cursor-grab touch-none rounded-full border-2 border-indigo-600 bg-white shadow-md active:cursor-grabbing dark:border-indigo-400 dark:bg-neutral-900"
+              style={{
+                left: `${selectionOverlay.end.left}px`,
+                top: `${selectionOverlay.end.top}px`,
+                transform: 'translate(-50%, -50%)',
+              }}
+              onPointerDown={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                dragHandleRef.current = 'end'
+                e.currentTarget.setPointerCapture(e.pointerId)
+              }}
+              onPointerMove={(e) => {
+                if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+                if ((e.buttons & 1) === 0) return
+                e.preventDefault()
+                applyRangeAfterPointer(e.clientX, e.clientY)
+              }}
+              onPointerUp={(e) => {
+                dragHandleRef.current = null
+                try {
+                  e.currentTarget.releasePointerCapture(e.pointerId)
+                } catch {
+                  /* not captured */
+                }
+              }}
+              onLostPointerCapture={() => {
+                dragHandleRef.current = null
+              }}
+            />
+          </div>
+        </>
+      )}
+
       {popover && !disabled && (
         <div
           ref={popoverRef}
+          onMouseDown={(e) => e.preventDefault()}
           className="fixed z-[60] flex -translate-x-1/2 flex-col gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
           style={{ left: popover.x, top: popover.y }}
           role="dialog"
