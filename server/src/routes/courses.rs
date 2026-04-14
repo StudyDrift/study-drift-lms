@@ -10,6 +10,9 @@ use crate::models::course::{
     MARKDOWN_THEME_PRESETS,
 };
 use crate::models::course_export::{CourseCanvasImportRequest, CourseExportV1, CourseImportRequest};
+use crate::models::course_gradebook::{
+    CourseGradebookGridColumn, CourseGradebookGridResponse, CourseGradebookGridStudent,
+};
 use crate::models::course_grading::{
     CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
 };
@@ -268,6 +271,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/grading",
             get(grading_get_handler).put(grading_put_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/gradebook/grid",
+            get(gradebook_grid_get_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/structure/items/{item_id}/assignment-group",
@@ -2395,11 +2402,69 @@ async fn module_quiz_generate_questions_handler(
     Ok(Json(GenerateModuleQuizQuestionsResponse { questions }))
 }
 
+fn gradebook_max_points(item: &CourseStructureItemResponse) -> Option<i32> {
+    if let Some(pw) = item.points_worth {
+        return Some(pw);
+    }
+    if item.kind == "quiz" && item.is_adaptive != Some(true) {
+        return item.points_possible;
+    }
+    None
+}
+
+async fn gradebook_grid_get_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<CourseGradebookGridResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_gradebook_view_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let student_rows =
+        enrollment::list_student_users_for_course_code(&state.pool, &course_code).await?;
+    let students: Vec<CourseGradebookGridStudent> = student_rows
+        .into_iter()
+        .map(|(user_id, display_name)| CourseGradebookGridStudent {
+            user_id,
+            display_name,
+        })
+        .collect();
+
+    let rows = course_structure::list_for_course(&state.pool, course_id).await?;
+    let rows = course_structure::filter_archived_items_from_structure_list(rows);
+    let items =
+        course_structure::rows_to_responses_with_quiz_adaptive(&state.pool, course_id, rows)
+            .await?;
+
+    let columns: Vec<CourseGradebookGridColumn> = items
+        .into_iter()
+        .filter(|it| it.kind == "assignment" || it.kind == "quiz")
+        .map(|it| {
+            let max_points = gradebook_max_points(&it);
+            CourseGradebookGridColumn {
+                id: it.id,
+                kind: it.kind,
+                title: it.title,
+                max_points,
+            }
+        })
+        .collect();
+
+    Ok(Json(CourseGradebookGridResponse { students, columns }))
+}
+
 async fn grading_get_handler(
     State(state): State<AppState>,
     Path(course_code): Path<String>,
     headers: HeaderMap,
-) -> Result<Json<CourseGradingSettingsResponse>, AppError> {
+    ) -> Result<Json<CourseGradingSettingsResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 

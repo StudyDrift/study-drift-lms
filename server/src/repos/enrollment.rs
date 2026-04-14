@@ -2,7 +2,7 @@ use std::ops::DerefMut;
 
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::db::schema;
@@ -282,6 +282,40 @@ pub async fn list_for_course_code(
     .await?;
 
     Ok(rows.into_iter().map(|r| r.into_public()).collect())
+}
+
+/// Learners with a `student` enrollment row, for gradebook views (`course:…:gradebook:view`).
+/// One row per `user_id` (stable label for display). Ordered by display label.
+pub async fn list_student_users_for_course_code(
+    pool: &PgPool,
+    course_code: &str,
+) -> Result<Vec<(Uuid, String)>, sqlx::Error> {
+    let rows: Vec<(Uuid, String)> = sqlx::query_as(&format!(
+        r#"
+        SELECT ce.user_id,
+               COALESCE(NULLIF(TRIM(u.display_name), ''), u.email) AS display_label
+        FROM {} ce
+        INNER JOIN {} c ON c.id = ce.course_id
+        INNER JOIN {} u ON u.id = ce.user_id
+        WHERE c.course_code = $1 AND ce.role = 'student'
+        ORDER BY display_label ASC, ce.user_id ASC
+        "#,
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES,
+        schema::USERS
+    ))
+    .bind(course_code)
+    .fetch_all(pool)
+    .await?;
+
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for (user_id, label) in rows {
+        if seen.insert(user_id) {
+            out.push((user_id, label));
+        }
+    }
+    Ok(out)
 }
 
 /// All enrollments in courses the requester is enrolled in (same visibility as enrollments API).

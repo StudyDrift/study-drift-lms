@@ -2,7 +2,7 @@ use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use rand::rngs::OsRng;
+use rand_core::OsRng;
 use sqlx::PgPool;
 use uuid::Uuid;
 

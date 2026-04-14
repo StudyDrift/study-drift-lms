@@ -6,6 +6,7 @@ pub mod course_feed;
 pub mod course_export;
 pub mod course_file;
 pub mod course_grading;
+pub mod course_gradebook;
 pub mod course_module_assignment;
 pub mod course_module_content;
 pub mod course_module_quiz;

@@ -322,6 +322,37 @@ export async function fetchCourseStructure(courseCode: string): Promise<CourseSt
   return body.items
 }
 
+/** GET `/gradebook/grid` — enrolled students and gradable module items (assignments and quizzes). */
+export type CourseGradebookGridStudent = {
+  userId: string
+  displayName: string
+}
+
+export type CourseGradebookGridColumn = {
+  id: string
+  kind: string
+  title: string
+  maxPoints: number | null
+}
+
+export type CourseGradebookGridResponse = {
+  students: CourseGradebookGridStudent[]
+  columns: CourseGradebookGridColumn[]
+}
+
+export async function fetchCourseGradebookGrid(courseCode: string): Promise<CourseGradebookGridResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook/grid`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const body = raw as { students?: CourseGradebookGridStudent[]; columns?: CourseGradebookGridColumn[] }
+  return {
+    students: body.students ?? [],
+    columns: body.columns ?? [],
+  }
+}
+
 /** Staff only: archived module items and their parent modules (for Settings → Archived). */
 export async function fetchCourseArchivedStructure(
   courseCode: string,
