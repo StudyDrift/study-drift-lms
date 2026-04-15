@@ -773,8 +773,7 @@ function GroupsDialog({
     )
   }
 
-  const err =
-    dialog.kind !== 'closed' && 'error' in dialog && dialog.error ? dialog.error : null
+  const err = dialog.error ?? null
 
   return (
     <div
