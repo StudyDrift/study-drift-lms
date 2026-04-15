@@ -34,8 +34,6 @@
 
 # Lextures
 
-**Learn by Learning & Teach by Teaching**
-
 Open-source learning platform for running courses end to end: structured modules, calendars, grading, and enrollments—with AI hooks when you want them—so instructors and students spend less time on tooling and more on teaching and learning.
 
 ## Features
