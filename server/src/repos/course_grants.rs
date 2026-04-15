@@ -111,6 +111,56 @@ pub async fn apply_app_role_course_grants(
     Ok(())
 }
 
+/// Removes rows in `user_course_grants` for this user and course whose permission belongs to this
+/// course (`course:<this course's code>:…`), using `split_part` so course codes with `_` are safe.
+pub async fn clear_user_course_grants_for_course<'e, E>(
+    executor: E,
+    user_id: Uuid,
+    course_id: Uuid,
+) -> Result<(), sqlx::Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
+    sqlx::query(&format!(
+        r#"
+        DELETE FROM {ug} g
+        USING {courses} c
+        WHERE g.user_id = $1 AND g.course_id = $2 AND c.id = g.course_id
+          AND split_part(g.permission_string, ':', 1) = 'course'
+          AND split_part(g.permission_string, ':', 2) = c.course_code
+        "#,
+        ug = schema::USER_COURSE_GRANTS,
+        courses = schema::COURSES,
+    ))
+    .bind(user_id)
+    .bind(course_id)
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+/// Clears concrete `course:<code>:…` grants for this user, re-adds roster read for staff, then applies `app_role_id`.
+pub async fn replace_course_app_role_grants_for_user(
+    pool: &PgPool,
+    user_id: Uuid,
+    course_id: Uuid,
+    course_code: &str,
+    app_role_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    clear_user_course_grants_for_course(&mut *tx, user_id, course_id).await?;
+    let enroll_read = course_enrollments_read_permission(course_code);
+    grant_course_permission_string(&mut *tx, user_id, course_id, &enroll_read).await?;
+    let strings = rbac::list_permission_strings_for_role(pool, app_role_id).await?;
+    for s in strings {
+        if let Some(concrete) = expand_course_permission_for_course(&s, course_code) {
+            grant_course_permission_string(&mut *tx, user_id, course_id, &concrete).await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

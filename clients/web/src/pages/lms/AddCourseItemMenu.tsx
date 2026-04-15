@@ -70,7 +70,7 @@ export function AddCourseItemMenu({
               onAdd()
               setOpen(false)
             }}
-            className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700/80"
+            className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700"
           >
             <span className="font-semibold text-slate-950 dark:text-neutral-100">Add Module</span>
             <span className="text-xs text-slate-500 dark:text-neutral-400">Group course activities and items</span>
@@ -86,7 +86,7 @@ export function AddCourseItemMenu({
                   onCollapseExpandAllModules()
                   setOpen(false)
                 }}
-                className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-neutral-700/80"
+                className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-neutral-700"
               >
                 <span className="font-semibold text-slate-950 dark:text-neutral-100">
                   {allModulesCollapsed ? 'Expand all modules' : 'Collapse all modules'}
@@ -105,7 +105,7 @@ export function AddCourseItemMenu({
             role="menuitemcheckbox"
             aria-checked={dragHandlesVisible}
             onClick={onToggleDragHandles}
-            className="flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700/80"
+            className="flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700"
           >
             <span
               className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${

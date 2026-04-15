@@ -24,7 +24,9 @@ import MyNotebooksPage from './pages/lms/MyNotebooksPage'
 import Reports from './pages/lms/Reports'
 import Settings from './pages/lms/Settings'
 import Login from './pages/Login'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import Signup from './pages/Signup'
+import TermsOfUsePage from './pages/TermsOfUsePage'
 
 export default function App() {
   return (
@@ -59,6 +61,8 @@ export default function App() {
           <Route path="/settings/ai" element={<Navigate to="/settings/ai/models" replace />} />
           <Route path="/settings/ai/:aiSection" element={<Settings />} />
           <Route path="/settings/:tab" element={<Settings />} />
+          <Route path="/terms" element={<TermsOfUsePage />} />
+          <Route path="/privacy" element={<PrivacyPolicyPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

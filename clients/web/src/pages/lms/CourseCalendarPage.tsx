@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
+import { usePermissions } from '../../context/usePermissions'
 import { fetchCourseStructure, type CourseStructureItem } from '../../lib/coursesApi'
+import { permCourseItemsCreate } from '../../lib/rbacApi'
 import { CourseCalendar, type CourseCalendarAssignment } from './CourseCalendar'
 import { LmsPage } from './LmsPage'
 
 export default function CourseCalendarPage() {
   const { courseCode } = useParams<{ courseCode: string }>()
+  const { allows, loading: permLoading } = usePermissions()
   const [items, setItems] = useState<Awaited<ReturnType<typeof fetchCourseStructure>> | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const canRescheduleDueByDrag = Boolean(
+    courseCode && !permLoading && allows(permCourseItemsCreate(courseCode)),
+  )
 
   const load = useCallback(async () => {
     if (!courseCode) return
@@ -44,6 +51,9 @@ export default function CourseCalendarPage() {
       title: i.title,
       dueAt: i.dueAt,
       kind: i.kind,
+      pointsWorth: i.pointsWorth,
+      pointsPossible: i.pointsPossible,
+      isAdaptive: i.isAdaptive,
     }))
   }, [items])
 
@@ -64,7 +74,14 @@ export default function CourseCalendarPage() {
       {!error && items === null && (
         <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400">Loading…</p>
       )}
-      {!error && items !== null && <CourseCalendar courseCode={courseCode} assignments={assignments} />}
+      {!error && items !== null && (
+        <CourseCalendar
+          courseCode={courseCode}
+          assignments={assignments}
+          canRescheduleDueByDrag={canRescheduleDueByDrag}
+          onDueDatesChanged={load}
+        />
+      )}
     </LmsPage>
   )
 }

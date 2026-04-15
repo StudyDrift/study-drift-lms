@@ -258,6 +258,165 @@ export function courseEnrollmentsUpdatePermission(courseCode: string): string {
   return `course:${courseCode}:enrollments:update`
 }
 
+export type EnrollmentGroupMembership = {
+  groupSetId: string
+  groupId: string
+}
+
+export type EnrollmentGroupTree = {
+  id: string
+  name: string
+  sortOrder: number
+  enrollmentIds: string[]
+}
+
+export type EnrollmentGroupSetTree = {
+  id: string
+  name: string
+  sortOrder: number
+  groups: EnrollmentGroupTree[]
+}
+
+export type EnrollmentGroupsTreeResponse = {
+  groupSets: EnrollmentGroupSetTree[]
+}
+
+export async function postEnrollmentGroupsEnable(courseCode: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollment-groups/enable`,
+    { method: 'POST' },
+  )
+  if (!res.ok) {
+    const raw: unknown = await res.json().catch(() => ({}))
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
+export async function fetchEnrollmentGroupsTree(
+  courseCode: string,
+): Promise<EnrollmentGroupsTreeResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollment-groups`,
+  )
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as EnrollmentGroupsTreeResponse
+}
+
+export async function postEnrollmentGroupSet(courseCode: string, name: string): Promise<string> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollment-groups/sets`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    },
+  )
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const id = (raw as { id?: string }).id
+  if (!id) throw new Error('Invalid response.')
+  return id
+}
+
+export async function postEnrollmentGroupInSet(
+  courseCode: string,
+  setId: string,
+  name: string,
+): Promise<string> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollment-groups/sets/${encodeURIComponent(setId)}/groups`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    },
+  )
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const id = (raw as { id?: string }).id
+  if (!id) throw new Error('Invalid response.')
+  return id
+}
+
+export async function patchEnrollmentGroupSetName(
+  courseCode: string,
+  setId: string,
+  name: string,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollment-groups/sets/${encodeURIComponent(setId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    },
+  )
+  if (!res.ok) {
+    const raw: unknown = await res.json().catch(() => ({}))
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
+export async function patchEnrollmentGroupName(
+  courseCode: string,
+  groupId: string,
+  name: string,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollment-groups/groups/${encodeURIComponent(groupId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    },
+  )
+  if (!res.ok) {
+    const raw: unknown = await res.json().catch(() => ({}))
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
+export async function deleteEnrollmentGroupSet(courseCode: string, setId: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollment-groups/sets/${encodeURIComponent(setId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const raw: unknown = await res.json().catch(() => ({}))
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
+export async function deleteEnrollmentGroup(courseCode: string, groupId: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollment-groups/groups/${encodeURIComponent(groupId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const raw: unknown = await res.json().catch(() => ({}))
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
+export async function putEnrollmentGroupMembership(
+  courseCode: string,
+  body: { enrollmentId: string; groupSetId: string; groupId: string | null },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollment-groups/memberships`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  if (!res.ok) {
+    const raw: unknown = await res.json().catch(() => ({}))
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
 /**
  * Same idea as the server course GET `student_only` flag: the viewer is enrolled as `student`
  * and has no teacher/instructor/ta enrollment in this course. Dual teacher+student rows are
@@ -333,6 +492,7 @@ export type CourseGradebookGridColumn = {
   kind: string
   title: string
   maxPoints: number | null
+  assignmentGroupId?: string | null
 }
 
 export type CourseGradebookGridResponse = {
@@ -400,6 +560,26 @@ export async function patchCourseStructureItem(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as CourseStructureItem
+}
+
+/** Reschedule due date only; server requires `course:<code>:items:create`. */
+export async function patchCourseStructureItemDueAt(
+  courseCode: string,
+  itemId: string,
+  body: { dueAt: string },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/items/${encodeURIComponent(itemId)}/due-at`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dueAt: body.dueAt }),
+    },
+  )
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
+  }
 }
 
 export async function unarchiveCourseStructureItem(

@@ -52,7 +52,7 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
           if (disabled) return
           setOpen((o) => !o)
         }}
-        className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-slate-200/70 bg-white/90 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-none transition hover:border-slate-300/80 hover:bg-slate-50/90 disabled:cursor-not-allowed disabled:opacity-60 sm:px-2.5 sm:text-sm dark:border-neutral-600/70 dark:bg-neutral-900/80 dark:text-neutral-200 dark:hover:border-neutral-500/80 dark:hover:bg-neutral-800/90"
+        className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-slate-200/70 bg-white/90 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-none transition hover:border-slate-300/80 hover:bg-slate-50/90 disabled:cursor-not-allowed disabled:opacity-60 sm:px-2.5 sm:text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-neutral-500 dark:hover:bg-neutral-800"
       >
         <Plus className="h-4 w-4 shrink-0" aria-hidden />
         <span className="truncate sm:hidden">Add item</span>
@@ -74,7 +74,7 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
             type="button"
             role="menuitem"
             onClick={() => pick('heading')}
-            className="flex w-full items-start gap-3 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700/80"
+            className="flex w-full items-start gap-3 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700"
           >
             <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
               <Heading className="h-4 w-4" aria-hidden />
@@ -88,9 +88,9 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
             type="button"
             role="menuitem"
             onClick={() => pick('content_page')}
-            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700/80"
+            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700"
           >
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-200/80 bg-indigo-50 text-indigo-600 dark:border-indigo-500/35 dark:bg-indigo-950/60 dark:text-indigo-300">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-200/80 bg-indigo-50 text-indigo-600 dark:border-indigo-500/35 dark:bg-indigo-950 dark:text-indigo-300">
               <FileText className="h-4 w-4" aria-hidden />
             </span>
             <span className="min-w-0 flex flex-col gap-0.5">
@@ -102,9 +102,9 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
             type="button"
             role="menuitem"
             onClick={() => pick('assignment')}
-            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700/80"
+            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700"
           >
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-200/90 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-200">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-200/90 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950 dark:text-amber-200">
               <ClipboardList className="h-4 w-4" aria-hidden />
             </span>
             <span className="min-w-0 flex flex-col gap-0.5">
@@ -116,9 +116,9 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
             type="button"
             role="menuitem"
             onClick={() => pick('quiz')}
-            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700/80"
+            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700"
           >
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-200/90 bg-emerald-50 text-emerald-700 dark:border-emerald-500/35 dark:bg-emerald-950/50 dark:text-emerald-200">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-200/90 bg-emerald-50 text-emerald-700 dark:border-emerald-500/35 dark:bg-emerald-950 dark:text-emerald-200">
               <CircleHelp className="h-4 w-4" aria-hidden />
             </span>
             <span className="min-w-0 flex flex-col gap-0.5">
@@ -132,9 +132,9 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
             type="button"
             role="menuitem"
             onClick={() => pick('external_link')}
-            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700/80"
+            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700"
           >
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-200/90 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-200/90 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-950 dark:text-violet-200">
               <ExternalLink className="h-4 w-4" aria-hidden />
             </span>
             <span className="min-w-0 flex flex-col gap-0.5">

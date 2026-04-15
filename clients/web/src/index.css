@@ -96,14 +96,48 @@ body {
 .dark .lms-scope .text-slate-500 {
   @apply text-neutral-400;
 }
+/*
+ * Solid surfaces in dark mode (no transparency on cards, modals, selects, or popovers).
+ * Fractional light utilities are mapped here so menus and panels stay opaque inside .lms-scope.
+ */
 .dark .lms-scope .bg-white {
-  @apply bg-neutral-800/55;
+  @apply bg-neutral-900;
 }
 .dark .lms-scope .bg-slate-50 {
-  @apply bg-neutral-800/35;
+  @apply bg-neutral-950;
 }
 .dark .lms-scope .bg-slate-100 {
-  @apply bg-neutral-800/45;
+  @apply bg-neutral-800;
+}
+.dark .lms-scope .bg-white\/90,
+.dark .lms-scope .bg-white\/80,
+.dark .lms-scope .bg-white\/70 {
+  @apply bg-neutral-900;
+}
+.dark .lms-scope .bg-slate-50\/90,
+.dark .lms-scope .bg-slate-50\/80,
+.dark .lms-scope .bg-slate-50\/70,
+.dark .lms-scope .bg-slate-50\/60,
+.dark .lms-scope .bg-slate-50\/50 {
+  @apply bg-neutral-950;
+}
+.dark .lms-scope .hover\:bg-slate-50:hover {
+  @apply bg-neutral-950;
+}
+.dark .lms-scope .hover\:bg-slate-50\/80:hover,
+.dark .lms-scope .hover\:bg-slate-50\/70:hover,
+.dark .lms-scope .hover\:bg-slate-50\/60:hover {
+  @apply bg-neutral-950;
+}
+.dark .lms-scope .hover\:bg-slate-100:hover {
+  @apply bg-neutral-800;
+}
+.dark .lms-scope .hover\:bg-white:hover,
+.dark .lms-scope .hover\:bg-white\/70:hover {
+  @apply bg-neutral-900;
+}
+.dark .lms-scope .focus\:bg-white:focus {
+  @apply bg-neutral-900;
 }
 .dark .lms-scope .border-slate-200 {
   @apply border-neutral-700;

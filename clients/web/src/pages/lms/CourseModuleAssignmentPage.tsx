@@ -354,43 +354,47 @@ export default function CourseModuleAssignmentPage() {
 
         {!loading && !loadError && !editing && (
           <div className="mt-8 space-y-6">
-            <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4">
+            <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-neutral-600 dark:bg-neutral-900/90">
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500">Due date</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900">{formatOptionalDateTime(dueAt)}</dd>
+                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Due date</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                    {formatOptionalDateTime(dueAt)}
+                  </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500">Visibility start</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900">
+                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Visibility start</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                     {formatOptionalDateTime(availableFromAt)}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500">Visibility end</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900">
+                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Visibility end</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                     {formatOptionalDateTime(availableUntilAt)}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500">Submission types</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900">
+                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Submission types</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                     {formatSubmissionTypes(submissionAllowText, submissionAllowFileUpload, submissionAllowUrl)}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500">Points</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900">{formatPointsWorth(pointsWorth)}</dd>
+                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Points</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                    {formatPointsWorth(pointsWorth)}
+                  </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500">Assignment group</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900">
+                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Assignment group</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                     {assignmentGroupDisplayName(assignmentGroupId, gradingGroups)}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500">Access code</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900">
+                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Access code</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                     {requiresAssignmentAccessCode ? 'Required' : 'None'}
                   </dd>
                 </div>

@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgres://test:test@localhost:5432/studydrift_test
-      JWT_SECRET: ci-test-jwt-secret
+      JWT_SECRET: ci-test-jwt-secret-needs-32-chars-minimum-ok
       RUN_MIGRATIONS: "true"
     services:
       postgres:

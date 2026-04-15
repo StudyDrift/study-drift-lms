@@ -5,6 +5,7 @@ import { useShellNav } from './ShellNavContext'
 import { SideNavCourseLinks } from './SideNavCourseLinks'
 import { SideNavCourseSettingsLinks } from './SideNavCourseSettingsLinks'
 import { SideNavMainLinks } from './SideNavMainLinks'
+import { SideNavFooter } from './SideNavFooter'
 import { SideNavSettingsLinks } from './SideNavSettingsLinks'
 
 export function SideNav() {
@@ -90,7 +91,7 @@ export function SideNav() {
             className={`absolute inset-0 flex flex-col gap-0.5 overflow-y-auto p-3 transition-all duration-300 ease-out ${
               showMainNav
                 ? 'z-10 translate-y-0 opacity-100'
-                : 'pointer-events-none z-0 -translate-y-1 opacity-0'
+                : 'pointer-events-none z-0 translate-y-1 opacity-0'
             }`}
             aria-label="Main"
             inert={!showMainNav}
@@ -136,6 +137,7 @@ export function SideNav() {
             {showSettingsNav && <SideNavSettingsLinks />}
           </nav>
         </div>
+        <SideNavFooter />
       </aside>
     </>
   )

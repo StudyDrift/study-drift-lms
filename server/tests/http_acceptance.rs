@@ -1,7 +1,7 @@
 //! End-to-end HTTP tests against a real Postgres database.
 //!
 //! Set `DATABASE_URL` (for example `postgres://studydrift:studydrift@127.0.0.1:5432/studydrift` when
-//! using `docker compose up postgres`). `JWT_SECRET` is set if unset.
+//! using `docker compose up postgres`). `JWT_SECRET` is set if unset (must be ≥32 characters).
 
 use serde_json::{json, Value};
 use std::net::SocketAddr;
@@ -18,7 +18,10 @@ async fn json_body(res: reqwest::Response) -> Value {
 async fn full_http_walkthrough() {
     std::env::set_var("RUN_MIGRATIONS", "true");
     if std::env::var("JWT_SECRET").is_err() {
-        std::env::set_var("JWT_SECRET", "integration-test-jwt-secret");
+        std::env::set_var(
+            "JWT_SECRET",
+            "integration-test-jwt-secret-32chars-minimum-x",
+        );
     }
     study_drift_server::load_dotenv();
     if std::env::var("DATABASE_URL").is_err() {

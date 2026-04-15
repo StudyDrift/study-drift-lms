@@ -80,7 +80,7 @@ function UserMenu() {
         aria-controls={open ? menuId : undefined}
         aria-label="User menu"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:border-neutral-500 dark:hover:bg-neutral-700/80"
+        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:border-neutral-500 dark:hover:bg-neutral-700"
       >
         {profile?.avatarUrl ? (
           <img
@@ -117,7 +117,7 @@ function UserMenu() {
             to="/settings/account"
             role="menuitem"
             onClick={() => setOpen(false)}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-neutral-200 dark:hover:bg-neutral-700/80"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-neutral-200 dark:hover:bg-neutral-700"
           >
             <User className="h-4 w-4 shrink-0 text-slate-500 dark:text-neutral-400" aria-hidden />
             Profile
@@ -126,7 +126,7 @@ function UserMenu() {
             type="button"
             role="menuitem"
             onClick={signOut}
-            className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-700/80"
+            className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-700"
           >
             <LogOut className="h-4 w-4 shrink-0 text-slate-500 dark:text-neutral-400" aria-hidden />
             Sign out
@@ -230,8 +230,8 @@ function CourseEnrollmentViewDropdown() {
               setCourseViewAs(courseCode, 'teacher')
               setOpen(false)
             }}
-            className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700/80 ${
-              courseViewMode === 'teacher' ? 'bg-indigo-50 dark:bg-neutral-800/90' : ''
+            className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700 ${
+              courseViewMode === 'teacher' ? 'bg-indigo-50 dark:bg-neutral-800' : ''
             }`}
           >
             <span className="font-semibold text-slate-950 dark:text-neutral-100">Teacher</span>
@@ -246,8 +246,8 @@ function CourseEnrollmentViewDropdown() {
               setCourseViewAs(courseCode, 'student')
               setOpen(false)
             }}
-            className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700/80 ${
-              courseViewMode === 'student' ? 'bg-indigo-50 dark:bg-neutral-800/90' : ''
+            className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-neutral-700 ${
+              courseViewMode === 'student' ? 'bg-indigo-50 dark:bg-neutral-800' : ''
             }`}
           >
             <span className="font-semibold text-slate-950 dark:text-neutral-100">Student</span>
@@ -282,7 +282,7 @@ export function TopBar() {
           type="button"
           aria-label="Search courses, people, pages, and actions"
           onClick={() => open()}
-          className="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-100 py-2 pl-3 pr-4 text-left text-sm text-slate-500 outline-none transition hover:border-slate-300 hover:bg-slate-50 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-500 dark:hover:bg-neutral-700/50 dark:focus:bg-neutral-800"
+          className="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-100 py-2 pl-3 pr-4 text-left text-sm text-slate-500 outline-none transition hover:border-slate-300 hover:bg-slate-50 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-500 dark:hover:bg-neutral-700 dark:focus:bg-neutral-800"
         >
           <Search className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" aria-hidden />
           <span className="min-w-0 flex-1 truncate sm:hidden">Search…</span>

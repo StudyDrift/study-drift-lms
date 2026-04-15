@@ -4,10 +4,16 @@ import { usePermissions } from '../../context/usePermissions'
 import {
   courseGradebookViewPermission,
   fetchCourseGradebookGrid,
+  fetchCourseGradingSettings,
   type CourseGradebookGridColumn,
   type CourseGradebookGridStudent,
 } from '../../lib/coursesApi'
-import { GradebookGrid, type GradebookColumn, type GradebookStudent } from './gradebook/GradebookGrid'
+import {
+  GradebookGrid,
+  type GradebookColumn,
+  type GradebookStudent,
+} from './gradebook/GradebookGrid'
+import type { AssignmentGroupWeight } from './gradebook/computeCourseFinalPercent'
 import { LmsPage } from './LmsPage'
 
 function buildEmptyGrades(students: GradebookStudent[], columns: GradebookColumn[]): Record<string, Record<string, string>> {
@@ -27,6 +33,7 @@ export default function CourseGradebook() {
   const { allows, loading } = usePermissions()
   const [students, setStudents] = useState<CourseGradebookGridStudent[]>([])
   const [columns, setColumns] = useState<CourseGradebookGridColumn[]>([])
+  const [assignmentGroups, setAssignmentGroups] = useState<AssignmentGroupWeight[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
 
@@ -35,7 +42,13 @@ export default function CourseGradebook() {
     [students],
   )
   const gridColumns: GradebookColumn[] = useMemo(
-    () => columns.map((c) => ({ id: c.id, title: c.title, maxPoints: c.maxPoints })),
+    () =>
+      columns.map((c) => ({
+        id: c.id,
+        title: c.title,
+        maxPoints: c.maxPoints,
+        assignmentGroupId: c.assignmentGroupId ?? null,
+      })),
     [columns],
   )
   const initialGrades = useMemo(
@@ -51,10 +64,19 @@ export default function CourseGradebook() {
       const data = await fetchCourseGradebookGrid(courseCode)
       setStudents(data.students)
       setColumns(data.columns)
+      try {
+        const grading = await fetchCourseGradingSettings(courseCode)
+        setAssignmentGroups(
+          grading.assignmentGroups.map((g) => ({ id: g.id, weightPercent: g.weightPercent })),
+        )
+      } catch {
+        setAssignmentGroups([])
+      }
       setLoadState('ok')
     } catch (e: unknown) {
       setStudents([])
       setColumns([])
+      setAssignmentGroups([])
       setLoadState('error')
       setLoadError(e instanceof Error ? e.message : 'Could not load gradebook.')
     }
@@ -99,13 +121,14 @@ export default function CourseGradebook() {
       )}
       {loadState === 'ok' && (
         <GradebookGrid
-          key={`${courseCode}:${gridStudents.map((s) => s.id).join(',')}:${gridColumns.map((c) => c.id).join(',')}`}
+          key={`${courseCode}:${gridStudents.map((s) => s.id).join(',')}:${gridColumns.map((c) => c.id).join(',')}:${assignmentGroups.map((g) => g.id).join(',')}`}
           columns={gridColumns}
           students={gridStudents}
           initialGrades={initialGrades}
+          assignmentGroups={assignmentGroups}
           footerNote={
             gridStudents.length > 0 && gridColumns.length > 0
-              ? 'Scores you type here are not saved yet.'
+              ? 'Scores you type here are not saved yet. Final is the weighted course percentage from those scores (or straight points if weights are unset).'
               : undefined
           }
         />

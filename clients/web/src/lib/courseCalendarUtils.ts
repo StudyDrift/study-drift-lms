@@ -67,3 +67,25 @@ export function formatDueShort(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
+
+/**
+ * Uses the local calendar date from `targetDayLocal` (e.g. a month cell) and keeps the same local
+ * wall-clock time as the previous due instant — used when dragging a due item to another day.
+ */
+export function mergeLocalCalendarDayPreserveWallClock(
+  targetDayLocal: Date,
+  previousDueIso: string,
+): string {
+  const prev = new Date(previousDueIso)
+  if (Number.isNaN(prev.getTime())) return previousDueIso
+  const next = new Date(
+    targetDayLocal.getFullYear(),
+    targetDayLocal.getMonth(),
+    targetDayLocal.getDate(),
+    prev.getHours(),
+    prev.getMinutes(),
+    prev.getSeconds(),
+    prev.getMilliseconds(),
+  )
+  return next.toISOString()
+}

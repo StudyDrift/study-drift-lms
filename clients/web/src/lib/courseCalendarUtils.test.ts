@@ -6,6 +6,7 @@ import {
   endOfWeekMondayExclusive,
   formatDueShort,
   isInTodoWindow,
+  mergeLocalCalendarDayPreserveWallClock,
   monthGridCells,
   startOfMonth,
   startOfWeekMonday,
@@ -101,5 +102,25 @@ describe('formatDueShort', () => {
     const out = formatDueShort(s)
     expect(out.length).toBeGreaterThan(4)
     expect(out).not.toBe(s)
+  })
+})
+
+describe('mergeLocalCalendarDayPreserveWallClock', () => {
+  it('moves the local calendar day and keeps local time-of-day', () => {
+    const prevLocal = new Date(2026, 3, 9, 14, 30, 45, 120)
+    const iso = prevLocal.toISOString()
+    const targetDay = new Date(2026, 3, 21)
+    const out = new Date(mergeLocalCalendarDayPreserveWallClock(targetDay, iso))
+    expect(out.getFullYear()).toBe(2026)
+    expect(out.getMonth()).toBe(3)
+    expect(out.getDate()).toBe(21)
+    expect(out.getHours()).toBe(14)
+    expect(out.getMinutes()).toBe(30)
+    expect(out.getSeconds()).toBe(45)
+    expect(out.getMilliseconds()).toBe(120)
+  })
+
+  it('returns the original string when previous due is not a date', () => {
+    expect(mergeLocalCalendarDayPreserveWallClock(new Date(2026, 3, 1), 'x')).toBe('x')
   })
 })

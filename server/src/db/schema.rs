@@ -27,3 +27,6 @@ pub const FEED_CHANNELS: &str = "course.feed_channels";
 pub const FEED_MESSAGES: &str = "course.feed_messages";
 pub const FEED_MESSAGE_LIKES: &str = "course.feed_message_likes";
 pub const FEED_MESSAGE_MENTIONS: &str = "course.feed_message_mentions";
+pub const ENROLLMENT_GROUP_SETS: &str = "course.enrollment_group_sets";
+pub const ENROLLMENT_GROUPS: &str = "course.enrollment_groups";
+pub const ENROLLMENT_GROUP_MEMBERSHIPS: &str = "course.enrollment_group_memberships";

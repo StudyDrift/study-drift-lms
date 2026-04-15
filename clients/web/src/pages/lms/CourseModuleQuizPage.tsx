@@ -928,13 +928,13 @@ export default function CourseModuleQuizPage() {
               className="shrink-0 lg:sticky lg:top-6 lg:w-72 lg:max-w-[min(100%,18rem)] xl:w-80 xl:max-w-[min(100%,20rem)]"
               aria-label="Quiz summary"
             >
-              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4">
-                <p className="text-sm font-semibold text-slate-900">
+              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-neutral-600 dark:bg-neutral-900/90">
+                <p className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
                   {isAdaptive
                     ? `Adaptive · up to ${adaptiveQuestionCount} generated questions`
                     : `${questions.length} ${questions.length === 1 ? 'question' : 'questions'}`}
                 </p>
-                <p className="mt-1 text-sm text-slate-600">
+                <p className="mt-1 text-sm text-slate-600 dark:text-neutral-300">
                   {canEdit ? (
                     isAdaptive ? (
                       <>
@@ -952,101 +952,105 @@ export default function CourseModuleQuizPage() {
                     'Quiz questions for this item.'
                   )}
                 </p>
-                <dl className="mt-4 space-y-2 border-t border-slate-200/80 pt-3 text-sm">
+                <dl className="mt-4 space-y-2 border-t border-slate-200/80 pt-3 text-sm dark:border-neutral-600">
                   {quizDateTimeIsSet(dueAt) ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-slate-500">Due date</dt>
-                      <dd className="min-w-0 text-right font-medium text-slate-900">{formatQuizDateTime(dueAt)}</dd>
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Due date</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                        {formatQuizDateTime(dueAt)}
+                      </dd>
                     </div>
                   ) : null}
                   {quizDateTimeIsSet(availableFromAt) ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-slate-500">Visibility start</dt>
-                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Visibility start</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                         {formatQuizDateTime(availableFromAt)}
                       </dd>
                     </div>
                   ) : null}
                   {quizDateTimeIsSet(availableUntilAt) ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-slate-500">Visibility end</dt>
-                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Visibility end</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                         {formatQuizDateTime(availableUntilAt)}
                       </dd>
                     </div>
                   ) : null}
                   <div className="flex justify-between gap-4">
-                    <dt className="shrink-0 text-slate-500">Unlimited attempts</dt>
-                    <dd className="min-w-0 text-right font-medium text-slate-900">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Unlimited attempts</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                       {unlimitedAttempts ? 'Yes' : 'No'}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt className="shrink-0 text-slate-500">One question at a time</dt>
-                    <dd className="min-w-0 text-right font-medium text-slate-900">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">One question at a time</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                       {oneQuestionAtATime ? 'Yes' : 'No'}
                     </dd>
                   </div>
                   {!unlimitedAttempts ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-slate-500">Max attempts</dt>
-                      <dd className="min-w-0 text-right font-medium text-slate-900">{quizAdvanced.maxAttempts}</dd>
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Max attempts</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                        {quizAdvanced.maxAttempts}
+                      </dd>
                     </div>
                   ) : null}
                   <div className="flex justify-between gap-4">
-                    <dt className="shrink-0 text-slate-500">Grade uses</dt>
-                    <dd className="min-w-0 text-right font-medium text-slate-900">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Grade uses</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                       {formatGradePolicyShort(quizAdvanced.gradeAttemptPolicy)}
                     </dd>
                   </div>
                   {pointsWorth != null ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-slate-500">Points</dt>
-                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Points</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                         {formatItemPointsWorth(pointsWorth)}
                       </dd>
                     </div>
                   ) : null}
                   {assignmentGroupId ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-slate-500">Assignment group</dt>
-                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Assignment group</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                         {assignmentGroupDisplayName(assignmentGroupId, gradingGroups)}
                       </dd>
                     </div>
                   ) : null}
                   {quizAdvanced.passingScorePercent != null ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-slate-500">Passing score</dt>
-                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Passing score</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                         {`${quizAdvanced.passingScorePercent}%`}
                       </dd>
                     </div>
                   ) : null}
                   {quizAdvanced.timeLimitMinutes != null ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-slate-500">Time limit</dt>
-                      <dd className="min-w-0 text-right font-medium text-slate-900">
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Time limit</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                         {`${quizAdvanced.timeLimitMinutes} min`}
                       </dd>
                     </div>
                   ) : null}
                   <div className="flex justify-between gap-4">
-                    <dt className="shrink-0 text-slate-500">Shuffle questions</dt>
-                    <dd className="min-w-0 text-right font-medium text-slate-900">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Shuffle questions</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                       {quizAdvanced.shuffleQuestions ? 'Yes' : 'No'}
                     </dd>
                   </div>
                   {quizAdvanced.requiresQuizAccessCode ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-slate-500">Access code</dt>
-                      <dd className="min-w-0 text-right font-medium text-slate-900">Required</dd>
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Access code</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">Required</dd>
                     </div>
                   ) : null}
                   {isAdaptive ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-slate-500">Adaptive difficulty</dt>
-                      <dd className="min-w-0 text-right font-medium text-slate-900 capitalize">
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Adaptive difficulty</dt>
+                      <dd className="min-w-0 text-right font-medium capitalize text-slate-900 dark:text-neutral-100">
                         {quizAdvanced.adaptiveDifficulty}
                       </dd>
                     </div>

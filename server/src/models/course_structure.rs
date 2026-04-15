@@ -103,6 +103,13 @@ pub struct PatchStructureItemRequest {
     pub archived: Option<bool>,
 }
 
+/// PATCH `…/structure/items/{id}/due-at` — calendar drag reschedule (`course:…:items:create` only).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchStructureItemDueAtRequest {
+    pub due_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateCourseHeadingRequest {

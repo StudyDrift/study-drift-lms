@@ -174,11 +174,11 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
   }
 
   if (loading) {
-    return <p className="mt-6 text-sm text-slate-500">Loading…</p>
+    return <p className="mt-6 text-sm text-slate-500 dark:text-neutral-400">Loading…</p>
   }
   if (loadError) {
     return (
-      <p className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+      <p className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200">
         {loadError}
       </p>
     )
@@ -187,9 +187,9 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
   return (
     <div className="space-y-8">
       <form onSubmit={onSaveGrading} className="space-y-6">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
-          <h2 className="text-sm font-semibold text-slate-900">Grading scale</h2>
-          <p className="mt-1 text-sm text-slate-500">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-600 dark:bg-neutral-900 dark:shadow-none">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Grading scale</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
             Choose how final grades are labeled for this course. This applies when displaying scores
             in the gradebook and to students.
           </p>
@@ -199,8 +199,8 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                 key={opt.id}
                 className={`flex cursor-pointer gap-3 rounded-xl border px-3 py-3 text-sm ${
                   gradingScale === opt.id
-                    ? 'border-indigo-300 bg-indigo-50/80'
-                    : 'border-slate-200 hover:border-slate-300'
+                    ? 'border-indigo-300 bg-indigo-50/80 dark:border-indigo-500/70 dark:bg-indigo-950/55'
+                    : 'border-slate-200 hover:border-slate-300 dark:border-neutral-600 dark:hover:border-neutral-500'
                 } ${!canEdit ? 'cursor-not-allowed opacity-70' : ''}`}
               >
                 <input
@@ -210,20 +210,36 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                   checked={gradingScale === opt.id}
                   disabled={!canEdit}
                   onChange={() => setGradingScale(opt.id)}
-                  className="mt-0.5 h-4 w-4 border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  className="mt-0.5 h-4 w-4 border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-500 dark:bg-neutral-800 dark:text-indigo-400 dark:focus:ring-indigo-400"
                 />
                 <span>
-                  <span className="font-medium text-slate-900">{opt.label}</span>
-                  <span className="mt-0.5 block text-slate-500">{opt.description}</span>
+                  <span
+                    className={`font-medium ${
+                      gradingScale === opt.id
+                        ? 'text-slate-900 dark:text-indigo-50'
+                        : 'text-slate-900 dark:text-neutral-100'
+                    }`}
+                  >
+                    {opt.label}
+                  </span>
+                  <span
+                    className={`mt-0.5 block ${
+                      gradingScale === opt.id
+                        ? 'text-slate-500 dark:text-indigo-200/85'
+                        : 'text-slate-500 dark:text-neutral-400'
+                    }`}
+                  >
+                    {opt.description}
+                  </span>
                 </span>
               </label>
             ))}
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
-          <h2 className="text-sm font-semibold text-slate-900">Assignment groups & weights</h2>
-          <p className="mt-1 text-sm text-slate-500">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-600 dark:bg-neutral-900 dark:shadow-none">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Assignment groups & weights</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
             Define categories (for example homework, exams, participation) and what percent of the
             course grade each category represents. Assign each quiz, assignment, or gradable module
             item to a group below.
@@ -232,7 +248,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[28rem] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-600">
+                <tr className="border-b border-slate-200 text-slate-600 dark:border-neutral-600 dark:text-neutral-400">
                   <th className="pb-2 pr-3 font-medium">Group name</th>
                   <th className="w-28 pb-2 pr-3 font-medium">Weight (%)</th>
                   <th className="w-10 pb-2" aria-hidden />
@@ -240,7 +256,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
               </thead>
               <tbody>
                 {groups.map((g) => (
-                  <tr key={g.clientKey} className="border-b border-slate-100">
+                  <tr key={g.clientKey} className="border-b border-slate-100 dark:border-neutral-800">
                     <td className="py-2 pr-3">
                       <input
                         type="text"
@@ -254,7 +270,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                           )
                         }
                         placeholder="e.g. Homework"
-                        className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:bg-slate-50"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-indigo-400 dark:disabled:bg-neutral-900"
                       />
                     </td>
                     <td className="py-2 pr-3">
@@ -270,7 +286,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                             ),
                           )
                         }
-                        className="w-full rounded-lg border border-slate-200 px-2 py-1.5 tabular-nums text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:bg-slate-50"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 tabular-nums text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-400 dark:disabled:bg-neutral-900"
                       />
                     </td>
                     <td className="py-2">
@@ -278,7 +294,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                         <button
                           type="button"
                           onClick={() => removeGroup(g.clientKey)}
-                          className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:text-neutral-500 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
                           aria-label="Remove group"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -295,7 +311,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
             <button
               type="button"
               onClick={addGroup}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:border-neutral-500 dark:hover:bg-neutral-800/80"
             >
               <Plus className="h-4 w-4" />
               Add group
@@ -303,7 +319,11 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
           )}
 
           <p
-            className={`mt-3 text-sm ${Math.abs(weightTotal - 100) < 0.01 ? 'text-emerald-700' : 'text-amber-800'}`}
+            className={`mt-3 text-sm ${
+              Math.abs(weightTotal - 100) < 0.01
+                ? 'text-emerald-700 dark:text-emerald-400'
+                : 'text-amber-800 dark:text-amber-300'
+            }`}
           >
             Weights sum to{' '}
             <span className="font-semibold tabular-nums">{weightTotal.toFixed(2)}%</span>
@@ -315,7 +335,11 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
 
         {saveMessage && (
           <p
-            className={saveStatus === 'error' ? 'text-sm text-rose-700' : 'text-sm text-emerald-700'}
+            className={
+              saveStatus === 'error'
+                ? 'text-sm text-rose-700 dark:text-rose-400'
+                : 'text-sm text-emerald-700 dark:text-emerald-400'
+            }
             role="status"
           >
             {saveMessage}
@@ -333,29 +357,29 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
         )}
 
         {!canEdit && (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-neutral-400">
             You can view these settings; only course editors can change grading.
           </p>
         )}
       </form>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
-        <h2 className="text-sm font-semibold text-slate-900">Gradable items</h2>
-        <p className="mt-1 text-sm text-slate-500">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-600 dark:bg-neutral-900 dark:shadow-none">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Gradable items</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
           Assign each quiz, assignment, or gradable content page to an assignment group. Items without a
           group do not count toward weighted categories until you assign one.
         </p>
 
         {gradableRows.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">
+          <p className="mt-4 text-sm text-slate-500 dark:text-neutral-400">
             No quizzes, assignments, or gradable content pages yet. Add them in{' '}
-            <span className="font-medium text-slate-700">Modules</span>.
+            <span className="font-medium text-slate-700 dark:text-neutral-200">Modules</span>.
           </p>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[32rem] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-600">
+                <tr className="border-b border-slate-200 text-slate-600 dark:border-neutral-600 dark:text-neutral-400">
                   <th className="pb-2 pr-3 font-medium">Item</th>
                   <th className="w-32 pb-2 pr-3 font-medium">Type</th>
                   <th className="pb-2 font-medium">Assignment group</th>
@@ -363,12 +387,12 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
               </thead>
               <tbody>
                 {gradableRows.map(({ item, moduleTitle }) => (
-                  <tr key={item.id} className="border-b border-slate-100">
+                  <tr key={item.id} className="border-b border-slate-100 dark:border-neutral-800">
                     <td className="py-2 pr-3">
-                      <div className="text-slate-500">{moduleTitle}</div>
-                      <div className="font-medium text-slate-900">{item.title}</div>
+                      <div className="text-slate-500 dark:text-neutral-400">{moduleTitle}</div>
+                      <div className="font-medium text-slate-900 dark:text-neutral-100">{item.title}</div>
                     </td>
-                    <td className="py-2 pr-3 capitalize text-slate-600">
+                    <td className="py-2 pr-3 capitalize text-slate-600 dark:text-neutral-400">
                       {item.kind === 'content_page' ? 'Content' : item.kind === 'quiz' ? 'Quiz' : 'Assignment'}
                     </td>
                     <td className="py-2">
@@ -376,7 +400,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                         value={item.assignmentGroupId ?? ''}
                         disabled={!canEdit || itemPatchingId === item.id}
                         onChange={(e) => void onItemGroupChange(item.id, e.target.value)}
-                        className="w-full max-w-xs rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="w-full max-w-xs rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-400"
                       >
                         <option value="">— None —</option>
                         {groups

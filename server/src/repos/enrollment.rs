@@ -416,6 +416,7 @@ impl CourseEnrollmentRow {
             display_name: self.display_name,
             role: role_display.to_string(),
             last_course_access_at: self.last_course_access_at,
+            group_memberships: Vec::new(),
         }
     }
 }
@@ -521,6 +522,70 @@ pub async fn delete_enrollment_for_course(
         return Ok(EnrollmentDeleteOutcome::NotFound);
     }
     Ok(EnrollmentDeleteOutcome::Deleted)
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct EnrollmentForPatch {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub course_id: Uuid,
+    pub role: String,
+}
+
+pub async fn get_enrollment_for_patch(
+    pool: &PgPool,
+    course_code: &str,
+    enrollment_id: Uuid,
+) -> Result<Option<EnrollmentForPatch>, sqlx::Error> {
+    sqlx::query_as::<_, EnrollmentForPatch>(&format!(
+        r#"
+        SELECT ce.id, ce.user_id, ce.course_id, ce.role
+        FROM {} ce
+        INNER JOIN {} c ON c.id = ce.course_id
+        WHERE c.course_code = $1 AND ce.id = $2
+        "#,
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES
+    ))
+    .bind(course_code)
+    .bind(enrollment_id)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Sets this enrollment row to `student` when it was `instructor`, and clears `user_course_grants`
+/// for that person in this course. Returns `false` when no matching row was updated.
+pub async fn demote_instructor_enrollment_row(
+    pool: &PgPool,
+    course_code: &str,
+    enrollment_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let row = sqlx::query_as::<_, (Uuid, Uuid)>(&format!(
+        r#"
+        UPDATE {} ce
+        SET role = 'student'
+        FROM {} c
+        WHERE ce.id = $1 AND c.id = ce.course_id AND c.course_code = $2
+          AND ce.role = 'instructor'
+        RETURNING ce.user_id, ce.course_id
+        "#,
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES
+    ))
+    .bind(enrollment_id)
+    .bind(course_code)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some((user_id, course_id)) = row else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+
+    course_grants::clear_user_course_grants_for_course(&mut *tx, user_id, course_id).await?;
+    tx.commit().await?;
+    Ok(true)
 }
 
 #[derive(Debug, sqlx::FromRow)]

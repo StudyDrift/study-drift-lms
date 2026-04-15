@@ -2,7 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, sqlx::FromRow, Serialize)]
+use super::enrollment_group::EnrollmentGroupMembershipPublic;
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CourseEnrollmentPublic {
     pub id: Uuid,
@@ -12,6 +14,9 @@ pub struct CourseEnrollmentPublic {
     pub role: String,
     /// Latest `user.user_audit.occurred_at` for this user in this course (any event kind).
     pub last_course_access_at: Option<DateTime<Utc>>,
+    /// Populated when course enrollment groups are enabled.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub group_memberships: Vec<EnrollmentGroupMembershipPublic>,
 }
 
 #[derive(Debug, Serialize)]
@@ -20,6 +25,8 @@ pub struct CourseEnrollmentsResponse {
     pub enrollments: Vec<CourseEnrollmentPublic>,
     /// Raw enrollment roles for the authenticated user (e.g. `teacher` and `student`).
     pub viewer_enrollment_roles: Vec<String>,
+    #[serde(default)]
+    pub enrollment_groups_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -27,6 +34,18 @@ pub struct CourseEnrollmentsResponse {
 pub struct EnrollSelfAsStudentResponse {
     /// `true` when a new student enrollment row was created.
     pub created: bool,
+}
+
+/// PATCH `/courses/.../enrollments/{id}` — send **either** `appRoleId` or `role`, not both.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchEnrollmentRequest {
+    /// Course creators only: set or replace this row as course staff with the given course-scoped app role.
+    #[serde(default)]
+    pub app_role_id: Option<Uuid>,
+    /// Set to `"student"` to demote an `instructor` enrollment (clears per-course grants for this course).
+    #[serde(default)]
+    pub role: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

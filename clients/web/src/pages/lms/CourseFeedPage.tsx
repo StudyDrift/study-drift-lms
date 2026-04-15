@@ -7,7 +7,6 @@ import {
   Pencil,
   Hash,
   Plus,
-  Send,
   X,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -317,7 +316,6 @@ export default function CourseFeedPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
-  const [feedImageUploading, setFeedImageUploading] = useState(false)
   const [notifPrefsOpen, setNotifPrefsOpen] = useState(false)
   const [notifPrefsDraft, setNotifPrefsDraft] = useState<FeedNotificationPrefs>(() =>
     defaultFeedNotificationPrefs(),
@@ -587,50 +585,10 @@ export default function CourseFeedPage() {
     )
   }
 
-  const title = course ? `Feed — ${course.title}` : 'Feed'
-
-  const titleContent = (
-    <div>
-      <div className="flex items-start gap-1.5 sm:gap-2">
-        <h1 className="min-w-0 flex-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-neutral-100">
-          {title}
-        </h1>
-        <details className="group/feed-title-menu relative shrink-0 pt-0.5">
-          <summary
-            className="list-none cursor-pointer rounded-lg p-1.5 text-slate-400 outline-none hover:bg-slate-100 hover:text-slate-600 dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-300 [&::-webkit-details-marker]:hidden"
-            aria-label="Feed page menu"
-          >
-            <MoreHorizontal className="h-6 w-6" aria-hidden />
-          </summary>
-          <div
-            className="absolute right-0 top-full z-40 mt-1 min-w-[14rem] overflow-hidden rounded-xl border border-slate-200/90 bg-white py-1 text-sm shadow-lg ring-1 ring-black/5 dark:border-neutral-700 dark:bg-neutral-900 dark:ring-white/10"
-            onMouseDown={(ev) => ev.preventDefault()}
-          >
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-slate-700 hover:bg-slate-50 dark:text-neutral-200 dark:hover:bg-neutral-800"
-              onClick={(e) => {
-                closeParentDetails(e.currentTarget)
-                setNotifPrefsDraft(loadFeedNotificationPrefs(courseCode))
-                setNotifPrefsOpen(true)
-              }}
-            >
-              <Bell className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-              Notification Preferences
-            </button>
-          </div>
-        </details>
-      </div>
-    </div>
-  )
+  const pageTitle = course ? `Course feed, ${course.title}` : 'Course feed'
 
   return (
-    <LmsPage
-      fillHeight
-      title={title}
-      titleContent={titleContent}
-      description="Course channels with replies, mentions, and pins."
-    >
+    <LmsPage fillHeight omitHeader title={pageTitle}>
       {loading && <p className="text-sm text-slate-500 dark:text-neutral-400">Loading…</p>}
       {error && (
         <p className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-100">
@@ -640,7 +598,7 @@ export default function CourseFeedPage() {
 
       {notifPrefsOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center dark:bg-black/50"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center dark:bg-neutral-950"
           role="dialog"
           aria-modal="true"
           aria-labelledby="feed-notif-prefs-title"
@@ -677,7 +635,7 @@ export default function CourseFeedPage() {
               </p>
               <fieldset className="space-y-3">
                 <legend className="sr-only">Feed notification options</legend>
-                <label className="flex cursor-pointer gap-3 rounded-xl border border-transparent px-1 py-1 hover:border-slate-100 hover:bg-slate-50/80 dark:hover:border-neutral-800 dark:hover:bg-neutral-900/60">
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-transparent px-1 py-1 hover:border-slate-100 hover:bg-slate-50/80 dark:hover:border-neutral-800 dark:hover:bg-neutral-900">
                   <input
                     type="checkbox"
                     className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-900"
@@ -695,7 +653,7 @@ export default function CourseFeedPage() {
                     </span>
                   </span>
                 </label>
-                <label className="flex cursor-pointer gap-3 rounded-xl border border-transparent px-1 py-1 hover:border-slate-100 hover:bg-slate-50/80 dark:hover:border-neutral-800 dark:hover:bg-neutral-900/60">
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-transparent px-1 py-1 hover:border-slate-100 hover:bg-slate-50/80 dark:hover:border-neutral-800 dark:hover:bg-neutral-900">
                   <input
                     type="checkbox"
                     className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-900"
@@ -713,7 +671,7 @@ export default function CourseFeedPage() {
                     </span>
                   </span>
                 </label>
-                <label className="flex cursor-pointer gap-3 rounded-xl border border-transparent px-1 py-1 hover:border-slate-100 hover:bg-slate-50/80 dark:hover:border-neutral-800 dark:hover:bg-neutral-900/60">
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-transparent px-1 py-1 hover:border-slate-100 hover:bg-slate-50/80 dark:hover:border-neutral-800 dark:hover:bg-neutral-900">
                   <input
                     type="checkbox"
                     className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-900"
@@ -731,7 +689,7 @@ export default function CourseFeedPage() {
                     </span>
                   </span>
                 </label>
-                <label className="flex cursor-pointer gap-3 rounded-xl border border-transparent px-1 py-1 hover:border-slate-100 hover:bg-slate-50/80 dark:hover:border-neutral-800 dark:hover:bg-neutral-900/60">
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-transparent px-1 py-1 hover:border-slate-100 hover:bg-slate-50/80 dark:hover:border-neutral-800 dark:hover:bg-neutral-900">
                   <input
                     type="checkbox"
                     className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-900"
@@ -751,7 +709,7 @@ export default function CourseFeedPage() {
                 </label>
               </fieldset>
             </div>
-            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900/60">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
               <button
                 type="button"
                 onClick={() => setNotifPrefsOpen(false)}
@@ -775,8 +733,8 @@ export default function CourseFeedPage() {
       )}
 
       {!loading && (
-        <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
-          <aside className="flex w-full shrink-0 flex-col rounded-2xl border border-slate-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-950 md:h-auto md:w-56">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row md:items-stretch">
+          <aside className="flex w-full shrink-0 flex-col rounded-xl border border-slate-200 bg-white p-2.5 dark:border-neutral-800 dark:bg-neutral-950 md:h-auto md:w-52">
             <div className="flex items-center justify-between gap-2 px-1 pb-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
                 Channels
@@ -825,7 +783,7 @@ export default function CourseFeedPage() {
 
           {newChannelModalOpen && (
             <div
-              className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center dark:bg-black/50"
+              className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center dark:bg-neutral-950"
               role="dialog"
               aria-modal="true"
               aria-labelledby="feed-new-channel-title"
@@ -869,7 +827,7 @@ export default function CourseFeedPage() {
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-indigo-500 dark:focus:ring-indigo-500/30"
                   />
                 </div>
-                <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900/60">
+                <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
                   <button
                     type="button"
                     onClick={() => !creatingChannel && setNewChannelModalOpen(false)}
@@ -891,25 +849,40 @@ export default function CourseFeedPage() {
             </div>
           )}
 
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:shadow-none">
-            <div className="shrink-0 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white px-5 py-4 dark:border-neutral-800 dark:from-neutral-900/80 dark:to-neutral-950">
-              <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-200">
-                  <Hash className="h-4 w-4" aria-hidden />
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:shadow-none">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 sm:px-4 dark:border-neutral-800">
+              <h2 className="flex min-w-0 items-baseline gap-1.5 truncate text-base font-semibold tracking-tight text-slate-900 dark:text-neutral-50">
+                <span className="shrink-0 text-slate-400 dark:text-neutral-500" aria-hidden>
+                  #
                 </span>
-                <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-neutral-50">
+                <span className="min-w-0 truncate">
                   {channels.find((c) => c.id === activeChannelId)?.name ?? 'Channel'}
-                </h2>
-              </div>
-              <details className="mt-2">
-                <summary className="cursor-pointer select-none list-none text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-neutral-500 dark:hover:text-neutral-200 [&::-webkit-details-marker]:hidden">
-                  Composer tips
+                </span>
+              </h2>
+              <details className="group/feed-channel-menu relative shrink-0">
+                <summary
+                  className="list-none cursor-pointer rounded-lg p-1.5 text-slate-400 outline-none hover:bg-slate-100 hover:text-slate-600 dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-300 [&::-webkit-details-marker]:hidden"
+                  aria-label="Channel menu"
+                >
+                  <MoreHorizontal className="h-5 w-5" aria-hidden />
                 </summary>
-                <p className="mt-2 max-w-md text-xs leading-relaxed text-slate-500 dark:text-neutral-400">
-                  Type @ for people.
-                  {staff ? ' Instructors can use @everyone. ' : ' '}
-                  Enter sends; Shift+Enter starts a new line.
-                </p>
+                <div
+                  className="absolute right-0 top-full z-40 mt-1 min-w-[14rem] overflow-hidden rounded-xl border border-slate-200/90 bg-white py-1 text-sm shadow-lg ring-1 ring-black/5 dark:border-neutral-700 dark:bg-neutral-900 dark:ring-white/10"
+                  onMouseDown={(ev) => ev.preventDefault()}
+                >
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-slate-700 hover:bg-slate-50 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    onClick={(e) => {
+                      closeParentDetails(e.currentTarget)
+                      setNotifPrefsDraft(loadFeedNotificationPrefs(courseCode))
+                      setNotifPrefsOpen(true)
+                    }}
+                  >
+                    <Bell className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                    Notification Preferences
+                  </button>
+                </div>
               </details>
             </div>
 
@@ -922,12 +895,12 @@ export default function CourseFeedPage() {
                   stickToBottomRef.current =
                     el.scrollHeight - el.scrollTop - el.clientHeight <= slack
                 }}
-                className="min-h-0 flex-1 overflow-y-auto px-4 py-2 sm:px-5"
+                className="min-h-0 flex-1 overflow-y-auto px-3 py-1 sm:px-4"
               >
                 {messages.map((m) => (
                   <article
                     key={m.id}
-                    className="border-b border-slate-100 py-5 last:border-b-0 last:pb-4 dark:border-neutral-800/80"
+                    className="border-b border-slate-100 py-3.5 last:border-b-0 last:pb-3 dark:border-neutral-800/80"
                   >
                     <MessageBlock
                       message={m}
@@ -1007,7 +980,7 @@ export default function CourseFeedPage() {
                 )}
               </div>
 
-              <div className="shrink-0 border-t border-slate-200 px-5 py-4 dark:border-neutral-800">
+              <div className="shrink-0 border-t border-slate-200 px-3 py-2 sm:px-4 dark:border-neutral-800">
                 {replyTo && (
                   <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-neutral-900">
                     <span className="truncate text-slate-600 dark:text-neutral-300">
@@ -1023,31 +996,17 @@ export default function CourseFeedPage() {
                     </button>
                   </div>
                 )}
-                <div className="flex gap-2">
-                  <div className="min-w-0 flex-1">
-                    <FeedComposer
-                      courseCode={courseCode}
-                      value={composer}
-                      onChange={setComposer}
-                      roster={roster}
-                      viewerUserId={viewerId}
-                      staff={staff}
-                      placeholder={replyTo ? 'Write a reply…' : 'Message this channel…'}
-                      disabled={sending}
-                      onImageBusyChange={setFeedImageUploading}
-                      onSubmit={() => void sendMessage()}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    disabled={sending || feedImageUploading || !composer.trim()}
-                    onClick={() => void sendMessage()}
-                    className="self-end rounded-xl bg-indigo-600 p-3 text-white hover:bg-indigo-500 disabled:opacity-40"
-                    aria-label="Send"
-                  >
-                    <Send className="h-5 w-5" />
-                  </button>
-                </div>
+                <FeedComposer
+                  courseCode={courseCode}
+                  value={composer}
+                  onChange={setComposer}
+                  roster={roster}
+                  viewerUserId={viewerId}
+                  staff={staff}
+                  placeholder={replyTo ? 'Write a reply…' : 'Message this channel…'}
+                  disabled={sending}
+                  onSubmit={() => void sendMessage()}
+                />
               </div>
             </div>
           </section>
@@ -1100,7 +1059,7 @@ function MessageBlock({
   const avatarSize = depth === 0 ? 'md' : 'sm'
 
   return (
-    <div className="group/msg rounded-xl px-1 py-0.5 transition-colors hover:bg-slate-50/70 dark:hover:bg-neutral-900/50">
+    <div className="group/msg rounded-xl px-1 py-0.5 transition-colors hover:bg-slate-50/70 dark:hover:bg-neutral-900">
       <div className="flex gap-3">
         <FeedAvatar userId={m.authorUserId} name={author} size={avatarSize} />
         <div className="min-w-0 flex-1 pt-0.5">

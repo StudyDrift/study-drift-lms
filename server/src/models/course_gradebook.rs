@@ -22,4 +22,6 @@ pub struct CourseGradebookGridColumn {
     pub kind: String,
     pub title: String,
     pub max_points: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assignment_group_id: Option<Uuid>,
 }

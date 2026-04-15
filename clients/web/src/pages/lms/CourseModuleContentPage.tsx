@@ -25,22 +25,6 @@ import { useLmsDarkMode } from '../../hooks/useLmsDarkMode'
 import { permCourseItemCreate } from '../../lib/rbacApi'
 import { LmsPage } from './LmsPage'
 
-function isoToDatetimeLocalValue(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function datetimeLocalValueToIso(value: string): string | null {
-  const t = value.trim()
-  if (!t) return null
-  const d = new Date(t)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toISOString()
-}
-
 function newLocalId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
@@ -54,8 +38,6 @@ export default function CourseModuleContentPage() {
 
   const [title, setTitle] = useState('')
   const [markdown, setMarkdown] = useState('')
-  const [dueAt, setDueAt] = useState<string | null>(null)
-  const [draftDueLocal, setDraftDueLocal] = useState('')
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -101,7 +83,6 @@ export default function CourseModuleContentPage() {
       ])
       setTitle(data.title)
       setMarkdown(data.markdown)
-      setDueAt(data.dueAt)
       setUpdatedAt(data.updatedAt)
       setMdPreset(courseRow.markdownThemePreset)
       setMdCustom(courseRow.markdownThemeCustom)
@@ -118,7 +99,6 @@ export default function CourseModuleContentPage() {
       setLoadError(e instanceof Error ? e.message : 'Could not load this page.')
       setTitle('')
       setMarkdown('')
-      setDueAt(null)
       setUpdatedAt(null)
     } finally {
       setLoading(false)
@@ -156,7 +136,6 @@ export default function CourseModuleContentPage() {
   function beginEdit() {
     setSaveError(null)
     setDraft(markdownToSectionsForEditor(markdown, newLocalId))
-    setDraftDueLocal(isoToDatetimeLocalValue(dueAt))
     setEditing(true)
   }
 
@@ -164,7 +143,6 @@ export default function CourseModuleContentPage() {
     setSaveError(null)
     setEditing(false)
     setDraft([])
-    setDraftDueLocal('')
   }
 
   async function save() {
@@ -175,10 +153,9 @@ export default function CourseModuleContentPage() {
     try {
       const data = await patchModuleContentPage(courseCode, itemId, {
         markdown: body,
-        dueAt: datetimeLocalValueToIso(draftDueLocal),
+        dueAt: null,
       })
       setMarkdown(data.markdown)
-      setDueAt(data.dueAt)
       setUpdatedAt(data.updatedAt)
       setEditing(false)
       setDraft([])
@@ -261,12 +238,6 @@ export default function CourseModuleContentPage() {
 
         {!loading && !loadError && !editing && (
           <div className="mt-8 space-y-6">
-            {dueAt && (
-              <p className="text-sm text-slate-600">
-                <span className="font-medium text-slate-800">Due:</span>{' '}
-                {new Date(dueAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-              </p>
-            )}
             <ContentPageReader
               markdown={markdown}
               theme={mdTheme}
@@ -286,24 +257,6 @@ export default function CourseModuleContentPage() {
             <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200 md:px-8">
               {saveError}
             </p>
-          )}
-          {canEdit && (
-            <div className="mb-4 px-4 md:px-8">
-              <label className="block text-sm font-medium text-slate-800 dark:text-neutral-200" htmlFor="content-due-at">
-                Due date (optional)
-              </label>
-              <input
-                id="content-due-at"
-                type="datetime-local"
-                value={draftDueLocal}
-                onChange={(e) => setDraftDueLocal(e.target.value)}
-                disabled={saving}
-                className="mt-2 w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500"
-              />
-              <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
-                Shown on the course calendar. Clear the field to remove.
-              </p>
-            </div>
           )}
           <div className="px-4 md:px-8">
             <SyllabusBlockEditor

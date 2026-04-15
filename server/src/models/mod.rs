@@ -13,6 +13,7 @@ pub mod course_module_quiz;
 pub mod course_structure;
 pub mod course_syllabus;
 pub mod enrollment;
+pub mod enrollment_group;
 pub mod me;
 pub mod rbac;
 pub mod reports;

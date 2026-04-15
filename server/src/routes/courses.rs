@@ -31,7 +31,7 @@ use crate::models::course_structure::{
     CourseStructureItemResponse, CourseStructureResponse, CreateCourseAssignmentRequest,
     CreateCourseExternalLinkRequest, CreateCourseHeadingRequest, CreateCourseModuleRequest,
     ModuleExternalLinkResponse, PatchCourseModuleRequest, PatchModuleExternalLinkRequest,
-    PatchStructureItemRequest, ReorderCourseStructureRequest,
+    PatchStructureItemDueAtRequest, PatchStructureItemRequest, ReorderCourseStructureRequest,
 };
 use crate::models::course_syllabus::{
     CourseSyllabusResponse, GenerateSyllabusSectionRequest, GenerateSyllabusSectionResponse,
@@ -39,7 +39,11 @@ use crate::models::course_syllabus::{
 };
 use crate::models::enrollment::{
     AddEnrollmentsRequest, AddEnrollmentsResponse, CourseEnrollmentsResponse,
-    EnrollSelfAsStudentResponse,
+    EnrollSelfAsStudentResponse, PatchEnrollmentRequest,
+};
+use crate::models::enrollment_group::{
+    CreateEnrollmentGroupRequest, CreateEnrollmentGroupSetRequest, EnrollmentGroupsTreeResponse,
+    PatchEnrollmentGroupRequest, PatchEnrollmentGroupSetRequest, PutEnrollmentGroupMembershipRequest,
 };
 use crate::models::rbac::CourseScopedRolesResponse;
 use crate::models::settings_ai::{GenerateCourseImageRequest, GenerateCourseImageResponse};
@@ -57,6 +61,7 @@ use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
+use crate::repos::enrollment_groups;
 use crate::repos::rbac;
 use crate::repos::syllabus_acceptance;
 use crate::repos::syllabus_markups;
@@ -210,7 +215,35 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/api/v1/courses/{course_code}/enrollments/{enrollment_id}",
-            delete(delete_enrollment_handler),
+            delete(delete_enrollment_handler).patch(patch_enrollment_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/enrollment-groups/enable",
+            post(enrollment_groups_enable_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/enrollment-groups",
+            get(enrollment_groups_tree_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/enrollment-groups/sets",
+            post(enrollment_group_sets_create_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/enrollment-groups/sets/{set_id}",
+            patch(enrollment_group_sets_patch_handler).delete(enrollment_group_sets_delete_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/enrollment-groups/sets/{set_id}/groups",
+            post(enrollment_groups_create_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/enrollment-groups/groups/{group_id}",
+            patch(enrollment_groups_patch_handler).delete(enrollment_groups_delete_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/enrollment-groups/memberships",
+            put(enrollment_groups_membership_put_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/syllabus",
@@ -279,6 +312,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/structure/items/{item_id}/assignment-group",
             patch(structure_item_assignment_group_patch_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/structure/items/{item_id}/due-at",
+            patch(structure_item_due_at_patch_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/structure/items/{item_id}",
@@ -2453,6 +2490,7 @@ async fn gradebook_grid_get_handler(
                 kind: it.kind,
                 title: it.title,
                 max_points,
+                assignment_group_id: it.assignment_group_id,
             }
         })
         .collect();
@@ -2517,6 +2555,69 @@ async fn grading_put_handler(
         ))),
         Err(PutError::Db(e)) => Err(e.into()),
     }
+}
+
+async fn structure_item_due_at_patch_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<PatchStructureItemDueAtRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_items_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let Some(row) = course_structure::get_item_row(&state.pool, course_id, item_id).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    if row.archived {
+        return Err(AppError::InvalidInput(
+            "Archived module items cannot be rescheduled from the calendar.".into(),
+        ));
+    }
+
+    match row.kind.as_str() {
+        "content_page" => {
+            course_structure::set_content_page_due_at(
+                &state.pool,
+                course_id,
+                item_id,
+                Some(req.due_at),
+            )
+            .await
+        }
+        "assignment" => {
+            course_structure::set_assignment_due_at(
+                &state.pool,
+                course_id,
+                item_id,
+                Some(req.due_at),
+            )
+            .await
+        }
+        "quiz" => {
+            course_structure::set_quiz_due_at(&state.pool, course_id, item_id, Some(req.due_at))
+                .await
+        }
+        _ => {
+            return Err(AppError::InvalidInput(
+                "Only content pages, assignments, and quizzes support a due date.".into(),
+            ));
+        }
+    }
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => AppError::NotFound,
+        _ => e.into(),
+    })?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn patch_structure_item_handler(
@@ -2893,13 +2994,449 @@ async fn enrollments_handler(
     let required = course_grants::course_enrollments_read_permission(&course_code);
     assert_permission(&state.pool, user.user_id, &required).await?;
 
-    let enrollments = enrollment::list_for_course_code(&state.pool, &course_code).await?;
+    let mut enrollments = enrollment::list_for_course_code(&state.pool, &course_code).await?;
+    let enrollment_groups_enabled =
+        enrollment_groups::enrollment_groups_enabled_for_course(&state.pool, &course_code).await?;
+    if enrollment_groups_enabled {
+        let map =
+            enrollment_groups::list_memberships_for_course_code(&state.pool, &course_code).await?;
+        for e in &mut enrollments {
+            if let Some(m) = map.get(&e.id) {
+                e.group_memberships = m.clone();
+            }
+        }
+    }
     let viewer_enrollment_roles =
         enrollment::user_roles_in_course(&state.pool, &course_code, user.user_id).await?;
     Ok(Json(CourseEnrollmentsResponse {
         enrollments,
         viewer_enrollment_roles,
+        enrollment_groups_enabled,
     }))
+}
+
+async fn enrollment_groups_require_enabled(
+    pool: &PgPool,
+    course_code: &str,
+) -> Result<(), AppError> {
+    if !enrollment_groups::enrollment_groups_enabled_for_course(pool, course_code).await? {
+        return Err(AppError::InvalidInput(
+            "Enrollment groups are not enabled for this course.".into(),
+        ));
+    }
+    Ok(())
+}
+
+async fn enrollment_groups_enable_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_update_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    enrollment_groups::enable_enrollment_groups(&state.pool, course_id, &course_code).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn enrollment_groups_tree_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<EnrollmentGroupsTreeResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_read_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    if !enrollment_groups::enrollment_groups_enabled_for_course(&state.pool, &course_code).await? {
+        return Err(AppError::InvalidInput(
+            "Enrollment groups are not enabled for this course.".into(),
+        ));
+    }
+
+    let tree = enrollment_groups::tree_for_course_code(&state.pool, &course_code).await?;
+    Ok(Json(tree))
+}
+
+async fn enrollment_group_sets_create_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<CreateEnrollmentGroupSetRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_update_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    enrollment_groups_require_enabled(&state.pool, &course_code).await?;
+
+    let name = req.name.trim();
+    if name.is_empty() {
+        return Err(AppError::InvalidInput("Group set name is required.".into()));
+    }
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let id = enrollment_groups::create_group_set(&state.pool, course_id, name).await?;
+    Ok(Json(serde_json::json!({ "id": id })))
+}
+
+async fn enrollment_group_sets_patch_handler(
+    State(state): State<AppState>,
+    Path((course_code, set_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<PatchEnrollmentGroupSetRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_update_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    enrollment_groups_require_enabled(&state.pool, &course_code).await?;
+
+    let name = req.name.trim();
+    if name.is_empty() {
+        return Err(AppError::InvalidInput("Group set name is required.".into()));
+    }
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let ok = enrollment_groups::patch_group_set_name(&state.pool, course_id, set_id, name).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn enrollment_group_sets_delete_handler(
+    State(state): State<AppState>,
+    Path((course_code, set_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_update_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    enrollment_groups_require_enabled(&state.pool, &course_code).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let ok = enrollment_groups::delete_group_set(&state.pool, course_id, set_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn enrollment_groups_create_handler(
+    State(state): State<AppState>,
+    Path((course_code, set_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<CreateEnrollmentGroupRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_update_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    enrollment_groups_require_enabled(&state.pool, &course_code).await?;
+
+    if !enrollment_groups::group_set_belongs_to_course(&state.pool, &course_code, set_id).await? {
+        return Err(AppError::NotFound);
+    }
+
+    let name = req.name.trim();
+    if name.is_empty() {
+        return Err(AppError::InvalidInput("Group name is required.".into()));
+    }
+
+    let id = enrollment_groups::create_group_in_set(&state.pool, set_id, name).await?;
+    Ok(Json(serde_json::json!({ "id": id })))
+}
+
+async fn enrollment_groups_patch_handler(
+    State(state): State<AppState>,
+    Path((course_code, group_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<PatchEnrollmentGroupRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_update_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    enrollment_groups_require_enabled(&state.pool, &course_code).await?;
+
+    let name = req.name.trim();
+    if name.is_empty() {
+        return Err(AppError::InvalidInput("Group name is required.".into()));
+    }
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let ok = enrollment_groups::patch_group_name(&state.pool, course_id, group_id, name).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn enrollment_groups_delete_handler(
+    State(state): State<AppState>,
+    Path((course_code, group_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_update_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    enrollment_groups_require_enabled(&state.pool, &course_code).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let ok = enrollment_groups::delete_group(&state.pool, course_id, group_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn enrollment_groups_membership_put_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<PutEnrollmentGroupMembershipRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_update_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    enrollment_groups_require_enabled(&state.pool, &course_code).await?;
+
+    if !enrollment_groups::enrollment_is_assignable_student(
+        &state.pool,
+        &course_code,
+        req.enrollment_id,
+    )
+    .await?
+    {
+        return Err(AppError::InvalidInput(
+            "Only student enrollments can be assigned to groups.".into(),
+        ));
+    }
+
+    let ok = enrollment_groups::set_membership(
+        &state.pool,
+        &course_code,
+        req.enrollment_id,
+        req.group_set_id,
+        req.group_id,
+    )
+    .await?;
+
+    if !ok {
+        return Err(AppError::InvalidInput(
+            "Enrollment or group is not part of this course.".into(),
+        ));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn patch_enrollment_handler(
+    State(state): State<AppState>,
+    Path((course_code, enrollment_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<PatchEnrollmentRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let required = course_grants::course_enrollments_update_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let role_norm = req
+        .role
+        .as_ref()
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty());
+
+    match (req.app_role_id, role_norm.as_deref()) {
+        (None, None) => Err(AppError::InvalidInput(
+            "Send appRoleId or role (\"student\").".into(),
+        )),
+        (Some(_), Some(_)) => Err(AppError::InvalidInput(
+            "Send only one of appRoleId or role.".into(),
+        )),
+        (None, Some(role_val)) => {
+            if role_val != "student" {
+                return Err(AppError::InvalidInput(
+                    "Only role: \"student\" is supported.".into(),
+                ));
+            }
+            let Some(row) =
+                enrollment::get_enrollment_for_patch(&state.pool, &course_code, enrollment_id)
+                    .await?
+            else {
+                return Err(AppError::NotFound);
+            };
+            if row.role == "teacher" {
+                return Err(AppError::InvalidInput(
+                    "The teacher enrollment cannot be changed here.".into(),
+                ));
+            }
+            if row.role != "instructor" {
+                return Err(AppError::InvalidInput(
+                    "Only instructor enrollments can be demoted to student.".into(),
+                ));
+            }
+            let ok = enrollment::demote_instructor_enrollment_row(
+                &state.pool,
+                &course_code,
+                enrollment_id,
+            )
+            .await?;
+            if !ok {
+                return Err(AppError::NotFound);
+            }
+            Ok(StatusCode::NO_CONTENT)
+        }
+        (Some(app_role_id), None) => {
+            require_course_creator(&state, &course_code, user.user_id).await?;
+
+            let Some(row) =
+                enrollment::get_enrollment_for_patch(&state.pool, &course_code, enrollment_id)
+                    .await?
+            else {
+                return Err(AppError::NotFound);
+            };
+            if row.role == "teacher" {
+                return Err(AppError::InvalidInput(
+                    "The teacher enrollment cannot be changed here.".into(),
+                ));
+            }
+            let Some(role_row) = rbac::get_role(&state.pool, app_role_id).await? else {
+                return Err(AppError::InvalidInput("Unknown role.".into()));
+            };
+            if role_row.scope != "course" {
+                return Err(AppError::InvalidInput(
+                    "Only course-scoped roles can be used when setting a course role.".into(),
+                ));
+            }
+
+            let target_roles =
+                enrollment::user_roles_in_course(&state.pool, &course_code, row.user_id).await?;
+            if target_roles.iter().any(|r| r == "teacher") {
+                return Err(AppError::InvalidInput(
+                    "This person's teacher enrollment can't be updated this way.".into(),
+                ));
+            }
+            if row.role == "student" && target_roles.iter().any(|r| r == "instructor") {
+                return Err(AppError::InvalidInput(
+                    "This person already has instructor access in this course.".into(),
+                ));
+            }
+            if enrollment::user_is_course_creator(&state.pool, &course_code, row.user_id).await? {
+                return Err(AppError::InvalidInput(
+                    "The course creator's enrollment can't be changed this way.".into(),
+                ));
+            }
+
+            let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await?
+            else {
+                return Err(AppError::NotFound);
+            };
+
+            if row.role == "student" {
+                enrollment::upsert_instructor_enrollment(
+                    &state.pool,
+                    &course_code,
+                    course_id,
+                    row.user_id,
+                )
+                .await?;
+            }
+
+            course_grants::replace_course_app_role_grants_for_user(
+                &state.pool,
+                row.user_id,
+                course_id,
+                &course_code,
+                app_role_id,
+            )
+            .await?;
+            Ok(StatusCode::NO_CONTENT)
+        }
+    }
 }
 
 async fn delete_enrollment_handler(

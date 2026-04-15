@@ -265,7 +265,7 @@ export function RolesPermissionsPanel() {
 
         <form
           onSubmit={(e) => void onCreatePermission(e)}
-          className="mt-4 flex flex-col gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 dark:border-neutral-600 dark:bg-neutral-800/50 sm:flex-row sm:flex-wrap sm:items-end"
+          className="mt-4 flex flex-col gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 dark:border-neutral-600 dark:bg-neutral-800 sm:flex-row sm:flex-wrap sm:items-end"
         >
           <div className="min-w-0 flex-1">
             <label htmlFor="new-perm-string" className="text-xs font-medium text-slate-600 dark:text-neutral-300">
@@ -388,7 +388,7 @@ export function RolesPermissionsPanel() {
                 </div>
 
                 {expanded && (
-                  <div className="border-t border-slate-100 bg-slate-50/80 px-4 py-4 dark:border-neutral-700 dark:bg-neutral-950/50">
+                  <div className="border-t border-slate-100 bg-slate-50/80 px-4 py-4 dark:border-neutral-700 dark:bg-neutral-950">
                     {role.description?.trim() ? (
                       <p className="mb-3 text-sm text-slate-600 dark:text-neutral-300">{role.description.trim()}</p>
                     ) : null}
@@ -521,7 +521,7 @@ function RoleSettingsModal({ role, onClose, onSaved }: RoleSettingsModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 dark:bg-neutral-950/70 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 dark:bg-neutral-950 sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="role-settings-title"
@@ -641,7 +641,7 @@ function AssignedPermissionsList({ assigned, onRemove, saving }: AssignedPermiss
       {assigned.map((p) => (
         <li
           key={p.id}
-          className="flex items-start gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-neutral-700 dark:bg-neutral-800/80"
+          className="flex items-start gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-neutral-700 dark:bg-neutral-800"
         >
           <button
             type="button"
@@ -711,7 +711,7 @@ function AddPermissionsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 dark:bg-neutral-950/70 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 dark:bg-neutral-950 sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-permissions-title"
@@ -915,7 +915,7 @@ function ManageUsersModal({ roleId, roleName, onClose }: ManageUsersModalProps) 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 dark:bg-neutral-950/70 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 dark:bg-neutral-950 sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="manage-users-title"
@@ -971,7 +971,7 @@ function ManageUsersModal({ roleId, roleName, onClose }: ManageUsersModalProps) 
                 {filteredMembers.map((u) => (
                   <li
                     key={u.id}
-                    className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-neutral-700 dark:bg-neutral-800/80"
+                    className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-neutral-700 dark:bg-neutral-800"
                   >
                     <button
                       type="button"
@@ -1027,7 +1027,7 @@ function ManageUsersModal({ roleId, roleName, onClose }: ManageUsersModalProps) 
                 {eligible.map((u) => (
                   <li
                     key={u.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-neutral-700 dark:bg-neutral-800/80"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-neutral-700 dark:bg-neutral-800"
                   >
                     <div className="min-w-0 flex-1 text-sm">
                       <div className="truncate font-medium text-slate-950 dark:text-neutral-100">
