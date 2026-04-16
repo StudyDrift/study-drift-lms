@@ -61,6 +61,14 @@ export function InboxUnreadProvider({ children }: { children: ReactNode }) {
 
     const ws = new WebSocket(url)
     wsRef.current = ws
+    ws.onopen = () => {
+      const token = getAccessToken()
+      if (!token) {
+        ws.close()
+        return
+      }
+      ws.send(JSON.stringify({ authToken: token }))
+    }
 
     ws.onmessage = (ev) => {
       const msg = parseMailboxWsMessage(String(ev.data))

@@ -1583,13 +1583,11 @@ export type PostCourseImportCanvasBody = {
 }
 
 function courseCanvasImportWebSocketUrl(courseCode: string): string | null {
-  const token = getAccessToken()
-  if (!token) return null
+  if (!getAccessToken()) return null
   const base = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
   const u = new URL(base)
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
-  const qs = new URLSearchParams({ token })
-  return `${u.origin}/api/v1/courses/${encodeURIComponent(courseCode)}/import/canvas/ws?${qs.toString()}`
+  return `${u.origin}/api/v1/courses/${encodeURIComponent(courseCode)}/import/canvas/ws`
 }
 
 /**
@@ -1602,7 +1600,11 @@ export async function postCourseImportCanvas(
   onProgress?: (message: string) => void,
 ): Promise<void> {
   const url = courseCanvasImportWebSocketUrl(courseCode)
+  const authToken = getAccessToken()
   if (!url) {
+    throw new Error('Sign in to import from Canvas.')
+  }
+  if (!authToken) {
     throw new Error('Sign in to import from Canvas.')
   }
 
@@ -1619,6 +1621,7 @@ export async function postCourseImportCanvas(
     ws.onopen = () => {
       ws.send(
         JSON.stringify({
+          authToken,
           mode: body.mode,
           canvasBaseUrl: body.canvasBaseUrl,
           canvasCourseId: body.canvasCourseId,

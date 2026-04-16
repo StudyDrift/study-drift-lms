@@ -52,6 +52,7 @@ mod tests {
             comm_events: comm_tx,
             feed_events: feed_tx,
             course_files_root: std::path::PathBuf::from("data/course-files"),
+            canvas_allowed_host_suffixes: vec!["instructure.com".into()],
         }
     }
 

@@ -28,8 +28,9 @@ pub struct ListQuery {
 }
 
 #[derive(Deserialize)]
-pub struct WsAuth {
-    token: String,
+#[serde(rename_all = "camelCase")]
+struct WsAuthMessage {
+    auth_token: String,
 }
 
 fn notify_mailbox(state: &AppState, user_id: Uuid) {
@@ -154,18 +155,35 @@ async fn patch_handler(
 
 /// `WebSocketUpgrade` must be the last extractor or the handshake will not complete.
 async fn ws_handler(
-    Query(WsAuth { token }): Query<WsAuth>,
     State(state): State<AppState>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = state
-        .jwt
-        .verify(&token)
-        .map_err(|_| AppError::Unauthorized)?;
-    Ok(ws.on_upgrade(move |socket| handle_ws(socket, state, user.user_id)))
+    Ok(ws.on_upgrade(move |socket| handle_ws(socket, state)))
 }
 
-async fn handle_ws(mut socket: WebSocket, state: AppState, user_id: Uuid) {
+async fn read_ws_user_id(socket: &mut WebSocket, state: &AppState) -> Option<Uuid> {
+    let text = loop {
+        match socket.recv().await {
+            Some(Ok(Message::Text(t))) => break t,
+            Some(Ok(Message::Ping(p))) => {
+                let _ = socket.send(Message::Pong(p)).await;
+            }
+            Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return None,
+            _ => {}
+        }
+    };
+    let auth: WsAuthMessage = match serde_json::from_str(&text) {
+        Ok(a) => a,
+        Err(_) => return None,
+    };
+    state.jwt.verify(&auth.auth_token).ok().map(|u| u.user_id)
+}
+
+async fn handle_ws(mut socket: WebSocket, state: AppState) {
+    let Some(user_id) = read_ws_user_id(&mut socket, &state).await else {
+        let _ = socket.send(Message::Close(None)).await;
+        return;
+    };
     let mut rx = state.comm_events.subscribe();
     loop {
         tokio::select! {

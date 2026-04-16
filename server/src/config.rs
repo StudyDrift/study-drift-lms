@@ -16,7 +16,12 @@ pub struct Config {
     pub open_router_api_key: Option<String>,
     /// Root directory for per-course uploaded files (images, etc.). Override with `COURSE_FILES_ROOT`.
     pub course_files_root: PathBuf,
+    /// Allowed Canvas base URL host suffixes (e.g. `instructure.com`).
+    /// Override with `CANVAS_ALLOWED_HOST_SUFFIXES` as a comma-separated list.
+    pub canvas_allowed_host_suffixes: Vec<String>,
 }
+
+const DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES: &[&str] = &["instructure.com"];
 
 fn allow_insecure_jwt_from_env() -> bool {
     match env::var("ALLOW_INSECURE_JWT") {
@@ -98,12 +103,34 @@ impl Config {
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("data/course-files"));
 
+        let canvas_allowed_host_suffixes = env::var("CANVAS_ALLOWED_HOST_SUFFIXES")
+            .ok()
+            .map(|raw| {
+                raw.split(',')
+                    .map(|s| {
+                        s.trim()
+                            .trim_start_matches("*.")
+                            .trim_start_matches('.')
+                            .to_ascii_lowercase()
+                    })
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| {
+                DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect()
+            });
+
         Ok(Self {
             database_url,
             jwt_secret,
             run_migrations,
             open_router_api_key,
             course_files_root,
+            canvas_allowed_host_suffixes,
         })
     }
 }
@@ -228,5 +255,29 @@ mod tests {
         set("COURSE_FILES_ROOT", Some(" /tmp/cf "));
         let c = Config::from_env().unwrap();
         assert_eq!(c.course_files_root, std::path::PathBuf::from("/tmp/cf"));
+    }
+
+    #[test]
+    #[serial]
+    fn canvas_allowed_host_suffixes_default() {
+        base_env_for_config_ok();
+        set("CANVAS_ALLOWED_HOST_SUFFIXES", None);
+        let c = Config::from_env().unwrap();
+        assert_eq!(c.canvas_allowed_host_suffixes, vec!["instructure.com"]);
+    }
+
+    #[test]
+    #[serial]
+    fn canvas_allowed_host_suffixes_from_env_csv() {
+        base_env_for_config_ok();
+        set(
+            "CANVAS_ALLOWED_HOST_SUFFIXES",
+            Some(" *.instructure.com,canvas.mycollege.edu , "),
+        );
+        let c = Config::from_env().unwrap();
+        assert_eq!(
+            c.canvas_allowed_host_suffixes,
+            vec!["instructure.com", "canvas.mycollege.edu"]
+        );
     }
 }

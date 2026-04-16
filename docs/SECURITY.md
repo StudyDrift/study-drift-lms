@@ -15,6 +15,8 @@
 - **Sensitive DB errors:** Generic client message for `sqlx` failures (`server/src/error.rs`).
 - **Container runtime user:** Server image runs as `nobody` (`server/Dockerfile`).
 - **JWT secret (remediated):** Startup requires `JWT_SECRET` of at least 32 characters unless `ALLOW_INSECURE_JWT=1` is set for local-only use (`server/src/config.rs`).
+- **WebSocket auth token in URL (remediated):** Realtime sockets now authenticate via the first WebSocket message (`authToken`) instead of URL query strings (`server/src/routes/communication.rs`, `server/src/routes/course_feed.rs`, `server/src/routes/courses.rs`, `clients/web/src/*` feed/mailbox/canvas helpers).
+- **Canvas import base-URL policy + redirect hardening (remediated):** Canvas imports now enforce host-suffix allowlist policy from config (`CANVAS_ALLOWED_HOST_SUFFIXES`, default `instructure.com`) and disable HTTP redirects for import fetches (`server/src/config.rs`, `server/src/services/canvas_course_import.rs`, `server/src/routes/courses.rs`).
 
 ---
 
@@ -24,30 +26,23 @@ Issues are ordered **critical → low**. Within a band, prefer fixing misconfigu
 
 ### Critical
 
-1. **WebSocket authentication passes the JWT in the query string**
-  **Risk:** Query strings are often written to access logs, proxy logs, `Referer` headers (in some flows), and browser history. Any leak equals bearer-token compromise for mailbox, course feed realtime, and Canvas import sockets.  
-   **Evidence:** `server/src/routes/communication.rs` (`WsAuth { token }`), `server/src/routes/course_feed.rs` (`FeedWsAuth`), `server/src/routes/courses.rs` (`CanvasImportWsQuery`); client builds URLs in `clients/web/src/lib/communicationApi.ts` and related feed/canvas helpers.  
-   **Remediation:** Prefer `Sec-WebSocket-Protocol` bearer subprotocol, a short-lived single-use WS ticket exchanged over `POST` + `Authorization`, or cookie-based sessions with `HttpOnly` + `SameSite` + CSRF protection for the ticket exchange. Ensure reverse proxies are configured not to log query strings for `/api/*/ws` routes if migration is phased.
+No active critical findings at this time.
 
 ### High
 
-1. **Canvas import sends the user-supplied base URL arbitrary HTTPS Bearer traffic**
-  **Risk:** Any instructor (or anyone with course-item import permission) can set `canvas_base_url` to a hostname they control. The server then sends the Canvas personal access token in the `Authorization` header to that host — **credential exfiltration** — and may follow redirects (default `reqwest` behavior), widening **SSRF** risk toward internal URLs depending on redirect chains.  
-   **Evidence:** `normalize_canvas_base_url` only enforces `https` + hostname (`server/src/services/canvas_course_import.rs`); `canvas_get_json_url` attaches the token (`server/src/services/canvas_course_import.rs`); client created with `Client::builder()` in `server/src/routes/courses.rs` (no redirect policy / IP blocklist visible).  
-   **Remediation:** Restrict `canvas_base_url` to an institutional allowlist (e.g. suffix match on `*.instructure.com` and/or env-configured domains). Use `redirect::Policy::limited` or disable redirects; optionally resolve DNS and reject private/link-local/metadata IP ranges before connecting.
-2. **CORS allows any origin**
+1. **CORS allows any origin**
   **Risk:** Today the SPA relies on bearer tokens in `localStorage`, which limits classic cookie CSRF, but `allow_origin(Any)` weakens defense in depth and complicates any future cookie-based auth, native wrappers, or misconfigured subdomains.  
    **Evidence:** `server/src/app.rs` (`CorsLayer::new().allow_origin(Any)`).  
    **Remediation:** Set explicit allowed origins from configuration (per environment). Keep credentials disabled unless you intentionally add cookie auth with tight origin + CSRF design.
-3. **No authentication rate limiting or lockout**
+2. **No authentication rate limiting or lockout**
   **Risk:** `/api/v1/auth/login` and `/api/v1/auth/signup` are unauthenticated endpoints suitable for credential stuffing and registration spam.  
    **Evidence:** `server/src/routes/auth.rs` — no middleware layer for throttling in `server/src/app.rs`.  
    **Remediation:** Add IP- and account-based limits (reverse proxy, gateway, or Axum middleware), exponential backoff after failures, and optional CAPTCHA or invite-only signup for production deployments.
-4. `**/health/ready` exposes database error strings to clients**
+3. `**/health/ready` exposes database error strings to clients**
   **Risk:** Operational and schema details can aid an attacker mapping the stack or migration state.  
    **Evidence:** `server/src/routes/health.rs` includes `"detail": detail` on failure.  
    **Remediation:** Return a fixed message to the client; log the detailed error server-side only. Restrict this endpoint to internal networks or monitoring systems in production.
-5. **Default Docker Compose credentials and exposed database ports**
+4. **Default Docker Compose credentials and exposed database ports**
   **Risk:** Accidental deployment of dev compose files, or a reachable host with default Postgres/Mongo passwords, leads to trivial data compromise. Mongo appears unused by the Rust server but is still bundled with weak defaults.  
    **Evidence:** `docker-compose.yml` (`POSTGRES_PASSWORD`, `JWT_SECRET: change-me-…`, `mongo` service, published `5432` / `27017`).  
    **Remediation:** Remove unused services from default stacks; use secrets management; do not publish DB ports in “production-style” profiles; document that compose files are dev-only unless hardened.
@@ -93,8 +88,8 @@ Issues are ordered **critical → low**. Within a band, prefer fixing misconfigu
 
 | Priority | Count | Themes                                                                                    |
 | -------- | ----- | ----------------------------------------------------------------------------------------- |
-| Critical | 1     | WebSocket token in URL                                                                    |
-| High     | 5     | Canvas URL/token + SSRF; CORS; auth rate limits; health info leak; compose defaults       |
+| Critical | 0     | None                                                                                      |
+| High     | 4     | CORS; auth rate limits; health info leak; compose defaults                                 |
 | Medium   | 5     | JWT lifetime + revocation; localStorage; upload validation; open signup; AI error leakage |
 | Low      | 3     | CSP / headers; markdown `javascript:` links; dependency & ops hygiene                     |
 
@@ -103,8 +98,6 @@ Issues are ordered **critical → low**. Within a band, prefer fixing misconfigu
 
 ## Next steps
 
-1. Address the remaining **critical** item before any internet-exposed deployment.
-2. Tighten **Canvas import** URL policy and HTTP client redirect behavior before treating imports as safe in enterprise networks.
-3. Add **automated** checks (config validation, security headers in nginx for prod profiles, audit in CI) so regressions are caught early.
+1. Add **automated** checks (config validation, security headers in nginx for prod profiles, audit in CI) so regressions are caught early.
 
 If you want a follow-up pass, the highest-value dynamic work would be: authenticated fuzzing of course-scoped IDs for IDOR, a focused review of `server/src/routes/courses.rs` for any handler that skips `assert_permission`, and a CSP rollout plan tested against TipTap / markdown rendering.

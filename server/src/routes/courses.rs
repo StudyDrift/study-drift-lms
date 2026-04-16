@@ -80,7 +80,7 @@ use crate::state::AppState;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, Query, State,
+        Path, State,
     },
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
@@ -2813,25 +2813,21 @@ async fn course_import_post_handler(
 }
 
 #[derive(Deserialize)]
-struct CanvasImportWsQuery {
-    token: String,
+#[serde(rename_all = "camelCase")]
+struct CanvasImportWsFirstMessage {
+    auth_token: String,
+    #[serde(flatten)]
+    request: CourseCanvasImportRequest,
 }
 
 /// WebSocket: client sends one text frame (same JSON as the former POST body), then receives
 /// `{"type":"progress","message":"…"}` lines followed by `{"type":"complete"}` or `{"type":"error","message":"…"}`.
 async fn course_import_canvas_ws_handler(
     Path(course_code): Path<String>,
-    Query(q): Query<CanvasImportWsQuery>,
     State(state): State<AppState>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = state
-        .jwt
-        .verify(&q.token)
-        .map_err(|_| AppError::Unauthorized)?;
-    Ok(ws.on_upgrade(move |socket| {
-        handle_canvas_import_ws(socket, state, user.user_id, course_code)
-    }))
+    Ok(ws.on_upgrade(move |socket| handle_canvas_import_ws(socket, state, course_code)))
 }
 
 fn canvas_import_ws_error_message(err: &AppError) -> String {
@@ -2857,7 +2853,6 @@ async fn ws_send_json(socket: &mut WebSocket, value: serde_json::Value) -> bool 
 async fn handle_canvas_import_ws(
     mut socket: WebSocket,
     state: AppState,
-    user_id: Uuid,
     course_code: String,
 ) {
     let first_text = loop {
@@ -2872,20 +2867,35 @@ async fn handle_canvas_import_ws(
         }
     };
 
-    let req: CourseCanvasImportRequest = match serde_json::from_str(&first_text) {
+    let first: CanvasImportWsFirstMessage = match serde_json::from_str(&first_text) {
         Ok(r) => r,
         Err(_) => {
             let _ = ws_send_json(
                 &mut socket,
                 json!({
                     "type": "error",
-                    "message": "Invalid JSON in the first message. Send the same object as the former Canvas import POST body.",
+                    "message": "Invalid JSON in the first message. Send authToken plus the former Canvas import POST body fields.",
                 }),
             )
             .await;
             return;
         }
     };
+    let user_id = match state.jwt.verify(&first.auth_token) {
+        Ok(u) => u.user_id,
+        Err(_) => {
+            let _ = ws_send_json(
+                &mut socket,
+                json!({
+                    "type": "error",
+                    "message": "Sign in required.",
+                }),
+            )
+            .await;
+            return;
+        }
+    };
+    let req = first.request;
 
     if let Err(e) = require_course_access(&state, &course_code, user_id).await {
         let _ = ws_send_json(
@@ -2928,6 +2938,7 @@ async fn handle_canvas_import_ws(
             let client = Client::builder()
                 .timeout(Duration::from_secs(180))
                 .connect_timeout(Duration::from_secs(30))
+                .redirect(reqwest::redirect::Policy::none())
                 .user_agent(concat!("lextures/", env!("CARGO_PKG_VERSION")))
                 .build()
                 .map_err(|e| {
@@ -2939,6 +2950,7 @@ async fn handle_canvas_import_ws(
                 &canvas_base_url,
                 &canvas_course_id,
                 &access_token,
+                &state.canvas_allowed_host_suffixes,
                 Some(&tx),
             )
             .await?;

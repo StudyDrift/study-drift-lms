@@ -66,8 +66,11 @@ export function CourseFeedUnreadProvider({ children }: { children: ReactNode }) 
     const token = getAccessToken()
     if (!token) return
 
-    const url = `${wsUrl(`/api/v1/courses/${encodeURIComponent(activeCourseCode)}/feed/ws`)}?token=${encodeURIComponent(token)}`
+    const url = wsUrl(`/api/v1/courses/${encodeURIComponent(activeCourseCode)}/feed/ws`)
     const ws = new WebSocket(url)
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ authToken: token }))
+    }
 
     ws.onmessage = (ev) => {
       try {

@@ -97,6 +97,7 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         comm_events: comm_tx,
         feed_events: feed_tx,
         course_files_root,
+        canvas_allowed_host_suffixes: config.canvas_allowed_host_suffixes.clone(),
     })
 }
 

@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearAccessToken, setAccessToken } from './auth'
+import { clearAccessToken, getAccessToken, setAccessToken } from './auth'
 import { apiUrl, authorizedFetch, joinApiBase } from './api'
 import { server } from '../test/mocks/server'
 
@@ -60,5 +60,22 @@ describe('authorizedFetch', () => {
     )
     await authorizedFetch('/api/v1/ping')
     expect(authHeader).toBeNull()
+  })
+
+  it('clears auth and redirects to login on 401 responses', async () => {
+    server.use(
+      http.get('http://localhost:8080/api/v1/ping', () => {
+        return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }),
+    )
+    const authRequiredListener = vi.fn()
+    window.addEventListener('studydrift-auth-required', authRequiredListener)
+
+    const res = await authorizedFetch('/api/v1/ping')
+
+    expect(res.status).toBe(401)
+    expect(authRequiredListener).toHaveBeenCalledTimes(1)
+    expect(getAccessToken()).toBeNull()
+    window.removeEventListener('studydrift-auth-required', authRequiredListener)
   })
 })

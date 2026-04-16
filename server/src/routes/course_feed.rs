@@ -1,7 +1,7 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        DefaultBodyLimit, Multipart, Path, Query, State,
+        DefaultBodyLimit, Multipart, Path, State,
     },
     http::HeaderMap,
     response::IntoResponse,
@@ -67,8 +67,9 @@ fn feed_event_json(payload: &FeedRealtimePayload) -> String {
 }
 
 #[derive(Deserialize)]
-struct FeedWsAuth {
-    token: String,
+#[serde(rename_all = "camelCase")]
+struct FeedWsAuthMessage {
+    auth_token: String,
 }
 
 pub fn router() -> Router<AppState> {
@@ -393,21 +394,43 @@ async fn unlike_message_handler(
 /// `WebSocketUpgrade` must be the last extractor or the handshake will not complete.
 async fn feed_ws_handler(
     Path(course_code): Path<String>,
-    Query(FeedWsAuth { token }): Query<FeedWsAuth>,
     State(state): State<AppState>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = state
-        .jwt
-        .verify(&token)
-        .map_err(|_| AppError::Unauthorized)?;
-    require_course_access(&state, &course_code, user.user_id).await?;
-    let course_id = resolve_course_id(&state, &course_code).await?;
-
-    Ok(ws.on_upgrade(move |socket| handle_feed_ws(socket, state, course_id)))
+    Ok(ws.on_upgrade(move |socket| handle_feed_ws(socket, state, course_code)))
 }
 
-async fn handle_feed_ws(mut socket: WebSocket, state: AppState, course_id: Uuid) {
+async fn read_feed_ws_user_id(socket: &mut WebSocket, state: &AppState) -> Option<Uuid> {
+    let text = loop {
+        match socket.recv().await {
+            Some(Ok(Message::Text(t))) => break t,
+            Some(Ok(Message::Ping(p))) => {
+                let _ = socket.send(Message::Pong(p)).await;
+            }
+            Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return None,
+            _ => {}
+        }
+    };
+    let auth: FeedWsAuthMessage = match serde_json::from_str(&text) {
+        Ok(a) => a,
+        Err(_) => return None,
+    };
+    state.jwt.verify(&auth.auth_token).ok().map(|u| u.user_id)
+}
+
+async fn handle_feed_ws(mut socket: WebSocket, state: AppState, course_code: String) {
+    let Some(user_id) = read_feed_ws_user_id(&mut socket, &state).await else {
+        let _ = socket.send(Message::Close(None)).await;
+        return;
+    };
+    if require_course_access(&state, &course_code, user_id).await.is_err() {
+        let _ = socket.send(Message::Close(None)).await;
+        return;
+    }
+    let Ok(course_id) = resolve_course_id(&state, &course_code).await else {
+        let _ = socket.send(Message::Close(None)).await;
+        return;
+    };
     let mut rx = state.feed_events.subscribe();
     loop {
         tokio::select! {

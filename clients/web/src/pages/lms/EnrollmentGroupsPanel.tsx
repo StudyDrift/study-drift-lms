@@ -11,8 +11,17 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Plus, Trash2, X } from 'lucide-react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
+import { ChevronDown, Plus, Shuffle, Trash2, X } from 'lucide-react'
 import type { CourseEnrollment } from './CourseEnrollments'
 import {
   deleteEnrollmentGroup,
@@ -81,6 +90,9 @@ function DroppableColumn({
   title,
   subtitle,
   highlight,
+  collapsible = false,
+  expanded = true,
+  onToggle,
   children,
 }: {
   setId: string
@@ -88,6 +100,9 @@ function DroppableColumn({
   title: string
   subtitle?: string
   highlight: boolean
+  collapsible?: boolean
+  expanded?: boolean
+  onToggle?: () => void
   children: ReactNode
 }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -96,21 +111,180 @@ function DroppableColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex min-h-[10rem] min-w-[11rem] flex-1 flex-col rounded-xl border bg-slate-50/80 p-2 dark:bg-neutral-900/50 ${
+      className={`flex min-w-[11rem] w-full flex-col rounded-xl border bg-slate-50/80 p-2 dark:bg-neutral-900/50 ${
         isOver || highlight
           ? 'border-indigo-400 ring-1 ring-indigo-400/40'
           : 'border-slate-200 dark:border-neutral-700'
-      }`}
+      } ${expanded ? 'min-h-[10rem]' : 'min-h-[3.5rem]'}`}
     >
-      <div className="mb-2 shrink-0 border-b border-slate-200 pb-2 dark:border-neutral-700">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
-          {title}
-        </p>
-        {subtitle ? (
-          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-neutral-500">{subtitle}</p>
-        ) : null}
-      </div>
-      <div className="flex flex-col gap-1.5">{children}</div>
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="mb-2 flex w-full items-start justify-between gap-2 shrink-0 border-b border-slate-200 pb-2 text-left dark:border-neutral-700"
+          aria-expanded={expanded}
+        >
+          <span>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+              {title}
+            </p>
+            {subtitle ? (
+              <p className="mt-0.5 text-[11px] text-slate-500 dark:text-neutral-500">{subtitle}</p>
+            ) : null}
+          </span>
+          <ChevronDown
+            className={`mt-0.5 h-4 w-4 shrink-0 text-slate-500 transition-transform dark:text-neutral-400 ${
+              expanded ? 'rotate-0' : '-rotate-90'
+            }`}
+            aria-hidden
+          />
+        </button>
+      ) : (
+        <div className="mb-2 shrink-0 border-b border-slate-200 pb-2 dark:border-neutral-700">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+            {title}
+          </p>
+          {subtitle ? (
+            <p className="mt-0.5 text-[11px] text-slate-500 dark:text-neutral-500">{subtitle}</p>
+          ) : null}
+        </div>
+      )}
+      {expanded ? <div className="flex flex-col gap-1.5">{children}</div> : null}
+    </div>
+  )
+}
+
+type GroupSetActionsMenuProps = {
+  disabled: boolean
+  hasSelectedSet: boolean
+  canAssignUnassigned: boolean
+  onNewSet: () => void
+  onRenameSet: () => void
+  onDeleteSet: () => void
+  onNewGroup: () => void
+  onAssignUnassigned: () => void
+}
+
+function GroupSetActionsMenu({
+  disabled,
+  hasSelectedSet,
+  canAssignUnassigned,
+  onNewSet,
+  onRenameSet,
+  onDeleteSet,
+  onNewGroup,
+  onAssignUnassigned,
+}: GroupSetActionsMenuProps) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const menuId = useId()
+
+  useEffect(() => {
+    if (!open) return
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+
+  return (
+    <div ref={rootRef} className="relative inline-block w-full text-left sm:w-auto">
+      <button
+        type="button"
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => {
+          if (disabled) return
+          setOpen((o) => !o)
+        }}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:justify-start sm:px-4"
+      >
+        <span>Actions</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 transition ${open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+
+      {open ? (
+        <div
+          id={menuId}
+          role="menu"
+          aria-label="Group set actions"
+          className="absolute right-0 z-50 mt-1 min-w-[14rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10 dark:border-neutral-600 dark:bg-neutral-800 dark:shadow-black/40"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            disabled={disabled}
+            onClick={() => {
+              onNewSet()
+              setOpen(false)
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-neutral-100 dark:hover:bg-neutral-700/80"
+          >
+            <Plus className="h-4 w-4 shrink-0" aria-hidden />
+            New set
+          </button>
+          {hasSelectedSet ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={disabled}
+                onClick={() => {
+                  onRenameSet()
+                  setOpen(false)
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-neutral-100 dark:hover:bg-neutral-700/80"
+              >
+                Rename set
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={disabled}
+                onClick={() => {
+                  onDeleteSet()
+                  setOpen(false)
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-300 dark:hover:bg-rose-950/40"
+              >
+                <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                Delete set
+              </button>
+              <div className="my-1 border-t border-slate-100 dark:border-neutral-700" role="separator" />
+              <button
+                type="button"
+                role="menuitem"
+                disabled={disabled}
+                onClick={() => {
+                  onNewGroup()
+                  setOpen(false)
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-neutral-100 dark:hover:bg-neutral-700/80"
+              >
+                <Plus className="h-4 w-4 shrink-0" aria-hidden />
+                New group
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={disabled || !canAssignUnassigned}
+                onClick={() => {
+                  if (!canAssignUnassigned) return
+                  onAssignUnassigned()
+                  setOpen(false)
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-neutral-100 dark:hover:bg-neutral-700/80"
+              >
+                <Shuffle className="h-4 w-4 shrink-0" aria-hidden />
+                Assign unassigned students
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -144,6 +318,7 @@ export function EnrollmentGroupsPanel({ courseCode, enrollments, canEdit }: Prop
   const [actionError, setActionError] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogState>({ kind: 'closed' })
   const [dialogBusy, setDialogBusy] = useState(false)
+  const [expandedGroupsById, setExpandedGroupsById] = useState<Record<string, boolean>>({})
 
   const studentEnrollments = useMemo(
     () => enrollments.filter(isStudentEnrollment),
@@ -185,6 +360,17 @@ export function EnrollmentGroupsPanel({ courseCode, enrollments, canEdit }: Prop
   )
 
   const selectedSet = tree?.groupSets.find((s) => s.id === selectedSetId) ?? null
+
+  useEffect(() => {
+    if (!selectedSet) return
+    setExpandedGroupsById((prev) => {
+      const next: Record<string, boolean> = {}
+      for (const group of selectedSet.groups) {
+        next[group.id] = prev[group.id] ?? true
+      }
+      return next
+    })
+  }, [selectedSet])
 
   const unassignedInSet = useMemo(() => {
     const inSet = new Set<string>()
@@ -365,6 +551,30 @@ export function EnrollmentGroupsPanel({ courseCode, enrollments, canEdit }: Prop
     }
   }
 
+  async function submitAssignUnassignedToGroups() {
+    if (!selectedSetId || !selectedSet?.groups.length || !unassignedInSet.length) return
+    setActionError(null)
+    setBusy(true)
+    try {
+      for (let i = 0; i < unassignedInSet.length; i += 1) {
+        const enrollment = unassignedInSet[i]
+        if (!enrollment) continue
+        const targetGroup = selectedSet.groups[i % selectedSet.groups.length]
+        if (!targetGroup) continue
+        await putEnrollmentGroupMembership(courseCode, {
+          enrollmentId: enrollment.id,
+          groupSetId: selectedSetId,
+          groupId: targetGroup.id,
+        })
+      }
+      await load()
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : 'Could not assign unassigned students.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading && !tree) {
     return <p className="mt-4 text-sm text-slate-500 dark:text-neutral-400">Loading groups…</p>
   }
@@ -441,65 +651,32 @@ export function EnrollmentGroupsPanel({ courseCode, enrollments, canEdit }: Prop
           </select>
         </div>
         {canEdit ? (
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                setDialog({ kind: 'new-set', name: 'New group set', error: null })
-              }
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
-            >
-              <Plus className="h-4 w-4" aria-hidden />
-              New set
-            </button>
-            {selectedSetId ? (
-              <>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    setDialog({
-                      kind: 'rename-set',
-                      setId: selectedSetId,
-                      name: selectedSet?.name ?? '',
-                      error: null,
-                    })
-                  }
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
-                >
-                  Rename set
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    setDialog({
-                      kind: 'delete-set',
-                      setId: selectedSetId,
-                      displayName: selectedSet?.name ?? 'this group set',
-                      error: null,
-                    })
-                  }
-                  className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-800 shadow-sm hover:bg-rose-50 dark:border-rose-900/50 dark:bg-neutral-900 dark:text-rose-300 dark:hover:bg-rose-950/40"
-                >
-                  <Trash2 className="h-4 w-4" aria-hidden />
-                  Delete set
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    setDialog({ kind: 'new-group', name: 'New group', error: null })
-                  }
-                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
-                >
-                  <Plus className="h-4 w-4" aria-hidden />
-                  New group
-                </button>
-              </>
-            ) : null}
-          </div>
+          <GroupSetActionsMenu
+            disabled={busy}
+            hasSelectedSet={Boolean(selectedSetId)}
+            canAssignUnassigned={Boolean(selectedSet?.groups.length && unassignedInSet.length)}
+            onNewSet={() => setDialog({ kind: 'new-set', name: 'New group set', error: null })}
+            onRenameSet={() => {
+              if (!selectedSetId) return
+              setDialog({
+                kind: 'rename-set',
+                setId: selectedSetId,
+                name: selectedSet?.name ?? '',
+                error: null,
+              })
+            }}
+            onDeleteSet={() => {
+              if (!selectedSetId) return
+              setDialog({
+                kind: 'delete-set',
+                setId: selectedSetId,
+                displayName: selectedSet?.name ?? 'this group set',
+                error: null,
+              })
+            }}
+            onNewGroup={() => setDialog({ kind: 'new-group', name: 'New group', error: null })}
+            onAssignUnassigned={() => void submitAssignUnassignedToGroups()}
+          />
         ) : null}
       </div>
 
@@ -511,84 +688,98 @@ export function EnrollmentGroupsPanel({ courseCode, enrollments, canEdit }: Prop
           onDragEnd={(e) => void onDragEnd(e)}
           onDragCancel={() => setActiveEnrollmentId(null)}
         >
-          <div className="mt-6 flex flex-wrap items-stretch gap-3">
-            <DroppableColumn
-              setId={selectedSetId}
-              groupId="__unassigned__"
-              title="Unassigned"
-              subtitle="Students only. Drag into a group to assign, or here to unassign."
-              highlight={false}
-            >
-              {unassignedInSet.map((e) => (
-                <DraggableChip
-                  key={e.id}
-                  enrollmentId={e.id}
-                  label={e.displayName?.trim() || '—'}
-                  disabled={!canEdit || busy}
-                />
-              ))}
-            </DroppableColumn>
-            {selectedSet.groups.map((g) => (
+          <div className="mt-6 overflow-x-auto">
+            <div className="grid min-w-full gap-3 lg:grid-cols-[minmax(15rem,22rem)_minmax(0,1fr)]">
+            <div className="lg:sticky lg:top-4 lg:self-start">
               <DroppableColumn
-                key={g.id}
                 setId={selectedSetId}
-                groupId={g.id}
-                title={g.name}
-                subtitle={canEdit ? 'Rename or delete with the links below.' : undefined}
+                groupId="__unassigned__"
+                title="Unassigned"
+                subtitle="Students only. Drag into a group to assign, or here to unassign."
                 highlight={false}
               >
-                <div className="mb-1 flex flex-wrap gap-1">
-                  {canEdit ? (
-                    <>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          setDialog({
-                            kind: 'rename-group',
-                            groupId: g.id,
-                            name: g.name,
-                            error: null,
-                          })
-                        }
-                        className="rounded-lg px-2 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
-                      >
-                        Rename
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          setDialog({
-                            kind: 'delete-group',
-                            groupId: g.id,
-                            displayName: g.name,
-                            error: null,
-                          })
-                        }
-                        className="rounded-lg px-2 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/40"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-                {g.enrollmentIds.map((eid) => {
-                  const e = enrollmentById.get(eid)
-                  const label = e?.displayName?.trim() || '—'
-                  const isStudent = e ? isStudentEnrollment(e) : false
-                  if (!isStudent) return null
-                  return (
-                    <DraggableChip
-                      key={eid}
-                      enrollmentId={eid}
-                      label={label}
-                      disabled={!canEdit || busy}
-                    />
-                  )
-                })}
+                {unassignedInSet.map((e) => (
+                  <DraggableChip
+                    key={e.id}
+                    enrollmentId={e.id}
+                    label={e.displayName?.trim() || '—'}
+                    disabled={!canEdit || busy}
+                  />
+                ))}
               </DroppableColumn>
-            ))}
+            </div>
+            <div className="flex min-w-max flex-col gap-3">
+              {selectedSet.groups.map((g) => {
+                const expanded = expandedGroupsById[g.id] ?? true
+                return (
+                  <DroppableColumn
+                    key={g.id}
+                    setId={selectedSetId}
+                    groupId={g.id}
+                    title={g.name}
+                    subtitle={canEdit ? 'Rename or delete with the links below.' : undefined}
+                    highlight={false}
+                    collapsible
+                    expanded={expanded}
+                    onToggle={() =>
+                      setExpandedGroupsById((prev) => ({ ...prev, [g.id]: !(prev[g.id] ?? true) }))
+                    }
+                  >
+                    <div className="mb-1 flex flex-wrap gap-1">
+                      {canEdit ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              setDialog({
+                                kind: 'rename-group',
+                                groupId: g.id,
+                                name: g.name,
+                                error: null,
+                              })
+                            }
+                            className="rounded-lg px-2 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                          >
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              setDialog({
+                                kind: 'delete-group',
+                                groupId: g.id,
+                                displayName: g.name,
+                                error: null,
+                              })
+                            }
+                            className="rounded-lg px-2 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                    {g.enrollmentIds.map((eid) => {
+                      const e = enrollmentById.get(eid)
+                      const label = e?.displayName?.trim() || '—'
+                      const isStudent = e ? isStudentEnrollment(e) : false
+                      if (!isStudent) return null
+                      return (
+                        <DraggableChip
+                          key={eid}
+                          enrollmentId={eid}
+                          label={label}
+                          disabled={!canEdit || busy}
+                        />
+                      )
+                    })}
+                  </DroppableColumn>
+                )
+              })}
+            </div>
+          </div>
           </div>
           <DragOverlay dropAnimation={null}>
             {activeEnrollmentId ? (
@@ -649,6 +840,20 @@ function GroupsDialog({
 }) {
   if (dialog.kind === 'closed') return null
 
+  const shouldSubmitOnEnter =
+    dialog.kind === 'new-set' ||
+    dialog.kind === 'rename-set' ||
+    dialog.kind === 'new-group' ||
+    dialog.kind === 'rename-group'
+
+  function onInputKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (!shouldSubmitOnEnter) return
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    if (dialogBusy) return
+    primaryAction()
+  }
+
   let title = ''
   let body: ReactNode = null
   let primaryLabel = 'Save'
@@ -667,12 +872,14 @@ function GroupsDialog({
         <input
           id="dlg-new-set-name"
           type="text"
+          autoFocus
           value={dialog.name}
           onChange={(e) =>
             onDialogChange({ kind: 'new-set', name: e.target.value, error: null })
           }
           className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
           disabled={dialogBusy}
+          onKeyDown={onInputKeyDown}
         />
       </>
     )
@@ -688,6 +895,7 @@ function GroupsDialog({
         <input
           id="dlg-rename-set-name"
           type="text"
+          autoFocus
           value={dialog.name}
           onChange={(e) =>
             onDialogChange({
@@ -699,6 +907,7 @@ function GroupsDialog({
           }
           className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
           disabled={dialogBusy}
+          onKeyDown={onInputKeyDown}
         />
       </>
     )
@@ -725,12 +934,14 @@ function GroupsDialog({
         <input
           id="dlg-new-group-name"
           type="text"
+          autoFocus
           value={dialog.name}
           onChange={(e) =>
             onDialogChange({ kind: 'new-group', name: e.target.value, error: null })
           }
           className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
           disabled={dialogBusy}
+          onKeyDown={onInputKeyDown}
         />
       </>
     )
@@ -746,6 +957,7 @@ function GroupsDialog({
         <input
           id="dlg-rename-group-name"
           type="text"
+          autoFocus
           value={dialog.name}
           onChange={(e) =>
             onDialogChange({
@@ -757,6 +969,7 @@ function GroupsDialog({
           }
           className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
           disabled={dialogBusy}
+          onKeyDown={onInputKeyDown}
         />
       </>
     )

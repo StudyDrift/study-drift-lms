@@ -32,13 +32,11 @@ describe('mailboxWebSocketUrl', () => {
     expect(mailboxWebSocketUrl()).toBeNull()
   })
 
-  it('builds ws URL with token query from VITE_API_URL', () => {
+  it('builds ws URL without query token from VITE_API_URL', () => {
     vi.stubEnv('VITE_API_URL', 'https://api.example.com')
     setAccessToken('tok-abc')
     const u = mailboxWebSocketUrl()
-    expect(u).toContain('wss://api.example.com')
-    expect(u).toContain('/api/v1/communication/ws?')
-    expect(u).toContain('token=tok-abc')
+    expect(u).toBe('wss://api.example.com/api/v1/communication/ws')
   })
 })
 

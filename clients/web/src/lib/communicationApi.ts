@@ -70,15 +70,13 @@ export async function sendMessage(
   return data.id
 }
 
-/** WebSocket URL for mailbox notifications (token in query). */
+/** WebSocket URL for mailbox notifications (auth is sent in first WS message). */
 export function mailboxWebSocketUrl(): string | null {
-  const token = getAccessToken()
-  if (!token) return null
+  if (!getAccessToken()) return null
   const base = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
   const u = new URL(base)
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
-  const qs = new URLSearchParams({ token })
-  return `${u.origin}/api/v1/communication/ws?${qs.toString()}`
+  return `${u.origin}/api/v1/communication/ws`
 }
 
 export function parseMailboxWsMessage(raw: string): { type?: string } | null {

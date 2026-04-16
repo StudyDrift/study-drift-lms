@@ -3,6 +3,7 @@
 //! Tokens are used only for the duration of the request and must never be logged.
 
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
@@ -97,7 +98,19 @@ fn html_to_markdown(html: &str) -> String {
     }
 }
 
-fn normalize_canvas_base_url(raw: &str) -> Result<String, AppError> {
+fn host_allowed_by_suffix_policy(host: &str, allowed_host_suffixes: &[String]) -> bool {
+    let host = host.to_ascii_lowercase();
+    allowed_host_suffixes.iter().any(|suffix| {
+        let suffix = suffix
+            .trim()
+            .trim_start_matches("*.")
+            .trim_start_matches('.')
+            .to_ascii_lowercase();
+        host == suffix || host.ends_with(&format!(".{suffix}"))
+    })
+}
+
+fn normalize_canvas_base_url(raw: &str, allowed_host_suffixes: &[String]) -> Result<String, AppError> {
     let t = raw.trim().trim_end_matches('/');
     if t.is_empty() {
         return Err(AppError::InvalidInput(
@@ -112,15 +125,25 @@ fn normalize_canvas_base_url(raw: &str) -> Result<String, AppError> {
             "Canvas base URL must use https.".into(),
         ));
     }
-    if url.host_str().is_none() {
+    let Some(host) = url.host_str() else {
         return Err(AppError::InvalidInput(
             "Canvas base URL must include a hostname.".into(),
+        ));
+    };
+    if host.parse::<IpAddr>().is_ok() {
+        return Err(AppError::InvalidInput(
+            "Canvas base URL must use a DNS hostname, not an IP address.".into(),
+        ));
+    }
+    if !host_allowed_by_suffix_policy(host, allowed_host_suffixes) {
+        return Err(AppError::InvalidInput(
+            "Canvas base URL host is not allowed by server policy.".into(),
         ));
     }
     Ok(format!(
         "{}://{}{}",
         url.scheme(),
-        url.host_str().unwrap_or_default(),
+        host,
         url.path().trim_end_matches('/')
     ))
 }
@@ -745,6 +768,7 @@ pub async fn build_export_from_canvas(
     canvas_base_url: &str,
     canvas_course_id: i64,
     access_token: &str,
+    allowed_host_suffixes: &[String],
     progress: Option<&UnboundedSender<String>>,
 ) -> Result<CourseExportV1, AppError> {
     let token = access_token.trim();
@@ -754,7 +778,7 @@ pub async fn build_export_from_canvas(
         ));
     }
     emit_progress(progress, "Connecting to Canvas…");
-    let base = normalize_canvas_base_url(canvas_base_url)?;
+    let base = normalize_canvas_base_url(canvas_base_url, allowed_host_suffixes)?;
     let cid = canvas_course_id;
     let cid_str = cid.to_string();
 
@@ -1552,6 +1576,7 @@ pub async fn build_export_from_canvas_wire(
     canvas_base_url: &str,
     canvas_course_id_raw: &str,
     access_token: &str,
+    allowed_host_suffixes: &[String],
     progress: Option<&UnboundedSender<String>>,
 ) -> Result<CourseExportV1, AppError> {
     let cid = parse_canvas_course_id(canvas_course_id_raw)?;
@@ -1560,7 +1585,33 @@ pub async fn build_export_from_canvas_wire(
         canvas_base_url,
         cid,
         access_token,
+        allowed_host_suffixes,
         progress,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canvas_host_suffix_policy_allows_subdomain_and_exact_match() {
+        let policy = vec!["instructure.com".to_string()];
+        assert!(host_allowed_by_suffix_policy(
+            "school.instructure.com",
+            &policy
+        ));
+        assert!(host_allowed_by_suffix_policy("instructure.com", &policy));
+    }
+
+    #[test]
+    fn canvas_host_suffix_policy_rejects_unlisted_hosts() {
+        let policy = vec!["instructure.com".to_string()];
+        assert!(!host_allowed_by_suffix_policy("evil-example.com", &policy));
+        assert!(!host_allowed_by_suffix_policy(
+            "instructure.com.evil-example.com",
+            &policy
+        ));
+    }
 }

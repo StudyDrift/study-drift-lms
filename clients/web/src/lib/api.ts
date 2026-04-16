@@ -1,4 +1,4 @@
-import { getAccessToken } from './auth'
+import { clearAccessToken, getAccessToken } from './auth'
 
 const defaultApi = 'http://localhost:8080'
 
@@ -26,5 +26,13 @@ export function authorizedFetch(path: string, init?: RequestInit): Promise<Respo
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
-  return fetch(apiUrl(path), { ...init, headers })
+  return fetch(apiUrl(path), { ...init, headers }).then((res) => {
+    if (res.status === 401) {
+      clearAccessToken()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('studydrift-auth-required'))
+      }
+    }
+    return res
+  })
 }

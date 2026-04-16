@@ -379,8 +379,11 @@ export default function CourseFeedPage() {
     if (!courseCode) return
     const token = getAccessToken()
     if (!token) return
-    const url = `${wsUrl(`/api/v1/courses/${encodeURIComponent(courseCode)}/feed/ws`)}?token=${encodeURIComponent(token)}`
+    const url = wsUrl(`/api/v1/courses/${encodeURIComponent(courseCode)}/feed/ws`)
     const ws = new WebSocket(url)
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ authToken: token }))
+    }
     ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(String(ev.data)) as {

@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { RequireAuth } from './auth/RequireAuth'
 import { AppShell } from './components/layout/AppShell'
 import Calendar from './pages/lms/Calendar'
@@ -29,6 +30,23 @@ import Signup from './pages/Signup'
 import TermsOfUsePage from './pages/TermsOfUsePage'
 
 export default function App() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  useEffect(() => {
+    function onAuthRequired() {
+      const from = `${location.pathname}${location.search}${location.hash}`
+      if (location.pathname === '/login' || location.pathname === '/signup') {
+        return
+      }
+      navigate('/login', { replace: true, state: { from } })
+    }
+    window.addEventListener('studydrift-auth-required', onAuthRequired)
+    return () => {
+      window.removeEventListener('studydrift-auth-required', onAuthRequired)
+    }
+  }, [location.hash, location.pathname, location.search, navigate])
+
   return (
     <Routes>
       <Route path="/login" element={<Login />} />

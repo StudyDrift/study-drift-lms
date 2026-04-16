@@ -59,4 +59,6 @@ pub struct AppState {
     pub feed_events: tokio::sync::broadcast::Sender<FeedRealtimePayload>,
     /// On-disk root for `course.course_files` blobs (`<root>/<course_code>/<storage_key>`).
     pub course_files_root: PathBuf,
+    /// Policy allowlist for Canvas import base URL hosts.
+    pub canvas_allowed_host_suffixes: Vec<String>,
 }
