@@ -1216,6 +1216,86 @@ export async function runAdaptiveQuizToCompletion(
   return { answeredCount: history.length, finished: true, message: null }
 }
 
+export type QuizAnswer = {
+  questionIndex: number
+  selectedChoiceIndex?: number | null
+  textAnswer?: string | null
+}
+
+export type QuizAttemptResponse = {
+  attemptId: string
+  attemptNumber: number
+  submittedAt: string
+  score?: number | null
+  maxScore?: number | null
+  percent?: number | null
+}
+
+export async function startQuizAttempt(
+  courseCode: string,
+  itemId: string,
+): Promise<QuizAttemptResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as QuizAttemptResponse
+}
+
+export async function submitQuizAttempt(
+  courseCode: string,
+  itemId: string,
+  attemptId: string,
+  body: {
+    accessCode?: string
+    answers: QuizAnswer[]
+    timeSpentSeconds?: number
+  },
+): Promise<QuizAttemptResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts/${encodeURIComponent(attemptId)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as QuizAttemptResponse
+}
+
+export async function fetchQuizAttempts(
+  courseCode: string,
+  itemId: string,
+): Promise<QuizAttemptResponse[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as QuizAttemptResponse[]
+}
+
+export async function fetchQuizAttempt(
+  courseCode: string,
+  itemId: string,
+  attemptId: string,
+): Promise<QuizAttemptResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts/${encodeURIComponent(attemptId)}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as QuizAttemptResponse
+}
+
 export async function fetchModuleContentPage(
   courseCode: string,
   itemId: string,

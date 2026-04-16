@@ -573,3 +573,143 @@ pub async fn upsert_import_body(
     .await?;
     Ok(())
 }
+
+/// Quiz attempt record from database.
+#[derive(Debug, Clone, FromRow)]
+pub struct QuizAttemptRow {
+    pub id: Uuid,
+    pub course_id: Uuid,
+    pub student_user_id: Uuid,
+    pub quiz_item_id: Uuid,
+    pub attempt_number: i32,
+    pub started_at: DateTime<Utc>,
+    pub submitted_at: Option<DateTime<Utc>>,
+    pub answers_json: Json<Vec<crate::models::course_module_quiz::QuizAnswer>>,
+    pub time_spent_seconds: Option<i32>,
+    pub score: Option<f64>,
+    pub max_score: Option<f64>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Get the next attempt number for a student's quiz (returns 1 if no attempts yet).
+pub async fn get_next_attempt_number(
+    pool: &PgPool,
+    student_user_id: Uuid,
+    quiz_item_id: Uuid,
+) -> Result<i32, sqlx::Error> {
+    let result: (Option<i32>,) = sqlx::query_as(&format!(
+        r#"
+        SELECT MAX(attempt_number) FROM {}
+        WHERE student_user_id = $1 AND quiz_item_id = $2
+        "#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(student_user_id)
+    .bind(quiz_item_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(result.0.unwrap_or(0) + 1)
+}
+
+/// Insert a new quiz attempt (started but not yet submitted).
+pub async fn insert_attempt(
+    pool: &PgPool,
+    course_id: Uuid,
+    student_user_id: Uuid,
+    quiz_item_id: Uuid,
+    attempt_number: i32,
+) -> Result<Uuid, sqlx::Error> {
+    let attempt_id = Uuid::new_v4();
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (id, course_id, student_user_id, quiz_item_id, attempt_number, started_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+        "#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(attempt_id)
+    .bind(course_id)
+    .bind(student_user_id)
+    .bind(quiz_item_id)
+    .bind(attempt_number)
+    .execute(pool)
+    .await?;
+
+    Ok(attempt_id)
+}
+
+/// Submit a quiz attempt with answers and optionally update score.
+pub async fn submit_attempt(
+    pool: &PgPool,
+    attempt_id: Uuid,
+    student_user_id: Uuid,
+    quiz_item_id: Uuid,
+    answers: &[crate::models::course_module_quiz::QuizAnswer],
+    time_spent_seconds: Option<i32>,
+    score: Option<f64>,
+    max_score: Option<f64>,
+) -> Result<Option<QuizAttemptRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        UPDATE {}
+        SET submitted_at = NOW(),
+            answers_json = $4,
+            time_spent_seconds = $5,
+            score = $6,
+            max_score = $7,
+            updated_at = NOW()
+        WHERE id = $1
+          AND student_user_id = $2
+          AND quiz_item_id = $3
+        RETURNING *
+        "#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(attempt_id)
+    .bind(student_user_id)
+    .bind(quiz_item_id)
+    .bind(Json(answers.to_vec()))
+    .bind(time_spent_seconds)
+    .bind(score)
+    .bind(max_score)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Get all submitted attempts for a student on a quiz, ordered by attempt number.
+pub async fn get_student_attempts(
+    pool: &PgPool,
+    student_user_id: Uuid,
+    quiz_item_id: Uuid,
+) -> Result<Vec<QuizAttemptRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        SELECT * FROM {}
+        WHERE student_user_id = $1 AND quiz_item_id = $2 AND submitted_at IS NOT NULL
+        ORDER BY attempt_number ASC
+        "#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(student_user_id)
+    .bind(quiz_item_id)
+    .fetch_all(pool)
+    .await
+}
+
+/// Get a specific quiz attempt by ID.
+pub async fn get_attempt_by_id(
+    pool: &PgPool,
+    attempt_id: Uuid,
+) -> Result<Option<QuizAttemptRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        SELECT * FROM {} WHERE id = $1
+        "#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(attempt_id)
+    .fetch_optional(pool)
+    .await
+}
+}

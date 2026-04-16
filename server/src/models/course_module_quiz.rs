@@ -471,3 +471,44 @@ pub struct AdaptiveQuizNextResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
+
+/// Single answer submission for a quiz question.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizAnswer {
+    pub question_index: usize,
+    /// For multiple_choice/true_false: selected choice index.
+    pub selected_choice_index: Option<usize>,
+    /// For fill_in_blank/essay/short_answer: text answer.
+    pub text_answer: Option<String>,
+}
+
+/// Student submission of a quiz attempt.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmitQuizAttemptRequest {
+    /// Plaintext access code if quiz requires it (max 128 chars).
+    pub access_code: Option<String>,
+    /// Answers for each question in the quiz.
+    pub answers: Vec<QuizAnswer>,
+    /// Seconds spent from start to submission.
+    pub time_spent_seconds: Option<i32>,
+}
+
+/// Result of starting or submitting a quiz attempt.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizAttemptResponse {
+    /// Unique attempt ID.
+    pub attempt_id: Uuid,
+    /// Which attempt this is (1-indexed).
+    pub attempt_number: i32,
+    /// When submission was accepted (UTC).
+    pub submitted_at: DateTime<Utc>,
+    /// Points earned on this attempt (if graded).
+    pub score: Option<f64>,
+    /// Total points possible.
+    pub max_score: Option<f64>,
+    /// Percent earned (0-100).
+    pub percent: Option<f64>,
+}

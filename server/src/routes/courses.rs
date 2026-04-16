@@ -25,8 +25,8 @@ use crate::models::course_module_quiz::{
     validate_adaptive_quiz_settings, validate_item_points_worth,
     validate_quiz_comprehensive_settings, validate_quiz_questions, AdaptiveQuizNextRequest,
     AdaptiveQuizNextResponse, CreateCourseQuizRequest, GenerateModuleQuizQuestionsRequest,
-    GenerateModuleQuizQuestionsResponse, ModuleQuizResponse, UpdateModuleQuizRequest,
-    ADAPTIVE_SOURCE_KINDS,
+    GenerateModuleQuizQuestionsResponse, ModuleQuizResponse, QuizAttemptResponse,
+    SubmitQuizAttemptRequest, UpdateModuleQuizRequest, ADAPTIVE_SOURCE_KINDS,
 };
 use crate::models::course_structure::{
     CourseStructureItemResponse, CourseStructureResponse, CreateCourseAssignmentRequest,
@@ -59,7 +59,7 @@ use crate::repos::course_grants;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
 use crate::repos::course_module_external_links;
-use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
+use crate::repos::course_module_quizzes::{self, QuizSettingsWrite, QuizAttemptRow};
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
@@ -182,6 +182,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/quizzes/{item_id}/adaptive-next",
             post(module_quiz_adaptive_next_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts",
+            post(quiz_attempt_start_handler).get(quiz_attempts_list_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}",
+            post(quiz_attempt_submit_handler).get(quiz_attempt_get_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/structure/archived",
@@ -3998,6 +4006,312 @@ async fn set_hero_image_handler(
             .await?
             .ok_or(AppError::NotFound)?;
     Ok(Json(row))
+}
+
+async fn quiz_attempt_start_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<QuizAttemptResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    // Verify student can access the quiz (check visibility and enrollment)
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    if !can_edit {
+        let visible = course_structure::quiz_visible_to_student(
+            &state.pool,
+            course_id,
+            item_id,
+            user.user_id,
+            Utc::now(),
+        )
+        .await?;
+        if !visible {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    // Get quiz settings
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    // Check attempt limit
+    if !quiz_row.unlimited_attempts {
+        let submitted_attempts = course_module_quizzes::get_student_attempts(
+            &state.pool,
+            user.user_id,
+            item_id,
+        )
+        .await?;
+        if submitted_attempts.len() >= quiz_row.max_attempts as usize {
+            return Err(AppError::InvalidInput(
+                "You have reached the maximum number of attempts for this quiz.".into(),
+            ));
+        }
+    }
+
+    // Get next attempt number and create the attempt
+    let next_attempt_num =
+        course_module_quizzes::get_next_attempt_number(&state.pool, user.user_id, item_id)
+            .await?;
+
+    let attempt_id = course_module_quizzes::insert_attempt(
+        &state.pool,
+        course_id,
+        user.user_id,
+        item_id,
+        next_attempt_num,
+    )
+    .await?;
+
+    Ok(Json(QuizAttemptResponse {
+        attempt_id,
+        attempt_number: next_attempt_num,
+        submitted_at: Utc::now(),
+        score: None,
+        max_score: None,
+        percent: None,
+    }))
+}
+
+async fn quiz_attempt_submit_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, attempt_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<SubmitQuizAttemptRequest>,
+) -> Result<Json<QuizAttemptResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    // Get quiz row
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    // Check access code if required
+    if let Some(code) = &quiz_row.quiz_access_code {
+        if !code.is_empty() {
+            let provided = req.access_code.as_deref().unwrap_or("");
+            if provided != code {
+                return Err(AppError::InvalidInput(
+                    "Invalid quiz access code.".into(),
+                ));
+            }
+        }
+    }
+
+    // Check late submission policy
+    let now = Utc::now();
+    if let Some(due_at) = quiz_row.due_at {
+        if now > due_at && quiz_row.late_submission_policy == "block" {
+            return Err(AppError::InvalidInput(
+                "Cannot submit after due date. Late submissions are not allowed.".into(),
+            ));
+        }
+    }
+
+    // Calculate score (simple: count correct answers for multiple choice)
+    let mut score = 0.0;
+    let max_score: f64 = quiz_row
+        .questions
+        .iter()
+        .map(|q| q.points as f64)
+        .sum();
+
+    for (idx, answer) in req.answers.iter().enumerate() {
+        if idx < quiz_row.questions.len() {
+            let question = &quiz_row.questions[idx];
+            // For MC/TF questions, check if answer is correct
+            if matches!(
+                question.question_type.as_str(),
+                "multiple_choice" | "true_false"
+            ) {
+                if let Some(selected_idx) = answer.selected_choice_index {
+                    if Some(selected_idx) == question.correct_choice_index {
+                        score += question.points as f64;
+                    }
+                }
+            }
+            // For essay/short_answer, we'd need instructor grading (not auto-graded here)
+        }
+    }
+
+    // Apply late penalty if applicable
+    if let Some(due_at) = quiz_row.due_at {
+        if now > due_at && quiz_row.late_submission_policy == "penalty" {
+            if let Some(penalty_pct) = quiz_row.late_penalty_percent {
+                let penalty = score * (penalty_pct as f64 / 100.0);
+                score = (score - penalty).max(0.0);
+            }
+        }
+    }
+
+    // Submit attempt
+    let submitted = course_module_quizzes::submit_attempt(
+        &state.pool,
+        attempt_id,
+        user.user_id,
+        item_id,
+        &req.answers,
+        req.time_spent_seconds,
+        Some(score),
+        Some(max_score),
+    )
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    // Update course_grades with the best score if applicable
+    let all_attempts =
+        course_module_quizzes::get_student_attempts(&state.pool, user.user_id, item_id)
+            .await?;
+
+    let final_score = match quiz_row.grade_attempt_policy.as_str() {
+        "highest" => all_attempts
+            .iter()
+            .filter_map(|a| a.score)
+            .fold(f64::NEG_INFINITY, f64::max),
+        "latest" => submitted.score.unwrap_or(0.0),
+        "first" => all_attempts
+            .first()
+            .and_then(|a| a.score)
+            .unwrap_or(0.0),
+        "average" => {
+            let sum: f64 = all_attempts.iter().filter_map(|a| a.score).sum();
+            let count = all_attempts.iter().filter(|a| a.score.is_some()).count();
+            if count > 0 {
+                sum / count as f64
+            } else {
+                0.0
+            }
+        }
+        _ => 0.0,
+    };
+
+    // Update or insert grade record if quiz has points_worth
+    if let Some(points_worth) = quiz_row.points_worth {
+        let percent = (final_score / max_score.max(1.0)) * 100.0;
+        let earned_points = (percent / 100.0) * points_worth as f64;
+        let _ = course_grades::upsert_and_delete(
+            &state.pool,
+            course_id,
+            &[(user.user_id, item_id, Some(earned_points))],
+        )
+        .await;
+    }
+
+    let percent = if max_score > 0.0 {
+        Some((score / max_score) * 100.0)
+    } else {
+        None
+    };
+
+    Ok(Json(QuizAttemptResponse {
+        attempt_id: submitted.id,
+        attempt_number: submitted.attempt_number,
+        submitted_at: submitted.submitted_at.unwrap_or_else(Utc::now),
+        score: submitted.score,
+        max_score: submitted.max_score,
+        percent,
+    }))
+}
+
+async fn quiz_attempts_list_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<QuizAttemptResponse>>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    // Check if quiz exists
+    let _quiz = course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    // Get student's attempts
+    let attempts =
+        course_module_quizzes::get_student_attempts(&state.pool, user.user_id, item_id)
+            .await?;
+
+    let responses = attempts
+        .into_iter()
+        .map(|a| QuizAttemptResponse {
+            attempt_id: a.id,
+            attempt_number: a.attempt_number,
+            submitted_at: a.submitted_at.unwrap_or_else(Utc::now),
+            score: a.score,
+            max_score: a.max_score,
+            percent: a
+                .score
+                .zip(a.max_score)
+                .map(|(s, m)| if m > 0.0 { (s / m) * 100.0 } else { 0.0 }),
+        })
+        .collect();
+
+    Ok(Json(responses))
+}
+
+async fn quiz_attempt_get_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, attempt_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<QuizAttemptResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    // Check if quiz exists
+    let _quiz = course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    // Get attempt
+    let attempt = course_module_quizzes::get_attempt_by_id(&state.pool, attempt_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    // Verify ownership (student can only see their own attempts, instructors can see all)
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    if !can_edit && attempt.student_user_id != user.user_id {
+        return Err(AppError::NotFound);
+    }
+
+    let percent = attempt
+        .score
+        .zip(attempt.max_score)
+        .map(|(s, m)| if m > 0.0 { (s / m) * 100.0 } else { 0.0 });
+
+    Ok(Json(QuizAttemptResponse {
+        attempt_id: attempt.id,
+        attempt_number: attempt.attempt_number,
+        submitted_at: attempt.submitted_at.unwrap_or_else(Utc::now),
+        score: attempt.score,
+        max_score: attempt.max_score,
+        percent,
+    }))
 }
 
 #[cfg(test)]
