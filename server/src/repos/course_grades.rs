@@ -93,3 +93,32 @@ pub async fn upsert_and_delete(
     tx.commit().await?;
     Ok(())
 }
+
+/// Single-cell upsert for automated quiz scoring (no transaction wrapper).
+pub async fn upsert_points(
+    pool: &PgPool,
+    course_id: Uuid,
+    student_user_id: Uuid,
+    module_item_id: Uuid,
+    points: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (course_id, student_user_id, module_item_id, points_earned)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (student_user_id, module_item_id)
+        DO UPDATE SET
+            course_id = EXCLUDED.course_id,
+            points_earned = EXCLUDED.points_earned,
+            updated_at = NOW()
+        "#,
+        schema::COURSE_GRADES
+    ))
+    .bind(course_id)
+    .bind(student_user_id)
+    .bind(module_item_id)
+    .bind(points)
+    .execute(pool)
+    .await?;
+    Ok(())
+}

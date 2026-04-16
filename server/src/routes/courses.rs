@@ -22,11 +22,12 @@ use crate::models::course_module_content::{
     CreateCourseContentPageRequest, ModuleContentPageResponse, UpdateModuleContentPageRequest,
 };
 use crate::models::course_module_quiz::{
-    validate_adaptive_quiz_settings, validate_item_points_worth,
+    sanitize_quiz_questions_for_learner, validate_adaptive_quiz_settings, validate_item_points_worth,
     validate_quiz_comprehensive_settings, validate_quiz_questions, AdaptiveQuizNextRequest,
     AdaptiveQuizNextResponse, CreateCourseQuizRequest, GenerateModuleQuizQuestionsRequest,
-    GenerateModuleQuizQuestionsResponse, ModuleQuizResponse, UpdateModuleQuizRequest,
-    ADAPTIVE_SOURCE_KINDS,
+    GenerateModuleQuizQuestionsResponse, ModuleQuizResponse, QuizQuestion, QuizResultsQuestionResult,
+    QuizResultsResponse, QuizResultsScoreSummary, QuizStartRequest, QuizStartResponse, QuizSubmitRequest,
+    QuizSubmitResponse, UpdateModuleQuizRequest, ADAPTIVE_SOURCE_KINDS,
 };
 use crate::models::course_structure::{
     CourseStructureItemResponse, CourseStructureResponse, CreateCourseAssignmentRequest,
@@ -64,6 +65,7 @@ use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
 use crate::repos::enrollment_groups;
+use crate::repos::quiz_attempts;
 use crate::repos::rbac;
 use crate::repos::syllabus_acceptance;
 use crate::repos::syllabus_markups;
@@ -71,6 +73,7 @@ use crate::repos::user;
 use crate::repos::user_ai_settings;
 use crate::repos::user_audit;
 use crate::services::adaptive_quiz_ai;
+use crate::services::quiz_attempt_grading;
 use crate::services::ai::OpenRouterError;
 use crate::services::auth;
 use crate::services::canvas_course_import;
@@ -82,7 +85,7 @@ use crate::state::AppState;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, State,
+        Path, Query, State,
     },
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
@@ -182,6 +185,18 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/quizzes/{item_id}/adaptive-next",
             post(module_quiz_adaptive_next_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/start",
+            post(module_quiz_start_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/submit",
+            post(module_quiz_submit_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/results",
+            get(module_quiz_results_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/structure/archived",
@@ -2099,12 +2114,11 @@ async fn module_quiz_get_handler(
         return Err(AppError::NotFound);
     };
 
-    Ok(Json(module_quiz_response_for_api(
-        item_id,
-        &row,
-        can_edit,
-        shift_ctx.as_ref(),
-    )))
+    let mut resp = module_quiz_response_for_api(item_id, &row, can_edit, shift_ctx.as_ref());
+    if !can_edit {
+        resp.questions = sanitize_quiz_questions_for_learner(resp.questions);
+    }
+    Ok(Json(resp))
 }
 
 async fn module_quiz_patch_handler(
@@ -2334,6 +2348,25 @@ async fn module_quiz_adaptive_next_handler(
         ));
     }
 
+    if !can_edit {
+        let Some(aid) = req.attempt_id else {
+            return Err(AppError::InvalidInput(
+                "attemptId is required to take an adaptive quiz.".into(),
+            ));
+        };
+        let Some(att) = quiz_attempts::get_attempt(&state.pool, aid).await? else {
+            return Err(AppError::NotFound);
+        };
+        if att.student_user_id != user.user_id
+            || att.course_id != course_id
+            || att.structure_item_id != item_id
+            || att.status != "in_progress"
+            || !att.is_adaptive
+        {
+            return Err(AppError::Forbidden);
+        }
+    }
+
     let total = row.adaptive_question_count;
     if req.history.len() >= total as usize {
         return Ok(Json(AdaptiveQuizNextResponse {
@@ -2388,6 +2421,482 @@ async fn module_quiz_adaptive_next_handler(
         finished: false,
         questions,
         message: None,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QuizResultsQuery {
+    attempt_id: Option<Uuid>,
+    student_user_id: Option<Uuid>,
+}
+
+fn quiz_access_code_matches(
+    row: &course_module_quizzes::CourseItemQuizRow,
+    submitted: Option<&str>,
+) -> bool {
+    let expected = row
+        .quiz_access_code
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    match expected {
+        None => true,
+        Some(sec) => submitted.map(|s| s.trim()) == Some(sec),
+    }
+}
+
+async fn module_quiz_start_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<QuizStartRequest>,
+) -> Result<Json<QuizStartResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    if !can_edit {
+        let visible = course_structure::quiz_visible_to_student(
+            &state.pool,
+            course_id,
+            item_id,
+            user.user_id,
+            Utc::now(),
+        )
+        .await?;
+        if !visible {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    let Some(row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    if !quiz_access_code_matches(&row, req.quiz_access_code.as_deref()) {
+        return Err(AppError::InvalidInput("Invalid quiz access code.".into()));
+    }
+
+    if let Some(existing) =
+        quiz_attempts::find_in_progress(&state.pool, course_id, item_id, user.user_id).await?
+    {
+        return Ok(Json(QuizStartResponse {
+            attempt_id: existing.id,
+            attempt_number: existing.attempt_number,
+            started_at: existing.started_at,
+        }));
+    }
+
+    let submitted_count =
+        quiz_attempts::count_submitted_attempts(&state.pool, course_id, item_id, user.user_id)
+            .await?;
+    if !row.unlimited_attempts && submitted_count >= row.max_attempts as i64 {
+        return Err(AppError::InvalidInput(
+            "No quiz attempts remaining for this quiz.".into(),
+        ));
+    }
+
+    let attempt_number =
+        quiz_attempts::next_attempt_number(&state.pool, course_id, item_id, user.user_id).await?;
+    let created = quiz_attempts::create_attempt(
+        &state.pool,
+        course_id,
+        item_id,
+        user.user_id,
+        attempt_number,
+        row.is_adaptive,
+    )
+    .await?;
+
+    Ok(Json(QuizStartResponse {
+        attempt_id: created.id,
+        attempt_number: created.attempt_number,
+        started_at: created.started_at,
+    }))
+}
+
+async fn module_quiz_submit_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<QuizSubmitRequest>,
+) -> Result<Json<QuizSubmitResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    if !can_edit {
+        let visible = course_structure::quiz_visible_to_student(
+            &state.pool,
+            course_id,
+            item_id,
+            user.user_id,
+            Utc::now(),
+        )
+        .await?;
+        if !visible {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    let Some(att) = quiz_attempts::get_attempt(&state.pool, req.attempt_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if att.student_user_id != user.user_id
+        || att.course_id != course_id
+        || att.structure_item_id != item_id
+        || att.status != "in_progress"
+    {
+        return Err(AppError::Forbidden);
+    }
+
+    let now = Utc::now();
+    let mut tx = state.pool.begin().await?;
+
+    if quiz_row.is_adaptive {
+        let hist = req.adaptive_history.ok_or_else(|| {
+            AppError::InvalidInput("adaptiveHistory is required for adaptive quizzes.".into())
+        })?;
+        if hist.len() != quiz_row.adaptive_question_count as usize {
+            return Err(AppError::InvalidInput(
+                "Adaptive history length does not match this quiz configuration.".into(),
+            ));
+        }
+        quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
+        let hist_json = serde_json::to_value(&hist).map_err(|e| AppError::InvalidInput(e.to_string()))?;
+        let mut earned = 0.0_f64;
+        let mut possible = 0.0_f64;
+        for (i, turn) in hist.iter().enumerate() {
+            let max_pts = quiz_attempt_grading::adaptive_turn_max_points(turn);
+            possible += max_pts;
+            let ok = quiz_attempt_grading::adaptive_turn_is_correct(turn);
+            let pts = if ok { max_pts } else { 0.0 };
+            earned += pts;
+            let rj = serde_json::json!({
+                "prompt": turn.prompt,
+                "questionType": turn.question_type,
+                "choices": turn.choices,
+                "choiceWeights": turn.choice_weights,
+                "selectedChoiceIndex": turn.selected_choice_index,
+            });
+            quiz_attempts::insert_response(
+                &mut *tx,
+                att.id,
+                i as i32,
+                None,
+                &turn.question_type,
+                Some(turn.prompt.as_str()),
+                &rj,
+                Some(ok),
+                Some(pts),
+                max_pts,
+            )
+            .await?;
+        }
+        let score_pct = if possible > 0.0 {
+            ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
+        } else {
+            0.0
+        };
+        let ok = quiz_attempts::finalize_attempt(
+            &mut *tx,
+            att.id,
+            now,
+            earned,
+            possible,
+            score_pct,
+            Some(&hist_json),
+        )
+        .await?;
+        if !ok {
+            return Err(AppError::InvalidInput(
+                "This attempt was already submitted.".into(),
+            ));
+        }
+        tx.commit().await?;
+
+        if quiz_row.show_score_timing != "manual" {
+            let attempts = quiz_attempts::list_submitted_attempts_for_item_student(
+                &state.pool,
+                course_id,
+                item_id,
+                user.user_id,
+            )
+            .await?;
+            if let Some((e, p)) = quiz_attempt_grading::pick_policy_points(&attempts, &quiz_row.grade_attempt_policy)
+            {
+                let gb = quiz_attempt_grading::points_for_gradebook(e, p, quiz_row.points_worth);
+                course_grades::upsert_points(&state.pool, course_id, user.user_id, item_id, gb).await?;
+            }
+        }
+
+        return Ok(Json(QuizSubmitResponse {
+            attempt_id: att.id,
+            points_earned: earned,
+            points_possible: possible,
+            score_percent: score_pct,
+        }));
+    }
+
+    let responses = req.responses.ok_or_else(|| {
+        AppError::InvalidInput("responses is required for non-adaptive quizzes.".into())
+    })?;
+
+    let bank: Vec<QuizQuestion> = quiz_row.questions_json.0.clone();
+    let mut by_id: HashMap<String, &QuizQuestion> = HashMap::new();
+    for q in &bank {
+        by_id.insert(q.id.clone(), q);
+    }
+    if let Some(pool_n) = quiz_row.random_question_pool_count {
+        if pool_n >= 1 && responses.len() != pool_n as usize {
+            return Err(AppError::InvalidInput(
+                "Submitted response count does not match the configured question pool size."
+                    .into(),
+            ));
+        }
+    }
+    for r in &responses {
+        if !by_id.contains_key(&r.question_id) {
+            return Err(AppError::InvalidInput(
+                "One or more question ids are not part of this quiz.".into(),
+            ));
+        }
+    }
+
+    quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
+
+    let mut earned = 0.0_f64;
+    let mut possible = 0.0_f64;
+    for (i, resp_item) in responses.iter().enumerate() {
+        let q = by_id
+            .get(&resp_item.question_id)
+            .ok_or_else(|| AppError::InvalidInput("Invalid question id.".into()))?;
+        let (pts, max_pts, is_ok) = quiz_attempt_grading::grade_static_question(q, resp_item);
+        earned += pts;
+        possible += max_pts;
+        let rj = serde_json::json!({
+            "selectedChoiceIndex": resp_item.selected_choice_index,
+            "selectedChoiceIndices": resp_item.selected_choice_indices,
+            "textAnswer": resp_item.text_answer,
+        });
+        quiz_attempts::insert_response(
+            &mut *tx,
+            att.id,
+            i as i32,
+            Some(resp_item.question_id.as_str()),
+            &q.question_type,
+            Some(q.prompt.as_str()),
+            &rj,
+            is_ok,
+            Some(pts),
+            max_pts,
+        )
+        .await?;
+    }
+
+    let score_pct = if possible > 0.0 {
+        ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
+    } else {
+        0.0
+    };
+    let ok = quiz_attempts::finalize_attempt(
+        &mut *tx,
+        att.id,
+        now,
+        earned,
+        possible,
+        score_pct,
+        None,
+    )
+    .await?;
+    if !ok {
+        return Err(AppError::InvalidInput(
+            "This attempt was already submitted.".into(),
+        ));
+    }
+    tx.commit().await?;
+
+    if quiz_row.show_score_timing != "manual" {
+        let attempts = quiz_attempts::list_submitted_attempts_for_item_student(
+            &state.pool,
+            course_id,
+            item_id,
+            user.user_id,
+        )
+        .await?;
+        if let Some((e, p)) = quiz_attempt_grading::pick_policy_points(&attempts, &quiz_row.grade_attempt_policy) {
+            let gb = quiz_attempt_grading::points_for_gradebook(e, p, quiz_row.points_worth);
+            course_grades::upsert_points(&state.pool, course_id, user.user_id, item_id, gb).await?;
+        }
+    }
+
+    Ok(Json(QuizSubmitResponse {
+        attempt_id: att.id,
+        points_earned: earned,
+        points_possible: possible,
+        score_percent: score_pct,
+    }))
+}
+
+async fn module_quiz_results_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    Query(q): Query<QuizResultsQuery>,
+    headers: HeaderMap,
+) -> Result<Json<QuizResultsResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+
+    let target_user = if let Some(sid) = q.student_user_id {
+        if !can_edit {
+            return Err(AppError::Forbidden);
+        }
+        sid
+    } else {
+        user.user_id
+    };
+
+    if !can_edit && target_user != user.user_id {
+        return Err(AppError::Forbidden);
+    }
+
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    let shift_ctx = if !can_edit {
+        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id).await?
+    } else {
+        None
+    };
+    let due_at = match shift_ctx.as_ref() {
+        Some(ctx) => relative_schedule::shift_opt(ctx, quiz_row.due_at),
+        None => quiz_row.due_at,
+    };
+
+    let now = Utc::now();
+
+    if !can_edit {
+        match quiz_row.review_when.as_str() {
+            "never" => return Err(AppError::Forbidden),
+            "after_due" => {
+                if let Some(d) = due_at {
+                    if now < d {
+                        return Err(AppError::Forbidden);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let attempt = if let Some(aid) = q.attempt_id {
+        quiz_attempts::get_attempt(&state.pool, aid).await?
+    } else {
+        quiz_attempts::latest_submitted_attempt(&state.pool, course_id, item_id, target_user).await?
+    }
+    .ok_or(AppError::NotFound)?;
+
+    if attempt.course_id != course_id
+        || attempt.structure_item_id != item_id
+        || attempt.student_user_id != target_user
+        || attempt.status != "submitted"
+    {
+        return Err(AppError::NotFound);
+    }
+
+    let rows = quiz_attempts::list_responses(&state.pool, attempt.id).await?;
+    let bank: Vec<QuizQuestion> = quiz_row.questions_json.0.clone();
+    let mut bank_by_id: HashMap<String, QuizQuestion> = HashMap::new();
+    for q in bank {
+        bank_by_id.insert(q.id.clone(), q);
+    }
+
+    let vis = quiz_row.review_visibility.as_str();
+    let show_score = can_edit
+        || (quiz_row.show_score_timing != "manual"
+            && vis != "none");
+    let show_questions = can_edit || !matches!(vis, "none" | "score_only");
+
+    let score = if show_score {
+        Some(QuizResultsScoreSummary {
+            points_earned: attempt.points_earned.unwrap_or(0.0),
+            points_possible: attempt.points_possible.unwrap_or(0.0),
+            score_percent: attempt.score_percent.unwrap_or(0.0),
+        })
+    } else {
+        None
+    };
+
+    let questions = if show_questions {
+        let include_correct = can_edit || matches!(vis, "correct_answers" | "full");
+        let mut out: Vec<QuizResultsQuestionResult> = Vec::new();
+        for r in rows {
+            let correct_idx = if !attempt.is_adaptive && include_correct {
+                r.question_id
+                    .as_ref()
+                    .and_then(|id| bank_by_id.get(id))
+                    .and_then(|q| q.correct_choice_index)
+            } else {
+                None
+            };
+            out.push(QuizResultsQuestionResult {
+                question_index: r.question_index,
+                question_id: r.question_id,
+                question_type: r.question_type,
+                prompt_snapshot: r.prompt_snapshot,
+                response_json: r.response_json,
+                is_correct: r.is_correct,
+                points_awarded: r.points_awarded,
+                max_points: r.max_points,
+                correct_choice_index: correct_idx,
+            });
+        }
+        Some(out)
+    } else {
+        None
+    };
+
+    Ok(Json(QuizResultsResponse {
+        attempt_id: attempt.id,
+        attempt_number: attempt.attempt_number,
+        started_at: attempt.started_at,
+        submitted_at: attempt.submitted_at,
+        status: attempt.status,
+        is_adaptive: attempt.is_adaptive,
+        score,
+        questions,
     }))
 }
 

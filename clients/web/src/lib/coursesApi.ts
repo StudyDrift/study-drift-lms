@@ -433,6 +433,19 @@ export function viewerIsLearnerOnlyCourseEnrollment(
   return hasStudent && !hasStaff
 }
 
+/**
+ * Matches server `enrollment::user_is_course_staff`: enrolled as `teacher` or `instructor` for this
+ * course. Use for roster/Enrollments UI — do not rely on permission strings alone (wildcards can
+ * match students).
+ */
+export function viewerIsCourseStaffEnrollment(
+  viewerEnrollmentRoles: readonly string[] | null | undefined,
+): boolean {
+  if (!viewerEnrollmentRoles?.length) return false
+  const roles = viewerEnrollmentRoles.map((r) => r.trim().toLowerCase())
+  return roles.some((r) => r === 'teacher' || r === 'instructor')
+}
+
 /** Hide course roster / Enrollments navigation for learners and when staff preview as a student. */
 export function viewerShouldHideCourseEnrollmentsNav(
   viewerEnrollmentRoles: readonly string[] | null | undefined,
@@ -443,16 +456,20 @@ export function viewerShouldHideCourseEnrollmentsNav(
 }
 
 /**
- * Show My grades for learner-only students, or for anyone while “View as: Student” is active
- * (so staff can preview the student experience). Hidden for staff in teacher view, including
- * dual teacher+student enrollments.
+ * Show “My grades” whenever “View as: Student” is active (staff preview), or when the viewer
+ * has a real student enrollment in this course (including dual student+staff enrollment).
+ * While enrollment roles are still loading (`null`), returns false so the nav does not flash on.
  */
 export function viewerShouldShowMyGradesNav(
   viewerEnrollmentRoles: readonly string[] | null | undefined,
   courseViewPreview: 'teacher' | 'student',
 ): boolean {
   if (courseViewPreview === 'student') return true
-  return viewerIsLearnerOnlyCourseEnrollment(viewerEnrollmentRoles)
+  if (viewerEnrollmentRoles === null) return false
+  if (!viewerEnrollmentRoles.length) return false
+  const roles = viewerEnrollmentRoles.map((r) => r.trim().toLowerCase())
+  console.log(roles)
+  return roles.includes('student') && !roles.some((r) => r === 'teacher' || r === 'instructor' || r === 'ta')
 }
 
 export type CourseStructureItem = {
@@ -1154,6 +1171,8 @@ export type AdaptiveQuizHistoryTurn = {
   choices: string[]
   choiceWeights: number[]
   selectedChoiceIndex: number | null
+  /** Carried from the generated question when submitting an attempt. */
+  points?: number
 }
 
 export type AdaptiveQuizGeneratedQuestion = {
@@ -1175,14 +1194,17 @@ export type AdaptiveQuizNextResponse =
 export async function postAdaptiveQuizNext(
   courseCode: string,
   itemId: string,
-  body: { history: AdaptiveQuizHistoryTurn[] },
+  body: { history: AdaptiveQuizHistoryTurn[]; attemptId?: string },
 ): Promise<AdaptiveQuizNextResponse> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/adaptive-next`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ history: body.history }),
+      body: JSON.stringify({
+        history: body.history,
+        ...(body.attemptId ? { attemptId: body.attemptId } : {}),
+      }),
     },
   )
   const raw = await parseJson(res)
@@ -1213,6 +1235,7 @@ export async function runAdaptiveQuizToCompletion(
   courseCode: string,
   itemId: string,
   maxQuestions: number,
+  attemptId?: string,
 ): Promise<{ answeredCount: number; finished: boolean; message: string | null }> {
   const history: AdaptiveQuizHistoryTurn[] = []
   let pending: AdaptiveQuizGeneratedQuestion[] = []
@@ -1222,7 +1245,7 @@ export async function runAdaptiveQuizToCompletion(
     const remainingSlots = cap - history.length
     const need = Math.min(2, remainingSlots)
     if (pending.length < need) {
-      const res = await postAdaptiveQuizNext(courseCode, itemId, { history })
+      const res = await postAdaptiveQuizNext(courseCode, itemId, { history, attemptId })
       if (res.finished) {
         return {
           answeredCount: history.length,
@@ -1248,11 +1271,118 @@ export async function runAdaptiveQuizToCompletion(
       choices: q.choices,
       choiceWeights: q.choiceWeights,
       selectedChoiceIndex: selectedIdx,
+      points: q.points,
     })
     pending = pending.slice(1)
   }
 
   return { answeredCount: history.length, finished: true, message: null }
+}
+
+export type QuizAttemptStartResponse = {
+  attemptId: string
+  attemptNumber: number
+  startedAt: string
+}
+
+export async function postQuizStart(
+  courseCode: string,
+  itemId: string,
+  body?: { quizAccessCode?: string | null },
+): Promise<QuizAttemptStartResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/start`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        quizAccessCode: body?.quizAccessCode ?? undefined,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as QuizAttemptStartResponse
+}
+
+export type QuizQuestionResponseItem = {
+  questionId: string
+  selectedChoiceIndex?: number
+  selectedChoiceIndices?: number[]
+  textAnswer?: string | null
+}
+
+export type QuizSubmitResponse = {
+  attemptId: string
+  pointsEarned: number
+  pointsPossible: number
+  scorePercent: number
+}
+
+export async function postQuizSubmit(
+  courseCode: string,
+  itemId: string,
+  body: {
+    attemptId: string
+    responses?: QuizQuestionResponseItem[]
+    adaptiveHistory?: AdaptiveQuizHistoryTurn[]
+  },
+): Promise<QuizSubmitResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/submit`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as QuizSubmitResponse
+}
+
+export type QuizResultsQuestionResult = {
+  questionIndex: number
+  questionId?: string | null
+  questionType: string
+  promptSnapshot?: string | null
+  responseJson: unknown
+  isCorrect?: boolean | null
+  pointsAwarded?: number | null
+  maxPoints: number
+  correctChoiceIndex?: number | null
+}
+
+export type QuizResultsPayload = {
+  attemptId: string
+  attemptNumber: number
+  startedAt: string
+  submittedAt?: string | null
+  status: string
+  isAdaptive: boolean
+  score?: {
+    pointsEarned: number
+    pointsPossible: number
+    scorePercent: number
+  } | null
+  questions?: QuizResultsQuestionResult[] | null
+}
+
+export async function fetchQuizResults(
+  courseCode: string,
+  itemId: string,
+  query?: { attemptId?: string; studentUserId?: string },
+): Promise<QuizResultsPayload> {
+  const q = new URLSearchParams()
+  if (query?.attemptId) q.set('attemptId', query.attemptId)
+  if (query?.studentUserId) q.set('studentUserId', query.studentUserId)
+  const qs = q.toString()
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/results${qs ? `?${qs}` : ''}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as QuizResultsPayload
 }
 
 export async function fetchModuleContentPage(

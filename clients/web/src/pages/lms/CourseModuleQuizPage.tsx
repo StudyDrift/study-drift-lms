@@ -15,10 +15,10 @@ import {
   generateModuleQuizQuestions,
   patchCourseStructureItemAssignmentGroup,
   patchModuleQuiz,
-  runAdaptiveQuizToCompletion,
   quizAdvancedSettingsFromPayload,
   type ContentPageMarkup,
   type CourseStructureItem,
+  type ModuleQuizPayload,
   type QuizAdvancedSettings,
   type QuizQuestion,
   type SyllabusSection,
@@ -29,6 +29,7 @@ import { CourseItemPromptEditor } from '../../components/CourseItemPromptEditor'
 import { expandQuizPromptWithRefs } from '../../lib/courseItemRefTokens'
 import { QuizPageSettingsPanel } from '../../components/quiz/QuizPageSettingsPanel'
 import { QuizStudentPreviewModal } from '../../components/quiz/QuizStudentPreviewModal'
+import { QuizStudentTakePanel } from '../../components/quiz/QuizStudentTakePanel'
 import { LmsPage } from './LmsPage'
 
 const QUESTION_TYPE_OPTIONS = [
@@ -339,7 +340,8 @@ export default function CourseModuleQuizPage() {
   const [generateBusy, setGenerateBusy] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
-  const [studentQuizBusy, setStudentQuizBusy] = useState(false)
+  const [studentQuizPayload, setStudentQuizPayload] = useState<ModuleQuizPayload | null>(null)
+  const [studentTakeOpen, setStudentTakeOpen] = useState(false)
   const [studentQuizBanner, setStudentQuizBanner] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [mdTheme, setMdTheme] = useState<ResolvedMarkdownTheme>(() =>
     resolveMarkdownTheme('classic', null),
@@ -393,6 +395,7 @@ export default function CourseModuleQuizPage() {
       setAdaptiveQuestionCount(
         typeof data.adaptiveQuestionCount === 'number' ? data.adaptiveQuestionCount : 5,
       )
+      setStudentQuizPayload(data)
       setMdTheme(resolveMarkdownTheme(courseRow.markdownThemePreset, courseRow.markdownThemeCustom))
       void loadMarkups()
     } catch (e) {
@@ -418,6 +421,7 @@ export default function CourseModuleQuizPage() {
       setGradingGroups([])
       setAssignmentGroupId(null)
       setMarkups([])
+      setStudentQuizPayload(null)
     } finally {
       setLoading(false)
     }
@@ -749,32 +753,10 @@ export default function CourseModuleQuizPage() {
     }
   }
 
-  async function handleStudentStartQuiz() {
+  function handleStudentStartQuiz() {
     if (!courseCode || !itemId) return
     setStudentQuizBanner(null)
-    if (!isAdaptive) {
-      setPreviewOpen(true)
-      return
-    }
-    setStudentQuizBusy(true)
-    try {
-      const maxQ = Math.min(30, Math.max(1, adaptiveQuestionCount))
-      const result = await runAdaptiveQuizToCompletion(courseCode, itemId, maxQ)
-      const tail = result.message?.trim()
-      setStudentQuizBanner({
-        kind: 'success',
-        text: tail
-          ? `Submitted ${result.answeredCount} answer${result.answeredCount === 1 ? '' : 's'}. ${tail}`
-          : `Submitted ${result.answeredCount} answer${result.answeredCount === 1 ? '' : 's'}. Quiz complete.`,
-      })
-    } catch (e) {
-      setStudentQuizBanner({
-        kind: 'error',
-        text: e instanceof Error ? e.message : 'Could not complete the quiz.',
-      })
-    } finally {
-      setStudentQuizBusy(false)
-    }
+    setStudentTakeOpen(true)
   }
 
   if (!courseCode || !itemId) {
@@ -867,11 +849,11 @@ export default function CourseModuleQuizPage() {
             ) : (
               <button
                 type="button"
-                onClick={() => void handleStudentStartQuiz()}
-                disabled={loading || studentQuizBusy}
+                onClick={() => handleStudentStartQuiz()}
+                disabled={loading}
                 className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {studentQuizBusy ? 'Running…' : 'Start Quiz'}
+                Start Quiz
               </button>
             )}
           </div>
@@ -1216,6 +1198,19 @@ export default function CourseModuleQuizPage() {
         advanced={quizAdvanced}
         oneQuestionAtATime={oneQuestionAtATime}
       />
+
+      {studentQuizPayload && courseCode && itemId ? (
+        <QuizStudentTakePanel
+          open={studentTakeOpen}
+          onClose={() => setStudentTakeOpen(false)}
+          courseCode={courseCode}
+          itemId={itemId}
+          quiz={studentQuizPayload}
+          advanced={quizAdvanced}
+          oneQuestionAtATime={oneQuestionAtATime}
+          allowBackNavigation={quizAdvanced.allowBackNavigation}
+        />
+      ) : null}
 
       {questionsOpen && (
         <div

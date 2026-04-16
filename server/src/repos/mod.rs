@@ -23,3 +23,4 @@ pub mod system_prompts;
 pub mod user;
 pub mod user_ai_settings;
 pub mod user_audit;
+pub mod quiz_attempts;

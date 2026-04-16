@@ -4,6 +4,7 @@ import {
   courseGradebookViewPermission,
   courseItemCreatePermission,
   courseItemsCreatePermission,
+  viewerIsCourseStaffEnrollment,
   viewerIsLearnerOnlyCourseEnrollment,
   viewerShouldHideCourseEnrollmentsNav,
   viewerShouldShowMyGradesNav,
@@ -50,6 +51,22 @@ describe('viewerIsLearnerOnlyCourseEnrollment', () => {
   })
 })
 
+describe('viewerIsCourseStaffEnrollment', () => {
+  it('is true only for teacher or instructor enrollment (matches server staff check)', () => {
+    expect(viewerIsCourseStaffEnrollment(['teacher'])).toBe(true)
+    expect(viewerIsCourseStaffEnrollment(['instructor'])).toBe(true)
+    expect(viewerIsCourseStaffEnrollment(['Teacher'])).toBe(true)
+    expect(viewerIsCourseStaffEnrollment(['student', 'teacher'])).toBe(true)
+  })
+
+  it('is false for student-only, ta, or unknown roles', () => {
+    expect(viewerIsCourseStaffEnrollment(['student'])).toBe(false)
+    expect(viewerIsCourseStaffEnrollment(['ta'])).toBe(false)
+    expect(viewerIsCourseStaffEnrollment([])).toBe(false)
+    expect(viewerIsCourseStaffEnrollment(null)).toBe(false)
+  })
+})
+
 describe('viewerShouldHideCourseEnrollmentsNav', () => {
   it('hides when previewing as student even with staff enrollment', () => {
     expect(viewerShouldHideCourseEnrollmentsNav(['teacher', 'student'], 'student')).toBe(true)
@@ -71,13 +88,23 @@ describe('viewerShouldShowMyGradesNav', () => {
     expect(viewerShouldShowMyGradesNav(['teacher'], 'student')).toBe(true)
   })
 
-  it('hides in teacher preview when staff is enrolled (including dual student+teacher)', () => {
-    expect(viewerShouldShowMyGradesNav(['student', 'teacher'], 'teacher')).toBe(false)
+  it('hides in teacher preview for staff who are not enrolled as students', () => {
     expect(viewerShouldShowMyGradesNav(['teacher'], 'teacher')).toBe(false)
+    expect(viewerShouldShowMyGradesNav(['instructor'], 'teacher')).toBe(false)
   })
 
-  it('shows in teacher preview only for learner-only enrollment', () => {
+  it('shows in teacher preview for learner-only student enrollment', () => {
     expect(viewerShouldShowMyGradesNav(['student'], 'teacher')).toBe(true)
     expect(viewerShouldShowMyGradesNav(['Student'], 'teacher')).toBe(true)
+  })
+
+  it('shows in teacher preview for dual student+staff enrollment', () => {
+    expect(viewerShouldShowMyGradesNav(['student', 'teacher'], 'teacher')).toBe(true)
+    expect(viewerShouldShowMyGradesNav(['student', 'instructor'], 'teacher')).toBe(true)
+  })
+
+  it('returns false while enrollment roles are still loading or missing in teacher view', () => {
+    expect(viewerShouldShowMyGradesNav(null, 'teacher')).toBe(false)
+    expect(viewerShouldShowMyGradesNav([], 'teacher')).toBe(false)
   })
 })

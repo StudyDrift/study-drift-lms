@@ -39,7 +39,7 @@ export default function CourseMyGrades() {
 
   const canView = useMemo(() => {
     if (!courseCode) return false
-    if (viewerEnrollmentRoles === null) return false
+    if (viewerEnrollmentRoles === null && courseViewPreview !== 'student') return false
     return viewerShouldShowMyGradesNav(viewerEnrollmentRoles, courseViewPreview)
   }, [courseCode, viewerEnrollmentRoles, courseViewPreview])
 
@@ -93,7 +93,7 @@ export default function CourseMyGrades() {
     return <Navigate to="/courses" replace />
   }
 
-  if (viewerEnrollmentRoles === null) {
+  if (viewerEnrollmentRoles === null && courseViewPreview !== 'student') {
     return null
   }
 

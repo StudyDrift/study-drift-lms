@@ -17,6 +17,7 @@ import {
   courseEnrollmentsReadPermission,
   courseGradebookViewPermission,
   courseItemCreatePermission,
+  viewerIsCourseStaffEnrollment,
   viewerShouldHideCourseEnrollmentsNav,
   viewerShouldShowMyGradesNav,
 } from '../../lib/coursesApi'
@@ -38,12 +39,11 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
     !permLoading && allows(courseGradebookViewPermission(courseCode))
   const canViewEnrollments =
     viewerEnrollmentRoles !== null &&
+    viewerIsCourseStaffEnrollment(viewerEnrollmentRoles) &&
     !viewerShouldHideCourseEnrollmentsNav(viewerEnrollmentRoles, courseViewPreview) &&
     !permLoading &&
     allows(courseEnrollmentsReadPermission(courseCode))
-  const canViewMyGrades =
-    viewerEnrollmentRoles !== null &&
-    viewerShouldShowMyGradesNav(viewerEnrollmentRoles, courseViewPreview)
+  const canViewMyGrades = viewerShouldShowMyGradesNav(viewerEnrollmentRoles, courseViewPreview)
   const canManageCourse =
     !permLoading && allows(courseItemCreatePermission(courseCode))
 

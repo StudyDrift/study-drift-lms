@@ -203,6 +203,13 @@ pub fn validate_adaptive_quiz_settings(
     Ok(())
 }
 
+pub fn sanitize_quiz_questions_for_learner(mut questions: Vec<QuizQuestion>) -> Vec<QuizQuestion> {
+    for q in &mut questions {
+        q.correct_choice_index = None;
+    }
+    questions
+}
+
 pub fn validate_quiz_questions(questions: &[QuizQuestion]) -> Result<(), AppError> {
     if questions.len() > MAX_QUIZ_QUESTIONS {
         return Err(AppError::InvalidInput(format!(
@@ -435,6 +442,9 @@ pub struct GenerateModuleQuizQuestionsResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdaptiveQuizNextRequest {
+    /// Required for learners taking a stored attempt; omitted for instructor preview.
+    #[serde(default)]
+    pub attempt_id: Option<Uuid>,
     pub history: Vec<AdaptiveQuizHistoryTurn>,
 }
 
@@ -446,6 +456,9 @@ pub struct AdaptiveQuizHistoryTurn {
     pub choices: Vec<String>,
     pub choice_weights: Vec<f64>,
     pub selected_choice_index: Option<usize>,
+    /// Per-question point value (usually from the generated question). Used when submitting an attempt.
+    #[serde(default)]
+    pub points: Option<i32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -470,4 +483,94 @@ pub struct AdaptiveQuizNextResponse {
     pub questions: Vec<AdaptiveQuizGeneratedQuestion>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizStartRequest {
+    #[serde(default)]
+    pub quiz_access_code: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizStartResponse {
+    pub attempt_id: Uuid,
+    pub attempt_number: i32,
+    pub started_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizQuestionResponseItem {
+    pub question_id: String,
+    #[serde(default)]
+    pub selected_choice_index: Option<usize>,
+    #[serde(default)]
+    pub selected_choice_indices: Option<Vec<usize>>,
+    #[serde(default)]
+    pub text_answer: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizSubmitRequest {
+    pub attempt_id: Uuid,
+    #[serde(default)]
+    pub responses: Option<Vec<QuizQuestionResponseItem>>,
+    #[serde(default)]
+    pub adaptive_history: Option<Vec<AdaptiveQuizHistoryTurn>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizSubmitResponse {
+    pub attempt_id: Uuid,
+    pub points_earned: f64,
+    pub points_possible: f64,
+    pub score_percent: f32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizResultsScoreSummary {
+    pub points_earned: f64,
+    pub points_possible: f64,
+    pub score_percent: f32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizResultsQuestionResult {
+    pub question_index: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub question_id: Option<String>,
+    pub question_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_snapshot: Option<String>,
+    pub response_json: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_correct: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub points_awarded: Option<f64>,
+    pub max_points: f64,
+    /// Present when review policy allows and the item is non-adaptive.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub correct_choice_index: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizResultsResponse {
+    pub attempt_id: Uuid,
+    pub attempt_number: i32,
+    pub started_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub submitted_at: Option<DateTime<Utc>>,
+    pub status: String,
+    pub is_adaptive: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub score: Option<QuizResultsScoreSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub questions: Option<Vec<QuizResultsQuestionResult>>,
 }
