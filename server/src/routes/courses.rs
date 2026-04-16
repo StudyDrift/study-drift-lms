@@ -9,7 +9,9 @@ use crate::models::course::{
     SetHeroImageRequest, UpdateCourseRequest, UpdateMarkdownThemeRequest, GRADING_SCALES,
     MARKDOWN_THEME_PRESETS,
 };
-use crate::models::course_export::{CourseCanvasImportRequest, CourseExportV1, CourseImportRequest};
+use crate::models::course_export::{
+    CourseCanvasImportRequest, CourseExportV1, CourseImportRequest,
+};
 use crate::models::course_gradebook::{
     CourseGradebookGridColumn, CourseGradebookGridResponse, CourseGradebookGridStudent,
     PutCourseGradebookGradesRequest,
@@ -44,7 +46,8 @@ use crate::models::enrollment::{
 };
 use crate::models::enrollment_group::{
     CreateEnrollmentGroupRequest, CreateEnrollmentGroupSetRequest, EnrollmentGroupsTreeResponse,
-    PatchEnrollmentGroupRequest, PatchEnrollmentGroupSetRequest, PutEnrollmentGroupMembershipRequest,
+    PatchEnrollmentGroupRequest, PatchEnrollmentGroupSetRequest,
+    PutEnrollmentGroupMembershipRequest,
 };
 use crate::models::rbac::CourseScopedRolesResponse;
 use crate::models::settings_ai::{GenerateCourseImageRequest, GenerateCourseImageResponse};
@@ -59,7 +62,7 @@ use crate::repos::course_grants;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
 use crate::repos::course_module_external_links;
-use crate::repos::course_module_quizzes::{self, QuizSettingsWrite, QuizAttemptRow};
+use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
@@ -89,10 +92,10 @@ use axum::{
     routing::{delete, get, patch, post, put},
     Json, Router,
 };
-use serde::Deserialize;
-use serde_json::json;
 use chrono::Utc;
 use reqwest::Client;
+use serde::Deserialize;
+use serde_json::json;
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -1984,7 +1987,8 @@ async fn module_assignment_get_handler(
         }
     }
 
-    let Some(row) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(row) =
+        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
@@ -2017,7 +2021,8 @@ async fn module_assignment_patch_handler(
         return Err(AppError::NotFound);
     };
 
-    let Some(cur) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(cur) =
+        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
@@ -2054,12 +2059,15 @@ async fn module_assignment_patch_handler(
             })?;
     }
 
-    let Some(row) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(row) =
+        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
 
-    Ok(Json(module_assignment_response_for_api(item_id, &row, true, None)))
+    Ok(Json(module_assignment_response_for_api(
+        item_id, &row, true, None,
+    )))
 }
 
 async fn module_quiz_get_handler(
@@ -2515,7 +2523,10 @@ fn parse_gradebook_points_str(raw: &str) -> Result<Option<f64>, AppError> {
     if t.is_empty() {
         return Ok(None);
     }
-    let cleaned: String = t.chars().filter(|c| *c != ',' && !c.is_whitespace()).collect();
+    let cleaned: String = t
+        .chars()
+        .filter(|c| *c != ',' && !c.is_whitespace())
+        .collect();
     let n: f64 = cleaned
         .parse()
         .map_err(|_| AppError::InvalidInput("Each score must be a valid number.".into()))?;
@@ -2614,7 +2625,7 @@ async fn grading_get_handler(
     State(state): State<AppState>,
     Path(course_code): Path<String>,
     headers: HeaderMap,
-    ) -> Result<Json<CourseGradingSettingsResponse>, AppError> {
+) -> Result<Json<CourseGradingSettingsResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
@@ -2962,11 +2973,7 @@ async fn ws_send_json(socket: &mut WebSocket, value: serde_json::Value) -> bool 
     }
 }
 
-async fn handle_canvas_import_ws(
-    mut socket: WebSocket,
-    state: AppState,
-    course_code: String,
-) {
+async fn handle_canvas_import_ws(mut socket: WebSocket, state: AppState, course_code: String) {
     let first_text = loop {
         match socket.recv().await {
             Some(Ok(Message::Text(t))) => break t,
@@ -3053,9 +3060,7 @@ async fn handle_canvas_import_ws(
                 .redirect(reqwest::redirect::Policy::none())
                 .user_agent(concat!("lextures/", env!("CARGO_PKG_VERSION")))
                 .build()
-                .map_err(|e| {
-                    AppError::InvalidInput(format!("Could not start HTTP client: {e}"))
-                })?;
+                .map_err(|e| AppError::InvalidInput(format!("Could not start HTTP client: {e}")))?;
 
             let export = canvas_course_import::build_export_from_canvas_wire(
                 &client,
@@ -4046,12 +4051,8 @@ async fn quiz_attempt_start_handler(
 
     // Check attempt limit
     if !quiz_row.unlimited_attempts {
-        let submitted_attempts = course_module_quizzes::get_student_attempts(
-            &state.pool,
-            user.user_id,
-            item_id,
-        )
-        .await?;
+        let submitted_attempts =
+            course_module_quizzes::get_student_attempts(&state.pool, user.user_id, item_id).await?;
         if submitted_attempts.len() >= quiz_row.max_attempts as usize {
             return Err(AppError::InvalidInput(
                 "You have reached the maximum number of attempts for this quiz.".into(),
@@ -4061,8 +4062,7 @@ async fn quiz_attempt_start_handler(
 
     // Get next attempt number and create the attempt
     let next_attempt_num =
-        course_module_quizzes::get_next_attempt_number(&state.pool, user.user_id, item_id)
-            .await?;
+        course_module_quizzes::get_next_attempt_number(&state.pool, user.user_id, item_id).await?;
 
     let attempt_id = course_module_quizzes::insert_attempt(
         &state.pool,
@@ -4108,9 +4108,7 @@ async fn quiz_attempt_submit_handler(
         if !code.is_empty() {
             let provided = req.access_code.as_deref().unwrap_or("");
             if provided != code {
-                return Err(AppError::InvalidInput(
-                    "Invalid quiz access code.".into(),
-                ));
+                return Err(AppError::InvalidInput("Invalid quiz access code.".into()));
             }
         }
     }
@@ -4128,14 +4126,14 @@ async fn quiz_attempt_submit_handler(
     // Calculate score (simple: count correct answers for multiple choice)
     let mut score = 0.0;
     let max_score: f64 = quiz_row
-        .questions
+        .questions_json
         .iter()
         .map(|q| q.points as f64)
         .sum();
 
     for (idx, answer) in req.answers.iter().enumerate() {
-        if idx < quiz_row.questions.len() {
-            let question = &quiz_row.questions[idx];
+        if idx < quiz_row.questions_json.len() {
+            let question = &quiz_row.questions_json[idx];
             // For MC/TF questions, check if answer is correct
             if matches!(
                 question.question_type.as_str(),
@@ -4177,8 +4175,7 @@ async fn quiz_attempt_submit_handler(
 
     // Update course_grades with the best score if applicable
     let all_attempts =
-        course_module_quizzes::get_student_attempts(&state.pool, user.user_id, item_id)
-            .await?;
+        course_module_quizzes::get_student_attempts(&state.pool, user.user_id, item_id).await?;
 
     let final_score = match quiz_row.grade_attempt_policy.as_str() {
         "highest" => all_attempts
@@ -4186,10 +4183,7 @@ async fn quiz_attempt_submit_handler(
             .filter_map(|a| a.score)
             .fold(f64::NEG_INFINITY, f64::max),
         "latest" => submitted.score.unwrap_or(0.0),
-        "first" => all_attempts
-            .first()
-            .and_then(|a| a.score)
-            .unwrap_or(0.0),
+        "first" => all_attempts.first().and_then(|a| a.score).unwrap_or(0.0),
         "average" => {
             let sum: f64 = all_attempts.iter().filter_map(|a| a.score).sum();
             let count = all_attempts.iter().filter(|a| a.score.is_some()).count();
@@ -4249,8 +4243,7 @@ async fn quiz_attempts_list_handler(
 
     // Get student's attempts
     let attempts =
-        course_module_quizzes::get_student_attempts(&state.pool, user.user_id, item_id)
-            .await?;
+        course_module_quizzes::get_student_attempts(&state.pool, user.user_id, item_id).await?;
 
     let responses = attempts
         .into_iter()
@@ -4299,10 +4292,11 @@ async fn quiz_attempt_get_handler(
         return Err(AppError::NotFound);
     }
 
-    let percent = attempt
-        .score
-        .zip(attempt.max_score)
-        .map(|(s, m)| if m > 0.0 { (s / m) * 100.0 } else { 0.0 });
+    let percent =
+        attempt
+            .score
+            .zip(attempt.max_score)
+            .map(|(s, m)| if m > 0.0 { (s / m) * 100.0 } else { 0.0 });
 
     Ok(Json(QuizAttemptResponse {
         attempt_id: attempt.id,

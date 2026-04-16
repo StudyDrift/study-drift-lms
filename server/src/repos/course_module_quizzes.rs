@@ -712,4 +712,3 @@ pub async fn get_attempt_by_id(
     .fetch_optional(pool)
     .await
 }
-}

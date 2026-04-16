@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Send } from 'lucide-react'
+import { AlertCircle, ChevronLeft, ChevronRight, Clock, Send } from 'lucide-react'
 import { MarkdownArticleView } from '../syllabus/SyllabusMarkdownView'
 import {
   startQuizAttempt,
