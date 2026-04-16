@@ -50,9 +50,7 @@ pub async fn find_or_create_user_for_import(
     if let Some(row) = find_by_email_ci(pool, email).await? {
         return Ok((row, false));
     }
-    let disp = display_name
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
+    let disp = display_name.map(str::trim).filter(|s| !s.is_empty());
     match insert_user(pool, email, placeholder_password_hash, disp).await {
         Ok(row) => Ok((row, true)),
         Err(e) => {

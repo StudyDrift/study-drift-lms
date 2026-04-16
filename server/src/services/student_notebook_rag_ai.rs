@@ -30,9 +30,9 @@ Rules:
 
 fn map_open_router_err(e: OpenRouterError) -> AppError {
     match e {
-        OpenRouterError::NoImageInResponse => AppError::AiGenerationFailed(
-            "The model returned an unexpected response.".into(),
-        ),
+        OpenRouterError::NoImageInResponse => {
+            AppError::AiGenerationFailed("The model returned an unexpected response.".into())
+        }
         OpenRouterError::ApiStatus(code, msg) => AppError::AiGenerationFailed(format!(
             "OpenRouter ({code}): {}",
             msg.chars().take(800).collect::<String>()
@@ -117,7 +117,12 @@ struct ScoredChunk {
     score: u32,
 }
 
-fn lexical_score(query_tokens: &[String], chunk: &str, course_code: &str, course_title: &str) -> u32 {
+fn lexical_score(
+    query_tokens: &[String],
+    chunk: &str,
+    course_code: &str,
+    course_title: &str,
+) -> u32 {
     let q_counts = token_counts(query_tokens);
     if q_counts.is_empty() {
         return 0;
@@ -160,7 +165,11 @@ fn retrieve_chunks(question: &str, notebooks: &[StudentNotebookDocInput]) -> Vec
             });
         }
     }
-    candidates.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.text.len().cmp(&b.text.len())));
+    candidates.sort_by(|a, b| {
+        b.score
+            .cmp(&a.score)
+            .then_with(|| a.text.len().cmp(&b.text.len()))
+    });
     candidates.truncate(MAX_CHUNKS_IN_PROMPT);
     candidates
 }
@@ -171,7 +180,10 @@ fn excerpt(s: &str) -> String {
     if t.chars().count() <= SOURCE_EXCERPT_CHARS {
         return t;
     }
-    t.chars().take(SOURCE_EXCERPT_CHARS.saturating_sub(1)).collect::<String>() + "…"
+    t.chars()
+        .take(SOURCE_EXCERPT_CHARS.saturating_sub(1))
+        .collect::<String>()
+        + "…"
 }
 
 /// Validates input sizes and returns an error message key for [`AppError::InvalidInput`].

@@ -460,7 +460,10 @@ pub async fn user_has_permission(
     Ok(any_grant_matches(&grants, required))
 }
 
-pub async fn app_role_id_by_name(pool: &PgPool, role_name: &str) -> Result<Option<Uuid>, sqlx::Error> {
+pub async fn app_role_id_by_name(
+    pool: &PgPool,
+    role_name: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
     sqlx::query_scalar(&format!(
         "SELECT id FROM {} WHERE name = $1",
         schema::APP_ROLES

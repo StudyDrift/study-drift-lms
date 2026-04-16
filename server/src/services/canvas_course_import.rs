@@ -7,10 +7,10 @@ use std::net::IpAddr;
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
-use tokio::sync::mpsc::UnboundedSender;
 use regex::Regex;
 use reqwest::Client;
 use serde_json::Value;
+use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -110,7 +110,10 @@ fn host_allowed_by_suffix_policy(host: &str, allowed_host_suffixes: &[String]) -
     })
 }
 
-fn normalize_canvas_base_url(raw: &str, allowed_host_suffixes: &[String]) -> Result<String, AppError> {
+fn normalize_canvas_base_url(
+    raw: &str,
+    allowed_host_suffixes: &[String],
+) -> Result<String, AppError> {
     let t = raw.trim().trim_end_matches('/');
     if t.is_empty() {
         return Err(AppError::InvalidInput(
@@ -264,7 +267,9 @@ fn canvas_user_row_to_contact(u: &Value) -> Option<(i64, CanvasRosterContact)> {
     let email = json_string(u.get("email"))
         .filter(|e| e.contains('@'))
         .map(|e| normalize_canvas_email(&e));
-    let login_id = json_string(u.get("login_id")).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let login_id = json_string(u.get("login_id"))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     let display_name = json_string(u.get("name"))
         .or_else(|| json_string(u.get("short_name")))
         .or_else(|| json_string(u.get("sortable_name")))
@@ -344,11 +349,7 @@ fn canvas_build_enrollments_from_canvas_data(
         }
     }
 
-    let mut keys: Vec<i64> = contacts
-        .keys()
-        .chain(role_map.keys())
-        .copied()
-        .collect();
+    let mut keys: Vec<i64> = contacts.keys().chain(role_map.keys()).copied().collect();
     keys.sort_unstable();
     keys.dedup();
 
@@ -356,10 +357,7 @@ fn canvas_build_enrollments_from_canvas_data(
     for uid in keys {
         let contact = contacts.get(&uid).cloned().unwrap_or_default();
         let rg = role_map.get(&uid);
-        let role = rg
-            .map(|r| r.role.as_str())
-            .unwrap_or("student")
-            .to_string();
+        let role = rg.map(|r| r.role.as_str()).unwrap_or("student").to_string();
         let instructor_grant_role = rg.and_then(|r| r.instructor_grant_role.clone());
         let display_from_role = rg.and_then(|r| r.display_hint.clone());
 
@@ -373,10 +371,7 @@ fn canvas_build_enrollments_from_canvas_data(
                 .unwrap_or_else(|| format!("canvas-user-{uid}@canvas-roster.imported"))
         };
 
-        let display_name = contact
-            .display_name
-            .clone()
-            .or(display_from_role);
+        let display_name = contact.display_name.clone().or(display_from_role);
 
         out.push(ExportedCourseEnrollment {
             email,
@@ -495,12 +490,15 @@ fn json_i64(v: Option<&Value>) -> Option<i64> {
     v.as_str().and_then(|s| s.trim().parse().ok())
 }
 
-fn canvas_api_url(base: &str, segments: &[&str], query: &[(&str, &str)]) -> Result<reqwest::Url, AppError> {
+fn canvas_api_url(
+    base: &str,
+    segments: &[&str],
+    query: &[(&str, &str)],
+) -> Result<reqwest::Url, AppError> {
     let root = base.trim_end_matches('/');
     let path = segments.join("/");
-    let mut url = reqwest::Url::parse(&format!("{}/api/v1/{}", root, path)).map_err(|_| {
-        AppError::InvalidInput("Invalid Canvas base URL or API path.".into())
-    })?;
+    let mut url = reqwest::Url::parse(&format!("{}/api/v1/{}", root, path))
+        .map_err(|_| AppError::InvalidInput("Invalid Canvas base URL or API path.".into()))?;
     if !query.is_empty() {
         let mut qp = url.query_pairs_mut();
         for (k, v) in query {
@@ -510,7 +508,11 @@ fn canvas_api_url(base: &str, segments: &[&str], query: &[(&str, &str)]) -> Resu
     Ok(url)
 }
 
-async fn canvas_get_json_url(client: &Client, url: reqwest::Url, token: &str) -> Result<Value, AppError> {
+async fn canvas_get_json_url(
+    client: &Client,
+    url: reqwest::Url,
+    token: &str,
+) -> Result<Value, AppError> {
     let resp = client
         .get(url)
         .header(
@@ -525,9 +527,10 @@ async fn canvas_get_json_url(client: &Client, url: reqwest::Url, token: &str) ->
             ))
         })?;
     let status = resp.status();
-    let bytes = resp.bytes().await.map_err(|e| {
-        AppError::InvalidInput(format!("Failed to read Canvas response: {e}"))
-    })?;
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| AppError::InvalidInput(format!("Failed to read Canvas response: {e}")))?;
     if !status.is_success() {
         let snippet = String::from_utf8_lossy(&bytes[..bytes.len().min(400)]);
         if status == reqwest::StatusCode::UNAUTHORIZED {
@@ -548,9 +551,8 @@ async fn canvas_get_json_url(client: &Client, url: reqwest::Url, token: &str) ->
             snippet.trim()
         )));
     }
-    serde_json::from_slice(&bytes).map_err(|e| {
-        AppError::InvalidInput(format!("Canvas returned invalid JSON: {e}"))
-    })
+    serde_json::from_slice(&bytes)
+        .map_err(|e| AppError::InvalidInput(format!("Canvas returned invalid JSON: {e}")))
 }
 
 /// Paginated GET where Canvas returns a JSON array per page (`?page=`).
@@ -578,9 +580,9 @@ async fn canvas_get_json_array_paginated(
             qp.append_pair("page", &page.to_string());
         }
         let arr = canvas_get_json_url(client, url, token).await?;
-        let items = arr
-            .as_array()
-            .ok_or_else(|| AppError::InvalidInput("Unexpected Canvas response (expected array).".into()))?;
+        let items = arr.as_array().ok_or_else(|| {
+            AppError::InvalidInput("Unexpected Canvas response (expected array).".into())
+        })?;
         if items.is_empty() {
             break;
         }
@@ -595,7 +597,11 @@ async fn canvas_get_json_array_paginated(
 }
 
 /// `tail` is the path after `/courses/{cid}/`, e.g. `pages/home` or `assignments/42`.
-fn canvas_course_subresource_url(base: &str, cid: i64, tail: &str) -> Result<reqwest::Url, AppError> {
+fn canvas_course_subresource_url(
+    base: &str,
+    cid: i64,
+    tail: &str,
+) -> Result<reqwest::Url, AppError> {
     let root = base.trim_end_matches('/');
     let tail = tail.trim_start_matches('/');
     reqwest::Url::parse(&format!("{}/api/v1/courses/{cid}/{tail}", root)).map_err(|_| {
@@ -622,7 +628,9 @@ fn pct_encode(s: &str) -> String {
     let mut out = String::new();
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{:02X}", b)),
         }
     }
@@ -632,7 +640,10 @@ fn pct_encode(s: &str) -> String {
 fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
     let id = q.get("id")?.as_i64()?;
     let qtype = q.get("question_type")?.as_str()?;
-    let prompt_html = q.get("question_text").and_then(|v| v.as_str()).unwrap_or("");
+    let prompt_html = q
+        .get("question_text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let mut prompt = html_to_markdown(prompt_html);
     if prompt.is_empty() {
         prompt = q
@@ -664,7 +675,9 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
                     multiple_answer: false,
                     answer_with_image: false,
                     required: true,
-                    points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
+                    points: json_f64_as_i32_points(q.get("points_possible"))
+                        .unwrap_or(1)
+                        .max(0),
                     estimated_minutes: 2,
                 });
             }
@@ -686,18 +699,17 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
                 multiple_answer: qtype == "multiple_answers_question",
                 answer_with_image: false,
                 required: true,
-                points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
+                points: json_f64_as_i32_points(q.get("points_possible"))
+                    .unwrap_or(1)
+                    .max(0),
                 estimated_minutes: 2,
             })
         }
         "true_false_question" => {
             let choices = vec!["True".to_string(), "False".to_string()];
-            let correct = answers.iter().position(|a| {
-                a.get("weight")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0)
-                    > 0.0
-            });
+            let correct = answers
+                .iter()
+                .position(|a| a.get("weight").and_then(|v| v.as_f64()).unwrap_or(0.0) > 0.0);
             Some(QuizQuestion {
                 id: format!("canvas-{id}"),
                 prompt,
@@ -707,7 +719,9 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
                 multiple_answer: false,
                 answer_with_image: false,
                 required: true,
-                points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
+                points: json_f64_as_i32_points(q.get("points_possible"))
+                    .unwrap_or(1)
+                    .max(0),
                 estimated_minutes: 1,
             })
         }
@@ -720,7 +734,9 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
             multiple_answer: false,
             answer_with_image: false,
             required: true,
-            points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
+            points: json_f64_as_i32_points(q.get("points_possible"))
+                .unwrap_or(1)
+                .max(0),
             estimated_minutes: 3,
         }),
         "essay_question" => Some(QuizQuestion {
@@ -732,7 +748,9 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
             multiple_answer: false,
             answer_with_image: false,
             required: true,
-            points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
+            points: json_f64_as_i32_points(q.get("points_possible"))
+                .unwrap_or(1)
+                .max(0),
             estimated_minutes: 10,
         }),
         "fill_in_multiple_blanks_question" | "fill_in_blank_question" => Some(QuizQuestion {
@@ -744,19 +762,25 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
             multiple_answer: false,
             answer_with_image: false,
             required: true,
-            points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
+            points: json_f64_as_i32_points(q.get("points_possible"))
+                .unwrap_or(1)
+                .max(0),
             estimated_minutes: 3,
         }),
         _ => Some(QuizQuestion {
             id: format!("canvas-{id}"),
-            prompt: format!("{prompt}\n\n_(Imported from Canvas as an essay: original type was `{qtype}`.)_"),
+            prompt: format!(
+                "{prompt}\n\n_(Imported from Canvas as an essay: original type was `{qtype}`.)_"
+            ),
             question_type: "essay".into(),
             choices: vec![],
             correct_choice_index: None,
             multiple_answer: false,
             answer_with_image: false,
             required: true,
-            points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
+            points: json_f64_as_i32_points(q.get("points_possible"))
+                .unwrap_or(1)
+                .max(0),
             estimated_minutes: 10,
         }),
     }
@@ -798,7 +822,10 @@ pub async fn build_export_from_canvas(
         .get("public_description")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let syllabus_html = course.get("syllabus_body").and_then(|v| v.as_str()).unwrap_or("");
+    let syllabus_html = course
+        .get("syllabus_body")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let description = if !desc_html.trim().is_empty() {
         html_to_markdown(desc_html)
     } else {
@@ -891,11 +918,7 @@ pub async fn build_export_from_canvas(
     .await?;
 
     let mut modules_sorted = modules;
-    modules_sorted.sort_by_key(|m| {
-        m.get("position")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(9999)
-    });
+    modules_sorted.sort_by_key(|m| m.get("position").and_then(|v| v.as_i64()).unwrap_or(9999));
 
     let now = Utc::now();
     let mut structure: Vec<CourseStructureItemResponse> = Vec::new();
@@ -917,14 +940,8 @@ pub async fn build_export_from_canvas(
 
     for m in modules_sorted {
         let module_title = json_string(m.get("name")).unwrap_or_else(|| "Module".to_string());
-        emit_progress(
-            progress,
-            &format!("Scanning module: {module_title}"),
-        );
-        let module_published = m
-            .get("published")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
+        emit_progress(progress, &format!("Scanning module: {module_title}"));
+        let module_published = m.get("published").and_then(|v| v.as_bool()).unwrap_or(true);
         let module_id = Uuid::new_v4();
         structure.push(CourseStructureItemResponse {
             id: module_id,
@@ -953,18 +970,13 @@ pub async fn build_export_from_canvas(
             .unwrap_or_default();
         if items.is_empty() {
             if let Some(mid) = json_i64(m.get("id")) {
-                if let Ok(fetched) =
-                    canvas_fetch_module_items(client, &base, token, cid, mid).await
+                if let Ok(fetched) = canvas_fetch_module_items(client, &base, token, cid, mid).await
                 {
                     items = fetched;
                 }
             }
         }
-        items.sort_by_key(|it| {
-            it.get("position")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(9999)
-        });
+        items.sort_by_key(|it| it.get("position").and_then(|v| v.as_i64()).unwrap_or(9999));
 
         for item in items {
             let title = json_string(item.get("title")).unwrap_or_else(|| "Item".to_string());
@@ -1066,10 +1078,7 @@ pub async fn build_export_from_canvas(
                             continue;
                         }
                     };
-                    let body_html = page_json
-                        .get("body")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
+                    let body_html = page_json.get("body").and_then(|v| v.as_str()).unwrap_or("");
                     let markdown = html_to_markdown(body_html);
                     let pid = Uuid::new_v4();
                     structure.push(CourseStructureItemResponse {
@@ -1136,7 +1145,10 @@ pub async fn build_export_from_canvas(
                             }
                         }
                     }
-                    if !submission_allow_text && !submission_allow_file_upload && !submission_allow_url {
+                    if !submission_allow_text
+                        && !submission_allow_file_upload
+                        && !submission_allow_url
+                    {
                         submission_allow_text = true;
                     }
                     let points_worth = json_f64_as_i32_points(aj.get("points_possible"));
@@ -1211,7 +1223,10 @@ pub async fn build_export_from_canvas(
                         .and_then(|v| v.as_i64())
                         .filter(|&m| m > 0)
                         .map(|m| m as i32);
-                    let allowed = qj.get("allowed_attempts").and_then(|v| v.as_i64()).unwrap_or(1);
+                    let allowed = qj
+                        .get("allowed_attempts")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(1);
                     let unlimited_attempts = allowed < 0;
                     let max_attempts = if unlimited_attempts {
                         1
@@ -1444,9 +1459,7 @@ pub async fn build_export_from_canvas(
                         continue;
                     }
                     let markdown = if !html_url.is_empty() {
-                        format!(
-                            "**{title}** (`{type_str}`)\n\n[View in Canvas]({html_url})"
-                        )
+                        format!("**{title}** (`{type_str}`)\n\n[View in Canvas]({html_url})")
                     } else {
                         format!("**{title}** (`{type_str}`)")
                     };
@@ -1509,8 +1522,15 @@ pub async fn build_export_from_canvas(
         }
     };
 
-    emit_progress(progress, "Loading Canvas course users (for emails and names)…");
-    let course_user_rows = match canvas_fetch_course_users_for_roster(client, &base, token, &cid_str).await {
+    emit_progress(
+        progress,
+        "Loading Canvas course users (for emails and names)…",
+    );
+    let course_user_rows = match canvas_fetch_course_users_for_roster(
+        client, &base, token, &cid_str,
+    )
+    .await
+    {
         Ok(v) => v,
         Err(e) => {
             emit_progress(
@@ -1524,7 +1544,8 @@ pub async fn build_export_from_canvas(
         }
     };
 
-    let enrollments = canvas_build_enrollments_from_canvas_data(&enrollment_rows, &course_user_rows);
+    let enrollments =
+        canvas_build_enrollments_from_canvas_data(&enrollment_rows, &course_user_rows);
     emit_progress(
         progress,
         &format!(

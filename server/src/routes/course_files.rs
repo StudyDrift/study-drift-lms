@@ -82,7 +82,8 @@ async fn download_course_file_handler(
         return Err(AppError::NotFound);
     };
 
-    let path = course_files::blob_disk_path(&state.course_files_root, &course_code, &row.storage_key);
+    let path =
+        course_files::blob_disk_path(&state.course_files_root, &course_code, &row.storage_key);
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|_| AppError::NotFound)?;

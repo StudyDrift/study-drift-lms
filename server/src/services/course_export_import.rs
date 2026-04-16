@@ -19,13 +19,13 @@ use crate::models::course_syllabus::SyllabusSection;
 use crate::repos::course;
 use crate::repos::course::UpdateCourse;
 use crate::repos::course_grading;
+use crate::repos::course_grants;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
 use crate::repos::course_module_external_links;
 use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
-use crate::repos::course_grants;
 use crate::repos::enrollment;
 use crate::repos::rbac;
 use crate::repos::user;
@@ -200,10 +200,9 @@ async fn apply_enrollments_from_export(
     if rows.is_empty() {
         return Ok(());
     }
-    let Some(creator_user_id) =
-        course::get_created_by_user_id(pool, target_course_code)
-            .await
-            .map_err(AppError::from)?
+    let Some(creator_user_id) = course::get_created_by_user_id(pool, target_course_code)
+        .await
+        .map_err(AppError::from)?
     else {
         return Err(AppError::InvalidInput(
             "Course is missing a creator; cannot apply enrollments.".into(),
@@ -1016,7 +1015,8 @@ pub async fn apply_import(
         }
     }
 
-    apply_enrollments_from_export(pool, target_course_code, course_id, mode, &ex.enrollments).await?;
+    apply_enrollments_from_export(pool, target_course_code, course_id, mode, &ex.enrollments)
+        .await?;
 
     Ok(())
 }

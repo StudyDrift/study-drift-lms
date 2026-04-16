@@ -45,7 +45,9 @@ async fn resolve_course_id(state: &AppState, course_code: &str) -> Result<Uuid, 
 }
 
 fn feed_publish(state: &AppState, course_id: Uuid, scope: FeedRealtimeScope) {
-    let _ = state.feed_events.send(FeedRealtimePayload { course_id, scope });
+    let _ = state
+        .feed_events
+        .send(FeedRealtimePayload { course_id, scope });
 }
 
 fn feed_event_json(payload: &FeedRealtimePayload) -> String {
@@ -278,7 +280,8 @@ async fn patch_message_handler(
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
     let course_id = resolve_course_id(&state, &course_code).await?;
-    let Some((ch_id, _author, _)) = course_feed::message_meta(&state.pool, course_id, message_id).await?
+    let Some((ch_id, _author, _)) =
+        course_feed::message_meta(&state.pool, course_id, message_id).await?
     else {
         return Err(AppError::NotFound);
     };
@@ -323,9 +326,8 @@ async fn pin_message_handler(
         return Err(AppError::NotFound);
     };
 
-    let ok =
-        course_feed::set_pinned(&state.pool, course_id, message_id, req.pinned, user.user_id)
-            .await?;
+    let ok = course_feed::set_pinned(&state.pool, course_id, message_id, req.pinned, user.user_id)
+        .await?;
     if !ok {
         return Err(AppError::NotFound);
     }
@@ -423,7 +425,10 @@ async fn handle_feed_ws(mut socket: WebSocket, state: AppState, course_code: Str
         let _ = socket.send(Message::Close(None)).await;
         return;
     };
-    if require_course_access(&state, &course_code, user_id).await.is_err() {
+    if require_course_access(&state, &course_code, user_id)
+        .await
+        .is_err()
+    {
         let _ = socket.send(Message::Close(None)).await;
         return;
     }

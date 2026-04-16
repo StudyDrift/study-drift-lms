@@ -517,8 +517,8 @@ pub async fn assignment_visible_to_student(
                 } else {
                     available_until
                 };
-                let within_availability = eff_af.map_or(true, |t| now >= t)
-                    && eff_au.map_or(true, |t| now <= t);
+                let within_availability =
+                    eff_af.map_or(true, |t| now >= t) && eff_au.map_or(true, |t| now <= t);
                 c_pub
                     && !c_arch
                     && m_pub
