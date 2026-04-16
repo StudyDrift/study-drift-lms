@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   ArrowLeft,
+  Award,
   Calendar,
   ClipboardList,
   FileText,
@@ -17,10 +17,11 @@ import {
   courseEnrollmentsReadPermission,
   courseGradebookViewPermission,
   courseItemCreatePermission,
-  fetchCourse,
   viewerShouldHideCourseEnrollmentsNav,
+  viewerShouldShowMyGradesNav,
 } from '../../lib/coursesApi'
 import { useCourseViewAs } from '../../lib/courseViewAs'
+import { useViewerEnrollmentRoles } from '../../lib/useViewerEnrollmentRoles'
 import { sideNavActiveClass, sideNavLinkClass } from './sideNavStyles'
 
 type SideNavCourseLinksProps = {
@@ -30,21 +31,7 @@ type SideNavCourseLinksProps = {
 export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
   const { allows, loading: permLoading } = usePermissions()
   const courseViewPreview = useCourseViewAs(courseCode)
-  const [viewerEnrollmentRoles, setViewerEnrollmentRoles] = useState<string[] | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    void fetchCourse(courseCode)
-      .then((c) => {
-        if (!cancelled) setViewerEnrollmentRoles(c.viewerEnrollmentRoles ?? [])
-      })
-      .catch(() => {
-        if (!cancelled) setViewerEnrollmentRoles([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [courseCode])
+  const viewerEnrollmentRoles = useViewerEnrollmentRoles(courseCode)
 
   const base = `/courses/${encodeURIComponent(courseCode)}`
   const canViewGradebook =
@@ -54,6 +41,9 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
     !viewerShouldHideCourseEnrollmentsNav(viewerEnrollmentRoles, courseViewPreview) &&
     !permLoading &&
     allows(courseEnrollmentsReadPermission(courseCode))
+  const canViewMyGrades =
+    viewerEnrollmentRoles !== null &&
+    viewerShouldShowMyGradesNav(viewerEnrollmentRoles, courseViewPreview)
   const canManageCourse =
     !permLoading && allows(courseItemCreatePermission(courseCode))
 
@@ -112,6 +102,15 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
         <Calendar className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Calendar
       </NavLink>
+      {canViewMyGrades && (
+        <NavLink
+          to={`${base}/my-grades`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <Award className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          My grades
+        </NavLink>
+      )}
       {canViewGradebook && (
         <NavLink
           to={`${base}/gradebook`}

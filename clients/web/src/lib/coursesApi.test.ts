@@ -6,6 +6,7 @@ import {
   courseItemsCreatePermission,
   viewerIsLearnerOnlyCourseEnrollment,
   viewerShouldHideCourseEnrollmentsNav,
+  viewerShouldShowMyGradesNav,
 } from './coursesApi'
 
 describe('courseItemCreatePermission', () => {
@@ -61,5 +62,22 @@ describe('viewerShouldHideCourseEnrollmentsNav', () => {
   it('does not hide for staff-only enrollment in teacher preview', () => {
     expect(viewerShouldHideCourseEnrollmentsNav(['teacher'], 'teacher')).toBe(false)
     expect(viewerShouldHideCourseEnrollmentsNav(['student', 'teacher'], 'teacher')).toBe(false)
+  })
+})
+
+describe('viewerShouldShowMyGradesNav', () => {
+  it('shows in student preview even when enrolled as staff', () => {
+    expect(viewerShouldShowMyGradesNav(['student', 'teacher'], 'student')).toBe(true)
+    expect(viewerShouldShowMyGradesNav(['teacher'], 'student')).toBe(true)
+  })
+
+  it('hides in teacher preview when staff is enrolled (including dual student+teacher)', () => {
+    expect(viewerShouldShowMyGradesNav(['student', 'teacher'], 'teacher')).toBe(false)
+    expect(viewerShouldShowMyGradesNav(['teacher'], 'teacher')).toBe(false)
+  })
+
+  it('shows in teacher preview only for learner-only enrollment', () => {
+    expect(viewerShouldShowMyGradesNav(['student'], 'teacher')).toBe(true)
+    expect(viewerShouldShowMyGradesNav(['Student'], 'teacher')).toBe(true)
   })
 })

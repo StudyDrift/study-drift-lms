@@ -27,7 +27,7 @@ import {
   type EnrollmentGroupMembership,
   type EnrollmentGroupsTreeResponse,
 } from '../../lib/coursesApi'
-import { useCourseViewAs } from '../../lib/courseViewAs'
+import { notifyCourseViewerEnrollmentChanged, useCourseViewAs } from '../../lib/courseViewAs'
 import { readApiErrorMessage } from '../../lib/errors'
 import { formatTimeAgoFromIso } from '../../lib/formatTimeAgo'
 
@@ -436,6 +436,7 @@ export default function CourseEnrollments() {
         return
       }
       setSelfStudentStatus('idle')
+      notifyCourseViewerEnrollmentChanged(courseCode)
       await loadEnrollments()
       await refreshPermissions()
     } catch {

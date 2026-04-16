@@ -1,3 +1,4 @@
+use crate::models::course_grading::AssignmentGroupPublic;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -35,4 +36,15 @@ pub struct CourseGradebookGridColumn {
     pub max_points: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assignment_group_id: Option<Uuid>,
+}
+
+/// Student-facing grades: one row per gradable item plus weights for final %.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CourseMyGradesResponse {
+    pub columns: Vec<CourseGradebookGridColumn>,
+    /// Earned points per module item id (omitted when no grade entered).
+    #[serde(default)]
+    pub grades: HashMap<Uuid, String>,
+    pub assignment_groups: Vec<AssignmentGroupPublic>,
 }

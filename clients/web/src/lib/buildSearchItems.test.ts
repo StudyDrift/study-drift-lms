@@ -104,6 +104,7 @@ describe('buildSearchItems', () => {
     expect(items.some((i) => i.path === '/courses/X/syllabus')).toBe(true)
     expect(items.some((i) => i.path === '/courses/X/feed')).toBe(true)
     expect(items.some((i) => i.path === '/courses/X/notebook')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/X/my-grades')).toBe(true)
     const add = items.find((i) => i.id === 'action:/courses/X/enrollments:add')
     expect(add?.group).toBe('action')
     expect(add?.path).toBe('/courses/X/enrollments')

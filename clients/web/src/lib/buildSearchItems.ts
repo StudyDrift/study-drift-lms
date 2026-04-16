@@ -157,6 +157,11 @@ export function buildSearchItems(
     { suffix: '/notebook', title: 'Notebook', hint: 'notes journal thoughts' },
     { suffix: '/calendar', title: 'Course calendar', hint: 'calendar schedule' },
     {
+      suffix: '/my-grades',
+      title: 'My grades',
+      hint: 'grades scores student your grades',
+    },
+    {
       suffix: '/gradebook',
       title: 'Gradebook',
       hint: 'gradebook grades scores',

@@ -12,7 +12,7 @@ use crate::models::course::{
 use crate::models::course_export::{CourseCanvasImportRequest, CourseExportV1, CourseImportRequest};
 use crate::models::course_gradebook::{
     CourseGradebookGridColumn, CourseGradebookGridResponse, CourseGradebookGridStudent,
-    PutCourseGradebookGradesRequest,
+    CourseMyGradesResponse, PutCourseGradebookGradesRequest,
 };
 use crate::models::course_grading::{
     CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
@@ -310,6 +310,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/gradebook/grid",
             get(gradebook_grid_get_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/my-grades",
+            get(my_grades_get_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/gradebook/grades",
@@ -2550,6 +2554,40 @@ async fn gradebook_grid_get_handler(
         students,
         columns,
         grades,
+    }))
+}
+
+async fn my_grades_get_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<CourseMyGradesResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let (course_id, students, columns) =
+        gradebook_students_and_columns(&state.pool, &course_code).await?;
+
+    let is_student = students.iter().any(|s| s.user_id == user.user_id);
+    if !is_student {
+        return Err(AppError::Forbidden);
+    }
+
+    let all_grades = course_grades::list_for_course(&state.pool, course_id).await?;
+    let grades = all_grades
+        .get(&user.user_id)
+        .cloned()
+        .unwrap_or_default();
+
+    let assignment_groups = course_grading::get_settings_for_course_code(&state.pool, &course_code)
+        .await?
+        .map(|s| s.assignment_groups)
+        .unwrap_or_default();
+
+    Ok(Json(CourseMyGradesResponse {
+        columns,
+        grades,
+        assignment_groups,
     }))
 }
 

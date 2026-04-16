@@ -442,6 +442,19 @@ export function viewerShouldHideCourseEnrollmentsNav(
   return viewerIsLearnerOnlyCourseEnrollment(viewerEnrollmentRoles)
 }
 
+/**
+ * Show My grades for learner-only students, or for anyone while “View as: Student” is active
+ * (so staff can preview the student experience). Hidden for staff in teacher view, including
+ * dual teacher+student enrollments.
+ */
+export function viewerShouldShowMyGradesNav(
+  viewerEnrollmentRoles: readonly string[] | null | undefined,
+  courseViewPreview: 'teacher' | 'student',
+): boolean {
+  if (courseViewPreview === 'student') return true
+  return viewerIsLearnerOnlyCourseEnrollment(viewerEnrollmentRoles)
+}
+
 export type CourseStructureItem = {
   id: string
   sortOrder: number
@@ -517,6 +530,32 @@ export async function fetchCourseGradebookGrid(courseCode: string): Promise<Cour
     students: body.students ?? [],
     columns: body.columns ?? [],
     grades: body.grades,
+  }
+}
+
+/** GET `/my-grades` — current user’s grades (enrolled as student only). */
+export type CourseMyGradesResponse = {
+  columns: CourseGradebookGridColumn[]
+  grades: Record<string, string>
+  assignmentGroups: AssignmentGroup[]
+}
+
+export async function fetchCourseMyGrades(courseCode: string): Promise<CourseMyGradesResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/my-grades`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const body = raw as {
+    columns?: CourseGradebookGridColumn[]
+    grades?: Record<string, string>
+    assignmentGroups?: unknown
+  }
+  const parsed = parseCourseGradingSettings({ assignmentGroups: body.assignmentGroups })
+  return {
+    columns: body.columns ?? [],
+    grades: body.grades ?? {},
+    assignmentGroups: parsed.assignmentGroups,
   }
 }
 

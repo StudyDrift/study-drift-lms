@@ -31,6 +31,15 @@ export function clearCourseViewAs(courseCode: string) {
   window.dispatchEvent(new Event('studydrift-course-view-as'))
 }
 
+/** Fired when the signed-in user’s enrollments for a course change (e.g. self-enroll as student). */
+export const COURSE_VIEWER_ENROLLMENTS_CHANGED = 'studydrift-course-viewer-enrollments-changed'
+
+export function notifyCourseViewerEnrollmentChanged(courseCode: string): void {
+  window.dispatchEvent(
+    new CustomEvent(COURSE_VIEWER_ENROLLMENTS_CHANGED, { detail: { courseCode } }),
+  )
+}
+
 /**
  * Re-renders when the user changes “View as” for this course (localStorage + custom event).
  * Use this instead of calling `getCourseViewAs` during render so React sees updates immediately.

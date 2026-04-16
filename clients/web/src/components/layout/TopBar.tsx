@@ -3,6 +3,7 @@ import { ChevronDown, LogOut, Menu, Search, User } from 'lucide-react'
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { setCourseViewAs, useCourseViewAs } from '../../lib/courseViewAs'
 import { authorizedFetch } from '../../lib/api'
+import { useViewerEnrollmentRoles } from '../../lib/useViewerEnrollmentRoles'
 import { useCommandPalette } from '../command-palette/useCommandPalette'
 import { clearAccessToken } from '../../lib/auth'
 import { applyUiTheme } from '../../lib/uiTheme'
@@ -146,32 +147,10 @@ function CourseEnrollmentViewDropdown() {
 
   const courseViewMode = useCourseViewAs(courseCode ?? undefined)
 
-  const [viewerRoles, setViewerRoles] = useState<string[] | null>(null)
+  const viewerRoles = useViewerEnrollmentRoles(courseCode)
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const menuId = useId()
-
-  useEffect(() => {
-    if (!courseCode) {
-      setViewerRoles(null)
-      return
-    }
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}`)
-        const raw: unknown = await res.json().catch(() => ({}))
-        if (!res.ok || cancelled) return
-        const data = raw as { viewerEnrollmentRoles?: string[] }
-        if (!cancelled) setViewerRoles(data.viewerEnrollmentRoles ?? [])
-      } catch {
-        if (!cancelled) setViewerRoles(null)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [courseCode])
 
   useEffect(() => {
     if (!open) return
