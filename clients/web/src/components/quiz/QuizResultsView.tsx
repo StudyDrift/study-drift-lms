@@ -25,12 +25,6 @@ export function QuizResultsView({
   const showAnswers = ['responses', 'correct_answers', 'full'].includes(quiz.reviewVisibility)
   const showCorrectAnswers = ['correct_answers', 'full'].includes(quiz.reviewVisibility)
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}m ${secs}s`
-  }
-
   const getLetterGrade = (pct: number): string => {
     if (pct >= 90) return 'A'
     if (pct >= 80) return 'B'
