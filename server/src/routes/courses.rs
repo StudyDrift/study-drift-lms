@@ -12,6 +12,7 @@ use crate::models::course::{
 use crate::models::course_export::{CourseCanvasImportRequest, CourseExportV1, CourseImportRequest};
 use crate::models::course_gradebook::{
     CourseGradebookGridColumn, CourseGradebookGridResponse, CourseGradebookGridStudent,
+    PutCourseGradebookGradesRequest,
 };
 use crate::models::course_grading::{
     CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
@@ -51,6 +52,7 @@ use crate::models::user_audit::PostCourseContextRequest;
 use crate::repos::content_page_markups;
 use crate::repos::course;
 use crate::repos::course_files;
+use crate::repos::course_grades;
 use crate::repos::course_grading;
 use crate::repos::course_grading::PutError;
 use crate::repos::course_grants;
@@ -92,7 +94,7 @@ use serde_json::json;
 use chrono::Utc;
 use reqwest::Client;
 use sqlx::PgPool;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -308,6 +310,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/gradebook/grid",
             get(gradebook_grid_get_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/gradebook/grades",
+            put(gradebook_grades_put_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/structure/items/{item_id}/assignment-group",
@@ -2449,23 +2455,22 @@ fn gradebook_max_points(item: &CourseStructureItemResponse) -> Option<i32> {
     None
 }
 
-async fn gradebook_grid_get_handler(
-    State(state): State<AppState>,
-    Path(course_code): Path<String>,
-    headers: HeaderMap,
-) -> Result<Json<CourseGradebookGridResponse>, AppError> {
-    let user = auth_user(&state, &headers)?;
-    require_course_access(&state, &course_code, user.user_id).await?;
-
-    let required = course_grants::course_gradebook_view_permission(&course_code);
-    assert_permission(&state.pool, user.user_id, &required).await?;
-
-    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+async fn gradebook_students_and_columns(
+    pool: &PgPool,
+    course_code: &str,
+) -> Result<
+    (
+        Uuid,
+        Vec<CourseGradebookGridStudent>,
+        Vec<CourseGradebookGridColumn>,
+    ),
+    AppError,
+> {
+    let Some(course_id) = course::get_id_by_course_code(pool, course_code).await? else {
         return Err(AppError::NotFound);
     };
 
-    let student_rows =
-        enrollment::list_student_users_for_course_code(&state.pool, &course_code).await?;
+    let student_rows = enrollment::list_student_users_for_course_code(pool, course_code).await?;
     let students: Vec<CourseGradebookGridStudent> = student_rows
         .into_iter()
         .map(|(user_id, display_name)| CourseGradebookGridStudent {
@@ -2474,11 +2479,10 @@ async fn gradebook_grid_get_handler(
         })
         .collect();
 
-    let rows = course_structure::list_for_course(&state.pool, course_id).await?;
+    let rows = course_structure::list_for_course(pool, course_id).await?;
     let rows = course_structure::filter_archived_items_from_structure_list(rows);
     let items =
-        course_structure::rows_to_responses_with_quiz_adaptive(&state.pool, course_id, rows)
-            .await?;
+        course_structure::rows_to_responses_with_quiz_adaptive(pool, course_id, rows).await?;
 
     let columns: Vec<CourseGradebookGridColumn> = items
         .into_iter()
@@ -2495,7 +2499,107 @@ async fn gradebook_grid_get_handler(
         })
         .collect();
 
-    Ok(Json(CourseGradebookGridResponse { students, columns }))
+    Ok((course_id, students, columns))
+}
+
+fn parse_gradebook_points_str(raw: &str) -> Result<Option<f64>, AppError> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    let cleaned: String = t.chars().filter(|c| *c != ',' && !c.is_whitespace()).collect();
+    let n: f64 = cleaned
+        .parse()
+        .map_err(|_| AppError::InvalidInput("Each score must be a valid number.".into()))?;
+    if !n.is_finite() || n < 0.0 {
+        return Err(AppError::InvalidInput(
+            "Each score must be a non-negative number.".into(),
+        ));
+    }
+    Ok(Some(n))
+}
+
+fn ensure_points_within_max(points: f64, max_points: Option<i32>) -> Result<(), AppError> {
+    if let Some(m) = max_points {
+        if m > 0 && points > m as f64 + 1e-6 {
+            return Err(AppError::InvalidInput(format!(
+                "Score cannot exceed {} points for this item.",
+                m
+            )));
+        }
+    }
+    Ok(())
+}
+
+async fn gradebook_grid_get_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<CourseGradebookGridResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_gradebook_view_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let (course_id, students, columns) =
+        gradebook_students_and_columns(&state.pool, &course_code).await?;
+    let grades = course_grades::list_for_course(&state.pool, course_id).await?;
+
+    Ok(Json(CourseGradebookGridResponse {
+        students,
+        columns,
+        grades,
+    }))
+}
+
+async fn gradebook_grades_put_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<PutCourseGradebookGradesRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let (course_id, students, columns) =
+        gradebook_students_and_columns(&state.pool, &course_code).await?;
+
+    let student_ok: HashSet<Uuid> = students.iter().map(|s| s.user_id).collect();
+    let item_meta: HashMap<Uuid, Option<i32>> =
+        columns.iter().map(|c| (c.id, c.max_points)).collect();
+
+    let mut ops: Vec<(Uuid, Uuid, Option<f64>)> = Vec::new();
+
+    for (user_id, row) in req.grades {
+        if !student_ok.contains(&user_id) {
+            return Err(AppError::InvalidInput(
+                "Grades include a user who is not enrolled as a student in this course.".into(),
+            ));
+        }
+        for (item_id, raw) in row {
+            let Some(max_p) = item_meta.get(&item_id).copied() else {
+                return Err(AppError::InvalidInput(
+                    "Grades include a module item that is not part of this course gradebook."
+                        .into(),
+                ));
+            };
+            let parsed = parse_gradebook_points_str(&raw)?;
+            match parsed {
+                None => ops.push((user_id, item_id, None)),
+                Some(p) => {
+                    ensure_points_within_max(p, max_p)?;
+                    ops.push((user_id, item_id, Some(p)));
+                }
+            }
+        }
+    }
+
+    course_grades::upsert_and_delete(&state.pool, course_id, &ops).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn grading_get_handler(

@@ -11,6 +11,7 @@ pub const USER_AUDIT: &str = r#""user".user_audit"#;
 pub const COURSES: &str = "course.courses";
 pub const COURSE_ENROLLMENTS: &str = "course.course_enrollments";
 pub const COURSE_STRUCTURE_ITEMS: &str = "course.course_structure_items";
+pub const COURSE_GRADES: &str = "course.course_grades";
 pub const MODULE_CONTENT_PAGES: &str = "course.module_content_pages";
 pub const MODULE_ASSIGNMENTS: &str = "course.module_assignments";
 pub const MODULE_QUIZZES: &str = "course.module_quizzes";

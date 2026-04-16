@@ -498,6 +498,8 @@ export type CourseGradebookGridColumn = {
 export type CourseGradebookGridResponse = {
   students: CourseGradebookGridStudent[]
   columns: CourseGradebookGridColumn[]
+  /** Saved scores keyed by student user id, then module item id. */
+  grades?: Record<string, Record<string, string>>
 }
 
 export async function fetchCourseGradebookGrid(courseCode: string): Promise<CourseGradebookGridResponse> {
@@ -506,11 +508,34 @@ export async function fetchCourseGradebookGrid(courseCode: string): Promise<Cour
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const body = raw as { students?: CourseGradebookGridStudent[]; columns?: CourseGradebookGridColumn[] }
+  const body = raw as {
+    students?: CourseGradebookGridStudent[]
+    columns?: CourseGradebookGridColumn[]
+    grades?: Record<string, Record<string, string>>
+  }
   return {
     students: body.students ?? [],
     columns: body.columns ?? [],
+    grades: body.grades,
   }
+}
+
+/** PUT `/gradebook/grades` — bulk upsert/clear cells (`course:<code>:item:create`). */
+export async function putCourseGradebookGrades(
+  courseCode: string,
+  grades: Record<string, Record<string, string>>,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook/grades`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grades }),
+    },
+  )
+  if (res.ok) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
 }
 
 /** Staff only: archived module items and their parent modules (for Settings → Archived). */

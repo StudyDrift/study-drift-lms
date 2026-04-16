@@ -43,6 +43,10 @@ type GradebookGridProps = {
   /** Weights from course grading settings; empty uses straight points across the grid. */
   assignmentGroups?: AssignmentGroupWeight[]
   footerNote?: string
+  /** When true, scores cannot be edited (view-only). */
+  readOnly?: boolean
+  /** Called whenever the in-memory grade map changes (for save/discard UI). */
+  onGradesChange?: (grades: Record<string, Record<string, string>>) => void
 }
 
 const CELL_PAD = 'px-3 py-2 text-sm'
@@ -146,6 +150,8 @@ export function GradebookGrid({
   initialGrades,
   assignmentGroups = [],
   footerNote,
+  readOnly = false,
+  onGradesChange,
 }: GradebookGridProps) {
   const [grades, setGrades] = useState<Record<string, Record<string, string>>>(() =>
     structuredClone(initialGrades),
@@ -262,6 +268,10 @@ export function GradebookGrid({
   }, [initialGrades, students, columns])
 
   useEffect(() => {
+    onGradesChange?.(grades)
+  }, [grades, onGradesChange])
+
+  useEffect(() => {
     if (activeSort?.kind !== 'grade') return
     if (!columns.some((c) => c.id === activeSort.columnId)) {
       setActiveSort(null)
@@ -364,6 +374,7 @@ export function GradebookGrid({
 
   const beginEdit = useCallback(
     (row: number, col: number, opts?: { range?: 'selection' | 'single' }) => {
+      if (readOnly) return
       const rangeMode = opts?.range ?? 'selection'
       let rowMin = row
       let rowMax = row
@@ -378,7 +389,7 @@ export function GradebookGrid({
       setDraft(displayValue(row, col))
       setEditing({ rowMin, rowMax, colMin, colMax })
     },
-    [displayValue, selectionAnchor, focusRow, focusCol],
+    [displayValue, selectionAnchor, focusRow, focusCol, readOnly],
   )
 
   const commitEdit = useCallback(() => {
@@ -440,6 +451,7 @@ export function GradebookGrid({
   )
 
   const clearSelectedScores = useCallback(() => {
+    if (readOnly) return
     const r0 = selectionAnchor == null ? focusRow : Math.min(selectionAnchor.row, focusRow)
     const r1 = selectionAnchor == null ? focusRow : Math.max(selectionAnchor.row, focusRow)
     const c0 = selectionAnchor == null ? focusCol : Math.min(selectionAnchor.col, focusCol)
@@ -457,10 +469,11 @@ export function GradebookGrid({
       }
       return next
     })
-  }, [selectionAnchor, focusRow, focusCol, filteredStudents, visibleColumns])
+  }, [readOnly, selectionAnchor, focusRow, focusCol, filteredStudents, visibleColumns])
 
   const handleFillKnobPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLButtonElement>, src: SelectionBounds) => {
+      if (readOnly) return
       if (e.button !== 0) return
       e.preventDefault()
       e.stopPropagation()
@@ -545,13 +558,21 @@ export function GradebookGrid({
       window.addEventListener('pointerup', onUp, { capture: true })
       window.addEventListener('pointercancel', onUp, { capture: true })
     },
-    [colCount, editing, rowCount],
+    [colCount, editing, readOnly, rowCount],
   )
 
   const handleGradeCellKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTableCellElement>, row: number, col: number) => {
       if (editing) return
       if (row !== focusRow || col !== focusCol) return
+
+      if (
+        readOnly &&
+        (e.key === 'Enter' || e.key === 'F2' || e.key === 'Delete' || e.key === 'Backspace')
+      ) {
+        e.preventDefault()
+        return
+      }
 
       const idx = row * colCount + col
 
@@ -625,7 +646,18 @@ export function GradebookGrid({
           break
       }
     },
-    [editing, focusRow, focusCol, colCount, selectionAnchor, moveBy, moveToIndex, beginEdit, clearSelectedScores],
+    [
+      readOnly,
+      editing,
+      focusRow,
+      focusCol,
+      colCount,
+      selectionAnchor,
+      moveBy,
+      moveToIndex,
+      beginEdit,
+      clearSelectedScores,
+    ],
   )
 
   const handleEditInputBlur = useCallback(() => {
@@ -945,6 +977,7 @@ export function GradebookGrid({
                     : ''
 
                   const showFillKnob =
+                    !readOnly &&
                     !editing &&
                     !fillDrag &&
                     activeSelectionBounds != null &&

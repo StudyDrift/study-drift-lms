@@ -1,4 +1,5 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize)]
@@ -6,6 +7,16 @@ use uuid::Uuid;
 pub struct CourseGradebookGridResponse {
     pub students: Vec<CourseGradebookGridStudent>,
     pub columns: Vec<CourseGradebookGridColumn>,
+    /// Saved points per student id and gradable module item id (empty cells omitted).
+    #[serde(default)]
+    pub grades: HashMap<Uuid, HashMap<Uuid, String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PutCourseGradebookGradesRequest {
+    /// Per student, per module item id string scores (empty string clears the cell).
+    pub grades: HashMap<Uuid, HashMap<Uuid, String>>,
 }
 
 #[derive(Debug, Serialize)]

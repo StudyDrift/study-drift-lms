@@ -395,7 +395,7 @@ export function EnrollmentGroupsPanel({ courseCode, enrollments, canEdit }: Prop
 
   useEffect(() => {
     if (dialog.kind === 'closed') return
-    function onKeydown(e: KeyboardEvent) {
+    function onKeydown(e: globalThis.KeyboardEvent) {
       if (e.key !== 'Escape') return
       if (dialogBusy) return
       e.preventDefault()
