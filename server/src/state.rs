@@ -47,6 +47,16 @@ pub struct FeedRealtimePayload {
     pub scope: FeedRealtimeScope,
 }
 
+/// Outbound email (password reset, etc.). When `smtp_host` is `None`, mail is not sent over SMTP.
+#[derive(Clone, Debug)]
+pub struct MailSettings {
+    pub smtp_host: Option<String>,
+    pub smtp_port: u16,
+    pub smtp_user: Option<String>,
+    pub smtp_password: Option<String>,
+    pub smtp_from: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
@@ -61,4 +71,7 @@ pub struct AppState {
     pub course_files_root: PathBuf,
     /// Policy allowlist for Canvas import base URL hosts.
     pub canvas_allowed_host_suffixes: Vec<String>,
+    /// Base URL of the SPA (no trailing slash), used to build password-reset links.
+    pub public_web_origin: String,
+    pub mail: MailSettings,
 }

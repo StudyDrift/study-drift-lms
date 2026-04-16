@@ -25,8 +25,10 @@ import Inbox from './pages/lms/Inbox'
 import MyNotebooksPage from './pages/lms/MyNotebooksPage'
 import Reports from './pages/lms/Reports'
 import Settings from './pages/lms/Settings'
+import ForgotPassword from './pages/ForgotPassword'
 import Login from './pages/Login'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
+import ResetPassword from './pages/ResetPassword'
 import Signup from './pages/Signup'
 import TermsOfUsePage from './pages/TermsOfUsePage'
 
@@ -37,7 +39,12 @@ export default function App() {
   useEffect(() => {
     function onAuthRequired() {
       const from = `${location.pathname}${location.search}${location.hash}`
-      if (location.pathname === '/login' || location.pathname === '/signup') {
+      if (
+        location.pathname === '/login' ||
+        location.pathname === '/signup' ||
+        location.pathname === '/forgot-password' ||
+        location.pathname === '/reset-password'
+      ) {
         return
       }
       navigate('/login', { replace: true, state: { from } })
@@ -52,6 +59,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route path="/" element={<Dashboard />} />

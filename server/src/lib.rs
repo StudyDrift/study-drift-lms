@@ -98,6 +98,14 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         feed_events: feed_tx,
         course_files_root,
         canvas_allowed_host_suffixes: config.canvas_allowed_host_suffixes.clone(),
+        public_web_origin: config.public_web_origin.clone(),
+        mail: crate::state::MailSettings {
+            smtp_host: config.smtp_host.clone(),
+            smtp_port: config.smtp_port,
+            smtp_user: config.smtp_user.clone(),
+            smtp_password: config.smtp_password.clone(),
+            smtp_from: config.smtp_from.clone(),
+        },
     })
 }
 

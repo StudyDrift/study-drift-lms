@@ -11,7 +11,12 @@ export default function Login() {
   const location = useLocation()
   const state = location.state as { from?: string } | undefined
   let from = state?.from ?? '/'
-  if (from === '/login' || from === '/signup') {
+  if (
+    from === '/login' ||
+    from === '/signup' ||
+    from === '/forgot-password' ||
+    from === '/reset-password'
+  ) {
     from = '/'
   }
 
@@ -106,6 +111,14 @@ export default function Login() {
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none ring-indigo-500/20 transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
                 placeholder="••••••••"
               />
+              <div className="mt-2 text-right">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
+                >
+                  Forgot password?
+                </Link>
+              </div>
             </div>
 
             {message && (

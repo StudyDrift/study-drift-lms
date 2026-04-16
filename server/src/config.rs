@@ -19,6 +19,15 @@ pub struct Config {
     /// Allowed Canvas base URL host suffixes (e.g. `instructure.com`).
     /// Override with `CANVAS_ALLOWED_HOST_SUFFIXES` as a comma-separated list.
     pub canvas_allowed_host_suffixes: Vec<String>,
+    /// Base URL of the web app (no trailing slash). Used in password-reset emails. Default: `http://localhost:5173`.
+    pub public_web_origin: String,
+    /// SMTP host for outbound mail. When unset, password-reset links are only logged (development).
+    pub smtp_host: Option<String>,
+    pub smtp_port: u16,
+    pub smtp_user: Option<String>,
+    pub smtp_password: Option<String>,
+    /// RFC 5322 From address for transactional mail (required for real delivery when SMTP is set).
+    pub smtp_from: Option<String>,
 }
 
 const DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES: &[&str] = &["instructure.com"];
@@ -103,6 +112,30 @@ impl Config {
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("data/course-files"));
 
+        let public_web_origin = env::var("PUBLIC_WEB_ORIGIN")
+            .ok()
+            .map(|s| s.trim().trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "http://localhost:5173".to_string());
+
+        let smtp_host = env::var("SMTP_HOST")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let smtp_port = env::var("SMTP_PORT")
+            .ok()
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or(587);
+        let smtp_user = env::var("SMTP_USER")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let smtp_password = env::var("SMTP_PASSWORD").ok().filter(|s| !s.trim().is_empty());
+        let smtp_from = env::var("SMTP_FROM")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
         let canvas_allowed_host_suffixes = env::var("CANVAS_ALLOWED_HOST_SUFFIXES")
             .ok()
             .map(|raw| {
@@ -131,6 +164,12 @@ impl Config {
             open_router_api_key,
             course_files_root,
             canvas_allowed_host_suffixes,
+            public_web_origin,
+            smtp_host,
+            smtp_port,
+            smtp_user,
+            smtp_password,
+            smtp_from,
         })
     }
 }

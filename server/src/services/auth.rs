@@ -2,14 +2,21 @@ use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use rand_core::OsRng;
+use base64::Engine as _;
+use rand_core::{OsRng, RngCore};
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::jwt::JwtSigner;
-use crate::models::auth::{AuthResponse, LoginRequest, SignupRequest, UserPublic};
-use crate::repos::{communication, rbac, user};
+use crate::models::auth::{
+    AuthResponse, ForgotPasswordRequest, ForgotPasswordResponse, LoginRequest, ResetPasswordRequest,
+    ResetPasswordResponse, SignupRequest, UserPublic,
+};
+use crate::repos::{communication, password_reset, rbac, user};
+use crate::services::mail;
+use crate::state::MailSettings;
 
 fn hash_password(raw: &str) -> Result<String, AppError> {
     let salt = SaltString::generate(&mut OsRng);
@@ -144,6 +151,89 @@ pub async fn login(
     })
 }
 
+fn sha256_token(token: &str) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(token.as_bytes());
+    h.finalize().into()
+}
+
+pub async fn request_password_reset(
+    pool: &PgPool,
+    mail_settings: &MailSettings,
+    public_web_origin: &str,
+    req: ForgotPasswordRequest,
+) -> Result<ForgotPasswordResponse, AppError> {
+    let email = normalize_email(&req.email);
+    if email.is_empty() || !email.contains('@') || email.len() > 254 {
+        return Err(AppError::InvalidInput(
+            "Enter a valid email address.".into(),
+        ));
+    }
+
+    if let Some(row) = user::find_by_email(pool, &email).await? {
+        let mut raw = [0u8; 32];
+        OsRng.fill_bytes(&mut raw);
+        let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw);
+        let token_hash = sha256_token(&token);
+        let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
+        password_reset::replace_token_for_user(pool, row.id, &token_hash, expires_at).await?;
+
+        let origin = public_web_origin.trim_end_matches('/');
+        let reset_url = format!("{origin}/reset-password?token={token}");
+
+        if let Err(e) = mail::send_password_reset_email(mail_settings, &row.email, &reset_url).await
+        {
+            tracing::error!(
+                error = %e,
+                email = %row.email,
+                "failed to send password reset email"
+            );
+        }
+    }
+
+    Ok(ForgotPasswordResponse {
+        message: "If that email is registered, you will receive a reset link shortly.",
+    })
+}
+
+pub async fn reset_password(
+    pool: &PgPool,
+    req: ResetPasswordRequest,
+) -> Result<ResetPasswordResponse, AppError> {
+    let token = req.token.trim();
+    if token.is_empty() {
+        return Err(AppError::InvalidResetToken);
+    }
+    if req.password.len() < 8 {
+        return Err(AppError::InvalidInput(
+            "Password must be at least 8 characters.".into(),
+        ));
+    }
+
+    let token_hash = sha256_token(token);
+    let Some(row) = password_reset::find_by_token_hash(pool, &token_hash).await? else {
+        return Err(AppError::InvalidResetToken);
+    };
+    if row.used_at.is_some() {
+        return Err(AppError::InvalidResetToken);
+    }
+    if row.expires_at < chrono::Utc::now() {
+        return Err(AppError::InvalidResetToken);
+    }
+
+    let password_hash = hash_password(&req.password)?;
+    let ok =
+        password_reset::mark_used_and_set_password(pool, row.id, row.user_id, &password_hash)
+            .await?;
+    if !ok {
+        return Err(AppError::InvalidResetToken);
+    }
+
+    Ok(ResetPasswordResponse {
+        message: "Your password has been updated. You can sign in now.",
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,5 +241,13 @@ mod tests {
     #[test]
     fn normalize_email_trims_and_lowercases() {
         assert_eq!(normalize_email("  A@B.COM  "), "a@b.com");
+    }
+
+    #[test]
+    fn sha256_token_is_stable() {
+        let a = sha256_token("hello");
+        let b = sha256_token("hello");
+        assert_eq!(a, b);
+        assert_ne!(a, sha256_token("hello!"));
     }
 }

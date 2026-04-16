@@ -23,6 +23,8 @@ pub enum AppError {
     EmailTaken,
     #[error("invalid input")]
     InvalidInput(String),
+    #[error("invalid or expired password reset link")]
+    InvalidResetToken,
     #[error(transparent)]
     Db(#[from] sqlx::Error),
     #[error(transparent)]
@@ -115,6 +117,15 @@ impl IntoResponse for AppError {
                 });
                 (StatusCode::BAD_REQUEST, body).into_response()
             }
+            AppError::InvalidResetToken => {
+                let body = Json(ErrorBody {
+                    error: ErrorDetail {
+                        code: "INVALID_RESET_TOKEN",
+                        message: "This reset link is invalid or has expired. Request a new one from the sign-in page.".into(),
+                    },
+                });
+                (StatusCode::BAD_REQUEST, body).into_response()
+            }
             AppError::Db(ref e) => {
                 tracing::error!(error = %e, "database error");
                 let body = Json(ErrorBody {
@@ -190,6 +201,7 @@ mod tests {
             ),
             (AppError::InvalidCredentials, "INVALID_CREDENTIALS"),
             (AppError::EmailTaken, "EMAIL_TAKEN"),
+            (AppError::InvalidResetToken, "INVALID_RESET_TOKEN"),
         ] {
             let r = err.into_response();
             let v = body_json(r).await;

@@ -20,10 +20,6 @@ The adaptive-quiz endpoint (`POST .../quizzes/:id/adaptive-next`) exists, but th
 
 ## P1 — High Value, Soon
 
-### 3. Password Reset / Forgot Password
-
-There is no forgot-password link, reset-token flow, or related API endpoint. Users who lose credentials have no self-service recovery path.
-
 ### 4. Course Announcements
 
 Instructors need a lightweight "post to all students" channel distinct from the inbox. No announcement model, feed entry type, or UI panel exists.
@@ -157,6 +153,7 @@ Described in `docs/ideas.md` — approval chains, onboarding flows (React Flow o
 The following are **in scope and working** so they are excluded from the backlog above:
 
 - Auth (JWT, signup, login, RBAC roles & permissions)
+- Password reset / forgot password (token-backed `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password`, `/forgot-password` and `/reset-password` UI; optional SMTP via `SMTP_*` / `PUBLIC_WEB_ORIGIN`, otherwise reset links logged at INFO for local dev)
 - Course creation, settings, archiving, catalog ordering
 - Module structure (headings, content pages, external links) with drag/drop reorder
 - Assignment settings (due date, availability window, points, submission types, access code, assignment groups)

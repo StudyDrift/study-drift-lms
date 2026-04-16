@@ -4,6 +4,7 @@
 //! using `docker compose up postgres`). `JWT_SECRET` is set if unset (must be ≥32 characters).
 
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::net::SocketAddr;
 
 async fn json_body(res: reqwest::Response) -> Value {
@@ -582,4 +583,132 @@ async fn full_http_walkthrough() {
         .await
         .unwrap();
     assert_eq!(r.status(), reqwest::StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn password_reset_flow() {
+    std::env::set_var("RUN_MIGRATIONS", "true");
+    if std::env::var("JWT_SECRET").is_err() {
+        std::env::set_var(
+            "JWT_SECRET",
+            "integration-test-jwt-secret-32chars-minimum-x",
+        );
+    }
+    study_drift_server::load_dotenv();
+    if std::env::var("DATABASE_URL").is_err() {
+        std::env::set_var(
+            "DATABASE_URL",
+            "postgres://studydrift:studydrift@127.0.0.1:5432/studydrift",
+        );
+    }
+    let state = study_drift_server::build_app_state_from_env()
+        .await
+        .expect("build app state");
+
+    let pool = state.pool.clone();
+    let app = study_drift_server::app::router(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr: SocketAddr = listener.local_addr().expect("addr");
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("serve");
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let base = format!("http://{}", addr);
+    let client = reqwest::Client::new();
+
+    let suf = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let email = format!("reset{suf}@example.com");
+    let signup_body = json!({
+        "email": email,
+        "password": "password123",
+        "display_name": "Reset Test"
+    });
+    let r = client
+        .post(format!("{base}/api/v1/auth/signup"))
+        .json(&signup_body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+    let body = json_body(r).await;
+    let user_id = body["user"]["id"].as_str().unwrap();
+    let user_uuid: uuid::Uuid = user_id.parse().unwrap();
+
+    let plain_token = "integration-test-reset-token";
+    let token_hash = Sha256::digest(plain_token.as_bytes());
+    sqlx::query(
+        r#"INSERT INTO "user".password_reset_tokens (user_id, token_hash, expires_at)
+           VALUES ($1, $2, NOW() + interval '1 hour')"#,
+    )
+    .bind(user_uuid)
+    .bind(token_hash.as_slice())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let r = client
+        .post(format!("{base}/api/v1/auth/reset-password"))
+        .json(&json!({
+            "token": "wrong",
+            "password": "newpassword999"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::BAD_REQUEST);
+
+    let r = client
+        .post(format!("{base}/api/v1/auth/reset-password"))
+        .json(&json!({
+            "token": plain_token,
+            "password": "newpassword999"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+
+    let r = client
+        .post(format!("{base}/api/v1/auth/login"))
+        .json(&json!({
+            "email": email,
+            "password": "password123"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+    let r = client
+        .post(format!("{base}/api/v1/auth/login"))
+        .json(&json!({
+            "email": email,
+            "password": "newpassword999"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+
+    let r = client
+        .post(format!("{base}/api/v1/auth/forgot-password"))
+        .json(&json!({ "email": email }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+
+    let r = client
+        .post(format!("{base}/api/v1/auth/forgot-password"))
+        .json(&json!({ "email": "nonexistent999@example.com" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
 }
