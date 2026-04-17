@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::models::assignment_rubric::RubricDefinition;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModuleContentPageResponse {
@@ -30,6 +32,30 @@ pub struct ModuleContentPageResponse {
     pub submission_allow_file_upload: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub submission_allow_url: Option<bool>,
+    /// Assignment only: `allow`, `penalty`, or `block`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub late_submission_policy: Option<String>,
+    /// Assignment only: percent deducted from earned score when policy is `penalty`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub late_penalty_percent: Option<i32>,
+    /// Assignment only: optional rubric (criteria with point-band levels).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rubric: Option<RubricDefinition>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateAssignmentRubricRequest {
+    pub prompt: String,
+    /// Current assignment body (Markdown), e.g. the unsaved editor draft; included in the AI context.
+    #[serde(default)]
+    pub assignment_markdown: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateAssignmentRubricResponse {
+    pub rubric: RubricDefinition,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,4 +89,11 @@ pub struct UpdateModuleContentPageRequest {
     pub submission_allow_file_upload: Option<bool>,
     #[serde(default)]
     pub submission_allow_url: Option<bool>,
+    #[serde(default)]
+    pub late_submission_policy: Option<String>,
+    #[serde(default)]
+    pub late_penalty_percent: Option<Option<i32>>,
+    /// Assignment only: omit to leave unchanged; JSON `null` clears the rubric.
+    #[serde(default)]
+    pub rubric: Option<Option<RubricDefinition>>,
 }

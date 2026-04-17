@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::ops::DerefMut;
 
 use chrono::{DateTime, Utc};
+use serde_json::Value as JsonValue;
 use sqlx::FromRow;
 use sqlx::PgPool;
 use sqlx::Postgres;
@@ -24,6 +25,9 @@ pub struct CourseItemAssignmentRow {
     pub submission_allow_text: bool,
     pub submission_allow_file_upload: bool,
     pub submission_allow_url: bool,
+    pub late_submission_policy: String,
+    pub late_penalty_percent: Option<i32>,
+    pub rubric_json: Option<JsonValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +41,9 @@ pub struct AssignmentBodyWrite {
     pub submission_allow_text: bool,
     pub submission_allow_file_upload: bool,
     pub submission_allow_url: bool,
+    pub late_submission_policy: String,
+    pub late_penalty_percent: Option<i32>,
+    pub rubric_json: Option<JsonValue>,
 }
 
 pub async fn insert_empty_for_item(
@@ -87,6 +94,37 @@ pub async fn points_worth_for_structure_items(
     Ok(rows.into_iter().map(|r| (r.id, r.points_worth)).collect())
 }
 
+/// `rubric_json` from `module_assignments` for assignment structure items (batch).
+pub async fn rubrics_for_structure_items(
+    pool: &PgPool,
+    course_id: Uuid,
+    structure_item_ids: &[Uuid],
+) -> Result<HashMap<Uuid, Option<JsonValue>>, sqlx::Error> {
+    if structure_item_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    #[derive(Debug, Clone, FromRow)]
+    struct Row {
+        id: Uuid,
+        rubric_json: Option<JsonValue>,
+    }
+    let rows: Vec<Row> = sqlx::query_as(&format!(
+        r#"
+        SELECT c.id, m.rubric_json
+        FROM {} c
+        INNER JOIN {} m ON m.structure_item_id = c.id
+        WHERE c.course_id = $1 AND c.kind = 'assignment' AND c.id = ANY($2)
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS,
+        schema::MODULE_ASSIGNMENTS
+    ))
+    .bind(course_id)
+    .bind(structure_item_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.id, r.rubric_json)).collect())
+}
+
 pub async fn get_for_course_item(
     pool: &PgPool,
     course_id: Uuid,
@@ -105,12 +143,16 @@ pub async fn get_for_course_item(
         bool,
         bool,
         bool,
+        String,
+        Option<i32>,
+        Option<JsonValue>,
     );
     let row: Option<RowTuple> = sqlx::query_as(&format!(
         r#"
         SELECT c.title, m.markdown, c.due_at, m.points_worth, c.assignment_group_id, m.updated_at,
                m.available_from, m.available_until, m.assignment_access_code,
-               m.submission_allow_text, m.submission_allow_file_upload, m.submission_allow_url
+               m.submission_allow_text, m.submission_allow_file_upload, m.submission_allow_url,
+               m.late_submission_policy, m.late_penalty_percent, m.rubric_json
         FROM {} c
         INNER JOIN {} m ON m.structure_item_id = c.id
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
@@ -137,6 +179,9 @@ pub async fn get_for_course_item(
             submission_allow_text,
             submission_allow_file_upload,
             submission_allow_url,
+            late_submission_policy,
+            late_penalty_percent,
+            rubric_json,
         )| CourseItemAssignmentRow {
             title,
             markdown,
@@ -150,6 +195,9 @@ pub async fn get_for_course_item(
             submission_allow_text,
             submission_allow_file_upload,
             submission_allow_url,
+            late_submission_policy,
+            late_penalty_percent,
+            rubric_json,
         },
     ))
 }
@@ -171,6 +219,9 @@ pub async fn write_assignment_body(
             submission_allow_text = $8,
             submission_allow_file_upload = $9,
             submission_allow_url = $10,
+            late_submission_policy = $11,
+            late_penalty_percent = $12,
+            rubric_json = $13,
             updated_at = NOW()
         FROM {} c
         WHERE m.structure_item_id = c.id
@@ -192,6 +243,9 @@ pub async fn write_assignment_body(
     .bind(body.submission_allow_text)
     .bind(body.submission_allow_file_upload)
     .bind(body.submission_allow_url)
+    .bind(&body.late_submission_policy)
+    .bind(body.late_penalty_percent)
+    .bind(&body.rubric_json)
     .fetch_optional(pool)
     .await
 }
@@ -208,15 +262,19 @@ pub async fn upsert_import_body(
     submission_allow_text: bool,
     submission_allow_file_upload: bool,
     submission_allow_url: bool,
+    late_submission_policy: &str,
+    late_penalty_percent: Option<i32>,
+    rubric_json: Option<&JsonValue>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"
         INSERT INTO {} (
             structure_item_id, markdown, points_worth, updated_at,
             available_from, available_until, assignment_access_code,
-            submission_allow_text, submission_allow_file_upload, submission_allow_url
+            submission_allow_text, submission_allow_file_upload, submission_allow_url,
+            late_submission_policy, late_penalty_percent, rubric_json
         )
-        SELECT c.id, $3, $4, NOW(), $5, $6, $7, $8, $9, $10
+        SELECT c.id, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13
         FROM {} c
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
         ON CONFLICT (structure_item_id) DO UPDATE
@@ -228,6 +286,9 @@ pub async fn upsert_import_body(
             submission_allow_text = EXCLUDED.submission_allow_text,
             submission_allow_file_upload = EXCLUDED.submission_allow_file_upload,
             submission_allow_url = EXCLUDED.submission_allow_url,
+            late_submission_policy = EXCLUDED.late_submission_policy,
+            late_penalty_percent = EXCLUDED.late_penalty_percent,
+            rubric_json = EXCLUDED.rubric_json,
             updated_at = NOW()
         "#,
         schema::MODULE_ASSIGNMENTS,
@@ -243,6 +304,9 @@ pub async fn upsert_import_body(
     .bind(submission_allow_text)
     .bind(submission_allow_file_upload)
     .bind(submission_allow_url)
+    .bind(late_submission_policy)
+    .bind(late_penalty_percent)
+    .bind(rubric_json)
     .execute(pool)
     .await?;
     Ok(())

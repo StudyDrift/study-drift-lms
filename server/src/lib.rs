@@ -44,10 +44,13 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
                     "{msg}\n\n\
                     This happens when a migration file was edited after it was already applied. \
                     If the current SQL in `server/migrations/` is the source of truth, align the \
-                    database: run `sqlx migrate info` (same DATABASE_URL as the app) to see the \
-                    version and the local checksum, then update `_sqlx_migrations`:\n  \
-                    UPDATE _sqlx_migrations SET checksum = decode('<local hex from info>', 'hex') WHERE version = <N>;\n\
-                    (From the host with Postgres on localhost:5432, or `docker compose exec postgres psql -U studydrift -d studydrift -c '...'`.)\n\
+                    database checksum. Quick option: from the repo root run \
+                    `python3 server/scripts/print_sqlx_checksum_update.py <version>` (e.g. `68`) \
+                    and execute the printed `UPDATE` against the same `DATABASE_URL` as the app \
+                    (or `python3 server/scripts/print_sqlx_checksum_update.py <version> --exec`). \
+                    Alternatively: `sqlx migrate info` shows the local hex; then:\n  \
+                    UPDATE _sqlx_migrations SET checksum = decode('<hex>', 'hex') WHERE version = <N>;\n\
+                    (e.g. `docker compose exec postgres psql -U studydrift -d studydrift -c '...'`.)\n\
                     Install the CLI: cargo install sqlx-cli --no-default-features --features rustls,postgres"
                 )
             } else {

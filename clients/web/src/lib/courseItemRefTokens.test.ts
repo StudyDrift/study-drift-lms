@@ -45,6 +45,9 @@ describe('courseItemRefTokens', () => {
       submissionAllowText: true,
       submissionAllowFileUpload: false,
       submissionAllowUrl: false,
+      lateSubmissionPolicy: 'allow',
+      latePenaltyPercent: null,
+      rubric: null,
     })
     const fetchAssign = vi.spyOn(coursesApi, 'fetchModuleAssignment').mockResolvedValue({
       itemId: '2',
@@ -61,6 +64,9 @@ describe('courseItemRefTokens', () => {
       submissionAllowText: true,
       submissionAllowFileUpload: false,
       submissionAllowUrl: false,
+      lateSubmissionPolicy: 'allow',
+      latePenaltyPercent: null,
+      rubric: null,
     })
     const id1 = 'a1b2c3d4-e5f6-4789-a012-345678901234'
     const id2 = 'b2c3d4e5-f6a7-4890-b123-456789012345'

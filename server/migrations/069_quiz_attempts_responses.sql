@@ -1,6 +1,6 @@
 -- Stored quiz attempts and per-question responses for module quizzes (static and adaptive).
 
-CREATE TABLE course.quiz_attempts (
+CREATE TABLE IF NOT EXISTS course.quiz_attempts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     course_id UUID NOT NULL REFERENCES course.courses (id) ON DELETE CASCADE,
     structure_item_id UUID NOT NULL REFERENCES course.course_structure_items (id) ON DELETE CASCADE,
@@ -17,10 +17,10 @@ CREATE TABLE course.quiz_attempts (
     UNIQUE (structure_item_id, student_user_id, attempt_number)
 );
 
-CREATE INDEX idx_quiz_attempts_course_item ON course.quiz_attempts (course_id, structure_item_id);
-CREATE INDEX idx_quiz_attempts_student_course ON course.quiz_attempts (student_user_id, course_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_course_item ON course.quiz_attempts (course_id, structure_item_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_student_course ON course.quiz_attempts (student_user_id, course_id);
 
-CREATE TABLE course.quiz_responses (
+CREATE TABLE IF NOT EXISTS course.quiz_responses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     attempt_id UUID NOT NULL REFERENCES course.quiz_attempts (id) ON DELETE CASCADE,
     question_index INT NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE course.quiz_responses (
     UNIQUE (attempt_id, question_index)
 );
 
-CREATE INDEX idx_quiz_responses_attempt ON course.quiz_responses (attempt_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_responses_attempt ON course.quiz_responses (attempt_id);
 
 COMMENT ON TABLE course.quiz_attempts IS
     'One learner session for a module quiz; rows move from in_progress to submitted.';

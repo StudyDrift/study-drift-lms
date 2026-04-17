@@ -77,6 +77,12 @@ pub struct ExportedAssignmentBody {
     pub submission_allow_file_upload: bool,
     #[serde(default)]
     pub submission_allow_url: bool,
+    #[serde(default = "default_export_late_submission_policy")]
+    pub late_submission_policy: String,
+    #[serde(default)]
+    pub late_penalty_percent: Option<i32>,
+    #[serde(default)]
+    pub rubric: Option<JsonValue>,
 }
 
 fn default_true() -> bool {

@@ -8,7 +8,7 @@ This document tracks features that are absent or incomplete in Lextures, sorted 
 
 These gaps mean a basic LMS loop (create → assign → submit → grade) cannot be completed end-to-end today.
 
-_(No open P0 items.)_
+*(No open P0 items.)*
 
 ---
 
@@ -32,10 +32,6 @@ Asynchronous threaded discussion is a table-stakes LMS feature. No discussion mo
 The inbox uses an internal WebSocket channel only. No outbound email is sent for new messages, upcoming due dates, grade posting, or announcements. Users miss critical events when offline.
 
 - Requires an email backend (SMTP / transactional provider) and a notification-preferences model.
-
-### 7. Late Submission Policy Enforcement
-
-The `late_submission_policy` column exists on the assignment model and the value is stored/returned, but nothing reads it to apply deductions. The policy is silently ignored.
 
 ---
 
@@ -147,13 +143,13 @@ Described in `docs/ideas.md` — approval chains, onboarding flows (React Flow o
 The following are **in scope and working** so they are excluded from the backlog above:
 
 - Auth (JWT, signup, login, RBAC roles & permissions)
-- Password reset / forgot password (token-backed `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password`, `/forgot-password` and `/reset-password` UI; optional SMTP via `SMTP_*` / `PUBLIC_WEB_ORIGIN`, otherwise reset links logged at INFO for local dev)
+- Password reset / forgot password (token-backed `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password`, `/forgot-password` and `/reset-password` UI; optional SMTP via `SMTP_`* / `PUBLIC_WEB_ORIGIN`, otherwise reset links logged at INFO for local dev)
 - Course creation, settings, archiving, catalog ordering
 - Module structure (headings, content pages, external links) with drag/drop reorder
-- Assignment settings (due date, availability window, points, submission types, access code, assignment groups)
+- Assignment settings (due date, availability window, points, submission types, access code, assignment groups, late submission policy)
 - Assignment submissions (DB record, submit/list API, student submit UI, instructor inbox)
 - Adaptive AI quiz generation and delivery
-- Quiz submission and results: stored attempts (`quiz_attempts`, `quiz_responses`), `POST .../quizzes/:id/start`, `POST .../quizzes/:id/submit`, `GET .../quizzes/:id/results` (including `studentUserId` query for instructors), learner-safe quiz GET (correct answers stripped), gradebook integration from submitted attempts, student take flow (`QuizStudentTakePanel`) with adaptive `attemptId` on `adaptive-next`
+- Quiz submission and results: stored attempts (`quiz_attempts`, `quiz_responses`), `POST .../quizzes/:id/start`, `POST .../quizzes/:id/submit`, `GET .../quizzes/:id/results` (including `studentUserId` query for instructors), learner-safe quiz GET (correct answers stripped), gradebook integration from submitted attempts, late submission policy enforced on start/submit (`block` / `penalty` on gradebook points), student take flow (`QuizStudentTakePanel`) with adaptive `attemptId` on `adaptive-next`
 - Syllabus editor with AI section generation and student acceptance tracking
 - Gradebook grid with instructor grade entry (`course_grades`, GET grid includes saved scores, PUT bulk save, save/discard UI), final-grade computation, and assignment group weighting
 - Student grade view (`GET .../my-grades`, `/courses/:code/my-grades`: earned vs. possible per assignment, course percent)
@@ -170,4 +166,3 @@ The following are **in scope and working** so they are excluded from the backlog
 - Course export/import (JSON)
 - Account profile (name, avatar, dark/light theme)
 - OpenRouter AI model configuration and system prompt customization
-

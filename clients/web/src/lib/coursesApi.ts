@@ -4,6 +4,8 @@ import { readApiErrorMessage } from './errors'
 
 import type { MarkdownThemeCustom } from './markdownTheme'
 
+export type LateSubmissionPolicy = 'allow' | 'penalty' | 'block'
+
 export type Course = {
   id: string
   courseCode: string
@@ -516,12 +518,34 @@ export type CourseGradebookGridStudent = {
   displayName: string
 }
 
+/** Assignment rubric: criteria with point-band levels (matches server `RubricDefinition`). */
+export type RubricLevel = {
+  label: string
+  points: number
+  /** Optional notes for this rating band on this criterion (stored in `rubric_json`). */
+  description?: string | null
+}
+
+export type RubricCriterion = {
+  id: string
+  title: string
+  description?: string | null
+  levels: RubricLevel[]
+}
+
+export type RubricDefinition = {
+  /** Optional heading above the criteria grid (e.g. section title). */
+  title?: string | null
+  criteria: RubricCriterion[]
+}
+
 export type CourseGradebookGridColumn = {
   id: string
   kind: string
   title: string
   maxPoints: number | null
   assignmentGroupId?: string | null
+  rubric?: RubricDefinition | null
 }
 
 export type CourseGradebookGridResponse = {
@@ -529,6 +553,8 @@ export type CourseGradebookGridResponse = {
   columns: CourseGradebookGridColumn[]
   /** Saved scores keyed by student user id, then module item id. */
   grades?: Record<string, Record<string, string>>
+  /** Rubric criterion scores: student → item → criterion id → points. */
+  rubricScores?: Record<string, Record<string, Record<string, string>>>
 }
 
 export async function fetchCourseGradebookGrid(courseCode: string): Promise<CourseGradebookGridResponse> {
@@ -541,11 +567,13 @@ export async function fetchCourseGradebookGrid(courseCode: string): Promise<Cour
     students?: CourseGradebookGridStudent[]
     columns?: CourseGradebookGridColumn[]
     grades?: Record<string, Record<string, string>>
+    rubricScores?: Record<string, Record<string, Record<string, string>>>
   }
   return {
     students: body.students ?? [],
     columns: body.columns ?? [],
     grades: body.grades,
+    rubricScores: body.rubricScores,
   }
 }
 
@@ -578,14 +606,22 @@ export async function fetchCourseMyGrades(courseCode: string): Promise<CourseMyG
 /** PUT `/gradebook/grades` — bulk upsert/clear cells (`course:<code>:item:create`). */
 export async function putCourseGradebookGrades(
   courseCode: string,
-  grades: Record<string, Record<string, string>>,
+  body: {
+    grades: Record<string, Record<string, string>>
+    rubricScores?: Record<string, Record<string, Record<string, number>>>
+  },
 ): Promise<void> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook/grades`,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grades }),
+      body: JSON.stringify({
+        grades: body.grades,
+        ...(body.rubricScores && Object.keys(body.rubricScores).length > 0
+          ? { rubricScores: body.rubricScores }
+          : {}),
+      }),
     },
   )
   if (res.ok) return
@@ -756,6 +792,46 @@ export type ModuleContentPagePayload = {
   submissionAllowText: boolean
   submissionAllowFileUpload: boolean
   submissionAllowUrl: boolean
+  lateSubmissionPolicy: LateSubmissionPolicy
+  latePenaltyPercent: number | null
+  /** Assignment rubric when configured. */
+  rubric: RubricDefinition | null
+}
+
+export function parseRubricDefinition(raw: unknown): RubricDefinition | null {
+  if (raw == null || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const titleRaw = o.title
+  const title =
+    typeof titleRaw === 'string' && titleRaw.trim() ? titleRaw.trim() : null
+  const critRaw = o.criteria
+  if (!Array.isArray(critRaw)) return null
+  const criteria: RubricCriterion[] = []
+  for (const c of critRaw) {
+    if (!c || typeof c !== 'object') continue
+    const cr = c as Record<string, unknown>
+    const id = typeof cr.id === 'string' ? cr.id : null
+    const title = typeof cr.title === 'string' ? cr.title.trim() : ''
+    const levelsRaw = cr.levels
+    if (!id || !title || !Array.isArray(levelsRaw)) continue
+    const levels: RubricLevel[] = []
+    for (const lv of levelsRaw) {
+      if (!lv || typeof lv !== 'object') continue
+      const l = lv as Record<string, unknown>
+      const label = typeof l.label === 'string' ? l.label.trim() : ''
+      const points = typeof l.points === 'number' && Number.isFinite(l.points) ? l.points : NaN
+      if (!label || !Number.isFinite(points)) continue
+      const levelDescRaw = l.description
+      const levelDesc =
+        typeof levelDescRaw === 'string' && levelDescRaw.trim() ? levelDescRaw.trim() : null
+      levels.push({ label, points, description: levelDesc })
+    }
+    if (levels.length === 0) continue
+    const description =
+      typeof cr.description === 'string' && cr.description.trim() ? cr.description.trim() : null
+    criteria.push({ id, title, description, levels })
+  }
+  return criteria.length > 0 ? { ...(title ? { title } : {}), criteria } : null
 }
 
 function normalizeModuleContentPagePayload(raw: unknown): ModuleContentPagePayload {
@@ -776,6 +852,9 @@ function normalizeModuleContentPagePayload(raw: unknown): ModuleContentPagePaylo
     submissionAllowText: r.submissionAllowText !== false,
     submissionAllowFileUpload: Boolean(r.submissionAllowFileUpload),
     submissionAllowUrl: Boolean(r.submissionAllowUrl),
+    lateSubmissionPolicy: (r.lateSubmissionPolicy as LateSubmissionPolicy) ?? 'allow',
+    latePenaltyPercent: typeof r.latePenaltyPercent === 'number' ? r.latePenaltyPercent : null,
+    rubric: parseRubricDefinition(r.rubric),
   }
 }
 
@@ -912,7 +991,6 @@ export type QuizQuestion = {
 }
 
 export type GradeAttemptPolicy = 'highest' | 'latest' | 'first' | 'average'
-export type LateSubmissionPolicy = 'allow' | 'penalty' | 'block'
 export type ShowScoreTiming = 'immediate' | 'after_due' | 'manual'
 export type ReviewVisibility = 'none' | 'score_only' | 'responses' | 'correct_answers' | 'full'
 export type ReviewWhen = 'after_submit' | 'after_due' | 'always' | 'never'
@@ -1542,6 +1620,10 @@ export async function patchModuleAssignment(
     submissionAllowText?: boolean
     submissionAllowFileUpload?: boolean
     submissionAllowUrl?: boolean
+    lateSubmissionPolicy?: LateSubmissionPolicy
+    latePenaltyPercent?: number | null
+    /** Set or clear assignment rubric (`null` removes). */
+    rubric?: RubricDefinition | null
   },
 ): Promise<ModuleContentPagePayload> {
   const res = await authorizedFetch(
@@ -1555,6 +1637,28 @@ export async function patchModuleAssignment(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return normalizeModuleContentPagePayload(raw)
+}
+
+/** POST `/assignments/:itemId/generate-rubric` — AI draft rubric (not persisted until assignment save). */
+export async function generateAssignmentRubric(
+  courseCode: string,
+  itemId: string,
+  body: { prompt: string; assignmentMarkdown: string },
+): Promise<{ rubric: RubricDefinition }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/generate-rubric`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: body.prompt, assignmentMarkdown: body.assignmentMarkdown }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { rubric?: unknown }
+  const rubric = parseRubricDefinition(o.rubric)
+  if (!rubric) throw new Error('The AI did not return a usable rubric.')
+  return { rubric }
 }
 
 /** Matches server `AppRole` for course-scoped roles dropdown (course creator only). */

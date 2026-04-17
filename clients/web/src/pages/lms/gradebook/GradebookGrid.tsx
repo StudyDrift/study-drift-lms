@@ -23,12 +23,14 @@ import {
   formatFinalPercent,
   type AssignmentGroupWeight,
 } from './computeCourseFinalPercent'
+import type { RubricDefinition } from '../../../lib/coursesApi'
 
 export type GradebookColumn = {
   id: string
   title: string
   maxPoints: number | null
   assignmentGroupId?: string | null
+  rubric?: RubricDefinition | null
 }
 
 export type GradebookStudent = {
@@ -47,6 +49,8 @@ type GradebookGridProps = {
   readOnly?: boolean
   /** Called whenever the in-memory grade map changes (for save/discard UI). */
   onGradesChange?: (grades: Record<string, Record<string, string>>) => void
+  /** Open rubric scoring for a student/column (assignment columns with a rubric). */
+  onRubricClick?: (studentId: string, columnId: string) => void
 }
 
 const CELL_PAD = 'px-3 py-2 text-sm'
@@ -152,6 +156,7 @@ export function GradebookGrid({
   footerNote,
   readOnly = false,
   onGradesChange,
+  onRubricClick,
 }: GradebookGridProps) {
   const [grades, setGrades] = useState<Record<string, Record<string, string>>>(() =>
     structuredClone(initialGrades),
@@ -1047,13 +1052,27 @@ export function GradebookGrid({
                           onBlur={handleEditInputBlur}
                         />
                       ) : (
-                        <span
-                          className={
-                            val ? 'text-slate-950 dark:text-neutral-100' : 'text-neutral-400 dark:text-neutral-500'
-                          }
-                        >
-                          {val || '—'}
-                        </span>
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span
+                            className={
+                              val ? 'text-slate-950 dark:text-neutral-100' : 'text-neutral-400 dark:text-neutral-500'
+                            }
+                          >
+                            {val || '—'}
+                          </span>
+                          {!readOnly && col.rubric && onRubricClick ? (
+                            <button
+                              type="button"
+                              className="text-[11px] font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onRubricClick(student.id, col.id)
+                              }}
+                            >
+                              Rubric
+                            </button>
+                          ) : null}
+                        </div>
                       )}
                       {showFillKnob && activeSelectionBounds != null && (
                         <button

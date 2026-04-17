@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 
 use crate::error::AppError;
+use crate::models::late_submission_policy::validate_late_submission_policy_pair;
 
 pub const MAX_ASSIGNMENT_ACCESS_CODE_LEN: usize = 128;
 
@@ -32,4 +33,11 @@ pub fn validate_assignment_delivery_settings(
         ));
     }
     Ok(())
+}
+
+pub fn validate_assignment_late_settings(
+    late_submission_policy: &str,
+    late_penalty_percent: Option<i32>,
+) -> Result<(), AppError> {
+    validate_late_submission_policy_pair(late_submission_policy, late_penalty_percent)
 }

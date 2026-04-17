@@ -1,4 +1,5 @@
 use crate::error::AppError;
+use crate::models::assignment_rubric::{self, RubricDefinition};
 use crate::http_auth::{assert_permission, auth_user, require_permission};
 use crate::models::content_page_markups::{
     ContentPageMarkupResponse, ContentPageMarkupsListResponse, CreateContentPageMarkupRequest,
@@ -17,9 +18,12 @@ use crate::models::course_gradebook::{
 use crate::models::course_grading::{
     CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
 };
-use crate::models::course_module_assignment::validate_assignment_delivery_settings;
+use crate::models::course_module_assignment::{
+    validate_assignment_delivery_settings, validate_assignment_late_settings,
+};
 use crate::models::course_module_content::{
-    CreateCourseContentPageRequest, ModuleContentPageResponse, UpdateModuleContentPageRequest,
+    CreateCourseContentPageRequest, GenerateAssignmentRubricRequest, GenerateAssignmentRubricResponse,
+    ModuleContentPageResponse, UpdateModuleContentPageRequest,
 };
 use crate::models::course_module_quiz::{
     sanitize_quiz_questions_for_learner, validate_adaptive_quiz_settings, validate_item_points_worth,
@@ -73,6 +77,7 @@ use crate::repos::user;
 use crate::repos::user_ai_settings;
 use crate::repos::user_audit;
 use crate::services::adaptive_quiz_ai;
+use crate::services::assignment_rubric_ai;
 use crate::services::quiz_attempt_grading;
 use crate::services::ai::OpenRouterError;
 use crate::services::auth;
@@ -94,7 +99,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::json;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use reqwest::Client;
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
@@ -165,6 +170,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/assignments/{item_id}",
             get(module_assignment_get_handler).patch(module_assignment_patch_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/assignments/{item_id}/generate-rubric",
+            post(module_assignment_generate_rubric_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/quizzes/{item_id}/markups",
@@ -445,6 +454,7 @@ const MAX_SYLLABUS_HEADING_LEN: usize = 512;
 const MAX_SYLLABUS_MARKDOWN_LEN: usize = 200_000;
 const MAX_MODULE_CONTENT_MARKDOWN_LEN: usize = 200_000;
 const MAX_QUIZ_GENERATION_PROMPT_LEN: usize = 8_000;
+const MAX_ASSIGNMENT_RUBRIC_PROMPT_LEN: usize = 8_000;
 const MAX_SYLLABUS_SECTION_INSTRUCTIONS_LEN: usize = 8_000;
 const MIN_QUIZ_GENERATION_COUNT: i32 = 1;
 const MAX_QUIZ_GENERATION_COUNT: i32 = 30;
@@ -491,6 +501,12 @@ fn module_assignment_response_for_api(
         submission_allow_text: Some(row.submission_allow_text),
         submission_allow_file_upload: Some(row.submission_allow_file_upload),
         submission_allow_url: Some(row.submission_allow_url),
+        late_submission_policy: Some(row.late_submission_policy.clone()),
+        late_penalty_percent: row.late_penalty_percent,
+        rubric: row
+            .rubric_json
+            .as_ref()
+            .and_then(|v| serde_json::from_value(v.clone()).ok()),
     }
 }
 
@@ -530,6 +546,21 @@ fn merge_assignment_body_write(
         .submission_allow_file_upload
         .unwrap_or(cur.submission_allow_file_upload);
     let submission_allow_url = req.submission_allow_url.unwrap_or(cur.submission_allow_url);
+    let late_submission_policy = match &req.late_submission_policy {
+        None => cur.late_submission_policy.clone(),
+        Some(s) => s.trim().to_string(),
+    };
+    let late_penalty_percent = match &req.late_penalty_percent {
+        None => cur.late_penalty_percent,
+        Some(v) => *v,
+    };
+    let rubric_json = match &req.rubric {
+        None => cur.rubric_json.clone(),
+        Some(None) => None,
+        Some(Some(r)) => Some(
+            serde_json::to_value(r).map_err(|e| AppError::InvalidInput(e.to_string()))?,
+        ),
+    };
     Ok(course_module_assignments::AssignmentBodyWrite {
         markdown,
         points_worth,
@@ -539,6 +570,9 @@ fn merge_assignment_body_write(
         submission_allow_text,
         submission_allow_file_upload,
         submission_allow_url,
+        late_submission_policy,
+        late_penalty_percent,
+        rubric_json,
     })
 }
 
@@ -1588,6 +1622,9 @@ async fn module_content_page_get_handler(
         submission_allow_text: None,
         submission_allow_file_upload: None,
         submission_allow_url: None,
+        late_submission_policy: None,
+        late_penalty_percent: None,
+        rubric: None,
     }))
 }
 
@@ -1653,6 +1690,9 @@ async fn module_content_page_patch_handler(
         submission_allow_text: None,
         submission_allow_file_upload: None,
         submission_allow_url: None,
+        late_submission_policy: None,
+        late_penalty_percent: None,
+        rubric: None,
     }))
 }
 
@@ -2043,6 +2083,17 @@ async fn module_assignment_patch_handler(
         merged_write.submission_allow_file_upload,
         merged_write.submission_allow_url,
     )?;
+    validate_assignment_late_settings(
+        &merged_write.late_submission_policy,
+        merged_write.late_penalty_percent,
+    )?;
+
+    if let Some(ref v) = merged_write.rubric_json {
+        let r: RubricDefinition = serde_json::from_value(v.clone())
+            .map_err(|_| AppError::InvalidInput("Invalid rubric.".into()))?;
+        assignment_rubric::validate_rubric_definition(&r)?;
+        assignment_rubric::validate_rubric_against_points_worth(&r, merged_write.points_worth)?;
+    }
 
     let updated = course_module_assignments::write_assignment_body(
         &state.pool,
@@ -2071,6 +2122,61 @@ async fn module_assignment_patch_handler(
     };
 
     Ok(Json(module_assignment_response_for_api(item_id, &row, true, None)))
+}
+
+async fn module_assignment_generate_rubric_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<GenerateAssignmentRubricRequest>,
+) -> Result<Json<GenerateAssignmentRubricResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let prompt = req.prompt.trim();
+    if prompt.is_empty() {
+        return Err(AppError::InvalidInput("Instructions are required.".into()));
+    }
+    if prompt.len() > MAX_ASSIGNMENT_RUBRIC_PROMPT_LEN {
+        return Err(AppError::InvalidInput("Instructions are too long.".into()));
+    }
+    if let Some(ref s) = req.assignment_markdown {
+        if s.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
+            return Err(AppError::InvalidInput("Assignment body is too long.".into()));
+        }
+    }
+
+    let client = state
+        .open_router
+        .as_ref()
+        .ok_or(AppError::AiNotConfigured)?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let Some(row) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    let model = user_ai_settings::get_course_setup_model_id(&state.pool, user.user_id).await?;
+
+    let rubric = assignment_rubric_ai::generate_assignment_rubric(
+        &state.pool,
+        client.as_ref(),
+        &model,
+        prompt,
+        &row.title,
+        row.points_worth,
+        req.assignment_markdown.as_deref(),
+    )
+    .await?;
+
+    Ok(Json(GenerateAssignmentRubricResponse { rubric }))
 }
 
 async fn module_quiz_get_handler(
@@ -2446,6 +2552,25 @@ fn quiz_access_code_matches(
     }
 }
 
+/// Applies late penalty to gradebook-scaled quiz points when policy is `penalty` and submission is late.
+fn quiz_gradebook_points_with_late_policy(
+    gb: f64,
+    quiz_row: &course_module_quizzes::CourseItemQuizRow,
+    due_effective: Option<DateTime<Utc>>,
+    submitted_at: DateTime<Utc>,
+) -> f64 {
+    if quiz_row.late_submission_policy != "penalty" {
+        return gb;
+    }
+    if !quiz_attempt_grading::quiz_submission_is_late(due_effective, submitted_at) {
+        return gb;
+    }
+    match quiz_row.late_penalty_percent {
+        Some(p) => quiz_attempt_grading::apply_late_penalty_to_gradebook_points(gb, p),
+        None => gb,
+    }
+}
+
 async fn module_quiz_start_handler(
     State(state): State<AppState>,
     Path((course_code, item_id)): Path<(String, Uuid)>,
@@ -2502,6 +2627,19 @@ async fn module_quiz_start_handler(
     if !row.unlimited_attempts && submitted_count >= row.max_attempts as i64 {
         return Err(AppError::InvalidInput(
             "No quiz attempts remaining for this quiz.".into(),
+        ));
+    }
+
+    let shift_ctx =
+        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id)
+            .await?;
+    let due_effective = quiz_attempt_grading::quiz_effective_due_at(row.due_at, shift_ctx.as_ref());
+    let now = Utc::now();
+    if row.late_submission_policy == "block"
+        && quiz_attempt_grading::quiz_submission_is_late(due_effective, now)
+    {
+        return Err(AppError::InvalidInput(
+            "No new attempts may be started after the due date for this quiz.".into(),
         ));
     }
 
@@ -2571,7 +2709,19 @@ async fn module_quiz_submit_handler(
         return Err(AppError::Forbidden);
     }
 
+    let shift_ctx =
+        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id)
+            .await?;
+    let due_effective = quiz_attempt_grading::quiz_effective_due_at(quiz_row.due_at, shift_ctx.as_ref());
     let now = Utc::now();
+    if quiz_row.late_submission_policy == "block"
+        && quiz_attempt_grading::quiz_submission_is_late(due_effective, now)
+    {
+        return Err(AppError::InvalidInput(
+            "This quiz does not accept submissions after the due date.".into(),
+        ));
+    }
+
     let mut tx = state.pool.begin().await?;
 
     if quiz_row.is_adaptive {
@@ -2647,6 +2797,7 @@ async fn module_quiz_submit_handler(
             if let Some((e, p)) = quiz_attempt_grading::pick_policy_points(&attempts, &quiz_row.grade_attempt_policy)
             {
                 let gb = quiz_attempt_grading::points_for_gradebook(e, p, quiz_row.points_worth);
+                let gb = quiz_gradebook_points_with_late_policy(gb, &quiz_row, due_effective, now);
                 course_grades::upsert_points(&state.pool, course_id, user.user_id, item_id, gb).await?;
             }
         }
@@ -2747,6 +2898,7 @@ async fn module_quiz_submit_handler(
         .await?;
         if let Some((e, p)) = quiz_attempt_grading::pick_policy_points(&attempts, &quiz_row.grade_attempt_policy) {
             let gb = quiz_attempt_grading::points_for_gradebook(e, p, quiz_row.points_worth);
+            let gb = quiz_gradebook_points_with_late_policy(gb, &quiz_row, due_effective, now);
             course_grades::upsert_points(&state.pool, course_id, user.user_id, item_id, gb).await?;
         }
     }
@@ -2997,17 +3149,36 @@ async fn gradebook_students_and_columns(
     let items =
         course_structure::rows_to_responses_with_quiz_adaptive(pool, course_id, rows).await?;
 
+    let assignment_ids: Vec<Uuid> = items
+        .iter()
+        .filter(|it| it.kind == "assignment")
+        .map(|it| it.id)
+        .collect();
+    let rubric_map =
+        course_module_assignments::rubrics_for_structure_items(pool, course_id, &assignment_ids)
+            .await?;
+
     let columns: Vec<CourseGradebookGridColumn> = items
         .into_iter()
         .filter(|it| it.kind == "assignment" || it.kind == "quiz")
         .map(|it| {
             let max_points = gradebook_max_points(&it);
+            let rubric = if it.kind == "assignment" {
+                rubric_map
+                    .get(&it.id)
+                    .cloned()
+                    .flatten()
+                    .and_then(|v| serde_json::from_value(v).ok())
+            } else {
+                None
+            };
             CourseGradebookGridColumn {
                 id: it.id,
                 kind: it.kind,
                 title: it.title,
                 max_points,
                 assignment_group_id: it.assignment_group_id,
+                rubric,
             }
         })
         .collect();
@@ -3057,12 +3228,13 @@ async fn gradebook_grid_get_handler(
 
     let (course_id, students, columns) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
-    let grades = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (grades, rubric_scores) = course_grades::list_for_course(&state.pool, course_id).await?;
 
     Ok(Json(CourseGradebookGridResponse {
         students,
         columns,
         grades,
+        rubric_scores,
     }))
 }
 
@@ -3082,7 +3254,7 @@ async fn my_grades_get_handler(
         return Err(AppError::Forbidden);
     }
 
-    let all_grades = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (all_grades, _) = course_grades::list_for_course(&state.pool, course_id).await?;
     let grades = all_grades
         .get(&user.user_id)
         .cloned()
@@ -3118,8 +3290,12 @@ async fn gradebook_grades_put_handler(
     let student_ok: HashSet<Uuid> = students.iter().map(|s| s.user_id).collect();
     let item_meta: HashMap<Uuid, Option<i32>> =
         columns.iter().map(|c| (c.id, c.max_points)).collect();
+    let rubric_by_item: HashMap<Uuid, RubricDefinition> = columns
+        .iter()
+        .filter_map(|c| c.rubric.clone().map(|r| (c.id, r)))
+        .collect();
 
-    let mut ops: Vec<(Uuid, Uuid, Option<f64>)> = Vec::new();
+    let mut ops: Vec<(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)> = Vec::new();
 
     for (user_id, row) in req.grades {
         if !student_ok.contains(&user_id) {
@@ -3135,11 +3311,34 @@ async fn gradebook_grades_put_handler(
                 ));
             };
             let parsed = parse_gradebook_points_str(&raw)?;
+            let rubric_scores_cell = req
+                .rubric_scores
+                .get(&user_id)
+                .and_then(|m| m.get(&item_id));
+
+            if let Some(rubric) = rubric_by_item.get(&item_id) {
+                if let Some(scores) = rubric_scores_cell {
+                    if !scores.is_empty() {
+                        let total = assignment_rubric::validate_rubric_scores_for_grade(rubric, scores)?;
+                        ensure_points_within_max(total, max_p)?;
+                        if let Some(p) = parsed {
+                            if (p - total).abs() > 1e-3 {
+                                return Err(AppError::InvalidInput(
+                                    "Rubric total must match the score entered for this cell.".into(),
+                                ));
+                            }
+                        }
+                        ops.push((user_id, item_id, Some(total), Some(scores.clone())));
+                        continue;
+                    }
+                }
+            }
+
             match parsed {
-                None => ops.push((user_id, item_id, None)),
+                None => ops.push((user_id, item_id, None, None)),
                 Some(p) => {
                     ensure_points_within_max(p, max_p)?;
-                    ops.push((user_id, item_id, Some(p)));
+                    ops.push((user_id, item_id, Some(p), None));
                 }
             }
         }

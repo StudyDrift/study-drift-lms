@@ -1175,6 +1175,9 @@ pub async fn build_export_from_canvas(
                             submission_allow_text,
                             submission_allow_file_upload,
                             submission_allow_url,
+                            late_submission_policy: "allow".into(),
+                            late_penalty_percent: None,
+                            rubric: None,
                         },
                     );
                     sort_order += 1;

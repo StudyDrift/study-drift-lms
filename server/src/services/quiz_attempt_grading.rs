@@ -1,7 +1,10 @@
 //! Scoring helpers for stored quiz attempts.
 
+use chrono::{DateTime, Utc};
+
 use crate::models::course_module_quiz::{AdaptiveQuizHistoryTurn, QuizQuestion, QuizQuestionResponseItem};
 use crate::repos::quiz_attempts::QuizAttemptRow;
+use crate::services::relative_schedule::{RelativeShiftContext, shift_opt};
 
 pub fn adaptive_turn_is_correct(turn: &AdaptiveQuizHistoryTurn) -> bool {
     let weights = &turn.choice_weights;
@@ -57,6 +60,35 @@ pub fn grade_static_question(
     }
 }
 
+/// Effective due time for a learner (relative schedule shifts authored due dates).
+pub fn quiz_effective_due_at(
+    due_at: Option<DateTime<Utc>>,
+    shift: Option<&RelativeShiftContext>,
+) -> Option<DateTime<Utc>> {
+    match shift {
+        Some(ctx) => shift_opt(ctx, due_at),
+        None => due_at,
+    }
+}
+
+/// True when a due date is set and submission occurs strictly after it.
+pub fn quiz_submission_is_late(
+    due_at: Option<DateTime<Utc>>,
+    submitted_at: DateTime<Utc>,
+) -> bool {
+    due_at.is_some_and(|d| submitted_at > d)
+}
+
+/// Applies a percentage penalty to gradebook-scaled points (e.g. 10% off → multiply by 0.9).
+pub fn apply_late_penalty_to_gradebook_points(points: f64, late_penalty_percent: i32) -> f64 {
+    if !points.is_finite() || points <= 0.0 {
+        return points;
+    }
+    let p = late_penalty_percent.clamp(0, 100);
+    let factor = (100 - p) as f64 / 100.0;
+    (points * factor).max(0.0)
+}
+
 pub fn points_for_gradebook(raw_earned: f64, raw_possible: f64, points_worth: Option<i32>) -> f64 {
     if raw_possible <= 0.0 || !raw_earned.is_finite() || !raw_possible.is_finite() {
         return 0.0;
@@ -96,4 +128,36 @@ pub fn pick_policy_points(attempts: &[QuizAttemptRow], policy: &str) -> Option<(
             a.points_possible.unwrap_or(0.0),
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+    use chrono::Utc;
+
+    #[test]
+    fn late_penalty_scales_points() {
+        let out = apply_late_penalty_to_gradebook_points(100.0, 10);
+        assert!((out - 90.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn submission_not_late_before_or_at_due() {
+        let due = Utc.with_ymd_and_hms(2026, 1, 2, 12, 0, 0).unwrap();
+        assert!(!quiz_submission_is_late(Some(due), due));
+        assert!(!quiz_submission_is_late(
+            Some(due),
+            due - chrono::Duration::seconds(1)
+        ));
+        assert!(quiz_submission_is_late(
+            Some(due),
+            due + chrono::Duration::seconds(1)
+        ));
+    }
+
+    #[test]
+    fn no_due_means_not_late() {
+        assert!(!quiz_submission_is_late(None, Utc::now()));
+    }
 }

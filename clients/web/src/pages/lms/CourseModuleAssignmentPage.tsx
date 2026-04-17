@@ -13,6 +13,8 @@ import {
   patchCourseStructureItemAssignmentGroup,
   patchModuleAssignment,
   type ContentPageMarkup,
+  type LateSubmissionPolicy,
+  type RubricDefinition,
   type SyllabusSection,
 } from '../../lib/coursesApi'
 import {
@@ -74,6 +76,15 @@ function formatSubmissionTypes(
   return parts.length ? parts.join(', ') : 'Not set'
 }
 
+function formatLateSubmissionSummary(
+  policy: LateSubmissionPolicy,
+  penaltyPercent: number | null,
+): string {
+  if (policy === 'allow') return 'Allow (no penalty)'
+  if (policy === 'block') return 'Block after due'
+  return penaltyPercent != null ? `Penalty: ${penaltyPercent}% off` : 'Penalty (percent required when saving)'
+}
+
 function newLocalId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
@@ -96,6 +107,9 @@ export default function CourseModuleAssignmentPage() {
   const [submissionAllowUrl, setSubmissionAllowUrl] = useState(false)
   const [assignmentAccessCode, setAssignmentAccessCode] = useState('')
   const [requiresAssignmentAccessCode, setRequiresAssignmentAccessCode] = useState(false)
+  const [lateSubmissionPolicy, setLateSubmissionPolicy] =
+    useState<LateSubmissionPolicy>('allow')
+  const [latePenaltyPercent, setLatePenaltyPercent] = useState<number | null>(null)
 
   const [draftDueLocal, setDraftDueLocal] = useState('')
   const [draftAvailableFromLocal, setDraftAvailableFromLocal] = useState('')
@@ -105,6 +119,11 @@ export default function CourseModuleAssignmentPage() {
   const [draftSubmissionAllowFileUpload, setDraftSubmissionAllowFileUpload] = useState(false)
   const [draftSubmissionAllowUrl, setDraftSubmissionAllowUrl] = useState(false)
   const [draftAssignmentAccessCode, setDraftAssignmentAccessCode] = useState('')
+  const [draftLateSubmissionPolicy, setDraftLateSubmissionPolicy] =
+    useState<LateSubmissionPolicy>('allow')
+  const [draftLatePenaltyPercent, setDraftLatePenaltyPercent] = useState<number | null>(null)
+  const [rubric, setRubric] = useState<RubricDefinition | null>(null)
+  const [draftRubric, setDraftRubric] = useState<RubricDefinition | null>(null)
 
   const [gradingGroups, setGradingGroups] = useState<{ id: string; name: string }[]>([])
   const [assignmentGroupId, setAssignmentGroupId] = useState<string | null>(null)
@@ -166,6 +185,10 @@ export default function CourseModuleAssignmentPage() {
       setSubmissionAllowUrl(data.submissionAllowUrl)
       setRequiresAssignmentAccessCode(data.requiresAssignmentAccessCode)
       setAssignmentAccessCode(data.assignmentAccessCode ?? '')
+      setLateSubmissionPolicy(data.lateSubmissionPolicy)
+      setLatePenaltyPercent(data.latePenaltyPercent)
+      setRubric(data.rubric)
+      setDraftRubric(data.rubric)
       setAssignmentGroupId(data.assignmentGroupId ?? null)
       setAssignmentGroupPatchError(null)
       try {
@@ -190,6 +213,8 @@ export default function CourseModuleAssignmentPage() {
       setAvailableUntilAt(null)
       setGradingGroups([])
       setAssignmentGroupId(null)
+      setRubric(null)
+      setDraftRubric(null)
       setUpdatedAt(null)
       setMarkups([])
     } finally {
@@ -210,6 +235,9 @@ export default function CourseModuleAssignmentPage() {
     setDraftSubmissionAllowFileUpload(submissionAllowFileUpload)
     setDraftSubmissionAllowUrl(submissionAllowUrl)
     setDraftAssignmentAccessCode(assignmentAccessCode)
+    setDraftLateSubmissionPolicy(lateSubmissionPolicy)
+    setDraftLatePenaltyPercent(latePenaltyPercent)
+    setDraftRubric(rubric)
   }
 
   function beginEdit() {
@@ -260,6 +288,9 @@ export default function CourseModuleAssignmentPage() {
         submissionAllowText: draftSubmissionAllowText,
         submissionAllowFileUpload: draftSubmissionAllowFileUpload,
         submissionAllowUrl: draftSubmissionAllowUrl,
+        lateSubmissionPolicy: draftLateSubmissionPolicy,
+        latePenaltyPercent: draftLatePenaltyPercent,
+        rubric: draftRubric,
       })
       setMarkdown(data.markdown)
       setDueAt(data.dueAt)
@@ -269,6 +300,10 @@ export default function CourseModuleAssignmentPage() {
       setSubmissionAllowText(data.submissionAllowText)
       setSubmissionAllowFileUpload(data.submissionAllowFileUpload)
       setSubmissionAllowUrl(data.submissionAllowUrl)
+      setLateSubmissionPolicy(data.lateSubmissionPolicy)
+      setLatePenaltyPercent(data.latePenaltyPercent)
+      setRubric(data.rubric)
+      setDraftRubric(data.rubric)
       setRequiresAssignmentAccessCode(data.requiresAssignmentAccessCode)
       setAssignmentAccessCode(data.assignmentAccessCode ?? '')
       setAssignmentGroupId(data.assignmentGroupId ?? null)
@@ -381,6 +416,12 @@ export default function CourseModuleAssignmentPage() {
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
+                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Late submission</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                    {formatLateSubmissionSummary(lateSubmissionPolicy, latePenaltyPercent)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
                   <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Points</dt>
                   <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                     {formatPointsWorth(pointsWorth)}
@@ -390,6 +431,14 @@ export default function CourseModuleAssignmentPage() {
                   <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Assignment group</dt>
                   <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                     {assignmentGroupDisplayName(assignmentGroupId, gradingGroups)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Rubric</dt>
+                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                    {rubric && rubric.criteria.length > 0
+                      ? `${rubric.criteria.length} criteria`
+                      : 'None'}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
@@ -457,6 +506,15 @@ export default function CourseModuleAssignmentPage() {
                     onSubmissionAllowUrlChange={setDraftSubmissionAllowUrl}
                     assignmentAccessCode={draftAssignmentAccessCode}
                     onAssignmentAccessCodeChange={setDraftAssignmentAccessCode}
+                    lateSubmissionPolicy={draftLateSubmissionPolicy}
+                    onLateSubmissionPolicyChange={setDraftLateSubmissionPolicy}
+                    latePenaltyPercent={draftLatePenaltyPercent}
+                    onLatePenaltyPercentChange={setDraftLatePenaltyPercent}
+                    draftRubric={draftRubric}
+                    onDraftRubricChange={setDraftRubric}
+                    courseCode={courseCode}
+                    assignmentItemId={itemId}
+                    assignmentMarkdown={sectionsToMarkdown(draft)}
                   />
                 ) : null
               }

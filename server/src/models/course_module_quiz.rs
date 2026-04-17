@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::models::late_submission_policy::validate_late_submission_policy_pair;
 
 /// Matches LMS quiz editor and [`crate::services::quiz_generation_ai`].
 pub const QUIZ_QUESTION_TYPES: &[&str] = &[
@@ -26,7 +27,6 @@ pub const MAX_ADAPTIVE_QUESTION_COUNT: i32 = 30;
 pub const ADAPTIVE_SOURCE_KINDS: &[&str] = &["content_page", "assignment", "quiz"];
 
 pub const GRADE_ATTEMPT_POLICIES: &[&str] = &["highest", "latest", "first", "average"];
-pub const LATE_SUBMISSION_POLICIES: &[&str] = &["allow", "penalty", "block"];
 pub const SHOW_SCORE_TIMINGS: &[&str] = &["immediate", "after_due", "manual"];
 pub const REVIEW_VISIBILITIES: &[&str] =
     &["none", "score_only", "responses", "correct_answers", "full"];
@@ -80,24 +80,7 @@ pub fn validate_quiz_comprehensive_settings(
             "gradeAttemptPolicy must be one of: highest, latest, first, average.".into(),
         ));
     }
-    if !LATE_SUBMISSION_POLICIES.contains(&late_submission_policy) {
-        return Err(AppError::InvalidInput(
-            "lateSubmissionPolicy must be one of: allow, penalty, block.".into(),
-        ));
-    }
-
-    if late_submission_policy == "penalty" {
-        let Some(p) = late_penalty_percent else {
-            return Err(AppError::InvalidInput(
-                "latePenaltyPercent is required when lateSubmissionPolicy is penalty.".into(),
-            ));
-        };
-        if !(0..=100).contains(&p) {
-            return Err(AppError::InvalidInput(
-                "latePenaltyPercent must be between 0 and 100.".into(),
-            ));
-        }
-    }
+    validate_late_submission_policy_pair(late_submission_policy, late_penalty_percent)?;
     if !SHOW_SCORE_TIMINGS.contains(&show_score_timing) {
         return Err(AppError::InvalidInput(
             "showScoreTiming must be one of: immediate, after_due, manual.".into(),

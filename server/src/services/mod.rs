@@ -1,4 +1,5 @@
 pub mod adaptive_quiz_ai;
+pub mod assignment_rubric_ai;
 pub mod ai;
 pub mod auth;
 pub mod mail;

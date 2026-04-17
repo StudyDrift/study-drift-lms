@@ -572,6 +572,21 @@ async fn apply_module_bodies(
             }
             "assignment" => {
                 if let Some(body) = ex.assignments.get(&it.id) {
+                    let rubric_json = match &body.rubric {
+                        None => None,
+                        Some(v) => {
+                            let r: crate::models::assignment_rubric::RubricDefinition =
+                                serde_json::from_value(v.clone()).map_err(|_| {
+                                    AppError::InvalidInput("Invalid rubric in course export.".into())
+                                })?;
+                            crate::models::assignment_rubric::validate_rubric_definition(&r)?;
+                            crate::models::assignment_rubric::validate_rubric_against_points_worth(
+                                &r,
+                                body.points_worth,
+                            )?;
+                            Some(v.clone())
+                        }
+                    };
                     course_module_assignments::upsert_import_body(
                         pool,
                         course_id,
@@ -584,6 +599,9 @@ async fn apply_module_bodies(
                         body.submission_allow_text,
                         body.submission_allow_file_upload,
                         body.submission_allow_url,
+                        body.late_submission_policy.as_str(),
+                        body.late_penalty_percent,
+                        rubric_json.as_ref(),
                     )
                     .await?;
                     course_structure::set_assignment_due_at(pool, course_id, it.id, body.due_at)
@@ -670,6 +688,21 @@ async fn apply_module_bodies_for_new_items_only(
             }
             "assignment" => {
                 if let Some(body) = ex.assignments.get(&it.id) {
+                    let rubric_json = match &body.rubric {
+                        None => None,
+                        Some(v) => {
+                            let r: crate::models::assignment_rubric::RubricDefinition =
+                                serde_json::from_value(v.clone()).map_err(|_| {
+                                    AppError::InvalidInput("Invalid rubric in course export.".into())
+                                })?;
+                            crate::models::assignment_rubric::validate_rubric_definition(&r)?;
+                            crate::models::assignment_rubric::validate_rubric_against_points_worth(
+                                &r,
+                                body.points_worth,
+                            )?;
+                            Some(v.clone())
+                        }
+                    };
                     course_module_assignments::upsert_import_body(
                         pool,
                         course_id,
@@ -682,6 +715,9 @@ async fn apply_module_bodies_for_new_items_only(
                         body.submission_allow_text,
                         body.submission_allow_file_upload,
                         body.submission_allow_url,
+                        body.late_submission_policy.as_str(),
+                        body.late_penalty_percent,
+                        rubric_json.as_ref(),
                     )
                     .await?;
                     course_structure::set_assignment_due_at(pool, course_id, it.id, body.due_at)
@@ -868,6 +904,9 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                             submission_allow_text: row.submission_allow_text,
                             submission_allow_file_upload: row.submission_allow_file_upload,
                             submission_allow_url: row.submission_allow_url,
+                            late_submission_policy: row.late_submission_policy.clone(),
+                            late_penalty_percent: row.late_penalty_percent,
+                            rubric: row.rubric_json.clone(),
                         },
                     );
                 }
