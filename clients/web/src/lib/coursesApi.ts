@@ -465,10 +465,9 @@ export function viewerShouldShowMyGradesNav(
   courseViewPreview: 'teacher' | 'student',
 ): boolean {
   if (courseViewPreview === 'student') return true
-  if (viewerEnrollmentRoles === null) return false
+  if (viewerEnrollmentRoles == null) return false
   if (!viewerEnrollmentRoles.length) return false
   const roles = viewerEnrollmentRoles.map((r) => r.trim().toLowerCase())
-  console.log(roles)
   return roles.includes('student') && !roles.some((r) => r === 'teacher' || r === 'instructor' || r === 'ta')
 }
 
