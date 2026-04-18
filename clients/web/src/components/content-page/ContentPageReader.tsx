@@ -360,6 +360,32 @@ export function ContentPageReader({
         closePopover()
         setNoteModal(false)
         setPendingQuote(null)
+        return
+      }
+      if (!popover) return
+      // Selection is cleared after mouseup so the browser has nothing to copy; handle ⌘/Ctrl+C explicitly.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'KeyC') {
+        const text =
+          popover.kind === 'selection'
+            ? pendingSelectionRangeRef.current?.toString().trim() || popover.text
+            : popover.quoteText
+        if (!text) return
+        e.preventDefault()
+        void navigator.clipboard.writeText(text).catch(() => {
+          try {
+            const ta = document.createElement('textarea')
+            ta.value = text
+            ta.setAttribute('readonly', '')
+            ta.style.position = 'fixed'
+            ta.style.left = '-9999px'
+            document.body.appendChild(ta)
+            ta.select()
+            document.execCommand('copy')
+            document.body.removeChild(ta)
+          } catch {
+            /* ignore */
+          }
+        })
       }
     }
     window.addEventListener('keydown', onKey)

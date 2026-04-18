@@ -15,8 +15,8 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::models::course_export::{
-    CourseExportSnapshot, CourseExportV1, ExportedAssignmentBody, ExportedContentPageBody,
-    ExportedCourseEnrollment, ExportedQuizBody,
+    CanvasImportInclude, CourseExportSnapshot, CourseExportV1, ExportedAssignmentBody,
+    ExportedContentPageBody, ExportedCourseEnrollment, ExportedQuizBody,
 };
 use crate::models::course_grading::{AssignmentGroupPublic, CourseGradingSettingsResponse};
 use crate::models::course_module_quiz::QuizQuestion;
@@ -762,12 +762,254 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn canvas_export_append_assignment_details(
+    client: &Client,
+    base: &str,
+    token: &str,
+    cid: i64,
+    aid: i64,
+    title: String,
+    item_published: bool,
+    parent_module_id: Uuid,
+    sort_order: &mut i32,
+    now: DateTime<Utc>,
+    map_grading_groups: bool,
+    canvas_ag_to_lex: &HashMap<i64, Uuid>,
+    structure: &mut Vec<CourseStructureItemResponse>,
+    assignments: &mut HashMap<Uuid, ExportedAssignmentBody>,
+    progress: Option<&UnboundedSender<String>>,
+    emit_first_fetch_msg: &mut bool,
+) -> Result<(), AppError> {
+    if *emit_first_fetch_msg {
+        emit_progress(progress, "Reading assignment details from Canvas…");
+        *emit_first_fetch_msg = false;
+    }
+    let Ok(a_url) = canvas_course_subresource_url(base, cid, &format!("assignments/{aid}")) else {
+        return Ok(());
+    };
+    let aj = match canvas_get_json_url(client, a_url, token).await {
+        Ok(v) => v,
+        Err(_) => return Ok(()),
+    };
+    let desc_html = aj.get("description").and_then(|v| v.as_str()).unwrap_or("");
+    let markdown = html_to_markdown(desc_html);
+    let due_at = json_datetime(aj.get("due_at"));
+    let available_from = json_datetime(aj.get("unlock_at"));
+    let available_until = json_datetime(aj.get("lock_at"));
+    let mut submission_allow_text = false;
+    let mut submission_allow_file_upload = false;
+    let mut submission_allow_url = false;
+    if let Some(arr) = aj.get("submission_types").and_then(|v| v.as_array()) {
+        for v in arr {
+            if let Some(s) = v.as_str() {
+                match s {
+                    "online_text_entry" => submission_allow_text = true,
+                    "online_upload" => submission_allow_file_upload = true,
+                    "online_url" => submission_allow_url = true,
+                    _ => {}
+                }
+            }
+        }
+    }
+    if !submission_allow_text && !submission_allow_file_upload && !submission_allow_url {
+        submission_allow_text = true;
+    }
+    let points_worth = json_f64_as_i32_points(aj.get("points_possible"));
+    let assignment_group_id = if map_grading_groups {
+        let canvas_gid = json_i64(aj.get("assignment_group_id"));
+        canvas_gid
+            .and_then(|g| canvas_ag_to_lex.get(&g).copied())
+            .or_else(|| canvas_ag_to_lex.values().next().copied())
+    } else {
+        None
+    };
+    let aid_lex = Uuid::new_v4();
+    structure.push(CourseStructureItemResponse {
+        id: aid_lex,
+        sort_order: *sort_order,
+        kind: "assignment".into(),
+        title,
+        parent_id: Some(parent_module_id),
+        published: item_published,
+        visible_from: None,
+        archived: false,
+        due_at,
+        assignment_group_id,
+        created_at: now,
+        updated_at: now,
+        is_adaptive: None,
+        points_possible: None,
+        points_worth,
+        external_url: None,
+    });
+    assignments.insert(
+        aid_lex,
+        ExportedAssignmentBody {
+            markdown,
+            due_at,
+            points_worth,
+            available_from,
+            available_until,
+            assignment_access_code: None,
+            submission_allow_text,
+            submission_allow_file_upload,
+            submission_allow_url,
+            late_submission_policy: "allow".into(),
+            late_penalty_percent: None,
+            rubric: None,
+        },
+    );
+    *sort_order += 1;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn canvas_export_append_quiz_details(
+    client: &Client,
+    base: &str,
+    token: &str,
+    cid: i64,
+    cid_str: &str,
+    qid: i64,
+    title: String,
+    item_published: bool,
+    parent_module_id: Uuid,
+    sort_order: &mut i32,
+    now: DateTime<Utc>,
+    map_grading_groups: bool,
+    canvas_ag_to_lex: &HashMap<i64, Uuid>,
+    structure: &mut Vec<CourseStructureItemResponse>,
+    quizzes: &mut HashMap<Uuid, ExportedQuizBody>,
+    progress: Option<&UnboundedSender<String>>,
+    emit_first_quiz_msg: &mut bool,
+    emit_first_questions_msg: &mut bool,
+) -> Result<(), AppError> {
+    if *emit_first_quiz_msg {
+        emit_progress(progress, "Reading quiz details from Canvas…");
+        *emit_first_quiz_msg = false;
+    }
+    let Ok(q_url) = canvas_course_subresource_url(base, cid, &format!("quizzes/{qid}")) else {
+        return Ok(());
+    };
+    let qj = match canvas_get_json_url(client, q_url, token).await {
+        Ok(v) => v,
+        Err(_) => return Ok(()),
+    };
+    let desc_html = qj.get("description").and_then(|v| v.as_str()).unwrap_or("");
+    let markdown = html_to_markdown(desc_html);
+    let due_at = json_datetime(qj.get("due_at"));
+    let available_from = json_datetime(qj.get("unlock_at"));
+    let available_until = json_datetime(qj.get("lock_at"));
+    let points_worth = json_f64_as_i32_points(qj.get("points_possible"));
+    let assignment_group_id = if map_grading_groups {
+        let canvas_gid = json_i64(qj.get("assignment_group_id"));
+        canvas_gid
+            .and_then(|g| canvas_ag_to_lex.get(&g).copied())
+            .or_else(|| canvas_ag_to_lex.values().next().copied())
+    } else {
+        None
+    };
+    let time_limit_minutes = qj
+        .get("time_limit")
+        .and_then(|v| v.as_i64())
+        .filter(|&m| m > 0)
+        .map(|m| m as i32);
+    let allowed = qj.get("allowed_attempts").and_then(|v| v.as_i64()).unwrap_or(1);
+    let unlimited_attempts = allowed < 0;
+    let max_attempts = if unlimited_attempts {
+        1
+    } else {
+        allowed.clamp(1, 100) as i32
+    };
+
+    let qid_str = qid.to_string();
+    if *emit_first_questions_msg {
+        emit_progress(progress, "Loading quiz questions from Canvas…");
+        *emit_first_questions_msg = false;
+    }
+    let questions_json = canvas_get_json_array_paginated(
+        client,
+        base,
+        token,
+        &["courses", cid_str, "quizzes", &qid_str, "questions"],
+        &[],
+    )
+    .await
+    .unwrap_or_default();
+    let mut questions: Vec<QuizQuestion> = Vec::new();
+    for row in questions_json {
+        if let Some(qq) = canvas_question_to_quiz_question(&row) {
+            questions.push(qq);
+        }
+    }
+
+    let qlex = Uuid::new_v4();
+    structure.push(CourseStructureItemResponse {
+        id: qlex,
+        sort_order: *sort_order,
+        kind: "quiz".into(),
+        title,
+        parent_id: Some(parent_module_id),
+        published: item_published,
+        visible_from: None,
+        archived: false,
+        due_at,
+        assignment_group_id,
+        created_at: now,
+        updated_at: now,
+        is_adaptive: Some(false),
+        points_possible: None,
+        points_worth,
+        external_url: None,
+    });
+    quizzes.insert(
+        qlex,
+        ExportedQuizBody {
+            markdown,
+            due_at,
+            available_from,
+            available_until,
+            unlimited_attempts,
+            max_attempts,
+            grade_attempt_policy: "latest".into(),
+            passing_score_percent: None,
+            points_worth,
+            late_submission_policy: "allow".into(),
+            late_penalty_percent: None,
+            time_limit_minutes,
+            timer_pause_when_tab_hidden: false,
+            per_question_time_limit_seconds: None,
+            show_score_timing: "immediate".into(),
+            review_visibility: "full".into(),
+            review_when: "always".into(),
+            one_question_at_a_time: false,
+            shuffle_questions: false,
+            shuffle_choices: false,
+            allow_back_navigation: true,
+            quiz_access_code: None,
+            adaptive_difficulty: "standard".into(),
+            adaptive_topic_balance: true,
+            adaptive_stop_rule: "fixed_count".into(),
+            random_question_pool_count: None,
+            questions,
+            is_adaptive: false,
+            adaptive_system_prompt: String::new(),
+            adaptive_source_item_ids: vec![],
+            adaptive_question_count: 5,
+        },
+    );
+    *sort_order += 1;
+    Ok(())
+}
+
 /// Fetches a Canvas course and builds an export bundle compatible with [`crate::services::course_export_import::apply_import`].
 pub async fn build_export_from_canvas(
     client: &Client,
     canvas_base_url: &str,
     canvas_course_id: i64,
     access_token: &str,
+    include: CanvasImportInclude,
     allowed_host_suffixes: &[String],
     progress: Option<&UnboundedSender<String>>,
 ) -> Result<CourseExportV1, AppError> {
@@ -790,89 +1032,105 @@ pub async fn build_export_from_canvas(
     let course = canvas_get_json_url(client, course_url, token).await?;
     emit_progress(progress, "Loaded course details from Canvas.");
 
-    let title = json_string(course.get("name"))
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| "Imported Canvas course".to_string());
+    let map_grading_groups = include.grades;
 
-    let desc_html = course
-        .get("public_description")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let syllabus_html = course.get("syllabus_body").and_then(|v| v.as_str()).unwrap_or("");
-    let description = if !desc_html.trim().is_empty() {
-        html_to_markdown(desc_html)
+    let (title, description, syllabus, starts_at, ends_at, published) = if include.settings {
+        let title = json_string(course.get("name"))
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "Imported Canvas course".to_string());
+
+        let desc_html = course
+            .get("public_description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let syllabus_html = course.get("syllabus_body").and_then(|v| v.as_str()).unwrap_or("");
+        let description = if !desc_html.trim().is_empty() {
+            html_to_markdown(desc_html)
+        } else {
+            html_to_markdown(syllabus_html)
+        };
+
+        let starts_at = json_datetime(course.get("start_at"));
+        let ends_at = json_datetime(course.get("end_at"));
+        let published = course
+            .get("workflow_state")
+            .and_then(|v| v.as_str())
+            .map(|s| s == "available")
+            .unwrap_or(true);
+
+        let mut syllabus = Vec::new();
+        if !syllabus_html.trim().is_empty() {
+            syllabus.push(SyllabusSection {
+                id: "canvas-syllabus".into(),
+                heading: "Syllabus".into(),
+                markdown: html_to_markdown(syllabus_html),
+            });
+        } else if !desc_html.trim().is_empty() {
+            // `syllabus_body` is omitted unless explicitly included; many courses only have `public_description`.
+            syllabus.push(SyllabusSection {
+                id: "canvas-course-overview".into(),
+                heading: "Course overview".into(),
+                markdown: html_to_markdown(desc_html),
+            });
+        }
+        (title, description, syllabus, starts_at, ends_at, published)
     } else {
-        html_to_markdown(syllabus_html)
+        (
+            "Canvas course".into(),
+            String::new(),
+            Vec::new(),
+            None,
+            None,
+            true,
+        )
     };
-
-    let starts_at = json_datetime(course.get("start_at"));
-    let ends_at = json_datetime(course.get("end_at"));
-    let published = course
-        .get("workflow_state")
-        .and_then(|v| v.as_str())
-        .map(|s| s == "available")
-        .unwrap_or(true);
-
-    let mut syllabus = Vec::new();
-    if !syllabus_html.trim().is_empty() {
-        syllabus.push(SyllabusSection {
-            id: "canvas-syllabus".into(),
-            heading: "Syllabus".into(),
-            markdown: html_to_markdown(syllabus_html),
-        });
-    } else if !desc_html.trim().is_empty() {
-        // `syllabus_body` is omitted unless explicitly included; many courses only have `public_description`.
-        syllabus.push(SyllabusSection {
-            id: "canvas-course-overview".into(),
-            heading: "Course overview".into(),
-            markdown: html_to_markdown(desc_html),
-        });
-    }
-
-    emit_progress(progress, "Loading assignment groups…");
-    let ag_rows = canvas_get_json_array_paginated(
-        client,
-        &base,
-        token,
-        &["courses", &cid_str, "assignment_groups"],
-        &[],
-    )
-    .await?;
-    emit_progress(progress, "Loaded assignment groups.");
 
     let mut canvas_ag_to_lex: HashMap<i64, Uuid> = HashMap::new();
     let mut assignment_groups: Vec<AssignmentGroupPublic> = Vec::new();
-    for (idx, row) in ag_rows.iter().enumerate() {
-        let Some(canvas_id) = json_i64(row.get("id")) else {
-            continue;
-        };
-        let lex = Uuid::new_v4();
-        canvas_ag_to_lex.insert(canvas_id, lex);
-        let name = json_string(row.get("name")).unwrap_or_else(|| "Assignments".to_string());
-        let sort_order = row
-            .get("position")
-            .and_then(|v| v.as_i64())
-            .unwrap_or((idx + 1) as i64) as i32;
-        let weight = row
-            .get("group_weight")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0)
-            .clamp(0.0, 100.0);
-        assignment_groups.push(AssignmentGroupPublic {
-            id: lex,
-            sort_order,
-            name,
-            weight_percent: weight,
-        });
-    }
-    if assignment_groups.is_empty() {
-        let lex = Uuid::new_v4();
-        assignment_groups.push(AssignmentGroupPublic {
-            id: lex,
-            sort_order: 1,
-            name: "Imported".into(),
-            weight_percent: 100.0,
-        });
+    if map_grading_groups {
+        emit_progress(progress, "Loading assignment groups…");
+        let ag_rows = canvas_get_json_array_paginated(
+            client,
+            &base,
+            token,
+            &["courses", &cid_str, "assignment_groups"],
+            &[],
+        )
+        .await?;
+        emit_progress(progress, "Loaded assignment groups.");
+
+        for (idx, row) in ag_rows.iter().enumerate() {
+            let Some(canvas_id) = json_i64(row.get("id")) else {
+                continue;
+            };
+            let lex = Uuid::new_v4();
+            canvas_ag_to_lex.insert(canvas_id, lex);
+            let name = json_string(row.get("name")).unwrap_or_else(|| "Assignments".to_string());
+            let sort_order_ag = row
+                .get("position")
+                .and_then(|v| v.as_i64())
+                .unwrap_or((idx + 1) as i64) as i32;
+            let weight = row
+                .get("group_weight")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0)
+                .clamp(0.0, 100.0);
+            assignment_groups.push(AssignmentGroupPublic {
+                id: lex,
+                sort_order: sort_order_ag,
+                name,
+                weight_percent: weight,
+            });
+        }
+        if assignment_groups.is_empty() {
+            let lex = Uuid::new_v4();
+            assignment_groups.push(AssignmentGroupPublic {
+                id: lex,
+                sort_order: 1,
+                name: "Imported".into(),
+                weight_percent: 100.0,
+            });
+        }
     }
 
     let grading = CourseGradingSettingsResponse {
@@ -880,22 +1138,24 @@ pub async fn build_export_from_canvas(
         assignment_groups,
     };
 
-    emit_progress(progress, "Loading all modules…");
-    let modules = canvas_get_json_array_paginated(
-        client,
-        &base,
-        token,
-        &["courses", &cid_str, "modules"],
-        &[("include[]", "items")],
-    )
-    .await?;
-
-    let mut modules_sorted = modules;
-    modules_sorted.sort_by_key(|m| {
-        m.get("position")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(9999)
-    });
+    let mut modules_sorted: Vec<Value> = Vec::new();
+    if include.modules {
+        emit_progress(progress, "Loading all modules…");
+        let modules = canvas_get_json_array_paginated(
+            client,
+            &base,
+            token,
+            &["courses", &cid_str, "modules"],
+            &[("include[]", "items")],
+        )
+        .await?;
+        modules_sorted = modules;
+        modules_sorted.sort_by_key(|m| {
+            m.get("position")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(9999)
+        });
+    }
 
     let now = Utc::now();
     let mut structure: Vec<CourseStructureItemResponse> = Vec::new();
@@ -910,10 +1170,12 @@ pub async fn build_export_from_canvas(
     let mut first_quiz_questions_msg = true;
     let mut first_discussion_msg = true;
 
-    emit_progress(
-        progress,
-        "Reading module items (pages, assignments, quizzes, discussions)…",
-    );
+    if include.modules {
+        emit_progress(
+            progress,
+            "Reading module items (pages, assignments, quizzes, discussions)…",
+        );
+    }
 
     for m in modules_sorted {
         let module_title = json_string(m.get("name")).unwrap_or_else(|| "Module".to_string());
@@ -1100,205 +1362,60 @@ pub async fn build_export_from_canvas(
                     sort_order += 1;
                 }
                 "Assignment" => {
-                    if first_assignment_msg {
-                        emit_progress(progress, "Reading assignment details from Canvas…");
-                        first_assignment_msg = false;
+                    if !include.assignments {
+                        continue;
                     }
                     let Some(aid) = json_i64(item.get("content_id")) else {
                         continue;
                     };
-                    let Ok(a_url) =
-                        canvas_course_subresource_url(&base, cid, &format!("assignments/{aid}"))
-                    else {
-                        continue;
-                    };
-                    let aj = match canvas_get_json_url(client, a_url, token).await {
-                        Ok(v) => v,
-                        Err(_) => continue,
-                    };
-                    let desc_html = aj.get("description").and_then(|v| v.as_str()).unwrap_or("");
-                    let markdown = html_to_markdown(desc_html);
-                    let due_at = json_datetime(aj.get("due_at"));
-                    let available_from = json_datetime(aj.get("unlock_at"));
-                    let available_until = json_datetime(aj.get("lock_at"));
-                    let mut submission_allow_text = false;
-                    let mut submission_allow_file_upload = false;
-                    let mut submission_allow_url = false;
-                    if let Some(arr) = aj.get("submission_types").and_then(|v| v.as_array()) {
-                        for v in arr {
-                            if let Some(s) = v.as_str() {
-                                match s {
-                                    "online_text_entry" => submission_allow_text = true,
-                                    "online_upload" => submission_allow_file_upload = true,
-                                    "online_url" => submission_allow_url = true,
-                                    _ => {}
-                                }
-                            }
-                        }
-                    }
-                    if !submission_allow_text && !submission_allow_file_upload && !submission_allow_url {
-                        submission_allow_text = true;
-                    }
-                    let points_worth = json_f64_as_i32_points(aj.get("points_possible"));
-                    let canvas_gid = json_i64(aj.get("assignment_group_id"));
-                    let assignment_group_id = canvas_gid
-                        .and_then(|g| canvas_ag_to_lex.get(&g).copied())
-                        .or_else(|| canvas_ag_to_lex.values().next().copied());
-                    let aid_lex = Uuid::new_v4();
-                    structure.push(CourseStructureItemResponse {
-                        id: aid_lex,
-                        sort_order,
-                        kind: "assignment".into(),
+                    canvas_export_append_assignment_details(
+                        client,
+                        &base,
+                        token,
+                        cid,
+                        aid,
                         title,
-                        parent_id: Some(module_id),
-                        published: item_published,
-                        visible_from: None,
-                        archived: false,
-                        due_at,
-                        assignment_group_id,
-                        created_at: now,
-                        updated_at: now,
-                        is_adaptive: None,
-                        points_possible: None,
-                        points_worth,
-                        external_url: None,
-                    });
-                    assignments.insert(
-                        aid_lex,
-                        ExportedAssignmentBody {
-                            markdown,
-                            due_at,
-                            points_worth,
-                            available_from,
-                            available_until,
-                            assignment_access_code: None,
-                            submission_allow_text,
-                            submission_allow_file_upload,
-                            submission_allow_url,
-                            late_submission_policy: "allow".into(),
-                            late_penalty_percent: None,
-                            rubric: None,
-                        },
-                    );
-                    sort_order += 1;
+                        item_published,
+                        module_id,
+                        &mut sort_order,
+                        now,
+                        map_grading_groups,
+                        &canvas_ag_to_lex,
+                        &mut structure,
+                        &mut assignments,
+                        progress,
+                        &mut first_assignment_msg,
+                    )
+                    .await?;
                 }
                 "Quiz" => {
-                    if first_quiz_msg {
-                        emit_progress(progress, "Reading quiz details from Canvas…");
-                        first_quiz_msg = false;
+                    if !include.quizzes {
+                        continue;
                     }
                     let Some(qid) = json_i64(item.get("content_id")) else {
                         continue;
                     };
-                    let Ok(q_url) =
-                        canvas_course_subresource_url(&base, cid, &format!("quizzes/{qid}"))
-                    else {
-                        continue;
-                    };
-                    let qj = match canvas_get_json_url(client, q_url, token).await {
-                        Ok(v) => v,
-                        Err(_) => continue,
-                    };
-                    let desc_html = qj.get("description").and_then(|v| v.as_str()).unwrap_or("");
-                    let markdown = html_to_markdown(desc_html);
-                    let due_at = json_datetime(qj.get("due_at"));
-                    let available_from = json_datetime(qj.get("unlock_at"));
-                    let available_until = json_datetime(qj.get("lock_at"));
-                    let points_worth = json_f64_as_i32_points(qj.get("points_possible"));
-                    let canvas_gid = json_i64(qj.get("assignment_group_id"));
-                    let assignment_group_id = canvas_gid
-                        .and_then(|g| canvas_ag_to_lex.get(&g).copied())
-                        .or_else(|| canvas_ag_to_lex.values().next().copied());
-                    let time_limit_minutes = qj
-                        .get("time_limit")
-                        .and_then(|v| v.as_i64())
-                        .filter(|&m| m > 0)
-                        .map(|m| m as i32);
-                    let allowed = qj.get("allowed_attempts").and_then(|v| v.as_i64()).unwrap_or(1);
-                    let unlimited_attempts = allowed < 0;
-                    let max_attempts = if unlimited_attempts {
-                        1
-                    } else {
-                        allowed.clamp(1, 100) as i32
-                    };
-
-                    let qid_str = qid.to_string();
-                    if first_quiz_questions_msg {
-                        emit_progress(progress, "Loading quiz questions from Canvas…");
-                        first_quiz_questions_msg = false;
-                    }
-                    let questions_json = canvas_get_json_array_paginated(
+                    canvas_export_append_quiz_details(
                         client,
                         &base,
                         token,
-                        &["courses", &cid_str, "quizzes", &qid_str, "questions"],
-                        &[],
-                    )
-                    .await
-                    .unwrap_or_default();
-                    let mut questions: Vec<QuizQuestion> = Vec::new();
-                    for row in questions_json {
-                        if let Some(qq) = canvas_question_to_quiz_question(&row) {
-                            questions.push(qq);
-                        }
-                    }
-
-                    let qlex = Uuid::new_v4();
-                    structure.push(CourseStructureItemResponse {
-                        id: qlex,
-                        sort_order,
-                        kind: "quiz".into(),
+                        cid,
+                        &cid_str,
+                        qid,
                         title,
-                        parent_id: Some(module_id),
-                        published: item_published,
-                        visible_from: None,
-                        archived: false,
-                        due_at,
-                        assignment_group_id,
-                        created_at: now,
-                        updated_at: now,
-                        is_adaptive: Some(false),
-                        points_possible: None,
-                        points_worth,
-                        external_url: None,
-                    });
-                    quizzes.insert(
-                        qlex,
-                        ExportedQuizBody {
-                            markdown,
-                            due_at,
-                            available_from,
-                            available_until,
-                            unlimited_attempts,
-                            max_attempts,
-                            grade_attempt_policy: "latest".into(),
-                            passing_score_percent: None,
-                            points_worth,
-                            late_submission_policy: "allow".into(),
-                            late_penalty_percent: None,
-                            time_limit_minutes,
-                            timer_pause_when_tab_hidden: false,
-                            per_question_time_limit_seconds: None,
-                            show_score_timing: "immediate".into(),
-                            review_visibility: "full".into(),
-                            review_when: "always".into(),
-                            one_question_at_a_time: false,
-                            shuffle_questions: false,
-                            shuffle_choices: false,
-                            allow_back_navigation: true,
-                            quiz_access_code: None,
-                            adaptive_difficulty: "standard".into(),
-                            adaptive_topic_balance: true,
-                            adaptive_stop_rule: "fixed_count".into(),
-                            random_question_pool_count: None,
-                            questions,
-                            is_adaptive: false,
-                            adaptive_system_prompt: String::new(),
-                            adaptive_source_item_ids: vec![],
-                            adaptive_question_count: 5,
-                        },
-                    );
-                    sort_order += 1;
+                        item_published,
+                        module_id,
+                        &mut sort_order,
+                        now,
+                        map_grading_groups,
+                        &canvas_ag_to_lex,
+                        &mut structure,
+                        &mut quizzes,
+                        progress,
+                        &mut first_quiz_msg,
+                        &mut first_quiz_questions_msg,
+                    )
+                    .await?;
                 }
                 "Discussion" => {
                     if first_discussion_msg {
@@ -1485,58 +1602,191 @@ pub async fn build_export_from_canvas(
         }
     }
 
-    emit_progress(progress, "Loading Canvas enrollments (for roles)…");
-    let enrollment_rows = match canvas_get_json_array_paginated(
-        client,
-        &base,
-        token,
-        &["courses", &cid_str, "enrollments"],
-        &[
-            ("state[]", "active"),
-            ("state[]", "invited"),
-            ("state[]", "creation_pending"),
-        ],
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            emit_progress(
-                progress,
-                &format!(
-                    "Could not load Canvas enrollments ({}). Roster will use course users only.",
-                    e
-                ),
-            );
-            Vec::new()
-        }
-    };
+    if !include.modules && (include.assignments || include.quizzes) {
+        emit_progress(
+            progress,
+            "Loading course-wide assignments and quizzes from Canvas…",
+        );
+        let synthetic_parent = Uuid::new_v4();
+        structure.push(CourseStructureItemResponse {
+            id: synthetic_parent,
+            sort_order,
+            kind: "module".into(),
+            title: "Imported from Canvas".into(),
+            parent_id: None,
+            published: true,
+            visible_from: None,
+            archived: false,
+            due_at: None,
+            assignment_group_id: None,
+            created_at: now,
+            updated_at: now,
+            is_adaptive: None,
+            points_possible: None,
+            points_worth: None,
+            external_url: None,
+        });
+        sort_order += 1;
 
-    emit_progress(progress, "Loading Canvas course users (for emails and names)…");
-    let course_user_rows = match canvas_fetch_course_users_for_roster(client, &base, token, &cid_str).await {
-        Ok(v) => v,
-        Err(e) => {
-            emit_progress(
-                progress,
-                &format!(
-                    "Could not load Canvas course users ({}). Roster will use enrollment data only.",
-                    e
-                ),
-            );
-            Vec::new()
+        if include.assignments {
+            let mut arows = canvas_get_json_array_paginated(
+                client,
+                &base,
+                token,
+                &["courses", &cid_str, "assignments"],
+                &[],
+            )
+            .await
+            .unwrap_or_default();
+            arows.sort_by_key(|r| {
+                r.get("position")
+                    .and_then(|v| v.as_i64())
+                    .or_else(|| json_i64(r.get("id")))
+                    .unwrap_or(9999)
+            });
+            for row in arows {
+                let Some(aid) = json_i64(row.get("id")) else {
+                    continue;
+                };
+                let atitle =
+                    json_string(row.get("name")).unwrap_or_else(|| "Assignment".to_string());
+                let item_published = row
+                    .get("published")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                canvas_export_append_assignment_details(
+                    client,
+                    &base,
+                    token,
+                    cid,
+                    aid,
+                    atitle,
+                    item_published,
+                    synthetic_parent,
+                    &mut sort_order,
+                    now,
+                    map_grading_groups,
+                    &canvas_ag_to_lex,
+                    &mut structure,
+                    &mut assignments,
+                    progress,
+                    &mut first_assignment_msg,
+                )
+                .await?;
+            }
         }
-    };
+        if include.quizzes {
+            let mut qrows = canvas_get_json_array_paginated(
+                client,
+                &base,
+                token,
+                &["courses", &cid_str, "quizzes"],
+                &[],
+            )
+            .await
+            .unwrap_or_default();
+            qrows.sort_by_key(|r| {
+                r.get("position")
+                    .and_then(|v| v.as_i64())
+                    .or_else(|| json_i64(r.get("id")))
+                    .unwrap_or(9999)
+            });
+            for row in qrows {
+                let Some(qid) = json_i64(row.get("id")) else {
+                    continue;
+                };
+                let qtitle = json_string(row.get("title"))
+                    .or_else(|| json_string(row.get("name")))
+                    .unwrap_or_else(|| "Quiz".to_string());
+                let item_published = row
+                    .get("published")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                canvas_export_append_quiz_details(
+                    client,
+                    &base,
+                    token,
+                    cid,
+                    &cid_str,
+                    qid,
+                    qtitle,
+                    item_published,
+                    synthetic_parent,
+                    &mut sort_order,
+                    now,
+                    map_grading_groups,
+                    &canvas_ag_to_lex,
+                    &mut structure,
+                    &mut quizzes,
+                    progress,
+                    &mut first_quiz_msg,
+                    &mut first_quiz_questions_msg,
+                )
+                .await?;
+            }
+        }
+    }
 
-    let enrollments = canvas_build_enrollments_from_canvas_data(&enrollment_rows, &course_user_rows);
-    emit_progress(
-        progress,
-        &format!(
-            "Prepared {} roster row(s) from Canvas ({} enrollment(s), {} user profile(s)).",
-            enrollments.len(),
-            enrollment_rows.len(),
-            course_user_rows.len()
-        ),
-    );
+    let enrollments = if include.enrollments {
+        emit_progress(progress, "Loading Canvas enrollments (for roles)…");
+        let enrollment_rows = match canvas_get_json_array_paginated(
+            client,
+            &base,
+            token,
+            &["courses", &cid_str, "enrollments"],
+            &[
+                ("state[]", "active"),
+                ("state[]", "invited"),
+                ("state[]", "creation_pending"),
+            ],
+        )
+        .await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                emit_progress(
+                    progress,
+                    &format!(
+                        "Could not load Canvas enrollments ({}). Roster will use course users only.",
+                        e
+                    ),
+                );
+                Vec::new()
+            }
+        };
+
+        emit_progress(progress, "Loading Canvas course users (for emails and names)…");
+        let course_user_rows =
+            match canvas_fetch_course_users_for_roster(client, &base, token, &cid_str).await {
+                Ok(v) => v,
+                Err(e) => {
+                    emit_progress(
+                        progress,
+                        &format!(
+                            "Could not load Canvas course users ({}). Roster will use enrollment data only.",
+                            e
+                        ),
+                    );
+                    Vec::new()
+                }
+            };
+
+        let enrollments =
+            canvas_build_enrollments_from_canvas_data(&enrollment_rows, &course_user_rows);
+        emit_progress(
+            progress,
+            &format!(
+                "Prepared {} roster row(s) from Canvas ({} enrollment(s), {} user profile(s)).",
+                enrollments.len(),
+                enrollment_rows.len(),
+                course_user_rows.len()
+            ),
+        );
+        enrollments
+    } else {
+        emit_progress(progress, "Skipping Canvas roster (enrollments import disabled).");
+        Vec::new()
+    };
     emit_progress(progress, "Building export bundle from Canvas data…");
 
     let snap = CourseExportSnapshot {
@@ -1555,6 +1805,9 @@ pub async fn build_export_from_canvas(
         published,
         markdown_theme_preset: "classic".into(),
         markdown_theme_custom: None,
+        notebook_enabled: true,
+        feed_enabled: true,
+        calendar_enabled: true,
     };
 
     Ok(CourseExportV1 {
@@ -1579,6 +1832,7 @@ pub async fn build_export_from_canvas_wire(
     canvas_base_url: &str,
     canvas_course_id_raw: &str,
     access_token: &str,
+    include: CanvasImportInclude,
     allowed_host_suffixes: &[String],
     progress: Option<&UnboundedSender<String>>,
 ) -> Result<CourseExportV1, AppError> {
@@ -1588,6 +1842,7 @@ pub async fn build_export_from_canvas_wire(
         canvas_base_url,
         cid,
         access_token,
+        include,
         allowed_host_suffixes,
         progress,
     )

@@ -1,5 +1,15 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { Archive, ArrowLeft, Calendar, FolderInput, Info, Palette, Scale } from 'lucide-react'
+import {
+  Archive,
+  ArrowLeft,
+  Calendar,
+  FolderInput,
+  Info,
+  Palette,
+  Scale,
+  SlidersHorizontal,
+  Target,
+} from 'lucide-react'
 import { courseSettingsSectionFromPathname } from './sideNavPathUtils'
 import { sideNavActiveClass, sideNavLinkClass } from './sideNavStyles'
 
@@ -52,6 +62,22 @@ export function SideNavCourseSettingsLinks({ courseCode }: SideNavCourseSettings
       >
         <Scale className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Grading
+      </NavLink>
+      <NavLink
+        to={`${base}/outcomes`}
+        className={() => `${sideNavLinkClass} ${section === 'outcomes' ? sideNavActiveClass : ''}`}
+      >
+        <Target className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        Outcomes
+      </NavLink>
+      <NavLink
+        to={`${base}/features-tools`}
+        className={() =>
+          `${sideNavLinkClass} ${section === 'features-tools' ? sideNavActiveClass : ''}`
+        }
+      >
+        <SlidersHorizontal className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        Features and Tools
       </NavLink>
       <NavLink
         to={`${base}/export-import`}

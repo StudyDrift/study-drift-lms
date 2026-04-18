@@ -11,15 +11,17 @@ This document describes the product UI direction for the Lextures learning manag
 
 ## Color
 
-| Role | Usage | Reference |
-|------|--------|-----------|
-| **Primary accent** | Primary buttons, active nav, key links | Indigo / violet family — e.g. `#6366F1` (Tailwind `indigo-500` / `indigo-600`) |
-| **Success / progress** | Positive metrics, completion | Teal / emerald (`teal-500`–`600`) |
-| **Warning** | Low-urgency tags, cautions | Amber (`amber-500`) |
-| **Text primary** | Headings, emphasis | `slate-900` |
-| **Text secondary** | Descriptions, metadata | `slate-500`–`slate-600` |
-| **Borders** | Dividers, card outlines | `slate-200` |
-| **Page background** | Main canvas behind content | White or `slate-50` |
+
+| Role                   | Usage                                  | Reference                                                                      |
+| ---------------------- | -------------------------------------- | ------------------------------------------------------------------------------ |
+| **Primary accent**     | Primary buttons, active nav, key links | Indigo / violet family — e.g. `#6366F1` (Tailwind `indigo-500` / `indigo-600`) |
+| **Success / progress** | Positive metrics, completion           | Teal / emerald (`teal-500`–`600`)                                              |
+| **Warning**            | Low-urgency tags, cautions             | Amber (`amber-500`)                                                            |
+| **Text primary**       | Headings, emphasis                     | `slate-900`                                                                    |
+| **Text secondary**     | Descriptions, metadata                 | `slate-500`–`slate-600`                                                        |
+| **Borders**            | Dividers, card outlines                | `slate-200`                                                                    |
+| **Page background**    | Main canvas behind content             | White or `slate-50`                                                            |
+
 
 Avoid pure black text; **slate-900** keeps contrast high while staying soft.
 
@@ -73,5 +75,5 @@ Avoid pure black text; **slate-900** keeps contrast high while staying soft.
 
 ## Implementation notes
 
-- Tailwind utility classes map the palette above (`slate-*`, `indigo-*`, `teal-*` for positive metrics).
+- Tailwind utility classes map the palette above (`slate-`*, `indigo-*`, `teal-*` for positive metrics).
 - Global font and `body` background are set in `clients/web/src/index.css`; page shells live under `clients/web/src/components/layout/`.

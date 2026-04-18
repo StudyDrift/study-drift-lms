@@ -43,6 +43,12 @@ pub struct CourseExportSnapshot {
     pub markdown_theme_preset: String,
     #[serde(default)]
     pub markdown_theme_custom: Option<JsonValue>,
+    #[serde(default = "default_true")]
+    pub notebook_enabled: bool,
+    #[serde(default = "default_true")]
+    pub feed_enabled: bool,
+    #[serde(default = "default_true")]
+    pub calendar_enabled: bool,
 }
 
 fn default_export_schedule_mode() -> String {
@@ -245,6 +251,37 @@ pub struct CourseImportRequest {
     pub export: CourseExportV1,
 }
 
+/// Which parts of a Canvas course to pull into the export bundle (and apply on import).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasImportInclude {
+    #[serde(default = "default_true")]
+    pub modules: bool,
+    #[serde(default = "default_true")]
+    pub assignments: bool,
+    #[serde(default = "default_true")]
+    pub quizzes: bool,
+    #[serde(default = "default_true")]
+    pub enrollments: bool,
+    #[serde(default = "default_true")]
+    pub grades: bool,
+    #[serde(default = "default_true")]
+    pub settings: bool,
+}
+
+impl Default for CanvasImportInclude {
+    fn default() -> Self {
+        Self {
+            modules: true,
+            assignments: true,
+            quizzes: true,
+            enrollments: true,
+            grades: true,
+            settings: true,
+        }
+    }
+}
+
 /// Import a Canvas course via the Canvas REST API (server-side proxy; token is not stored).
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -256,4 +293,6 @@ pub struct CourseCanvasImportRequest {
     pub canvas_course_id: String,
     /// Short-lived Canvas access token with permission to read the course.
     pub access_token: String,
+    #[serde(default)]
+    pub include: CanvasImportInclude,
 }

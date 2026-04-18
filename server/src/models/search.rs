@@ -6,6 +6,9 @@ use uuid::Uuid;
 pub struct SearchCourseItem {
     pub course_code: String,
     pub title: String,
+    pub notebook_enabled: bool,
+    pub feed_enabled: bool,
+    pub calendar_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]

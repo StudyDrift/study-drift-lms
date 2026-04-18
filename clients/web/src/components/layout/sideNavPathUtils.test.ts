@@ -33,6 +33,10 @@ describe('courseSettingsSectionFromPathname', () => {
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/dates')).toBe('dates')
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/branding')).toBe('branding')
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/grading')).toBe('grading')
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/outcomes')).toBe('outcomes')
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/features-tools')).toBe(
+      'features-tools',
+    )
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/export-import')).toBe(
       'export-import',
     )

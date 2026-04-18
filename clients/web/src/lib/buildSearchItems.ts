@@ -145,17 +145,34 @@ export function buildSearchItems(
     hint: string
     /** If set, the page is only searchable when `allows(permission(courseCode))` is true. */
     requiredPermission?: (courseCode: string) => string
+    /** If set, omit when the course has turned off this tool. */
+    whenCourse?: (c: SearchCourseItem) => boolean
   }[] = [
     { suffix: '', title: 'Course dashboard', hint: 'dashboard overview' },
-    { suffix: '/feed', title: 'Feed', hint: 'feed chat channels messages discussion' },
+    {
+      suffix: '/feed',
+      title: 'Feed',
+      hint: 'feed chat channels messages discussion',
+      whenCourse: (c) => c.feedEnabled !== false,
+    },
     { suffix: '/syllabus', title: 'Syllabus', hint: 'syllabus outline' },
     {
       suffix: '/modules',
       title: 'Modules',
       hint: 'modules lessons content pages assignments quizzes external links',
     },
-    { suffix: '/notebook', title: 'Notebook', hint: 'notes journal thoughts' },
-    { suffix: '/calendar', title: 'Course calendar', hint: 'calendar schedule' },
+    {
+      suffix: '/notebook',
+      title: 'Notebook',
+      hint: 'notes journal thoughts',
+      whenCourse: (c) => c.notebookEnabled !== false,
+    },
+    {
+      suffix: '/calendar',
+      title: 'Course calendar',
+      hint: 'calendar schedule',
+      whenCourse: (c) => c.calendarEnabled !== false,
+    },
     {
       suffix: '/my-grades',
       title: 'My grades',
@@ -185,6 +202,9 @@ export function buildSearchItems(
     const base = `/courses/${enc(c.courseCode)}`
     for (const def of coursePageDefs) {
       if (def.requiredPermission && !allows(def.requiredPermission(c.courseCode))) {
+        continue
+      }
+      if (def.whenCourse && !def.whenCourse(c)) {
         continue
       }
       const path = `${base}${def.suffix}`
@@ -222,6 +242,18 @@ export function buildSearchItems(
       title: 'Grading settings',
       hint: 'grading scale assignment groups weights categories',
       requiredPermission: courseGradebookViewPermission,
+    },
+    {
+      suffix: '/settings/outcomes',
+      title: 'Course outcomes',
+      hint: 'learning outcomes objectives alignment evidence quiz questions progress',
+      requiredPermission: courseItemCreatePermission,
+    },
+    {
+      suffix: '/settings/features-tools',
+      title: 'Course features and tools',
+      hint: 'features tools notebook feed calendar enable disable toggles',
+      requiredPermission: courseItemCreatePermission,
     },
     {
       suffix: '/settings/export-import',

@@ -6,9 +6,9 @@ use crate::models::content_page_markups::{
 };
 use crate::models::course::{
     CoursePublic, CourseWithViewerResponse, CoursesResponse, CreateCourseRequest,
-    MarkdownThemeCustom, PatchCourseArchivedRequest, PutCourseCatalogOrderRequest,
-    SetHeroImageRequest, UpdateCourseRequest, UpdateMarkdownThemeRequest, GRADING_SCALES,
-    MARKDOWN_THEME_PRESETS,
+    MarkdownThemeCustom, PatchCourseArchivedRequest, PatchCourseFeaturesRequest,
+    PutCourseCatalogOrderRequest, SetHeroImageRequest, UpdateCourseRequest, UpdateMarkdownThemeRequest,
+    GRADING_SCALES, MARKDOWN_THEME_PRESETS,
 };
 use crate::models::course_export::{CourseCanvasImportRequest, CourseExportV1, CourseImportRequest};
 use crate::models::course_gradebook::{
@@ -65,6 +65,7 @@ use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
 use crate::repos::course_module_external_links;
 use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
+use crate::repos::course_outcomes;
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
@@ -97,7 +98,7 @@ use axum::{
     routing::{delete, get, patch, post, put},
     Json, Router,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use chrono::{DateTime, Utc};
 use reqwest::Client;
@@ -300,6 +301,10 @@ pub fn router() -> Router<AppState> {
             patch(update_markdown_theme_handler),
         )
         .route(
+            "/api/v1/courses/{course_code}/features",
+            patch(patch_course_features_handler),
+        )
+        .route(
             "/api/v1/courses/{course_code}/archived",
             patch(patch_course_archived_handler),
         )
@@ -330,6 +335,22 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/grading",
             get(grading_get_handler).put(grading_put_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/outcomes",
+            get(course_outcomes_list_handler).post(course_outcomes_create_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/outcomes/{outcome_id}",
+            patch(course_outcomes_patch_handler).delete(course_outcomes_delete_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/outcomes/{outcome_id}/links",
+            post(course_outcomes_add_link_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/outcomes/{outcome_id}/links/{link_id}",
+            delete(course_outcomes_delete_link_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/gradebook/grid",
@@ -3407,6 +3428,514 @@ async fn grading_put_handler(
     }
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CourseOutcomesListResponse {
+    enrolled_learners: i32,
+    outcomes: Vec<CourseOutcomeApi>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CourseOutcomeApi {
+    id: Uuid,
+    title: String,
+    description: String,
+    sort_order: i32,
+    rollup_avg_score_percent: Option<f32>,
+    links: Vec<CourseOutcomeLinkApi>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CourseOutcomeLinkApi {
+    id: Uuid,
+    structure_item_id: Uuid,
+    target_kind: String,
+    quiz_question_id: String,
+    measurement_level: String,
+    intensity_level: String,
+    item_title: String,
+    item_kind: String,
+    progress: course_outcomes::OutcomeLinkProgress,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PostCourseOutcomeRequest {
+    title: String,
+    #[serde(default)]
+    description: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PatchCourseOutcomeRequest {
+    title: Option<String>,
+    description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PostCourseOutcomeLinkRequest {
+    structure_item_id: Uuid,
+    target_kind: String,
+    #[serde(default)]
+    quiz_question_id: Option<String>,
+    #[serde(default)]
+    measurement_level: Option<String>,
+    #[serde(default)]
+    intensity_level: Option<String>,
+}
+
+fn validate_outcome_link_levels(
+    measurement: Option<&str>,
+    intensity: Option<&str>,
+) -> Result<(&'static str, &'static str), AppError> {
+    let m_raw = measurement.unwrap_or("").trim();
+    let m = if m_raw.is_empty() { "formative" } else { m_raw };
+    let i_raw = intensity.unwrap_or("").trim();
+    let i = if i_raw.is_empty() { "medium" } else { i_raw };
+
+    let m = course_outcomes::MEASUREMENT_LEVELS
+        .iter()
+        .copied()
+        .find(|v| *v == m)
+        .ok_or_else(|| {
+            AppError::InvalidInput(format!(
+                "measurementLevel must be one of: {}.",
+                course_outcomes::MEASUREMENT_LEVELS.join(", ")
+            ))
+        })?;
+    let i = course_outcomes::INTENSITY_LEVELS
+        .iter()
+        .copied()
+        .find(|v| *v == i)
+        .ok_or_else(|| {
+            AppError::InvalidInput(format!(
+                "intensityLevel must be one of: {}.",
+                course_outcomes::INTENSITY_LEVELS.join(", ")
+            ))
+        })?;
+    Ok((m, i))
+}
+
+/// One score per gradable evidence target so duplicate links (e.g. different measurement labels) do not double-count.
+fn rollup_avg_for_outcome_links(links: &[CourseOutcomeLinkApi]) -> Option<f32> {
+    let mut by_evidence: HashMap<(Uuid, String, String), f32> = HashMap::new();
+    for link in links {
+        if let Some(p) = link.progress.avg_score_percent {
+            let key = (
+                link.structure_item_id,
+                link.target_kind.clone(),
+                link.quiz_question_id.clone(),
+            );
+            by_evidence.entry(key).or_insert(p);
+        }
+    }
+    if by_evidence.is_empty() {
+        None
+    } else {
+        Some(by_evidence.values().sum::<f32>() / by_evidence.len() as f32)
+    }
+}
+
+async fn require_course_outcomes_edit(
+    state: &AppState,
+    course_code: &str,
+    user_id: Uuid,
+) -> Result<Uuid, AppError> {
+    require_course_access(state, course_code, user_id).await?;
+    let required = course_grants::course_item_create_permission(course_code);
+    assert_permission(&state.pool, user_id, &required).await?;
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    Ok(course_id)
+}
+
+async fn course_outcomes_list_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<CourseOutcomesListResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id = require_course_outcomes_edit(&state, &course_code, user.user_id).await?;
+
+    let students = enrollment::list_student_users_for_course_code(&state.pool, &course_code).await?;
+    let enrolled = students.len() as i32;
+
+    let rows = course_outcomes::list_outcomes(&state.pool, course_id).await?;
+    let link_rows = course_outcomes::list_links_for_course(&state.pool, course_id).await?;
+
+    let mut links_by_outcome: HashMap<Uuid, Vec<&course_outcomes::OutcomeLinkWithItemRow>> =
+        HashMap::new();
+    for lr in &link_rows {
+        links_by_outcome.entry(lr.outcome_id).or_default().push(lr);
+    }
+
+    let mut outcomes_out = Vec::with_capacity(rows.len());
+    for o in rows {
+        let empty: Vec<&course_outcomes::OutcomeLinkWithItemRow> = Vec::new();
+        let links_for_o = links_by_outcome.get(&o.id).unwrap_or(&empty);
+
+        let mut link_apis: Vec<CourseOutcomeLinkApi> = Vec::new();
+
+        for lr in links_for_o {
+            let progress = match lr.target_kind.as_str() {
+                "quiz_question" => {
+                    course_outcomes::progress_for_quiz_question(
+                        &state.pool,
+                        course_id,
+                        lr.structure_item_id,
+                        lr.quiz_question_id.trim(),
+                        enrolled,
+                    )
+                    .await?
+                }
+                "assignment" | "quiz" => {
+                    course_outcomes::progress_for_graded_item(
+                        &state.pool,
+                        course_id,
+                        lr.structure_item_id,
+                        lr.item_kind.as_str(),
+                        enrolled,
+                    )
+                    .await?
+                }
+                _ => course_outcomes::OutcomeLinkProgress {
+                    avg_score_percent: None,
+                    graded_learners: 0,
+                    enrolled_learners: enrolled,
+                },
+            };
+            link_apis.push(CourseOutcomeLinkApi {
+                id: lr.id,
+                structure_item_id: lr.structure_item_id,
+                target_kind: lr.target_kind.clone(),
+                quiz_question_id: lr.quiz_question_id.clone(),
+                measurement_level: lr.measurement_level.clone(),
+                intensity_level: lr.intensity_level.clone(),
+                item_title: lr.item_title.clone(),
+                item_kind: lr.item_kind.clone(),
+                progress,
+            });
+        }
+
+        let rollup_avg_score_percent = rollup_avg_for_outcome_links(&link_apis);
+
+        outcomes_out.push(CourseOutcomeApi {
+            id: o.id,
+            title: o.title,
+            description: o.description,
+            sort_order: o.sort_order,
+            rollup_avg_score_percent,
+            links: link_apis,
+        });
+    }
+
+    Ok(Json(CourseOutcomesListResponse {
+        enrolled_learners: enrolled,
+        outcomes: outcomes_out,
+    }))
+}
+
+async fn course_outcomes_create_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<PostCourseOutcomeRequest>,
+) -> Result<Json<CourseOutcomeApi>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id = require_course_outcomes_edit(&state, &course_code, user.user_id).await?;
+
+    let title = req.title.trim();
+    if title.is_empty() {
+        return Err(AppError::InvalidInput("Title is required.".into()));
+    }
+    if title.len() > 500 {
+        return Err(AppError::InvalidInput("Title is too long.".into()));
+    }
+    if req.description.len() > 20_000 {
+        return Err(AppError::InvalidInput("Description is too long.".into()));
+    }
+
+    let row = course_outcomes::insert_outcome(
+        &state.pool,
+        course_id,
+        title,
+        req.description.trim(),
+    )
+    .await?;
+
+    Ok(Json(CourseOutcomeApi {
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        sort_order: row.sort_order,
+        rollup_avg_score_percent: None,
+        links: vec![],
+    }))
+}
+
+async fn course_outcomes_patch_handler(
+    State(state): State<AppState>,
+    Path((course_code, outcome_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<PatchCourseOutcomeRequest>,
+) -> Result<Json<CourseOutcomeApi>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id = require_course_outcomes_edit(&state, &course_code, user.user_id).await?;
+
+    if let Some(ref t) = req.title {
+        let t = t.trim();
+        if t.is_empty() {
+            return Err(AppError::InvalidInput("Title cannot be empty.".into()));
+        }
+        if t.len() > 500 {
+            return Err(AppError::InvalidInput("Title is too long.".into()));
+        }
+    }
+    if let Some(ref d) = req.description {
+        if d.len() > 20_000 {
+            return Err(AppError::InvalidInput("Description is too long.".into()));
+        }
+    }
+
+    let Some(updated) = course_outcomes::update_outcome(
+        &state.pool,
+        course_id,
+        outcome_id,
+        req.title.as_deref(),
+        req.description.as_deref(),
+    )
+    .await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    let enrolled =
+        enrollment::list_student_users_for_course_code(&state.pool, &course_code).await?.len() as i32;
+    let link_rows =
+        course_outcomes::list_links_for_outcome(&state.pool, course_id, outcome_id).await?;
+
+    let mut link_apis = Vec::new();
+    for lr in &link_rows {
+        let progress = match lr.target_kind.as_str() {
+            "quiz_question" => {
+                course_outcomes::progress_for_quiz_question(
+                    &state.pool,
+                    course_id,
+                    lr.structure_item_id,
+                    lr.quiz_question_id.trim(),
+                    enrolled,
+                )
+                .await?
+            }
+            "assignment" | "quiz" => {
+                course_outcomes::progress_for_graded_item(
+                    &state.pool,
+                    course_id,
+                    lr.structure_item_id,
+                    lr.item_kind.as_str(),
+                    enrolled,
+                )
+                .await?
+            }
+            _ => course_outcomes::OutcomeLinkProgress {
+                avg_score_percent: None,
+                graded_learners: 0,
+                enrolled_learners: enrolled,
+            },
+        };
+        link_apis.push(CourseOutcomeLinkApi {
+            id: lr.id,
+            structure_item_id: lr.structure_item_id,
+            target_kind: lr.target_kind.clone(),
+            quiz_question_id: lr.quiz_question_id.clone(),
+            measurement_level: lr.measurement_level.clone(),
+            intensity_level: lr.intensity_level.clone(),
+            item_title: lr.item_title.clone(),
+            item_kind: lr.item_kind.clone(),
+            progress,
+        });
+    }
+
+    let rollup_avg_score_percent = rollup_avg_for_outcome_links(&link_apis);
+
+    Ok(Json(CourseOutcomeApi {
+        id: updated.id,
+        title: updated.title,
+        description: updated.description,
+        sort_order: updated.sort_order,
+        rollup_avg_score_percent,
+        links: link_apis,
+    }))
+}
+
+async fn course_outcomes_delete_handler(
+    State(state): State<AppState>,
+    Path((course_code, outcome_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id = require_course_outcomes_edit(&state, &course_code, user.user_id).await?;
+
+    let ok = course_outcomes::delete_outcome(&state.pool, course_id, outcome_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn course_outcomes_add_link_handler(
+    State(state): State<AppState>,
+    Path((course_code, outcome_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<PostCourseOutcomeLinkRequest>,
+) -> Result<Json<CourseOutcomeLinkApi>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id = require_course_outcomes_edit(&state, &course_code, user.user_id).await?;
+
+    let outcomes = course_outcomes::list_outcomes(&state.pool, course_id).await?;
+    if !outcomes.iter().any(|o| o.id == outcome_id) {
+        return Err(AppError::NotFound);
+    }
+
+    let kind = req.target_kind.trim();
+    if !matches!(kind, "assignment" | "quiz" | "quiz_question") {
+        return Err(AppError::InvalidInput(
+            "targetKind must be assignment, quiz, or quiz_question.".into(),
+        ));
+    }
+
+    let Some(item) =
+        course_structure::get_item_row(&state.pool, course_id, req.structure_item_id).await?
+    else {
+        return Err(AppError::InvalidInput(
+            "That module item is not part of this course.".into(),
+        ));
+    };
+
+    let qid = req.quiz_question_id.as_deref().unwrap_or("").trim();
+    let qid_store = if kind == "quiz_question" {
+        if qid.is_empty() {
+            return Err(AppError::InvalidInput(
+                "quizQuestionId is required when targetKind is quiz_question.".into(),
+            ));
+        }
+        let Some(quiz_row) =
+            course_module_quizzes::get_for_course_item(&state.pool, course_id, req.structure_item_id)
+                .await?
+        else {
+            return Err(AppError::InvalidInput("Quiz not found for that item.".into()));
+        };
+        let questions: &[QuizQuestion] = quiz_row.questions_json.as_ref();
+        if !questions.iter().any(|q| q.id == qid) {
+            return Err(AppError::InvalidInput(
+                "That quiz does not contain a question with the given id.".into(),
+            ));
+        }
+        qid
+    } else {
+        ""
+    };
+
+    let expected_kind = match kind {
+        "assignment" => "assignment",
+        "quiz" | "quiz_question" => "quiz",
+        _ => "",
+    };
+    if item.kind != expected_kind {
+        return Err(AppError::InvalidInput(
+            "The module item type does not match targetKind.".into(),
+        ));
+    }
+
+    let (measurement_level, intensity_level) = validate_outcome_link_levels(
+        req.measurement_level.as_deref(),
+        req.intensity_level.as_deref(),
+    )?;
+
+    let inserted = match course_outcomes::insert_link(
+        &state.pool,
+        outcome_id,
+        req.structure_item_id,
+        kind,
+        qid_store,
+        measurement_level,
+        intensity_level,
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            if let sqlx::Error::Database(ref dbe) = e {
+                if dbe.constraint() == Some("ux_course_outcome_links_unique_target") {
+                    return Err(AppError::InvalidInput(
+                        "This outcome already maps that item with the same measurement and intensity levels. Change the levels or remove the existing mapping first.".into(),
+                    ));
+                }
+            }
+            return Err(e.into());
+        }
+    };
+
+    let enrolled =
+        enrollment::list_student_users_for_course_code(&state.pool, &course_code).await?.len() as i32;
+
+    let progress = match kind {
+        "quiz_question" => {
+            course_outcomes::progress_for_quiz_question(
+                &state.pool,
+                course_id,
+                req.structure_item_id,
+                qid_store,
+                enrolled,
+            )
+            .await?
+        }
+        "assignment" | "quiz" => {
+            course_outcomes::progress_for_graded_item(
+                &state.pool,
+                course_id,
+                req.structure_item_id,
+                item.kind.as_str(),
+                enrolled,
+            )
+            .await?
+        }
+        _ => unreachable!(),
+    };
+
+    Ok(Json(CourseOutcomeLinkApi {
+        id: inserted.id,
+        structure_item_id: inserted.structure_item_id,
+        target_kind: inserted.target_kind,
+        quiz_question_id: inserted.quiz_question_id,
+        measurement_level: inserted.measurement_level,
+        intensity_level: inserted.intensity_level,
+        item_title: item.title,
+        item_kind: item.kind,
+        progress,
+    }))
+}
+
+async fn course_outcomes_delete_link_handler(
+    State(state): State<AppState>,
+    Path((course_code, outcome_id, link_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id = require_course_outcomes_edit(&state, &course_code, user.user_id).await?;
+
+    let ok = course_outcomes::delete_link(&state.pool, course_id, outcome_id, link_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn structure_item_due_at_patch_handler(
     State(state): State<AppState>,
     Path((course_code, item_id)): Path<(String, Uuid)>,
@@ -3658,7 +4187,8 @@ async fn course_import_post_handler(
     let required = course_grants::course_item_create_permission(&course_code);
     assert_permission(&state.pool, user.user_id, &required).await?;
 
-    course_export_import::apply_import(&state.pool, &course_code, req.mode, &req.export).await?;
+    course_export_import::apply_import(&state.pool, &course_code, req.mode, &req.export, None)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -3777,6 +4307,7 @@ async fn handle_canvas_import_ws(
         canvas_base_url,
         canvas_course_id,
         access_token,
+        include: canvas_include,
     } = req;
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
@@ -3800,6 +4331,7 @@ async fn handle_canvas_import_ws(
                 &canvas_base_url,
                 &canvas_course_id,
                 &access_token,
+                canvas_include,
                 &state.canvas_allowed_host_suffixes,
                 Some(&tx),
             )
@@ -3813,7 +4345,14 @@ async fn handle_canvas_import_ws(
                 .to_string(),
             );
 
-            course_export_import::apply_import(&pool, &course_code_worker, mode, &export).await?;
+            course_export_import::apply_import(
+                &pool,
+                &course_code_worker,
+                mode,
+                &export,
+                Some(&canvas_include),
+            )
+            .await?;
             Ok::<(), AppError>(())
         };
 
@@ -4503,6 +5042,30 @@ async fn update_markdown_theme_handler(
         course::update_markdown_theme(&state.pool, &course_code, preset, custom_store.as_ref())
             .await?
             .ok_or(AppError::NotFound)?;
+    Ok(Json(row))
+}
+
+async fn patch_course_features_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<PatchCourseFeaturesRequest>,
+) -> Result<Json<CoursePublic>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let row = course::patch_course_features(
+        &state.pool,
+        &course_code,
+        req.notebook_enabled,
+        req.feed_enabled,
+        req.calendar_enabled,
+    )
+    .await?
+    .ok_or(AppError::NotFound)?;
     Ok(Json(row))
 }
 

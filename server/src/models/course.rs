@@ -65,6 +65,12 @@ pub struct CoursePublic {
     pub grading_scale: String,
     /// When true, hidden from dashboards and search for all enrollments.
     pub archived: bool,
+    /// Student course notebook page (local notes UI); when false, nav and client treat as off.
+    pub notebook_enabled: bool,
+    /// Course discussion feed and related APIs.
+    pub feed_enabled: bool,
+    /// Course-level due-date calendar view.
+    pub calendar_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -118,6 +124,14 @@ pub struct UpdateMarkdownThemeRequest {
     pub preset: String,
     #[serde(default)]
     pub custom: Option<MarkdownThemeCustom>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchCourseFeaturesRequest {
+    pub notebook_enabled: bool,
+    pub feed_enabled: bool,
+    pub calendar_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]

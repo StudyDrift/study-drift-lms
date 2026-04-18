@@ -21,6 +21,8 @@ import {
 import { CourseArchivedContentSection } from './CourseArchivedContentSection'
 import { CourseExportImportSection } from './CourseExportImportSection'
 import { CourseGradingSettingsSection } from './CourseGradingSettings'
+import { CourseFeaturesSection } from './CourseFeaturesSection'
+import { CourseOutcomesSection } from './CourseOutcomesSection'
 
 function isoToDatetimeLocal(iso: string | null): string {
   if (!iso) return ''
@@ -77,7 +79,15 @@ type SavePayload = {
   relativeHiddenAfter: string | null
 }
 
-type SettingsSection = 'basic' | 'dates' | 'branding' | 'grading' | 'export-import' | 'archived'
+type SettingsSection =
+  | 'basic'
+  | 'dates'
+  | 'branding'
+  | 'grading'
+  | 'outcomes'
+  | 'features-tools'
+  | 'export-import'
+  | 'archived'
 
 function parseSettingsSection(courseCode: string, pathname: string): SettingsSection | 'invalid' {
   const base = `/courses/${encodeURIComponent(courseCode)}/settings`
@@ -90,6 +100,8 @@ function parseSettingsSection(courseCode: string, pathname: string): SettingsSec
   if (parts[0] === 'dates') return 'dates'
   if (parts[0] === 'branding') return 'branding'
   if (parts[0] === 'grading') return 'grading'
+  if (parts[0] === 'outcomes') return 'outcomes'
+  if (parts[0] === 'features-tools') return 'features-tools'
   if (parts[0] === 'export-import') return 'export-import'
   if (parts[0] === 'archived') return 'archived'
   return 'invalid'
@@ -496,17 +508,25 @@ export default function CourseSettings() {
           ? course?.title
             ? `${course.title} — grading`
             : 'Grading'
-          : section === 'export-import'
+          : section === 'outcomes'
             ? course?.title
-              ? `${course.title} — export/import`
-              : 'Export / import'
-            : section === 'archived'
+              ? `${course.title} — outcomes`
+              : 'Outcomes'
+            : section === 'features-tools'
               ? course?.title
-                ? `${course.title} — archived`
-                : 'Archived'
-              : course?.title
-                ? `${course.title} — settings`
-                : 'Course settings'
+                ? `${course.title} — features and tools`
+                : 'Features and tools'
+              : section === 'export-import'
+                ? course?.title
+                  ? `${course.title} — export/import`
+                  : 'Export / import'
+                : section === 'archived'
+                  ? course?.title
+                    ? `${course.title} — archived`
+                    : 'Archived'
+                  : course?.title
+                    ? `${course.title} — settings`
+                    : 'Course settings'
 
   const pageDescription =
     section === 'basic'
@@ -517,11 +537,15 @@ export default function CourseSettings() {
           ? 'Hero image, banner, and reading appearance for syllabus and module pages.'
           : section === 'grading'
             ? 'Grading scale, weighted assignment groups, and how items map to each group.'
-            : section === 'export-import'
-              ? 'Download the full course as JSON or restore from a backup file.'
-              : section === 'archived'
-                ? 'Module items you archived from the outline. Restore them when you want them visible again.'
-                : ''
+            : section === 'outcomes'
+              ? 'Define learning outcomes, map assignments and quizzes (including individual questions) with measurement and intensity levels, and review class progress from grades and attempts.'
+              : section === 'features-tools'
+                ? 'Choose which course tools appear in the menu and are available to instructors and learners.'
+                : section === 'export-import'
+                  ? 'Download the full course as JSON or restore from a backup file.'
+                  : section === 'archived'
+                    ? 'Module items you archived from the outline. Restore them when you want them visible again.'
+                    : ''
 
   return (
     <LmsPage title={pageTitle} description={pageDescription}>
@@ -543,7 +567,7 @@ export default function CourseSettings() {
 
       {course && !loading && (
         <div
-          className={`mt-8 space-y-6 ${section === 'branding' || section === 'grading' || section === 'export-import' || section === 'archived' ? 'max-w-4xl' : 'max-w-2xl'}`}
+          className={`mt-8 space-y-6 ${section === 'branding' || section === 'grading' || section === 'outcomes' || section === 'features-tools' || section === 'export-import' || section === 'archived' ? 'max-w-4xl' : 'max-w-2xl'}`}
         >
           {section === 'basic' && (
             <>
@@ -959,6 +983,14 @@ export default function CourseSettings() {
           )}
 
           {section === 'grading' && <CourseGradingSettingsSection courseCode={courseCode} />}
+          {section === 'outcomes' && <CourseOutcomesSection courseCode={courseCode} />}
+          {section === 'features-tools' && (
+            <CourseFeaturesSection
+              courseCode={courseCode}
+              course={course}
+              onCourseUpdated={setCourse}
+            />
+          )}
           {section === 'export-import' && <CourseExportImportSection courseCode={courseCode} />}
           {section === 'archived' && <CourseArchivedContentSection courseCode={courseCode} />}
         </div>

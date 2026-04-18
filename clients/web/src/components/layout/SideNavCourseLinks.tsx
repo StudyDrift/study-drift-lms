@@ -12,6 +12,7 @@ import {
   Settings,
   Users,
 } from 'lucide-react'
+import { useCourseNavFeatures } from '../../context/CourseNavFeaturesContext'
 import { usePermissions } from '../../context/usePermissions'
 import {
   courseEnrollmentsReadPermission,
@@ -30,6 +31,7 @@ type SideNavCourseLinksProps = {
 }
 
 export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
+  const { notebookEnabled, feedEnabled, calendarEnabled } = useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
   const courseViewPreview = useCourseViewAs(courseCode)
   const viewerEnrollmentRoles = useViewerEnrollmentRoles(courseCode)
@@ -67,13 +69,15 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
         <LayoutDashboard className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Dashboard
       </NavLink>
-      <NavLink
-        to={`${base}/feed`}
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <MessageSquare className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Feed
-      </NavLink>
+      {feedEnabled && (
+        <NavLink
+          to={`${base}/feed`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <MessageSquare className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Feed
+        </NavLink>
+      )}
       <NavLink
         to={`${base}/syllabus`}
         className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
@@ -88,20 +92,24 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
         <Layers className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Modules
       </NavLink>
-      <NavLink
-        to={`${base}/notebook`}
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <NotebookPen className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Notebook
-      </NavLink>
-      <NavLink
-        to={`${base}/calendar`}
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <Calendar className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Calendar
-      </NavLink>
+      {notebookEnabled && (
+        <NavLink
+          to={`${base}/notebook`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <NotebookPen className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Notebook
+        </NavLink>
+      )}
+      {calendarEnabled && (
+        <NavLink
+          to={`${base}/calendar`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <Calendar className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Calendar
+        </NavLink>
+      )}
       {canViewMyGrades && (
         <NavLink
           to={`${base}/my-grades`}

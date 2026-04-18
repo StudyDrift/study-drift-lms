@@ -31,6 +31,12 @@ export type Course = {
   markdownThemeCustom: MarkdownThemeCustom | null
   /** Display grading scale id (matches server `GRADING_SCALES`). */
   gradingScale: string
+  /** Course notebook page in the LMS (default true when omitted by older servers). */
+  notebookEnabled?: boolean
+  /** Course discussion feed (default true when omitted). */
+  feedEnabled?: boolean
+  /** Course due-date calendar page (default true when omitted). */
+  calendarEnabled?: boolean
   createdAt: string
   updatedAt: string
   /** Present on single-course GET: raw enrollment roles for the viewer (`teacher`, `student`, …). */
@@ -171,6 +177,27 @@ export async function patchCourseMarkdownTheme(
       body: JSON.stringify({
         preset: body.preset,
         custom: body.custom ?? null,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as Course
+}
+
+export async function patchCourseFeatures(
+  courseCode: string,
+  body: { notebookEnabled: boolean; feedEnabled: boolean; calendarEnabled: boolean },
+): Promise<Course> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/features`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        notebookEnabled: body.notebookEnabled,
+        feedEnabled: body.feedEnabled,
+        calendarEnabled: body.calendarEnabled,
       }),
     },
   )
@@ -1791,6 +1818,142 @@ export async function putCourseGradingSettings(
   return parseCourseGradingSettings(raw)
 }
 
+/** GET `/outcomes` — learning outcomes, evidence links, and class-level progress. */
+export type CourseOutcomeLinkProgress = {
+  avgScorePercent: number | null
+  gradedLearners: number
+  enrolledLearners: number
+}
+
+/** Must match server `course_outcome_links` check constraint. */
+export const OUTCOME_MEASUREMENT_LEVEL_IDS = [
+  'diagnostic',
+  'formative',
+  'summative',
+  'performance',
+] as const
+export type OutcomeMeasurementLevelId = (typeof OUTCOME_MEASUREMENT_LEVEL_IDS)[number]
+
+export const OUTCOME_INTENSITY_LEVEL_IDS = ['low', 'medium', 'high'] as const
+export type OutcomeIntensityLevelId = (typeof OUTCOME_INTENSITY_LEVEL_IDS)[number]
+
+export type CourseOutcomeLink = {
+  id: string
+  structureItemId: string
+  targetKind: 'assignment' | 'quiz' | 'quiz_question'
+  quizQuestionId: string
+  measurementLevel: OutcomeMeasurementLevelId | string
+  intensityLevel: OutcomeIntensityLevelId | string
+  itemTitle: string
+  itemKind: string
+  progress: CourseOutcomeLinkProgress
+}
+
+export type CourseOutcome = {
+  id: string
+  title: string
+  description: string
+  sortOrder: number
+  rollupAvgScorePercent: number | null
+  links: CourseOutcomeLink[]
+}
+
+export type CourseOutcomesListResponse = {
+  enrolledLearners: number
+  outcomes: CourseOutcome[]
+}
+
+export async function fetchCourseOutcomes(courseCode: string): Promise<CourseOutcomesListResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/outcomes`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as CourseOutcomesListResponse
+}
+
+export async function createCourseOutcome(
+  courseCode: string,
+  body: { title: string; description?: string },
+): Promise<CourseOutcome> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/outcomes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: body.title, description: body.description ?? '' }),
+  })
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as CourseOutcome
+}
+
+export async function patchCourseOutcome(
+  courseCode: string,
+  outcomeId: string,
+  body: { title?: string; description?: string },
+): Promise<CourseOutcome> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/outcomes/${encodeURIComponent(outcomeId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as CourseOutcome
+}
+
+export async function deleteCourseOutcome(courseCode: string, outcomeId: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/outcomes/${encodeURIComponent(outcomeId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
+export async function addCourseOutcomeLink(
+  courseCode: string,
+  outcomeId: string,
+  body: {
+    structureItemId: string
+    targetKind: string
+    quizQuestionId?: string
+    measurementLevel?: string
+    intensityLevel?: string
+  },
+): Promise<CourseOutcomeLink> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/outcomes/${encodeURIComponent(outcomeId)}/links`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as CourseOutcomeLink
+}
+
+export async function deleteCourseOutcomeLink(
+  courseCode: string,
+  outcomeId: string,
+  linkId: string,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/outcomes/${encodeURIComponent(outcomeId)}/links/${encodeURIComponent(linkId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
 export async function patchCourseStructureItemAssignmentGroup(
   courseCode: string,
   itemId: string,
@@ -1872,11 +2035,32 @@ export async function postCourseImport(
   }
 }
 
+/** Mirrors server `CanvasImportInclude`; all default true when omitted. */
+export type CanvasImportInclude = {
+  modules: boolean
+  assignments: boolean
+  quizzes: boolean
+  enrollments: boolean
+  grades: boolean
+  settings: boolean
+}
+
+export const CANVAS_IMPORT_INCLUDE_ALL: CanvasImportInclude = {
+  modules: true,
+  assignments: true,
+  quizzes: true,
+  enrollments: true,
+  grades: true,
+  settings: true,
+}
+
 export type PostCourseImportCanvasBody = {
   mode: CourseBundleImportMode
   canvasBaseUrl: string
   canvasCourseId: string
   accessToken: string
+  /** When omitted, every category is imported (server default). */
+  include?: CanvasImportInclude
 }
 
 function courseCanvasImportWebSocketUrl(courseCode: string): string | null {
@@ -1923,6 +2107,7 @@ export async function postCourseImportCanvas(
           canvasBaseUrl: body.canvasBaseUrl,
           canvasCourseId: body.canvasCourseId,
           accessToken: body.accessToken,
+          include: body.include ?? CANVAS_IMPORT_INCLUDE_ALL,
         }),
       )
     }

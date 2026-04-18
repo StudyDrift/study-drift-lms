@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- sync localStorage notebook and course title from network */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
+import { useCourseNavFeatures } from '../../context/CourseNavFeaturesContext'
 import { MarkdownBodyEditor } from '../../components/editor/block-editor/MarkdownBodyEditor'
 import { CourseNotebookSidebar } from '../../components/notebook/CourseNotebookSidebar'
 import {
@@ -22,6 +23,8 @@ const CONTENT_SAVE_MS = 500
 
 export default function CourseNotebookPage() {
   const { courseCode } = useParams<{ courseCode: string }>()
+  const { notebookEnabled: courseNotebookEnabled, loading: courseFeatureFlagsLoading } =
+    useCourseNavFeatures()
   const [data, setData] = useState<CourseNotebookStore | null>(null)
   const [courseTitle, setCourseTitle] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -209,6 +212,10 @@ export default function CourseNotebookPage() {
 
   if (!courseCode) {
     return <Navigate to="/courses" replace />
+  }
+
+  if (!courseFeatureFlagsLoading && !courseNotebookEnabled) {
+    return <Navigate to={`/courses/${encodeURIComponent(courseCode)}`} replace />
   }
 
   if (!data) {

@@ -395,16 +395,20 @@ function SortableChildRow({
   }
 
   const showRowChrome = canManageItemRow && !child.archived
+  const gripAlwaysOn = dragHandlesVisible || isDragging
 
   return (
-    <li ref={setNodeRef} style={style} className="py-3 first:pt-0">
+    <li ref={setNodeRef} style={style} className="group py-3 first:pt-0">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-2">
         <div className="flex min-w-0 flex-1 items-start gap-2">
           {!disabled && (
             <button
               type="button"
-              style={!dragHandlesVisible ? { display: 'none' } : undefined}
-              className="mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300"
+              className={`mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300 ${
+                gripAlwaysOn
+                  ? 'opacity-100'
+                  : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto'
+              }`}
               aria-label="Drag to reorder item"
               {...listeners}
               {...attributes}
@@ -423,7 +427,7 @@ function SortableChildRow({
         </div>
         {showRowChrome ? (
           <div
-            className={`flex shrink-0 justify-end sm:items-center sm:self-center sm:pl-0 ${!disabled && dragHandlesVisible ? 'pl-[3.25rem]' : 'pl-0'}`}
+            className={`flex shrink-0 justify-end sm:items-center sm:self-center sm:pl-0 ${!disabled ? 'pl-[3.25rem]' : 'pl-0'}`}
           >
             <ModuleItemRowActions
               child={child}
@@ -491,7 +495,7 @@ function ModuleCardBody({
       }`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-3">
-        <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
+        <div className="group flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
           {moduleDragHandle}
           <div className="min-w-0 flex-1">
             {showAccordionToggle ? (
@@ -692,8 +696,11 @@ function SortableModuleCard({
           canEditModules ? (
             <button
               type="button"
-              style={!dragHandlesVisible ? { display: 'none' } : undefined}
-              className="mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300"
+              className={`mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300 ${
+                dragHandlesVisible || isDragging
+                  ? 'opacity-100'
+                  : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto'
+              }`}
               aria-label="Drag to reorder module"
               {...listeners}
               {...attributes}
@@ -865,9 +872,10 @@ export default function CourseModules() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!courseCode) return
-    setLoading(true)
+    const silent = Boolean(opts?.silent)
+    if (!silent) setLoading(true)
     setLoadError(null)
     setModuleActionError(null)
     try {
@@ -877,7 +885,7 @@ export default function CourseModules() {
       setLoadError(e instanceof Error ? e.message : 'Could not load course structure.')
       setItems([])
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [courseCode])
 
@@ -905,7 +913,7 @@ export default function CourseModules() {
       setModuleSaving(true)
       try {
         await createCourseModule(courseCode, { title })
-        await load()
+        await load({ silent: true })
         setModuleModalOpen(false)
       } catch (e) {
         setModuleSaveError(e instanceof Error ? e.message : 'Could not save module.')
@@ -923,7 +931,7 @@ export default function CourseModules() {
       setHeadingSaving(true)
       try {
         await createModuleHeading(courseCode, headingModuleId, { title })
-        await load()
+        await load({ silent: true })
         setHeadingModalOpen(false)
         setHeadingModuleId(null)
       } catch (e) {
@@ -942,7 +950,7 @@ export default function CourseModules() {
       setContentPageSaving(true)
       try {
         await createModuleContentPage(courseCode, contentPageModuleId, { title })
-        await load()
+        await load({ silent: true })
         setContentPageModalOpen(false)
         setContentPageModuleId(null)
       } catch (e) {
@@ -961,7 +969,7 @@ export default function CourseModules() {
       setAssignmentSaving(true)
       try {
         await createModuleAssignment(courseCode, assignmentModuleId, { title })
-        await load()
+        await load({ silent: true })
         setAssignmentModalOpen(false)
         setAssignmentModuleId(null)
       } catch (e) {
@@ -980,7 +988,7 @@ export default function CourseModules() {
       setQuizSaving(true)
       try {
         await createModuleQuiz(courseCode, quizModuleId, { title })
-        await load()
+        await load({ silent: true })
         setQuizModalOpen(false)
         setQuizModuleId(null)
       } catch (e) {
@@ -999,7 +1007,7 @@ export default function CourseModules() {
       setExternalLinkSaving(true)
       try {
         await createModuleExternalLink(courseCode, externalLinkModuleId, { title, url })
-        await load()
+        await load({ silent: true })
         setExternalLinkModalOpen(false)
         setExternalLinkModuleId(null)
       } catch (e) {
@@ -1066,7 +1074,7 @@ export default function CourseModules() {
           published: !item.published,
           visibleFrom: item.visibleFrom,
         })
-        await load()
+        await load({ silent: true })
       } catch (e) {
         setModuleActionError(e instanceof Error ? e.message : 'Could not update module.')
       } finally {
@@ -1083,7 +1091,7 @@ export default function CourseModules() {
       setBusyChildItemId(child.id)
       try {
         await patchCourseStructureItem(courseCode, child.id, { published: !child.published })
-        await load()
+        await load({ silent: true })
       } catch (e) {
         setModuleActionError(e instanceof Error ? e.message : 'Could not update item.')
       } finally {
@@ -1107,7 +1115,7 @@ export default function CourseModules() {
       setEditItemSaving(true)
       try {
         await patchCourseStructureItem(courseCode, editTargetItem.id, { title })
-        await load()
+        await load({ silent: true })
         setEditItemModalOpen(false)
         setEditTargetItem(null)
       } catch (e) {
@@ -1131,7 +1139,7 @@ export default function CourseModules() {
     setBusyChildItemId(child.id)
     try {
       await archiveCourseStructureItem(courseCode, child.id)
-      await load()
+      await load({ silent: true })
       setArchiveConfirmItem(null)
     } catch (e) {
       setModuleActionError(e instanceof Error ? e.message : 'Could not archive item.')
@@ -1154,7 +1162,7 @@ export default function CourseModules() {
       setModuleSettingsSaving(true)
       try {
         await patchCourseModule(courseCode, moduleSettingsModuleId, payload)
-        await load()
+        await load({ silent: true })
         setModuleSettingsOpen(false)
         setModuleSettingsModuleId(null)
       } catch (e) {
@@ -1228,7 +1236,7 @@ export default function CourseModules() {
         setItems(next)
       } catch (e) {
         setReorderError(e instanceof Error ? e.message : 'Could not save order.')
-        await load()
+        await load({ silent: true })
       } finally {
         setReorderSaving(false)
       }

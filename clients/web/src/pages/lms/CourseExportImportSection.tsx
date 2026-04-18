@@ -3,10 +3,12 @@ import { Download, GraduationCap, Upload } from 'lucide-react'
 import { BookLoader } from '../../components/quiz/BookLoader'
 import { usePermissions } from '../../context/usePermissions'
 import {
+  CANVAS_IMPORT_INCLUDE_ALL,
   courseItemCreatePermission,
   fetchCourseExport,
   postCourseImport,
   postCourseImportCanvas,
+  type CanvasImportInclude,
   type CourseBundleImportMode,
 } from '../../lib/coursesApi'
 export function CourseExportImportSection({ courseCode }: { courseCode: string }) {
@@ -21,6 +23,7 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
   const [canvasBaseUrl, setCanvasBaseUrl] = useState('')
   const [canvasCourseId, setCanvasCourseId] = useState('')
   const [canvasToken, setCanvasToken] = useState('')
+  const [canvasInclude, setCanvasInclude] = useState<CanvasImportInclude>(CANVAS_IMPORT_INCLUDE_ALL)
   const [canvasImportStatus, setCanvasImportStatus] = useState<{
     key: number
     text: string
@@ -91,6 +94,7 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
           canvasBaseUrl: canvasBaseUrl.trim(),
           canvasCourseId: canvasCourseId.trim(),
           accessToken: canvasToken.trim(),
+          include: canvasInclude,
         },
         (message) => {
           setCanvasImportStatus((prev) => ({
@@ -225,13 +229,51 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
             From Canvas LMS
           </h3>
           <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
-            Use a Canvas personal access token. We fetch modules, wiki pages, assignments, quizzes
-            (and questions when exposed by Canvas), discussions, and enrollments (active and
-            invited), then map them into this course. Anyone with a matching email gets enrolled; if
-            they do not have a Lexters account yet, one is created with a random password (they can
-            use password reset to sign in, if your deployment offers it). The token is sent once for
-            the import (HTTPS and WebSocket) and is not stored.
+            Use a Canvas personal access token. Choose what to pull below (all are on by default).
+            We map Canvas into this course; anyone with a matching email gets enrolled when
+            enrollments are included; if they do not have a Lexters account yet, one is created with
+            a random password (they can use password reset to sign in, if your deployment offers it).
+            The token is sent once for the import (HTTPS and WebSocket) and is not stored.
           </p>
+          <fieldset className="mt-4 rounded-xl border border-slate-200 p-4 dark:border-neutral-600">
+            <legend className="px-1 text-xs font-medium text-slate-700 dark:text-neutral-300">
+              Import from Canvas
+            </legend>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {(
+                [
+                  ['modules', 'Modules', 'Outline, wiki pages, discussions, links, and other module items (not assignments/quizzes).'] as const,
+                  ['assignments', 'Assignments', 'Assignment prompts, due dates, and submission settings.'] as const,
+                  ['quizzes', 'Quizzes', 'Quizzes and questions when Canvas exposes them.'] as const,
+                  ['enrollments', 'Enrollments', 'Active and invited roster (matched by email).'] as const,
+                  ['grades', 'Grades', 'Assignment groups and weighting from Canvas (gradebook layout).'] as const,
+                  ['settings', 'Settings', 'Course title, overview, dates, visibility, and syllabus sections.'] as const,
+                ] as const
+              ).map(([key, label, hint]) => (
+                <label
+                  key={key}
+                  className="flex cursor-pointer items-start gap-2 rounded-lg border border-transparent px-1 py-1 hover:border-slate-200 hover:bg-slate-50 dark:hover:border-neutral-600 dark:hover:bg-neutral-800/60"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={canvasInclude[key]}
+                    onChange={(e) =>
+                      setCanvasInclude((prev) => ({ ...prev, [key]: e.target.checked }))
+                    }
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-slate-900 dark:text-neutral-100">
+                      {label}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-500">
+                      {hint}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <label className="block sm:col-span-2">
               <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">

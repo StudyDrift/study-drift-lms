@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Navigate, useParams } from 'react-router-dom'
 import { CourseFileMarkdownImage } from '../../components/syllabus/CourseFileMarkdownImage'
 import { FeedComposer } from '../../components/feed/FeedComposer'
 import { wsUrl } from '../../lib/api'
@@ -34,6 +34,7 @@ import {
 } from '../../lib/courseFeedApi'
 import { fetchCourse, type Course } from '../../lib/coursesApi'
 import { getAccessToken, getJwtSubject } from '../../lib/auth'
+import { useCourseNavFeatures } from '../../context/CourseNavFeaturesContext'
 import { useCourseFeedUnread } from '../../context/useCourseFeedUnread'
 import { LmsPage } from './LmsPage'
 
@@ -300,6 +301,8 @@ function FeedMessageBody({
 
 export default function CourseFeedPage() {
   const { courseCode } = useParams<{ courseCode: string }>()
+  const { feedEnabled: courseFeedEnabled, loading: courseFeatureFlagsLoading } =
+    useCourseNavFeatures()
   const [course, setCourse] = useState<Course | null>(null)
   const [channels, setChannels] = useState<FeedChannel[]>([])
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null)
@@ -586,6 +589,10 @@ export default function CourseFeedPage() {
         <p className="mt-6 text-sm text-slate-500">Invalid link.</p>
       </LmsPage>
     )
+  }
+
+  if (!courseFeatureFlagsLoading && !courseFeedEnabled) {
+    return <Navigate to={`/courses/${encodeURIComponent(courseCode)}`} replace />
   }
 
   const pageTitle = course ? `Course feed, ${course.title}` : 'Course feed'

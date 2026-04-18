@@ -140,17 +140,42 @@ describe('buildSearchItems', () => {
     expect(noGrade.some((i) => i.path === '/courses/G/settings/grading')).toBe(false)
   })
 
-  it('includes export-import and archived settings when item:create is granted', () => {
+  it('includes export-import, outcomes, features-tools, and archived settings when item:create is granted', () => {
     const allowsItems = (p: string) => p === courseItemCreatePermission('Z')
     const items = buildSearchItems([{ courseCode: 'Z', title: 'W' }], [], allowsItems)
+    expect(items.some((i) => i.path === '/courses/Z/settings/outcomes')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/Z/settings/features-tools')).toBe(true)
     expect(items.some((i) => i.path === '/courses/Z/settings/export-import')).toBe(true)
     expect(items.some((i) => i.path === '/courses/Z/settings/archived')).toBe(true)
   })
 
-  it('omits export-import and archived settings without item:create', () => {
+  it('omits export-import, outcomes, features-tools, and archived settings without item:create', () => {
     const items = buildSearchItems([{ courseCode: 'Z', title: 'W' }], [], allowsNone)
+    expect(items.some((i) => i.path === '/courses/Z/settings/outcomes')).toBe(false)
+    expect(items.some((i) => i.path === '/courses/Z/settings/features-tools')).toBe(false)
     expect(items.some((i) => i.path === '/courses/Z/settings/export-import')).toBe(false)
     expect(items.some((i) => i.path === '/courses/Z/settings/archived')).toBe(false)
+  })
+
+  it('omits feed, notebook, and calendar search targets when disabled on the course', () => {
+    const allowsRosterX = (p: string) => p === courseEnrollmentsReadPermission('X')
+    const items = buildSearchItems(
+      [
+        {
+          courseCode: 'X',
+          title: 'Y',
+          feedEnabled: false,
+          notebookEnabled: false,
+          calendarEnabled: false,
+        },
+      ],
+      [],
+      allowsRosterX,
+    )
+    expect(items.some((i) => i.path === '/courses/X/feed')).toBe(false)
+    expect(items.some((i) => i.path === '/courses/X/notebook')).toBe(false)
+    expect(items.some((i) => i.path === '/courses/X/calendar')).toBe(false)
+    expect(items.some((i) => i.path === '/courses/X/syllabus')).toBe(true)
   })
 
   it('includes gradebook page only for courses where gradebook view is granted', () => {

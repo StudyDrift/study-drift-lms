@@ -21,6 +21,8 @@ export type CourseSettingsSection =
   | 'dates'
   | 'branding'
   | 'grading'
+  | 'outcomes'
+  | 'features-tools'
   | 'export-import'
   | 'archived'
 
@@ -32,6 +34,8 @@ export function courseSettingsSectionFromPathname(pathname: string): CourseSetti
   if (parts[0] === 'dates') return 'dates'
   if (parts[0] === 'branding') return 'branding'
   if (parts[0] === 'grading') return 'grading'
+  if (parts[0] === 'outcomes') return 'outcomes'
+  if (parts[0] === 'features-tools') return 'features-tools'
   if (parts[0] === 'export-import') return 'export-import'
   if (parts[0] === 'archived') return 'archived'
   return 'basic'

@@ -26,6 +26,9 @@ async fn search_index_handler(
         .map(|c| SearchCourseItem {
             course_code: c.course_code,
             title: c.title,
+            notebook_enabled: c.notebook_enabled,
+            feed_enabled: c.feed_enabled,
+            calendar_enabled: c.calendar_enabled,
         })
         .collect();
 

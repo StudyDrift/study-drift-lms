@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
+import { useCourseNavFeatures } from '../../context/CourseNavFeaturesContext'
 import { usePermissions } from '../../context/usePermissions'
 import { fetchCourseStructure, type CourseStructureItem } from '../../lib/coursesApi'
 import { permCourseItemsCreate } from '../../lib/rbacApi'
@@ -8,6 +9,8 @@ import { LmsPage } from './LmsPage'
 
 export default function CourseCalendarPage() {
   const { courseCode } = useParams<{ courseCode: string }>()
+  const { calendarEnabled: courseCalendarEnabled, loading: courseFeatureFlagsLoading } =
+    useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
   const [items, setItems] = useState<Awaited<ReturnType<typeof fetchCourseStructure>> | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -59,6 +62,10 @@ export default function CourseCalendarPage() {
 
   if (!courseCode) {
     return <Navigate to="/courses" replace />
+  }
+
+  if (!courseFeatureFlagsLoading && !courseCalendarEnabled) {
+    return <Navigate to={`/courses/${encodeURIComponent(courseCode)}`} replace />
   }
 
   return (

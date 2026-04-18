@@ -4,6 +4,10 @@ import { readApiErrorMessage } from './errors'
 export type SearchCourseItem = {
   courseCode: string
   title: string
+  /** When false, course feed is hidden from search and nav. */
+  notebookEnabled?: boolean
+  feedEnabled?: boolean
+  calendarEnabled?: boolean
 }
 
 export type SearchPersonItem = {

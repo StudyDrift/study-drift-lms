@@ -38,10 +38,17 @@ async fn require_course_access(
     Ok(())
 }
 
-async fn resolve_course_id(state: &AppState, course_code: &str) -> Result<Uuid, AppError> {
-    course::get_id_by_course_code(&state.pool, course_code)
+/// Course id for feed routes; returns an error when the feed tool is disabled for the course.
+async fn feed_course_id(state: &AppState, course_code: &str) -> Result<Uuid, AppError> {
+    let course = course::get_by_course_code(&state.pool, course_code)
         .await?
-        .ok_or(AppError::NotFound)
+        .ok_or(AppError::NotFound)?;
+    if !course.feed_enabled {
+        return Err(AppError::InvalidInput(
+            "The course feed is disabled for this course.".into(),
+        ));
+    }
+    Ok(course.id)
 }
 
 fn feed_publish(state: &AppState, course_id: Uuid, scope: FeedRealtimeScope) {
@@ -115,7 +122,7 @@ async fn list_channels_handler(
 ) -> Result<Json<FeedChannelsResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
-    let course_id = resolve_course_id(&state, &course_code).await?;
+    let course_id = feed_course_id(&state, &course_code).await?;
     let channels = course_feed::list_channels(&state.pool, course_id, user.user_id).await?;
     Ok(Json(FeedChannelsResponse { channels }))
 }
@@ -128,7 +135,7 @@ async fn create_channel_handler(
 ) -> Result<Json<FeedChannelPublic>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
-    let course_id = resolve_course_id(&state, &course_code).await?;
+    let course_id = feed_course_id(&state, &course_code).await?;
     let name = req.name.trim();
     if name.is_empty() || name.len() > 80 {
         return Err(AppError::InvalidInput(
@@ -147,7 +154,7 @@ async fn roster_handler(
 ) -> Result<Json<FeedRosterResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
-    let course_id = resolve_course_id(&state, &course_code).await?;
+    let course_id = feed_course_id(&state, &course_code).await?;
     let people = course_feed::list_roster(&state.pool, course_id).await?;
     Ok(Json(FeedRosterResponse { people }))
 }
@@ -163,6 +170,11 @@ async fn upload_feed_image_handler(
     let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
+    if !course_row.feed_enabled {
+        return Err(AppError::InvalidInput(
+            "The course feed is disabled for this course.".into(),
+        ));
+    }
 
     let (bytes, original_filename, mime_type) =
         course_image_upload::ingest_multipart_image_field(&mut multipart).await?;
@@ -189,7 +201,7 @@ async fn list_messages_handler(
 ) -> Result<Json<FeedMessagesResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
-    let course_id = resolve_course_id(&state, &course_code).await?;
+    let course_id = feed_course_id(&state, &course_code).await?;
     if !course_feed::channel_belongs_to_course(&state.pool, course_id, channel_id).await? {
         return Err(AppError::NotFound);
     }
@@ -206,7 +218,7 @@ async fn create_message_handler(
 ) -> Result<Json<CreateFeedMessageResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
-    let course_id = resolve_course_id(&state, &course_code).await?;
+    let course_id = feed_course_id(&state, &course_code).await?;
     if !course_feed::channel_belongs_to_course(&state.pool, course_id, channel_id).await? {
         return Err(AppError::NotFound);
     }
@@ -277,7 +289,7 @@ async fn patch_message_handler(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
-    let course_id = resolve_course_id(&state, &course_code).await?;
+    let course_id = feed_course_id(&state, &course_code).await?;
     let Some((ch_id, _author, _)) = course_feed::message_meta(&state.pool, course_id, message_id).await?
     else {
         return Err(AppError::NotFound);
@@ -317,7 +329,7 @@ async fn pin_message_handler(
     if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
         return Err(AppError::Forbidden);
     }
-    let course_id = resolve_course_id(&state, &course_code).await?;
+    let course_id = feed_course_id(&state, &course_code).await?;
     let Some((ch_id, _, _)) = course_feed::message_meta(&state.pool, course_id, message_id).await?
     else {
         return Err(AppError::NotFound);
@@ -348,7 +360,7 @@ async fn like_message_handler(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
-    let course_id = resolve_course_id(&state, &course_code).await?;
+    let course_id = feed_course_id(&state, &course_code).await?;
     let Some((ch_id, _, _)) = course_feed::message_meta(&state.pool, course_id, message_id).await?
     else {
         return Err(AppError::NotFound);
@@ -373,7 +385,7 @@ async fn unlike_message_handler(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
-    let course_id = resolve_course_id(&state, &course_code).await?;
+    let course_id = feed_course_id(&state, &course_code).await?;
     let Some((ch_id, _, _)) = course_feed::message_meta(&state.pool, course_id, message_id).await?
     else {
         return Err(AppError::NotFound);
@@ -427,7 +439,7 @@ async fn handle_feed_ws(mut socket: WebSocket, state: AppState, course_code: Str
         let _ = socket.send(Message::Close(None)).await;
         return;
     }
-    let Ok(course_id) = resolve_course_id(&state, &course_code).await else {
+    let Ok(course_id) = feed_course_id(&state, &course_code).await else {
         let _ = socket.send(Message::Close(None)).await;
         return;
     };

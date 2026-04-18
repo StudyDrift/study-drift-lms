@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { CommandPaletteProvider } from '../command-palette/CommandPaletteProvider'
 import { CourseFeedUnreadProvider } from '../../context/CourseFeedUnreadProvider'
 import { InboxUnreadProvider } from '../../context/InboxUnreadProvider'
+import { CourseNavFeaturesProvider } from '../../context/CourseNavFeaturesContext'
 import { ShellNavProvider } from './ShellNavContext'
 import { SideNav } from './SideNav'
 import { TopBar } from './TopBar'
@@ -13,16 +14,18 @@ export function AppShell() {
       <CourseFeedUnreadProvider>
         <CommandPaletteProvider>
           <ShellNavProvider>
-            <UiThemeSync />
-            <div className="flex h-dvh min-h-0 overflow-hidden bg-slate-50 dark:bg-neutral-950">
-              <SideNav />
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-neutral-900">
-                <TopBar />
-                <main className="lms-scope flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto dark:bg-neutral-900">
-                  <Outlet />
-                </main>
+            <CourseNavFeaturesProvider>
+              <UiThemeSync />
+              <div className="flex h-dvh min-h-0 overflow-hidden bg-slate-50 dark:bg-neutral-950">
+                <SideNav />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-neutral-900">
+                  <TopBar />
+                  <main className="lms-scope flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto dark:bg-neutral-900">
+                    <Outlet />
+                  </main>
+                </div>
               </div>
-            </div>
+            </CourseNavFeaturesProvider>
           </ShellNavProvider>
         </CommandPaletteProvider>
       </CourseFeedUnreadProvider>

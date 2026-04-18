@@ -54,6 +54,9 @@ pub async fn list_for_enrolled_user(
             c.markdown_theme_custom,
             c.grading_scale,
             c.archived,
+            c.notebook_enabled,
+            c.feed_enabled,
+            c.calendar_enabled,
             c.created_at,
             c.updated_at
         FROM {} c
@@ -110,6 +113,9 @@ pub async fn create_course(
                 markdown_theme_custom,
                 grading_scale,
                 archived,
+                notebook_enabled,
+                feed_enabled,
+                calendar_enabled,
                 created_at,
                 updated_at
             "#,
@@ -212,6 +218,9 @@ pub async fn get_by_course_code(
             markdown_theme_custom,
             grading_scale,
             archived,
+            notebook_enabled,
+            feed_enabled,
+            calendar_enabled,
             created_at,
             updated_at
         FROM {}
@@ -291,6 +300,9 @@ pub async fn update_course(
             markdown_theme_custom,
             grading_scale,
             archived,
+            notebook_enabled,
+            feed_enabled,
+            calendar_enabled,
             created_at,
             updated_at
         "#,
@@ -308,6 +320,58 @@ pub async fn update_course(
     .bind(u.relative_hidden_after)
     .bind(u.relative_schedule_anchor_at)
     .bind(u.course_code)
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn patch_course_features(
+    pool: &PgPool,
+    course_code: &str,
+    notebook_enabled: bool,
+    feed_enabled: bool,
+    calendar_enabled: bool,
+) -> Result<Option<CoursePublic>, sqlx::Error> {
+    sqlx::query_as::<_, CoursePublic>(&format!(
+        r#"
+        UPDATE {}
+        SET
+            notebook_enabled = $1,
+            feed_enabled = $2,
+            calendar_enabled = $3,
+            updated_at = NOW()
+        WHERE course_code = $4
+        RETURNING
+            id,
+            course_code,
+            title,
+            description,
+            hero_image_url,
+            hero_image_object_position,
+            starts_at,
+            ends_at,
+            visible_from,
+            hidden_at,
+            schedule_mode,
+            relative_end_after,
+            relative_hidden_after,
+            relative_schedule_anchor_at,
+            published,
+            markdown_theme_preset,
+            markdown_theme_custom,
+            grading_scale,
+            archived,
+            notebook_enabled,
+            feed_enabled,
+            calendar_enabled,
+            created_at,
+            updated_at
+        "#,
+        schema::COURSES
+    ))
+    .bind(notebook_enabled)
+    .bind(feed_enabled)
+    .bind(calendar_enabled)
+    .bind(course_code)
     .fetch_optional(pool)
     .await
 }
@@ -346,6 +410,9 @@ pub async fn set_hero_image_fields(
             markdown_theme_custom,
             grading_scale,
             archived,
+            notebook_enabled,
+            feed_enabled,
+            calendar_enabled,
             created_at,
             updated_at
         "#,
@@ -395,6 +462,9 @@ pub async fn update_markdown_theme(
             markdown_theme_custom,
             grading_scale,
             archived,
+            notebook_enabled,
+            feed_enabled,
+            calendar_enabled,
             created_at,
             updated_at
         "#,
@@ -520,6 +590,9 @@ pub async fn set_course_archived(
             markdown_theme_custom,
             grading_scale,
             archived,
+            notebook_enabled,
+            feed_enabled,
+            calendar_enabled,
             created_at,
             updated_at
         "#,
@@ -556,6 +629,14 @@ pub async fn factory_reset_course(
     sqlx::query(&format!(
         r#"DELETE FROM {} WHERE course_id = $1"#,
         schema::USER_AUDIT
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::COURSE_LEARNING_OUTCOMES
     ))
     .bind(course_id)
     .execute(&mut *tx)
@@ -639,6 +720,9 @@ pub async fn factory_reset_course(
             markdown_theme_preset = 'classic',
             markdown_theme_custom = NULL,
             grading_scale = 'letter_standard',
+            notebook_enabled = true,
+            feed_enabled = true,
+            calendar_enabled = true,
             updated_at = NOW()
         WHERE course_code = $1
         RETURNING
@@ -661,6 +745,9 @@ pub async fn factory_reset_course(
             markdown_theme_custom,
             grading_scale,
             archived,
+            notebook_enabled,
+            feed_enabled,
+            calendar_enabled,
             created_at,
             updated_at
         "#,

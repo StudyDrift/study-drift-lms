@@ -43,6 +43,12 @@ function datetimeLocalValueToIso(value: string): string | null {
   return d.toISOString()
 }
 
+function assignmentDateTimeIsSet(iso: string | null): boolean {
+  if (!iso) return false
+  const d = new Date(iso)
+  return !Number.isNaN(d.getTime())
+}
+
 function formatOptionalDateTime(iso: string | null): string {
   if (!iso) return 'Not set'
   const d = new Date(iso)
@@ -64,16 +70,16 @@ function assignmentGroupDisplayName(
   return g?.name ?? 'Unknown group'
 }
 
-function formatSubmissionTypes(
-  text: boolean,
-  file: boolean,
-  url: boolean,
-): string {
+function formatSubmissionTypes(text: boolean, file: boolean, url: boolean): string {
   const parts: string[] = []
   if (text) parts.push('Text')
   if (file) parts.push('File upload')
   if (url) parts.push('URL')
-  return parts.length ? parts.join(', ') : 'Not set'
+  return parts.join(', ')
+}
+
+function submissionTypesAreSet(text: boolean, file: boolean, url: boolean): boolean {
+  return text || file || url
 }
 
 function formatLateSubmissionSummary(
@@ -391,62 +397,74 @@ export default function CourseModuleAssignmentPage() {
           <div className="mt-8 space-y-6">
             <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-neutral-600 dark:bg-neutral-900/90">
               <dl className="space-y-2 text-sm">
-                <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Due date</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
-                    {formatOptionalDateTime(dueAt)}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Visibility start</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
-                    {formatOptionalDateTime(availableFromAt)}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Visibility end</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
-                    {formatOptionalDateTime(availableUntilAt)}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Submission types</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
-                    {formatSubmissionTypes(submissionAllowText, submissionAllowFileUpload, submissionAllowUrl)}
-                  </dd>
-                </div>
+                {assignmentDateTimeIsSet(dueAt) ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Due date</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      {formatOptionalDateTime(dueAt)}
+                    </dd>
+                  </div>
+                ) : null}
+                {assignmentDateTimeIsSet(availableFromAt) ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Visibility start</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      {formatOptionalDateTime(availableFromAt)}
+                    </dd>
+                  </div>
+                ) : null}
+                {assignmentDateTimeIsSet(availableUntilAt) ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Visibility end</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      {formatOptionalDateTime(availableUntilAt)}
+                    </dd>
+                  </div>
+                ) : null}
+                {submissionTypesAreSet(submissionAllowText, submissionAllowFileUpload, submissionAllowUrl) ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Submission types</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      {formatSubmissionTypes(submissionAllowText, submissionAllowFileUpload, submissionAllowUrl)}
+                    </dd>
+                  </div>
+                ) : null}
                 <div className="flex justify-between gap-4">
                   <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Late submission</dt>
                   <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
                     {formatLateSubmissionSummary(lateSubmissionPolicy, latePenaltyPercent)}
                   </dd>
                 </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Points</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
-                    {formatPointsWorth(pointsWorth)}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Assignment group</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
-                    {assignmentGroupDisplayName(assignmentGroupId, gradingGroups)}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Rubric</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
-                    {rubric && rubric.criteria.length > 0
-                      ? `${rubric.criteria.length} criteria`
-                      : 'None'}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Access code</dt>
-                  <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
-                    {requiresAssignmentAccessCode ? 'Required' : 'None'}
-                  </dd>
-                </div>
+                {pointsWorth != null ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Points</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      {formatPointsWorth(pointsWorth)}
+                    </dd>
+                  </div>
+                ) : null}
+                {assignmentGroupId ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Assignment group</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      {assignmentGroupDisplayName(assignmentGroupId, gradingGroups)}
+                    </dd>
+                  </div>
+                ) : null}
+                {rubric && rubric.criteria.length > 0 ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Rubric</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      {`${rubric.criteria.length} criteria`}
+                    </dd>
+                  </div>
+                ) : null}
+                {requiresAssignmentAccessCode ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Access code</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">Required</dd>
+                  </div>
+                ) : null}
               </dl>
             </div>
             <ContentPageReader

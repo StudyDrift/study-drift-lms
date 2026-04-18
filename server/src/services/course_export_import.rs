@@ -7,8 +7,8 @@ use crate::db::schema;
 use crate::error::AppError;
 use crate::models::course::{MarkdownThemeCustom, GRADING_SCALES};
 use crate::models::course_export::{
-    CourseExportSnapshot, CourseExportV1, CourseImportMode, ExportedAssignmentBody,
-    ExportedContentPageBody, ExportedCourseEnrollment, ExportedQuizBody,
+    CanvasImportInclude, CourseExportSnapshot, CourseExportV1, CourseImportMode,
+    ExportedAssignmentBody, ExportedContentPageBody, ExportedCourseEnrollment, ExportedQuizBody,
 };
 use crate::models::course_grading::CourseGradingSettingsResponse;
 use crate::models::course_module_quiz::{
@@ -499,6 +499,15 @@ async fn apply_course_snapshot(
     course::update_hero_fields_optional(pool, course_code, url, pos)
         .await
         .map_err(AppError::from)?;
+    course::patch_course_features(
+        pool,
+        course_code,
+        snap.notebook_enabled,
+        snap.feed_enabled,
+        snap.calendar_enabled,
+    )
+    .await?
+    .ok_or(AppError::NotFound)?;
     Ok(())
 }
 
@@ -857,6 +866,9 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         published: course.published,
         markdown_theme_preset: course.markdown_theme_preset.clone(),
         markdown_theme_custom: course.markdown_theme_custom.clone(),
+        notebook_enabled: course.notebook_enabled,
+        feed_enabled: course.feed_enabled,
+        calendar_enabled: course.calendar_enabled,
     };
 
     let grading = course_grading::get_settings_for_course_code(pool, course_code)
@@ -990,6 +1002,7 @@ pub async fn apply_import(
     target_course_code: &str,
     mode: CourseImportMode,
     ex: &CourseExportV1,
+    canvas_include: Option<&CanvasImportInclude>,
 ) -> Result<(), AppError> {
     validate_export_payload(ex)?;
 
@@ -997,21 +1010,37 @@ pub async fn apply_import(
         .await?
         .ok_or(AppError::NotFound)?;
 
+    let apply_grades = canvas_include.map(|i| i.grades).unwrap_or(true);
+    let apply_settings = canvas_include.map(|i| i.settings).unwrap_or(true);
+    let apply_enrollments = canvas_include.map(|i| i.enrollments).unwrap_or(true);
+    // JSON imports (`canvas_include` is None) erase the outline even when the bundle has no
+    // structure rows. Canvas partial imports skip that when every content category was unchecked.
+    let erase_outline_before_apply = !ex.structure.is_empty() || canvas_include.is_none();
+    // When the Canvas export intentionally omits all modules (partial import), do not delete
+    // local items that are absent from an empty `structure` list.
+    let overwrite_prune_structure = !ex.structure.is_empty() || canvas_include.is_none();
+
     match mode {
         CourseImportMode::Erase => {
-            course_structure::delete_all_items_for_course(pool, course_id)
+            if erase_outline_before_apply {
+                course_structure::delete_all_items_for_course(pool, course_id)
+                    .await
+                    .map_err(AppError::from)?;
+            }
+            if apply_grades {
+                apply_grading_from_export(pool, target_course_code, &ex.grading).await?;
+            }
+            if apply_settings {
+                apply_course_snapshot(pool, target_course_code, &ex.course).await?;
+                course_syllabus::upsert_syllabus(
+                    pool,
+                    course_id,
+                    &ex.syllabus,
+                    ex.require_syllabus_acceptance,
+                )
                 .await
                 .map_err(AppError::from)?;
-            apply_grading_from_export(pool, target_course_code, &ex.grading).await?;
-            apply_course_snapshot(pool, target_course_code, &ex.course).await?;
-            course_syllabus::upsert_syllabus(
-                pool,
-                course_id,
-                &ex.syllabus,
-                ex.require_syllabus_acceptance,
-            )
-            .await
-            .map_err(AppError::from)?;
+            }
             for it in &ex.structure {
                 course_structure::import_upsert_structure_item(pool, course_id, it, false)
                     .await
@@ -1020,8 +1049,12 @@ pub async fn apply_import(
             apply_module_bodies(pool, course_id, ex).await?;
         }
         CourseImportMode::MergeAdd => {
-            merge_add_grading_groups(pool, course_id, &ex.grading).await?;
-            merge_syllabus_sections(pool, course_id, &ex.syllabus).await?;
+            if apply_grades {
+                merge_add_grading_groups(pool, course_id, &ex.grading).await?;
+            }
+            if apply_settings {
+                merge_syllabus_sections(pool, course_id, &ex.syllabus).await?;
+            }
             let mut inserted: HashSet<Uuid> = HashSet::new();
             for it in &ex.structure {
                 let ins = course_structure::import_upsert_structure_item(pool, course_id, it, true)
@@ -1034,28 +1067,40 @@ pub async fn apply_import(
             apply_module_bodies_for_new_items_only(pool, course_id, ex, &inserted).await?;
         }
         CourseImportMode::Overwrite => {
-            apply_grading_from_export(pool, target_course_code, &ex.grading).await?;
-            apply_course_snapshot(pool, target_course_code, &ex.course).await?;
-            course_syllabus::upsert_syllabus(
-                pool,
-                course_id,
-                &ex.syllabus,
-                ex.require_syllabus_acceptance,
-            )
-            .await
-            .map_err(AppError::from)?;
-            let keep: HashSet<Uuid> = ex.structure.iter().map(|i| i.id).collect();
-            delete_structure_not_in_export(pool, course_id, &keep).await?;
-            for it in &ex.structure {
-                course_structure::import_upsert_structure_item(pool, course_id, it, false)
-                    .await
-                    .map_err(AppError::from)?;
+            if apply_grades {
+                apply_grading_from_export(pool, target_course_code, &ex.grading).await?;
             }
-            apply_module_bodies(pool, course_id, ex).await?;
+            if apply_settings {
+                apply_course_snapshot(pool, target_course_code, &ex.course).await?;
+                course_syllabus::upsert_syllabus(
+                    pool,
+                    course_id,
+                    &ex.syllabus,
+                    ex.require_syllabus_acceptance,
+                )
+                .await
+                .map_err(AppError::from)?;
+            }
+            if overwrite_prune_structure {
+                let keep: HashSet<Uuid> = ex.structure.iter().map(|i| i.id).collect();
+                delete_structure_not_in_export(pool, course_id, &keep).await?;
+                for it in &ex.structure {
+                    course_structure::import_upsert_structure_item(pool, course_id, it, false)
+                        .await
+                        .map_err(AppError::from)?;
+                }
+                apply_module_bodies(pool, course_id, ex).await?;
+            }
         }
     }
 
-    apply_enrollments_from_export(pool, target_course_code, course_id, mode, &ex.enrollments).await?;
+    let enrollment_rows: &[ExportedCourseEnrollment] = if apply_enrollments {
+        &ex.enrollments
+    } else {
+        &[]
+    };
+    apply_enrollments_from_export(pool, target_course_code, course_id, mode, enrollment_rows)
+        .await?;
 
     Ok(())
 }
