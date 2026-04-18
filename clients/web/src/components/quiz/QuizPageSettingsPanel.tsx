@@ -10,6 +10,7 @@ import type {
   ReviewWhen,
   ShowScoreTiming,
 } from '../../lib/coursesApi'
+import { ModuleItemOutcomesMappingAccordion } from '../outcomes/ModuleItemOutcomesMappingAccordion'
 
 export type QuizPageSettingsPanelProps = {
   disabled?: boolean
@@ -34,6 +35,10 @@ export type QuizPageSettingsPanelProps = {
   advanced: QuizAdvancedSettings
   onAdvancedChange: (next: QuizAdvancedSettings) => void
   showAdaptiveSection: boolean
+  /** When set, settings include outcome links for this quiz item. */
+  courseCode?: string
+  quizItemId?: string
+  quizOutcomesQuestions?: { id: string; prompt: string }[]
 }
 
 const inputClass =
@@ -149,6 +154,9 @@ export function QuizPageSettingsPanel({
   advanced,
   onAdvancedChange,
   showAdaptiveSection,
+  courseCode,
+  quizItemId,
+  quizOutcomesQuestions,
 }: QuizPageSettingsPanelProps) {
   function patch(p: Partial<QuizAdvancedSettings>) {
     onAdvancedChange({ ...advanced, ...p })
@@ -522,6 +530,18 @@ export function QuizPageSettingsPanel({
             </div>
           </div>
         </SettingsAccordion>
+
+        {courseCode && quizItemId ? (
+          <SettingsAccordion title="Outcomes mapping">
+            <ModuleItemOutcomesMappingAccordion
+              courseCode={courseCode}
+              itemId={quizItemId}
+              mode="quiz"
+              disabled={disabled}
+              quizQuestions={quizOutcomesQuestions ?? []}
+            />
+          </SettingsAccordion>
+        ) : null}
 
         <SettingsAccordion title="Access">
           <div className="pt-1">

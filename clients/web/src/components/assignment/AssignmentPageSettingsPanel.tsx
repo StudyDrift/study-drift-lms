@@ -8,6 +8,7 @@ import {
   type RubricCriterion,
   type RubricLevel,
 } from '../../lib/coursesApi'
+import { ModuleItemOutcomesMappingAccordion } from '../outcomes/ModuleItemOutcomesMappingAccordion'
 
 export type AssignmentPageSettingsPanelProps = {
   disabled?: boolean
@@ -368,6 +369,17 @@ export function AssignmentPageSettingsPanel({
             assignmentMarkdown={assignmentMarkdown}
           />
         </SettingsAccordion>
+
+        {courseCode && assignmentItemId ? (
+          <SettingsAccordion title="Outcomes mapping">
+            <ModuleItemOutcomesMappingAccordion
+              courseCode={courseCode}
+              itemId={assignmentItemId}
+              mode="assignment"
+              disabled={disabled}
+            />
+          </SettingsAccordion>
+        ) : null}
 
         <SettingsAccordion title="Access">
           <div className="space-y-3 pt-1">

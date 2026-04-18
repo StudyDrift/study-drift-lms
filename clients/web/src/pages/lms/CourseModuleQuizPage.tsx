@@ -1086,6 +1086,9 @@ export default function CourseModuleQuizPage() {
                     advanced={draftQuizAdvanced}
                     onAdvancedChange={setDraftQuizAdvanced}
                     showAdaptiveSection={isAdaptive}
+                    courseCode={courseCode}
+                    quizItemId={itemId}
+                    quizOutcomesQuestions={questions.map((q) => ({ id: q.id, prompt: q.prompt }))}
                   />
                 ) : null
               }
