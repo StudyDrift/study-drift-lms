@@ -909,7 +909,8 @@ function ManageUsersModal({ roleId, roleName, onClose }: ManageUsersModalProps) 
     return members.filter(
       (u) =>
         u.email.toLowerCase().includes(q) ||
-        (u.displayName && u.displayName.toLowerCase().includes(q)),
+        (u.displayName && u.displayName.toLowerCase().includes(q)) ||
+        (u.sid && u.sid.toLowerCase().includes(q)),
     )
   }, [members, memberFilter])
 
@@ -989,6 +990,11 @@ function ManageUsersModal({ roleId, roleName, onClose }: ManageUsersModalProps) 
                       {u.displayName?.trim() ? (
                         <div className="truncate text-xs text-slate-500 dark:text-neutral-400">{u.email}</div>
                       ) : null}
+                      {u.sid?.trim() ? (
+                        <div className="truncate text-xs text-slate-500 dark:text-neutral-400">
+                          Student ID: {u.sid.trim()}
+                        </div>
+                      ) : null}
                     </div>
                   </li>
                 ))}
@@ -1035,6 +1041,11 @@ function ManageUsersModal({ roleId, roleName, onClose }: ManageUsersModalProps) 
                       </div>
                       {u.displayName?.trim() ? (
                         <div className="truncate text-xs text-slate-500 dark:text-neutral-400">{u.email}</div>
+                      ) : null}
+                      {u.sid?.trim() ? (
+                        <div className="truncate text-xs text-slate-500 dark:text-neutral-400">
+                          Student ID: {u.sid.trim()}
+                        </div>
                       ) : null}
                     </div>
                     <button

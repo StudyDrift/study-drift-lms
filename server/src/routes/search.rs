@@ -29,6 +29,8 @@ async fn search_index_handler(
             notebook_enabled: c.notebook_enabled,
             feed_enabled: c.feed_enabled,
             calendar_enabled: c.calendar_enabled,
+            question_bank_enabled: c.question_bank_enabled,
+            lockdown_mode_enabled: c.lockdown_mode_enabled,
         })
         .collect();
 

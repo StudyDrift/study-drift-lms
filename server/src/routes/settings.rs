@@ -1,15 +1,18 @@
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
-    routing::{get, post, put},
+    routing::{get, patch, post, put},
     Json, Router,
 };
 use serde::Deserialize;
+use sqlx::Error as SqlxError;
+use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::http_auth::{auth_user, require_permission};
+use crate::models::rbac::UserBrief;
 use crate::models::settings_account::{
-    AccountProfileResponse, GenerateAvatarRequest, GenerateAvatarResponse,
+    AccountProfileResponse, GenerateAvatarRequest, GenerateAvatarResponse, PatchUserStudentIdRequest,
     UpdateAccountProfileRequest,
 };
 use crate::models::settings_ai::{
@@ -18,6 +21,7 @@ use crate::models::settings_ai::{
 use crate::models::settings_system_prompts::{
     SystemPromptItem, SystemPromptUpdateRequest, SystemPromptsListResponse,
 };
+use crate::repos::rbac;
 use crate::repos::system_prompts;
 use crate::repos::user;
 use crate::repos::user_ai_settings;
@@ -51,6 +55,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/settings/account",
             get(get_account_handler).patch(patch_account_handler),
+        )
+        .route(
+            "/api/v1/settings/users/{user_id}/student-id",
+            patch(patch_user_student_id_handler),
         )
         .route("/api/v1/settings/ai/models", get(get_ai_models_handler))
         .route(
@@ -182,7 +190,33 @@ fn to_profile_response(row: user::UserProfileRow) -> AccountProfileResponse {
         last_name: row.last_name,
         avatar_url: row.avatar_url,
         ui_theme: row.ui_theme,
+        sid: row.sid,
     }
+}
+
+fn map_sid_unique_violation(e: SqlxError) -> AppError {
+    if let Some(db) = e.as_database_error() {
+        if db.code().as_deref() == Some("23505") {
+            return AppError::InvalidInput("That student ID is already assigned to another user.".into());
+        }
+    }
+    AppError::Db(e)
+}
+
+fn normalize_student_id(s: Option<String>) -> Result<Option<String>, AppError> {
+    let Some(s) = s else {
+        return Ok(None);
+    };
+    let t = s.trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    if t.len() > 128 {
+        return Err(AppError::InvalidInput(
+            "Student ID must be at most 128 characters.".into(),
+        ));
+    }
+    Ok(Some(t.to_string()))
 }
 
 fn normalize_ui_theme(s: Option<String>) -> Result<Option<String>, AppError> {
@@ -207,6 +241,26 @@ async fn get_account_handler(
         .await?
         .ok_or(AppError::NotFound)?;
     Ok(Json(to_profile_response(row)))
+}
+
+async fn patch_user_student_id_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(user_id): Path<Uuid>,
+    Json(req): Json<PatchUserStudentIdRequest>,
+) -> Result<Json<UserBrief>, AppError> {
+    require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
+    if !rbac::user_exists(&state.pool, user_id).await? {
+        return Err(AppError::NotFound);
+    }
+    let sid = normalize_student_id(req.sid)?;
+    user::set_user_sid(&state.pool, user_id, sid.as_deref())
+        .await
+        .map_err(map_sid_unique_violation)?;
+    let row = rbac::get_user_brief(&state.pool, user_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    Ok(Json(row))
 }
 
 async fn patch_account_handler(

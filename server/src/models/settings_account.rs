@@ -9,6 +9,8 @@ pub struct AccountProfileResponse {
     pub last_name: Option<String>,
     pub avatar_url: Option<String>,
     pub ui_theme: String,
+    /// Campus / SIS student id when assigned by an administrator (read-only in account settings).
+    pub sid: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,4 +32,11 @@ pub struct GenerateAvatarRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GenerateAvatarResponse {
     pub image_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchUserStudentIdRequest {
+    /// Set to `null` or omit to clear the student id for this user.
+    pub sid: Option<String>,
 }

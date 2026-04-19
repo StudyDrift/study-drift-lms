@@ -10,6 +10,9 @@ export const PERM_COURSE_CREATE = 'global:app:course:create' as const
 /** Learning activity reports (`user.user_audit` aggregates). */
 export const PERM_REPORTS_VIEW = 'global:app:reports:view' as const
 
+/** Student accommodation records (accessibility coordinators / Global Admin). */
+export const PERM_ACCOMMODATIONS_MANAGE = 'global:user:accommodations:manage' as const
+
 /** Re-export: per-course item create (`course:<courseCode>:item:create`), merged into `/me/permissions` via course grants. */
 export { courseItemCreatePermission as permCourseItemCreate } from './coursesApi'
 
@@ -45,6 +48,8 @@ export type UserBrief = {
   id: string
   email: string
   displayName: string | null
+  /** Campus / SIS student id when assigned by an administrator. */
+  sid?: string | null
 }
 
 async function parseJson(res: Response): Promise<unknown> {

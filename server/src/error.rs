@@ -25,6 +25,8 @@ pub enum AppError {
     InvalidInput(String),
     #[error("invalid or expired password reset link")]
     InvalidResetToken,
+    #[error("question already locked")]
+    QuestionAlreadyLocked,
     #[error(transparent)]
     Db(#[from] sqlx::Error),
     #[error(transparent)]
@@ -125,6 +127,15 @@ impl IntoResponse for AppError {
                     },
                 });
                 (StatusCode::BAD_REQUEST, body).into_response()
+            }
+            AppError::QuestionAlreadyLocked => {
+                let body = Json(ErrorBody {
+                    error: ErrorDetail {
+                        code: "QUESTION_ALREADY_LOCKED",
+                        message: "This question has already been submitted for this attempt.".into(),
+                    },
+                });
+                (StatusCode::FORBIDDEN, body).into_response()
             }
             AppError::Db(ref e) => {
                 tracing::error!(error = %e, "database error");

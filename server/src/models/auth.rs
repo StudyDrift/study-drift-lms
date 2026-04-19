@@ -24,6 +24,8 @@ pub struct UserPublic {
     pub last_name: Option<String>,
     pub avatar_url: Option<String>,
     pub ui_theme: String,
+    /// Campus / SIS student id when assigned by an administrator (read-only for the account owner).
+    pub sid: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

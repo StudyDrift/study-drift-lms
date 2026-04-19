@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
+  Accessibility,
   BarChart3,
   BookMarked,
   BookOpen,
@@ -10,13 +11,14 @@ import {
 } from 'lucide-react'
 import { useInboxUnreadCount } from '../../context/useInboxUnread'
 import { usePermissions } from '../../context/usePermissions'
-import { PERM_REPORTS_VIEW } from '../../lib/rbacApi'
+import { PERM_ACCOMMODATIONS_MANAGE, PERM_REPORTS_VIEW } from '../../lib/rbacApi'
 import { sideNavActiveClass, sideNavLinkClass } from './sideNavStyles'
 
 export function SideNavMainLinks() {
   const unreadInboxCount = useInboxUnreadCount()
   const { allows, loading: permLoading } = usePermissions()
   const canViewReports = !permLoading && allows(PERM_REPORTS_VIEW)
+  const canManageAccommodations = !permLoading && allows(PERM_ACCOMMODATIONS_MANAGE)
 
   return (
     <>
@@ -56,6 +58,15 @@ export function SideNavMainLinks() {
         >
           <BarChart3 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
           Reports
+        </NavLink>
+      )}
+      {canManageAccommodations && (
+        <NavLink
+          to="/admin/accommodations"
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <Accessibility className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Accommodations
         </NavLink>
       )}
       <NavLink

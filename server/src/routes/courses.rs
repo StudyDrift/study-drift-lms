@@ -29,7 +29,9 @@ use crate::models::course_module_quiz::{
     sanitize_quiz_questions_for_learner, validate_adaptive_quiz_settings, validate_item_points_worth,
     validate_quiz_comprehensive_settings, validate_quiz_questions, AdaptiveQuizNextRequest,
     AdaptiveQuizNextResponse, CreateCourseQuizRequest, GenerateModuleQuizQuestionsRequest,
-    GenerateModuleQuizQuestionsResponse, ModuleQuizResponse, QuizQuestion, QuizResultsQuestionResult,
+    GenerateModuleQuizQuestionsResponse, ModuleQuizGetQuery, ModuleQuizResponse, QuizQuestion,
+    QuizQuestionResponseItem,     QuizAdvanceResponse, QuizAttemptHintRequest, QuizCurrentQuestionResponse, QuizFocusLossEventApi,
+    QuizFocusLossEventsResponse, QuizFocusLossRequest, QuizResultsQuestionResult,
     QuizResultsResponse, QuizResultsScoreSummary, QuizStartRequest, QuizStartResponse, QuizSubmitRequest,
     QuizSubmitResponse, UpdateModuleQuizRequest, ADAPTIVE_SOURCE_KINDS,
 };
@@ -70,6 +72,7 @@ use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
 use crate::repos::enrollment_groups;
+use crate::repos::question_bank as qb_repo;
 use crate::repos::quiz_attempts;
 use crate::repos::rbac;
 use crate::repos::syllabus_acceptance;
@@ -79,7 +82,10 @@ use crate::repos::user_ai_settings;
 use crate::repos::user_audit;
 use crate::services::adaptive_quiz_ai;
 use crate::services::assignment_rubric_ai;
+use crate::services::question_bank;
+use crate::services::accommodations;
 use crate::services::quiz_attempt_grading;
+use crate::services::quiz_lockdown;
 use crate::services::ai::OpenRouterError;
 use crate::services::auth;
 use crate::services::canvas_course_import;
@@ -207,6 +213,26 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/quizzes/{item_id}/results",
             get(module_quiz_results_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/current-question",
+            get(quiz_attempt_current_question_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/advance",
+            post(quiz_attempt_advance_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/focus-loss",
+            post(quiz_attempt_focus_loss_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/focus-loss-events",
+            get(quiz_attempt_focus_loss_events_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/hint",
+            post(quiz_attempt_hint_stub_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/structure/archived",
@@ -602,6 +628,7 @@ fn module_quiz_response_for_api(
     row: &course_module_quizzes::CourseItemQuizRow,
     show_adaptive_details: bool,
     shift: Option<&relative_schedule::RelativeShiftContext>,
+    course_lockdown_enabled: bool,
 ) -> ModuleQuizResponse {
     let due_at = match shift {
         Some(ctx) => relative_schedule::shift_opt(ctx, row.due_at),
@@ -624,6 +651,17 @@ fn module_quiz_response_for_api(
         .then(|| row.quiz_access_code.clone())
         .flatten()
         .filter(|s| !s.trim().is_empty());
+    let effective_lockdown = quiz_lockdown::effective_lockdown_mode(course_lockdown_enabled, row);
+    let lockdown_mode = if show_adaptive_details {
+        row.lockdown_mode.clone()
+    } else {
+        effective_lockdown.to_string()
+    };
+    let focus_loss_threshold = if show_adaptive_details {
+        row.focus_loss_threshold
+    } else {
+        None
+    };
     ModuleQuizResponse {
         item_id,
         title: row.title.clone(),
@@ -648,6 +686,8 @@ fn module_quiz_response_for_api(
         shuffle_questions: row.shuffle_questions,
         shuffle_choices: row.shuffle_choices,
         allow_back_navigation: row.allow_back_navigation,
+        lockdown_mode,
+        focus_loss_threshold,
         requires_quiz_access_code,
         quiz_access_code,
         adaptive_difficulty: row.adaptive_difficulty.clone(),
@@ -655,6 +695,7 @@ fn module_quiz_response_for_api(
         adaptive_stop_rule: row.adaptive_stop_rule.clone(),
         random_question_pool_count: row.random_question_pool_count,
         questions: row.questions_json.0.clone(),
+        uses_server_question_sampling: false,
         updated_at: row.updated_at,
         is_adaptive: row.is_adaptive,
         adaptive_system_prompt: (show_adaptive_details && row.is_adaptive)
@@ -691,6 +732,8 @@ fn quiz_settings_patch_requested(req: &UpdateModuleQuizRequest) -> bool {
         || req.adaptive_stop_rule.is_some()
         || req.random_question_pool_count.is_some()
         || req.points_worth.is_some()
+        || req.lockdown_mode.is_some()
+        || req.focus_loss_threshold.is_some()
 }
 
 fn merge_quiz_settings_write(
@@ -772,6 +815,12 @@ fn merge_quiz_settings_write(
     }
     if let Some(v) = &req.points_worth {
         s.points_worth = *v;
+    }
+    if let Some(v) = &req.lockdown_mode {
+        s.lockdown_mode = v.trim().to_string();
+    }
+    if let Some(v) = &req.focus_loss_threshold {
+        s.focus_loss_threshold = *v;
     }
     s
 }
@@ -2203,6 +2252,7 @@ async fn module_assignment_generate_rubric_handler(
 async fn module_quiz_get_handler(
     State(state): State<AppState>,
     Path((course_code, item_id)): Path<(String, Uuid)>,
+    Query(q): Query<ModuleQuizGetQuery>,
     headers: HeaderMap,
 ) -> Result<Json<ModuleQuizResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
@@ -2241,7 +2291,31 @@ async fn module_quiz_get_handler(
         return Err(AppError::NotFound);
     };
 
-    let mut resp = module_quiz_response_for_api(item_id, &row, can_edit, shift_ctx.as_ref());
+    let mut resp = module_quiz_response_for_api(
+        item_id,
+        &row,
+        can_edit,
+        shift_ctx.as_ref(),
+        course_row.lockdown_mode_enabled,
+    );
+    let attempt_for_q = if !can_edit {
+        q.attempt_id
+    } else {
+        None
+    };
+    let resolved = question_bank::resolve_delivery_questions(
+        &state.pool,
+        course_id,
+        item_id,
+        course_row.question_bank_enabled,
+        &row.questions_json.0,
+        attempt_for_q,
+        Some(user.user_id),
+        can_edit,
+    )
+    .await?;
+    resp.questions = resolved.questions;
+    resp.uses_server_question_sampling = resolved.uses_server_question_sampling;
     if !can_edit {
         resp.questions = sanitize_quiz_questions_for_learner(resp.questions);
     }
@@ -2269,9 +2343,11 @@ async fn module_quiz_patch_handler(
         validate_quiz_questions(questions)?;
     }
 
-    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
-        return Err(AppError::NotFound);
-    };
+    let course_row = course::get_by_course_code(&state.pool, &course_code)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let course_id = course_row.id;
+    let course_bank_on = course_row.question_bank_enabled;
 
     let patch_quiz_settings = quiz_settings_patch_requested(&req);
     let mut quiz_settings_write: Option<QuizSettingsWrite> = None;
@@ -2300,6 +2376,11 @@ async fn module_quiz_patch_handler(
             merged.quiz_access_code.as_deref(),
         )?;
         validate_item_points_worth(merged.points_worth)?;
+        if quiz_lockdown::parse_lockdown_mode_setting(&merged.lockdown_mode).is_none() {
+            return Err(AppError::InvalidInput(
+                "lockdownMode must be one of: standard, one_at_a_time, kiosk.".into(),
+            ));
+        }
         quiz_settings_write = Some(merged);
     }
 
@@ -2334,6 +2415,16 @@ async fn module_quiz_patch_handler(
                 .await?;
         if updated.is_none() {
             return Err(AppError::NotFound);
+        }
+        if course_bank_on {
+            question_bank::sync_quiz_refs_from_editor_json(
+                &state.pool,
+                course_id,
+                item_id,
+                &questions,
+                Some(user.user_id),
+            )
+            .await?;
         }
     }
 
@@ -2429,8 +2520,19 @@ async fn module_quiz_patch_handler(
         return Err(AppError::NotFound);
     };
 
+    let eff = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &row);
+    if row.is_adaptive && quiz_lockdown::server_enforces_forward_lockdown(eff) {
+        return Err(AppError::InvalidInput(
+            "Adaptive quizzes cannot use lockdown delivery modes.".into(),
+        ));
+    }
+
     Ok(Json(module_quiz_response_for_api(
-        item_id, &row, true, None,
+        item_id,
+        &row,
+        true,
+        None,
+        course_row.lockdown_mode_enabled,
     )))
 }
 
@@ -2492,6 +2594,7 @@ async fn module_quiz_adaptive_next_handler(
         {
             return Err(AppError::Forbidden);
         }
+        accommodations::require_attempt_within_deadline(&att, Utc::now())?;
     }
 
     let total = row.adaptive_question_count;
@@ -2574,6 +2677,22 @@ fn quiz_access_code_matches(
 }
 
 /// Applies late penalty to gradebook-scaled quiz points when policy is `penalty` and submission is late.
+async fn academic_integrity_from_focus_loss(
+    mode: &str,
+    threshold: Option<i32>,
+    pool: &sqlx::PgPool,
+    attempt_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    if mode != quiz_lockdown::LOCKDOWN_KIOSK {
+        return Ok(false);
+    }
+    let Some(t) = threshold.filter(|t| *t >= 1) else {
+        return Ok(false);
+    };
+    let n = quiz_attempts::count_focus_loss_events(pool, attempt_id).await?;
+    Ok(n > t as i64)
+}
+
 fn quiz_gradebook_points_with_late_policy(
     gb: f64,
     quiz_row: &course_module_quizzes::CourseItemQuizRow,
@@ -2632,6 +2751,16 @@ async fn module_quiz_start_handler(
         return Err(AppError::InvalidInput("Invalid quiz access code.".into()));
     }
 
+    let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &row);
+    if row.is_adaptive && quiz_lockdown::server_enforces_forward_lockdown(mode) {
+        return Err(AppError::InvalidInput(
+            "Adaptive quizzes cannot use lockdown delivery modes.".into(),
+        ));
+    }
+
+    let acc = accommodations::resolve_effective_or_default(&state.pool, user.user_id, course_id).await;
+    let hints_disabled = quiz_lockdown::hints_disabled(mode) && !acc.hints_always_enabled;
+
     if let Some(existing) =
         quiz_attempts::find_in_progress(&state.pool, course_id, item_id, user.user_id).await?
     {
@@ -2639,16 +2768,25 @@ async fn module_quiz_start_handler(
             attempt_id: existing.id,
             attempt_number: existing.attempt_number,
             started_at: existing.started_at,
+            lockdown_mode: mode.to_string(),
+            hints_disabled,
+            back_navigation_allowed: quiz_lockdown::back_navigation_allowed(mode),
+            current_question_index: existing.current_question_index,
+            deadline_at: existing.deadline_at,
+            reduced_distraction_mode: acc.reduced_distraction_mode,
         }));
     }
 
     let submitted_count =
         quiz_attempts::count_submitted_attempts(&state.pool, course_id, item_id, user.user_id)
             .await?;
-    if !row.unlimited_attempts && submitted_count >= row.max_attempts as i64 {
-        return Err(AppError::InvalidInput(
-            "No quiz attempts remaining for this quiz.".into(),
-        ));
+    if !row.unlimited_attempts {
+        let cap = row.max_attempts as i64 + acc.extra_attempts.max(0) as i64;
+        if submitted_count >= cap {
+            return Err(AppError::InvalidInput(
+                "No quiz attempts remaining for this quiz.".into(),
+            ));
+        }
     }
 
     let shift_ctx =
@@ -2666,6 +2804,11 @@ async fn module_quiz_start_handler(
 
     let attempt_number =
         quiz_attempts::next_attempt_number(&state.pool, course_id, item_id, user.user_id).await?;
+    let (deadline_at, extended_time_applied) = accommodations::compute_attempt_deadline(
+        now,
+        row.time_limit_minutes,
+        acc.time_multiplier,
+    );
     let created = quiz_attempts::create_attempt(
         &state.pool,
         course_id,
@@ -2673,13 +2816,48 @@ async fn module_quiz_start_handler(
         user.user_id,
         attempt_number,
         row.is_adaptive,
+        deadline_at,
+        extended_time_applied,
     )
     .await?;
+
+    if acc.has_operational_settings() {
+        accommodations::log_accommodation_applied(
+            user.user_id,
+            item_id,
+            &accommodations::instructor_flag_labels(&acc),
+        );
+    }
+
+    if course_row.question_bank_enabled && !row.is_adaptive {
+        let refs = qb_repo::list_quiz_question_refs(&state.pool, item_id).await?;
+        if !refs.is_empty() {
+            if let Err(e) = question_bank::materialize_attempt_questions(
+                &state.pool,
+                course_id,
+                item_id,
+                created.id,
+                user.user_id,
+                &refs,
+            )
+            .await
+            {
+                let _ = quiz_attempts::delete_attempt(&state.pool, created.id).await;
+                return Err(e);
+            }
+        }
+    }
 
     Ok(Json(QuizStartResponse {
         attempt_id: created.id,
         attempt_number: created.attempt_number,
         started_at: created.started_at,
+        lockdown_mode: mode.to_string(),
+        hints_disabled,
+        back_navigation_allowed: quiz_lockdown::back_navigation_allowed(mode),
+        current_question_index: created.current_question_index,
+        deadline_at: created.deadline_at,
+        reduced_distraction_mode: acc.reduced_distraction_mode,
     }))
 }
 
@@ -2735,6 +2913,7 @@ async fn module_quiz_submit_handler(
             .await?;
     let due_effective = quiz_attempt_grading::quiz_effective_due_at(quiz_row.due_at, shift_ctx.as_ref());
     let now = Utc::now();
+    accommodations::require_attempt_within_deadline(&att, now)?;
     if quiz_row.late_submission_policy == "block"
         && quiz_attempt_grading::quiz_submission_is_late(due_effective, now)
     {
@@ -2782,6 +2961,7 @@ async fn module_quiz_submit_handler(
                 Some(ok),
                 Some(pts),
                 max_pts,
+                false,
             )
             .await?;
         }
@@ -2798,6 +2978,7 @@ async fn module_quiz_submit_handler(
             possible,
             score_pct,
             Some(&hist_json),
+            false,
         )
         .await?;
         if !ok {
@@ -2831,67 +3012,169 @@ async fn module_quiz_submit_handler(
         }));
     }
 
-    let responses = req.responses.ok_or_else(|| {
-        AppError::InvalidInput("responses is required for non-adaptive quizzes.".into())
-    })?;
+    let responses = req.responses.clone().unwrap_or_default();
 
-    let bank: Vec<QuizQuestion> = quiz_row.questions_json.0.clone();
+    let resolved = question_bank::resolve_delivery_questions(
+        &state.pool,
+        course_id,
+        item_id,
+        course_row.question_bank_enabled,
+        &quiz_row.questions_json.0,
+        Some(att.id),
+        Some(user.user_id),
+        false,
+    )
+    .await?;
+    let bank: Vec<QuizQuestion> = resolved.questions;
     let mut by_id: HashMap<String, &QuizQuestion> = HashMap::new();
     for q in &bank {
         by_id.insert(q.id.clone(), q);
     }
-    if let Some(pool_n) = quiz_row.random_question_pool_count {
-        if pool_n >= 1 && responses.len() != pool_n as usize {
+
+    let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
+
+    let (earned, possible, score_pct, academic_integrity_flag) = if quiz_lockdown::server_enforces_forward_lockdown(mode)
+    {
+        if !responses.is_empty() {
             return Err(AppError::InvalidInput(
-                "Submitted response count does not match the configured question pool size."
+                "For lockdown-mode quizzes, omit responses on submit; answers are taken from your saved progress."
                     .into(),
             ));
         }
-    }
-    for r in &responses {
-        if !by_id.contains_key(&r.question_id) {
+        let db_rows = quiz_attempts::list_responses(&state.pool, att.id).await?;
+        if db_rows.len() != bank.len() {
             return Err(AppError::InvalidInput(
-                "One or more question ids are not part of this quiz.".into(),
+                "Complete each question in order before submitting this quiz.".into(),
             ));
         }
-    }
-
-    quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
-
-    let mut earned = 0.0_f64;
-    let mut possible = 0.0_f64;
-    for (i, resp_item) in responses.iter().enumerate() {
-        let q = by_id
-            .get(&resp_item.question_id)
-            .ok_or_else(|| AppError::InvalidInput("Invalid question id.".into()))?;
-        let (pts, max_pts, is_ok) = quiz_attempt_grading::grade_static_question(q, resp_item);
-        earned += pts;
-        possible += max_pts;
-        let rj = serde_json::json!({
-            "selectedChoiceIndex": resp_item.selected_choice_index,
-            "selectedChoiceIndices": resp_item.selected_choice_indices,
-            "textAnswer": resp_item.text_answer,
-        });
-        quiz_attempts::insert_response(
-            &mut *tx,
+        for (i, db_row) in db_rows.iter().enumerate() {
+            if db_row.question_index != i as i32 || !db_row.locked {
+                return Err(AppError::InvalidInput(
+                    "Quiz responses are incomplete. Use Next after each question, then submit.".into(),
+                ));
+            }
+        }
+        quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
+        let mut earned = 0.0_f64;
+        let mut possible = 0.0_f64;
+        for (i, db_row) in db_rows.iter().enumerate() {
+            let qid = db_row.question_id.as_deref().ok_or_else(|| {
+                AppError::InvalidInput("Missing question id on saved response.".into())
+            })?;
+            let q = by_id
+                .get(qid)
+                .ok_or_else(|| AppError::InvalidInput("Invalid question id.".into()))?;
+            let resp_item: QuizQuestionResponseItem =
+                serde_json::from_value(db_row.response_json.clone()).map_err(|e| {
+                    AppError::InvalidInput(format!("Could not read saved answer: {e}"))
+                })?;
+            let (pts, max_pts, is_ok) = quiz_attempt_grading::grade_static_question(q, &resp_item);
+            earned += pts;
+            possible += max_pts;
+            let rj = serde_json::json!({
+                "selectedChoiceIndex": resp_item.selected_choice_index,
+                "selectedChoiceIndices": resp_item.selected_choice_indices,
+                "textAnswer": resp_item.text_answer,
+            });
+            quiz_attempts::insert_response(
+                &mut *tx,
+                att.id,
+                i as i32,
+                Some(qid),
+                &q.question_type,
+                Some(q.prompt.as_str()),
+                &rj,
+                is_ok,
+                Some(pts),
+                max_pts,
+                false,
+            )
+            .await?;
+        }
+        let score_pct = if possible > 0.0 {
+            ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
+        } else {
+            0.0
+        };
+        let academic_integrity_flag = academic_integrity_from_focus_loss(
+            mode,
+            quiz_row.focus_loss_threshold,
+            &state.pool,
             att.id,
-            i as i32,
-            Some(resp_item.question_id.as_str()),
-            &q.question_type,
-            Some(q.prompt.as_str()),
-            &rj,
-            is_ok,
-            Some(pts),
-            max_pts,
         )
         .await?;
-    }
-
-    let score_pct = if possible > 0.0 {
-        ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
+        (earned, possible, score_pct, academic_integrity_flag)
     } else {
-        0.0
+        if responses.is_empty() {
+            return Err(AppError::InvalidInput(
+                "responses is required for non-adaptive quizzes.".into(),
+            ));
+        }
+        if !resolved.uses_server_question_sampling {
+            if let Some(pool_n) = quiz_row.random_question_pool_count {
+                if pool_n >= 1 && responses.len() != pool_n as usize {
+                    return Err(AppError::InvalidInput(
+                        "Submitted response count does not match the configured question pool size."
+                            .into(),
+                    ));
+                }
+            }
+        }
+        for r in &responses {
+            if !by_id.contains_key(&r.question_id) {
+                return Err(AppError::InvalidInput(
+                    "One or more question ids are not part of this quiz.".into(),
+                ));
+            }
+        }
+
+        quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
+
+        let mut earned = 0.0_f64;
+        let mut possible = 0.0_f64;
+        for (i, resp_item) in responses.iter().enumerate() {
+            let q = by_id
+                .get(&resp_item.question_id)
+                .ok_or_else(|| AppError::InvalidInput("Invalid question id.".into()))?;
+            let (pts, max_pts, is_ok) = quiz_attempt_grading::grade_static_question(q, resp_item);
+            earned += pts;
+            possible += max_pts;
+            let rj = serde_json::json!({
+                "selectedChoiceIndex": resp_item.selected_choice_index,
+                "selectedChoiceIndices": resp_item.selected_choice_indices,
+                "textAnswer": resp_item.text_answer,
+            });
+            quiz_attempts::insert_response(
+                &mut *tx,
+                att.id,
+                i as i32,
+                Some(resp_item.question_id.as_str()),
+                &q.question_type,
+                Some(q.prompt.as_str()),
+                &rj,
+                is_ok,
+                Some(pts),
+                max_pts,
+                false,
+            )
+            .await?;
+        }
+
+        let score_pct = if possible > 0.0 {
+            ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
+        } else {
+            0.0
+        };
+        let academic_integrity_flag = academic_integrity_from_focus_loss(
+            mode,
+            quiz_row.focus_loss_threshold,
+            &state.pool,
+            att.id,
+        )
+        .await?;
+        (earned, possible, score_pct, academic_integrity_flag)
     };
+
     let ok = quiz_attempts::finalize_attempt(
         &mut *tx,
         att.id,
@@ -2900,6 +3183,7 @@ async fn module_quiz_submit_handler(
         possible,
         score_pct,
         None,
+        academic_integrity_flag,
     )
     .await?;
     if !ok {
@@ -3010,7 +3294,18 @@ async fn module_quiz_results_handler(
     }
 
     let rows = quiz_attempts::list_responses(&state.pool, attempt.id).await?;
-    let bank: Vec<QuizQuestion> = quiz_row.questions_json.0.clone();
+    let resolved = question_bank::resolve_delivery_questions(
+        &state.pool,
+        course_id,
+        item_id,
+        course_row.question_bank_enabled,
+        &quiz_row.questions_json.0,
+        Some(attempt.id),
+        Some(target_user),
+        false,
+    )
+    .await?;
+    let bank: Vec<QuizQuestion> = resolved.questions;
     let mut bank_by_id: HashMap<String, QuizQuestion> = HashMap::new();
     for q in bank {
         bank_by_id.insert(q.id.clone(), q);
@@ -3065,9 +3360,11 @@ async fn module_quiz_results_handler(
         attempt_id: attempt.id,
         attempt_number: attempt.attempt_number,
         started_at: attempt.started_at,
+        academic_integrity_flag: attempt.academic_integrity_flag,
         submitted_at: attempt.submitted_at,
         status: attempt.status,
         is_adaptive: attempt.is_adaptive,
+        extended_time_active: attempt.extended_time_applied,
         score,
         questions,
     }))
@@ -5063,6 +5360,8 @@ async fn patch_course_features_handler(
         req.notebook_enabled,
         req.feed_enabled,
         req.calendar_enabled,
+        req.question_bank_enabled,
+        req.lockdown_mode_enabled,
     )
     .await?
     .ok_or(AppError::NotFound)?;
@@ -5307,6 +5606,328 @@ async fn set_hero_image_handler(
             .await?
             .ok_or(AppError::NotFound)?;
     Ok(Json(row))
+}
+
+async fn quiz_attempt_current_question_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, attempt_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<QuizCurrentQuestionResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    let Some(att) = quiz_attempts::get_attempt(&state.pool, attempt_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if att.student_user_id != user.user_id
+        || att.course_id != course_id
+        || att.structure_item_id != item_id
+        || att.status != "in_progress"
+    {
+        return Err(AppError::Forbidden);
+    }
+
+    accommodations::require_attempt_within_deadline(&att, Utc::now())?;
+
+    let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
+    if !quiz_lockdown::server_enforces_forward_lockdown(mode) {
+        return Err(AppError::InvalidInput(
+            "This endpoint is only used for lockdown-mode quizzes.".into(),
+        ));
+    }
+
+    let resolved = question_bank::resolve_delivery_questions(
+        &state.pool,
+        course_id,
+        item_id,
+        course_row.question_bank_enabled,
+        &quiz_row.questions_json.0,
+        Some(att.id),
+        Some(user.user_id),
+        false,
+    )
+    .await?;
+    let bank = sanitize_quiz_questions_for_learner(resolved.questions);
+    let total = bank.len();
+    let idx = att.current_question_index as usize;
+    if idx >= total {
+        return Ok(Json(QuizCurrentQuestionResponse {
+            question: None,
+            question_index: att.current_question_index,
+            total_questions: total,
+            completed: true,
+        }));
+    }
+    Ok(Json(QuizCurrentQuestionResponse {
+        question: bank.get(idx).cloned(),
+        question_index: att.current_question_index,
+        total_questions: total,
+        completed: false,
+    }))
+}
+
+async fn quiz_attempt_advance_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, attempt_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+    Json(body): Json<QuizQuestionResponseItem>,
+) -> Result<Json<QuizAdvanceResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    let Some(att) = quiz_attempts::get_attempt(&state.pool, attempt_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if att.student_user_id != user.user_id
+        || att.course_id != course_id
+        || att.structure_item_id != item_id
+        || att.status != "in_progress"
+    {
+        return Err(AppError::Forbidden);
+    }
+
+    accommodations::require_attempt_within_deadline(&att, Utc::now())?;
+
+    let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
+    if !quiz_lockdown::server_enforces_forward_lockdown(mode) {
+        return Err(AppError::InvalidInput(
+            "Advance is only available for lockdown-mode quizzes.".into(),
+        ));
+    }
+
+    let resolved = question_bank::resolve_delivery_questions(
+        &state.pool,
+        course_id,
+        item_id,
+        course_row.question_bank_enabled,
+        &quiz_row.questions_json.0,
+        Some(att.id),
+        Some(user.user_id),
+        false,
+    )
+    .await?;
+    let bank = &resolved.questions;
+    let cur = att.current_question_index;
+    let cur_usize = cur as usize;
+    if cur_usize >= bank.len() {
+        return Err(AppError::InvalidInput(
+            "There is no current question to answer for this attempt.".into(),
+        ));
+    }
+    let q = &bank[cur_usize];
+    if body.question_id != q.id {
+        return Err(AppError::InvalidInput(
+            "The answer does not match the current question.".into(),
+        ));
+    }
+
+    if quiz_attempts::response_is_locked(&state.pool, att.id, cur).await? {
+        return Err(AppError::QuestionAlreadyLocked);
+    }
+
+    let (pts, max_pts, is_ok) = quiz_attempt_grading::grade_static_question(q, &body);
+    let rj = serde_json::json!({
+        "selectedChoiceIndex": body.selected_choice_index,
+        "selectedChoiceIndices": body.selected_choice_indices,
+        "textAnswer": body.text_answer,
+    });
+
+    let mut tx = state.pool.begin().await?;
+    quiz_attempts::insert_response(
+        &mut *tx,
+        att.id,
+        cur,
+        Some(q.id.as_str()),
+        &q.question_type,
+        Some(q.prompt.as_str()),
+        &rj,
+        is_ok,
+        Some(pts),
+        max_pts,
+        true,
+    )
+    .await
+    .map_err(|e: sqlx::Error| {
+        if let sqlx::Error::Database(ref db) = e {
+            if db.code().as_deref() == Some("23505") {
+                return AppError::QuestionAlreadyLocked;
+            }
+        }
+        AppError::Db(e)
+    })?;
+
+    if !quiz_attempts::bump_current_question_index(&mut *tx, att.id, cur).await? {
+        return Err(AppError::InvalidInput(
+            "Could not advance this attempt. Refresh and try again.".into(),
+        ));
+    }
+    tx.commit().await?;
+
+    let new_idx = cur + 1;
+    let completed = new_idx as usize >= bank.len();
+    Ok(Json(QuizAdvanceResponse {
+        locked: true,
+        current_question_index: new_idx,
+        completed,
+    }))
+}
+
+async fn quiz_attempt_focus_loss_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, attempt_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<QuizFocusLossRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    let Some(att) = quiz_attempts::get_attempt(&state.pool, attempt_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if att.student_user_id != user.user_id
+        || att.course_id != course_id
+        || att.structure_item_id != item_id
+        || att.status != "in_progress"
+    {
+        return Err(AppError::Forbidden);
+    }
+
+    let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
+    if mode != quiz_lockdown::LOCKDOWN_KIOSK {
+        return Err(AppError::InvalidInput(
+            "Focus-loss reporting is only active in kiosk mode.".into(),
+        ));
+    }
+
+    let et = req.event_type.trim();
+    if et.is_empty() || et.len() > 64 {
+        return Err(AppError::InvalidInput("eventType is invalid.".into()));
+    }
+
+    quiz_attempts::insert_focus_loss_event(&state.pool, att.id, et, req.duration_ms).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn quiz_attempt_focus_loss_events_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, attempt_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<QuizFocusLossEventsResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    if !can_edit {
+        return Err(AppError::Forbidden);
+    }
+
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
+    if mode != quiz_lockdown::LOCKDOWN_KIOSK {
+        return Err(AppError::Forbidden);
+    }
+
+    let Some(att) = quiz_attempts::get_attempt(&state.pool, attempt_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if att.course_id != course_id || att.structure_item_id != item_id {
+        return Err(AppError::NotFound);
+    }
+
+    let rows = quiz_attempts::list_focus_loss_events(&state.pool, attempt_id).await?;
+    let total = quiz_attempts::count_focus_loss_events(&state.pool, attempt_id).await?;
+    let events = rows
+        .into_iter()
+        .map(|r| QuizFocusLossEventApi {
+            id: r.id,
+            event_type: r.event_type,
+            duration_ms: r.duration_ms,
+            created_at: r.created_at,
+        })
+        .collect();
+    Ok(Json(QuizFocusLossEventsResponse { events, total }))
+}
+
+async fn quiz_attempt_hint_stub_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, attempt_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+    Json(_req): Json<QuizAttemptHintRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    let Some(att) = quiz_attempts::get_attempt(&state.pool, attempt_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if att.student_user_id != user.user_id
+        || att.course_id != course_id
+        || att.structure_item_id != item_id
+        || att.status != "in_progress"
+    {
+        return Err(AppError::Forbidden);
+    }
+
+    accommodations::require_attempt_within_deadline(&att, Utc::now())?;
+
+    let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
+    let acc = accommodations::resolve_effective_or_default(&state.pool, user.user_id, course_id).await;
+    if quiz_lockdown::hints_disabled(mode) && !acc.hints_always_enabled {
+        return Err(AppError::Forbidden);
+    }
+    Err(AppError::InvalidInput(
+        "Hints are not implemented for this quiz yet.".into(),
+    ))
 }
 
 #[cfg(test)]

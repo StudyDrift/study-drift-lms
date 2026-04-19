@@ -49,6 +49,10 @@ pub struct CourseExportSnapshot {
     pub feed_enabled: bool,
     #[serde(default = "default_true")]
     pub calendar_enabled: bool,
+    #[serde(default)]
+    pub question_bank_enabled: bool,
+    #[serde(default)]
+    pub lockdown_mode_enabled: bool,
 }
 
 fn default_export_schedule_mode() -> String {
@@ -139,6 +143,10 @@ pub struct ExportedQuizBody {
     pub shuffle_choices: bool,
     #[serde(default = "default_export_allow_back_navigation")]
     pub allow_back_navigation: bool,
+    #[serde(default = "default_export_lockdown_mode")]
+    pub lockdown_mode: String,
+    #[serde(default)]
+    pub focus_loss_threshold: Option<i32>,
     #[serde(default)]
     pub quiz_access_code: Option<String>,
     #[serde(default = "default_export_adaptive_difficulty")]
@@ -190,6 +198,10 @@ fn default_export_review_when() -> String {
 
 fn default_export_allow_back_navigation() -> bool {
     true
+}
+
+fn default_export_lockdown_mode() -> String {
+    "standard".to_string()
 }
 
 fn default_export_adaptive_difficulty() -> String {

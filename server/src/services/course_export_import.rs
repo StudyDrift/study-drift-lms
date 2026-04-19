@@ -272,6 +272,10 @@ fn quiz_settings_from_export(body: &ExportedQuizBody) -> QuizSettingsWrite {
         adaptive_stop_rule: body.adaptive_stop_rule.clone(),
         random_question_pool_count: body.random_question_pool_count,
         points_worth: body.points_worth,
+        lockdown_mode: crate::services::quiz_lockdown::parse_lockdown_mode_setting(&body.lockdown_mode)
+            .unwrap_or(crate::services::quiz_lockdown::LOCKDOWN_STANDARD)
+            .to_string(),
+        focus_loss_threshold: body.focus_loss_threshold,
     }
 }
 const MAX_SYLLABUS_SECTIONS: usize = 50;
@@ -505,6 +509,8 @@ async fn apply_course_snapshot(
         snap.notebook_enabled,
         snap.feed_enabled,
         snap.calendar_enabled,
+        snap.question_bank_enabled,
+        snap.lockdown_mode_enabled,
     )
     .await?
     .ok_or(AppError::NotFound)?;
@@ -869,6 +875,8 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         notebook_enabled: course.notebook_enabled,
         feed_enabled: course.feed_enabled,
         calendar_enabled: course.calendar_enabled,
+        question_bank_enabled: course.question_bank_enabled,
+        lockdown_mode_enabled: course.lockdown_mode_enabled,
     };
 
     let grading = course_grading::get_settings_for_course_code(pool, course_code)
@@ -952,6 +960,8 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                             shuffle_questions: row.shuffle_questions,
                             shuffle_choices: row.shuffle_choices,
                             allow_back_navigation: row.allow_back_navigation,
+                            lockdown_mode: row.lockdown_mode.clone(),
+                            focus_loss_threshold: row.focus_loss_threshold,
                             quiz_access_code: row.quiz_access_code.clone(),
                             adaptive_difficulty: row.adaptive_difficulty.clone(),
                             adaptive_topic_balance: row.adaptive_topic_balance,

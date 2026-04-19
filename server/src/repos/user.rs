@@ -13,11 +13,12 @@ pub struct UserRow {
     pub last_name: Option<String>,
     pub avatar_url: Option<String>,
     pub ui_theme: String,
+    pub sid: Option<String>,
 }
 
 pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>, sqlx::Error> {
     sqlx::query_as::<_, UserRow>(&format!(
-        "SELECT id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme FROM {} WHERE email = $1",
+        "SELECT id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid FROM {} WHERE email = $1",
         schema::USERS
     ))
     .bind(email)
@@ -29,7 +30,7 @@ pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>
 pub async fn find_by_email_ci(pool: &PgPool, email: &str) -> Result<Option<UserRow>, sqlx::Error> {
     sqlx::query_as::<_, UserRow>(&format!(
         r#"
-        SELECT id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme
+        SELECT id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid
         FROM {}
         WHERE lower(trim(email)) = lower(trim($1))
         "#,
@@ -78,7 +79,7 @@ pub async fn insert_user(
         r#"
         INSERT INTO {} (email, password_hash, display_name)
         VALUES ($1, $2, $3)
-        RETURNING id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme
+        RETURNING id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid
         "#,
         schema::USERS
     ))
@@ -97,6 +98,7 @@ pub struct UserProfileRow {
     pub last_name: Option<String>,
     pub avatar_url: Option<String>,
     pub ui_theme: String,
+    pub sid: Option<String>,
 }
 
 pub async fn get_profile_by_id(
@@ -105,7 +107,7 @@ pub async fn get_profile_by_id(
 ) -> Result<Option<UserProfileRow>, sqlx::Error> {
     sqlx::query_as::<_, UserProfileRow>(&format!(
         r#"
-        SELECT email, display_name, first_name, last_name, avatar_url, ui_theme
+        SELECT email, display_name, first_name, last_name, avatar_url, ui_theme, sid
         FROM {}
         WHERE id = $1
         "#,
@@ -154,7 +156,7 @@ pub async fn update_profile(
             display_name = $5,
             ui_theme = COALESCE($6, ui_theme)
         WHERE id = $1
-        RETURNING email, display_name, first_name, last_name, avatar_url, ui_theme
+        RETURNING email, display_name, first_name, last_name, avatar_url, ui_theme, sid
         "#,
         schema::USERS
     ))
@@ -165,5 +167,83 @@ pub async fn update_profile(
     .bind(display_name)
     .bind(ui_theme)
     .fetch_optional(pool)
+    .await
+}
+
+/// Sets or clears the campus student identifier (`sid`). Intended for administrator use only.
+pub async fn set_user_sid(
+    pool: &PgPool,
+    user_id: Uuid,
+    sid: Option<&str>,
+) -> Result<u64, sqlx::Error> {
+    let n = sqlx::query(&format!(
+        r#"UPDATE {} SET sid = $2 WHERE id = $1"#,
+        schema::USERS
+    ))
+    .bind(user_id)
+    .bind(sid)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(n)
+}
+
+/// Row for accessibility-coordinator user lookup (email, names, `sid`, or exact id).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct UserAccommodationSearchRow {
+    pub id: Uuid,
+    pub email: String,
+    pub display_name: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub sid: Option<String>,
+}
+
+/// Search learners by email, display name, first or last name, campus `sid`, or exact UUID.
+pub async fn search_users_for_accommodation_lookup(
+    pool: &PgPool,
+    query: &str,
+) -> Result<Vec<UserAccommodationSearchRow>, sqlx::Error> {
+    let t = query.trim();
+    if t.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if let Ok(id) = Uuid::parse_str(t) {
+        let row = sqlx::query_as::<_, UserAccommodationSearchRow>(&format!(
+            r#"
+            SELECT id, email, display_name, first_name, last_name, sid
+            FROM {}
+            WHERE id = $1
+            "#,
+            schema::USERS
+        ))
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+        return Ok(row.map(|r| vec![r]).unwrap_or_default());
+    }
+
+    if t.len() < 2 {
+        return Ok(Vec::new());
+    }
+
+    let pattern = format!("%{t}%");
+    sqlx::query_as::<_, UserAccommodationSearchRow>(&format!(
+        r#"
+        SELECT id, email, display_name, first_name, last_name, sid
+        FROM {}
+        WHERE email ILIKE $1
+           OR COALESCE(display_name, '') ILIKE $1
+           OR COALESCE(first_name, '') ILIKE $1
+           OR COALESCE(last_name, '') ILIKE $1
+           OR COALESCE(sid, '') ILIKE $1
+        ORDER BY LOWER(email) ASC
+        LIMIT 40
+        "#,
+        schema::USERS
+    ))
+    .bind(&pattern)
+    .fetch_all(pool)
     .await
 }

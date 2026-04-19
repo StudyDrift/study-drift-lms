@@ -14,6 +14,7 @@ export type CourseNavFeatures = {
   notebookEnabled: boolean
   feedEnabled: boolean
   calendarEnabled: boolean
+  questionBankEnabled: boolean
   /** True while loading or re-fetching flags for the active course. */
   loading: boolean
   /** Re-load feature flags from the server (e.g. after saving settings). */
@@ -24,6 +25,7 @@ const defaultFeatures: CourseNavFeatures = {
   notebookEnabled: true,
   feedEnabled: true,
   calendarEnabled: true,
+  questionBankEnabled: false,
   loading: false,
   refresh: async () => {},
 }
@@ -39,6 +41,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
   const [notebookEnabled, setNotebookEnabled] = useState(true)
   const [feedEnabled, setFeedEnabled] = useState(true)
   const [calendarEnabled, setCalendarEnabled] = useState(true)
+  const [questionBankEnabled, setQuestionBankEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -46,6 +49,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setNotebookEnabled(true)
       setFeedEnabled(true)
       setCalendarEnabled(true)
+      setQuestionBankEnabled(false)
       return
     }
     setLoading(true)
@@ -54,10 +58,12 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setNotebookEnabled(c.notebookEnabled !== false)
       setFeedEnabled(c.feedEnabled !== false)
       setCalendarEnabled(c.calendarEnabled !== false)
+      setQuestionBankEnabled(c.questionBankEnabled === true)
     } catch {
       setNotebookEnabled(true)
       setFeedEnabled(true)
       setCalendarEnabled(true)
+      setQuestionBankEnabled(false)
     } finally {
       setLoading(false)
     }
@@ -72,10 +78,11 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       notebookEnabled,
       feedEnabled,
       calendarEnabled,
+      questionBankEnabled,
       loading,
       refresh,
     }),
-    [notebookEnabled, feedEnabled, calendarEnabled, loading, refresh],
+    [notebookEnabled, feedEnabled, calendarEnabled, questionBankEnabled, loading, refresh],
   )
 
   return (

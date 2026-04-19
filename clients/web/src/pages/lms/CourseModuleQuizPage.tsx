@@ -11,6 +11,7 @@ import {
   fetchCourseGradingSettings,
   fetchCourseStructure,
   fetchModuleQuiz,
+  fetchQuizFocusLossEvents,
   fetchReaderMarkups,
   generateModuleQuizQuestions,
   patchCourseStructureItemAssignmentGroup,
@@ -18,6 +19,7 @@ import {
   quizAdvancedSettingsFromPayload,
   type ContentPageMarkup,
   type CourseStructureItem,
+  type LockdownMode,
   type ModuleQuizPayload,
   type QuizAdvancedSettings,
   type QuizQuestion,
@@ -76,6 +78,12 @@ function formatGradePolicyShort(p: string): string {
   if (p === 'first') return 'First attempt'
   if (p === 'average') return 'Average'
   return p
+}
+
+function formatLockdownModeLabel(mode: LockdownMode): string {
+  if (mode === 'one_at_a_time') return 'One at a time'
+  if (mode === 'kiosk') return 'Kiosk'
+  return 'Standard'
 }
 
 function formatItemPointsWorth(p: number | null): string {
@@ -311,6 +319,18 @@ export default function CourseModuleQuizPage() {
   const [draftAvailableUntilLocal, setDraftAvailableUntilLocal] = useState('')
   const [draftUnlimitedAttempts, setDraftUnlimitedAttempts] = useState(false)
   const [draftOneQuestionAtATime, setDraftOneQuestionAtATime] = useState(false)
+  const [courseLockdownEnabled, setCourseLockdownEnabled] = useState(false)
+  const [lockdownMode, setLockdownMode] = useState<LockdownMode>('standard')
+  const [draftLockdownMode, setDraftLockdownMode] = useState<LockdownMode>('standard')
+  const [focusLossThreshold, setFocusLossThreshold] = useState<number | null>(null)
+  const [draftFocusLossThreshold, setDraftFocusLossThreshold] = useState<number | null>(null)
+  const [focusInspectAttemptId, setFocusInspectAttemptId] = useState('')
+  const [focusInspectLoading, setFocusInspectLoading] = useState(false)
+  const [focusInspectError, setFocusInspectError] = useState<string | null>(null)
+  const [focusInspectData, setFocusInspectData] = useState<{
+    events: { id: string; eventType: string; createdAt: string; durationMs?: number | null }[]
+    total: number
+  } | null>(null)
   const [pointsWorth, setPointsWorth] = useState<number | null>(null)
   const [draftPointsWorth, setDraftPointsWorth] = useState<number | null>(null)
   const [gradingGroups, setGradingGroups] = useState<{ id: string; name: string }[]>([])
@@ -396,6 +416,12 @@ export default function CourseModuleQuizPage() {
         typeof data.adaptiveQuestionCount === 'number' ? data.adaptiveQuestionCount : 5,
       )
       setStudentQuizPayload(data)
+      setCourseLockdownEnabled(courseRow.lockdownModeEnabled === true)
+      setLockdownMode(data.lockdownMode)
+      setDraftLockdownMode(data.lockdownMode)
+      const lossTh = data.focusLossThreshold
+      setFocusLossThreshold(typeof lossTh === 'number' ? lossTh : null)
+      setDraftFocusLossThreshold(typeof lossTh === 'number' ? lossTh : null)
       setMdTheme(resolveMarkdownTheme(courseRow.markdownThemePreset, courseRow.markdownThemeCustom))
       void loadMarkups()
     } catch (e) {
@@ -422,6 +448,11 @@ export default function CourseModuleQuizPage() {
       setAssignmentGroupId(null)
       setMarkups([])
       setStudentQuizPayload(null)
+      setCourseLockdownEnabled(false)
+      setLockdownMode('standard')
+      setDraftLockdownMode('standard')
+      setFocusLossThreshold(null)
+      setDraftFocusLossThreshold(null)
     } finally {
       setLoading(false)
     }
@@ -519,6 +550,9 @@ export default function CourseModuleQuizPage() {
     availableUntilAt,
     unlimitedAttempts,
     oneQuestionAtATime,
+    lockdownMode,
+    focusLossThreshold,
+    courseLockdownEnabled,
     pointsWorth,
     assignmentGroupId,
     gradingGroups,
@@ -535,6 +569,8 @@ export default function CourseModuleQuizPage() {
     setDraftAvailableUntilLocal(isoToDatetimeLocalValue(availableUntilAt))
     setDraftUnlimitedAttempts(unlimitedAttempts)
     setDraftOneQuestionAtATime(oneQuestionAtATime)
+    setDraftLockdownMode(lockdownMode)
+    setDraftFocusLossThreshold(focusLossThreshold)
     setDraftPointsWorth(pointsWorth)
     setDraftQuizAdvanced(quizAdvanced)
     setEditingContent(true)
@@ -551,6 +587,8 @@ export default function CourseModuleQuizPage() {
     setDraftAvailableUntilLocal(isoToDatetimeLocalValue(availableUntilAt))
     setDraftUnlimitedAttempts(unlimitedAttempts)
     setDraftOneQuestionAtATime(oneQuestionAtATime)
+    setDraftLockdownMode(lockdownMode)
+    setDraftFocusLossThreshold(focusLossThreshold)
     setDraftPointsWorth(pointsWorth)
     setDraftQuizAdvanced(quizAdvanced)
   }
@@ -568,6 +606,26 @@ export default function CourseModuleQuizPage() {
       )
     } finally {
       setAssignmentGroupPatching(false)
+    }
+  }
+
+  async function loadFocusInspectEvents() {
+    if (!courseCode || !itemId) return
+    const id = focusInspectAttemptId.trim()
+    if (!id) {
+      setFocusInspectError('Enter an attempt id.')
+      return
+    }
+    setFocusInspectLoading(true)
+    setFocusInspectError(null)
+    setFocusInspectData(null)
+    try {
+      const data = await fetchQuizFocusLossEvents(courseCode, itemId, id)
+      setFocusInspectData(data)
+    } catch (e) {
+      setFocusInspectError(e instanceof Error ? e.message : 'Could not load events.')
+    } finally {
+      setFocusInspectLoading(false)
     }
   }
 
@@ -606,6 +664,8 @@ export default function CourseModuleQuizPage() {
         shuffleQuestions: draftQuizAdvanced.shuffleQuestions,
         shuffleChoices: draftQuizAdvanced.shuffleChoices,
         allowBackNavigation: draftQuizAdvanced.allowBackNavigation,
+        lockdownMode: draftLockdownMode,
+        focusLossThreshold: draftFocusLossThreshold,
         quizAccessCode: code.length > 0 ? code : null,
         adaptiveDifficulty: draftQuizAdvanced.adaptiveDifficulty,
         adaptiveTopicBalance: draftQuizAdvanced.adaptiveTopicBalance,
@@ -619,6 +679,11 @@ export default function CourseModuleQuizPage() {
       setAvailableUntilAt(data.availableUntil ?? null)
       setUnlimitedAttempts(Boolean(data.unlimitedAttempts))
       setOneQuestionAtATime(Boolean(data.oneQuestionAtATime))
+      setLockdownMode(data.lockdownMode)
+      setDraftLockdownMode(data.lockdownMode)
+      const thSaved = data.focusLossThreshold
+      setFocusLossThreshold(typeof thSaved === 'number' ? thSaved : null)
+      setDraftFocusLossThreshold(typeof thSaved === 'number' ? thSaved : null)
       setPointsWorth(data.pointsWorth ?? null)
       setDraftPointsWorth(data.pointsWorth ?? null)
       setAssignmentGroupId(data.assignmentGroupId ?? null)
@@ -673,6 +738,12 @@ export default function CourseModuleQuizPage() {
           typeof data.adaptiveQuestionCount === 'number' ? data.adaptiveQuestionCount : adaptiveCount,
         )
         setQuizAdvanced(quizAdvancedSettingsFromPayload(data))
+        setLockdownMode(data.lockdownMode)
+        setDraftLockdownMode(data.lockdownMode)
+        const thAdaptive = data.focusLossThreshold
+        setFocusLossThreshold(typeof thAdaptive === 'number' ? thAdaptive : null)
+        setDraftFocusLossThreshold(typeof thAdaptive === 'number' ? thAdaptive : null)
+        setStudentQuizPayload(data)
         setPointsWorth(data.pointsWorth ?? null)
         setDraftPointsWorth(data.pointsWorth ?? null)
         setAssignmentGroupId(data.assignmentGroupId ?? null)
@@ -696,6 +767,12 @@ export default function CourseModuleQuizPage() {
         setAdaptiveSourceItemIds(data.adaptiveSourceItemIds ?? [])
         setAdaptiveQuestionCount(5)
         setQuizAdvanced(quizAdvancedSettingsFromPayload(data))
+        setLockdownMode(data.lockdownMode)
+        setDraftLockdownMode(data.lockdownMode)
+        const thStatic = data.focusLossThreshold
+        setFocusLossThreshold(typeof thStatic === 'number' ? thStatic : null)
+        setDraftFocusLossThreshold(typeof thStatic === 'number' ? thStatic : null)
+        setStudentQuizPayload(data)
         setPointsWorth(data.pointsWorth ?? null)
         setDraftPointsWorth(data.pointsWorth ?? null)
         setAssignmentGroupId(data.assignmentGroupId ?? null)
@@ -971,6 +1048,32 @@ export default function CourseModuleQuizPage() {
                       {oneQuestionAtATime ? 'Yes' : 'No'}
                     </dd>
                   </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Course lockdown feature</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      {courseLockdownEnabled ? 'On' : 'Off'}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Delivery mode</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      {formatLockdownModeLabel(lockdownMode)}
+                    </dd>
+                  </div>
+                  {lockdownMode === 'kiosk' ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Focus-loss threshold</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                        {focusLossThreshold != null ? String(focusLossThreshold) : 'None'}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {!courseLockdownEnabled && lockdownMode !== 'standard' ? (
+                    <p className="text-xs leading-snug text-amber-800 dark:text-amber-200/90">
+                      This quiz is set to {formatLockdownModeLabel(lockdownMode).toLowerCase()}, but the course
+                      lockdown feature is off, so learners currently get standard delivery.
+                    </p>
+                  ) : null}
                   {!unlimitedAttempts ? (
                     <div className="flex justify-between gap-4">
                       <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Max attempts</dt>
@@ -1039,6 +1142,63 @@ export default function CourseModuleQuizPage() {
                   ) : null}
                 </dl>
               </div>
+              {canEdit && courseLockdownEnabled && lockdownMode === 'kiosk' && !isAdaptive ? (
+                <div className="mt-4 rounded-2xl border border-slate-200/90 bg-white p-4 dark:border-neutral-600 dark:bg-neutral-950/80">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
+                    Kiosk focus-loss log
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-neutral-400">
+                    Enter a learner attempt id to list recorded tab or window events (instructors only).
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <input
+                      type="text"
+                      value={focusInspectAttemptId}
+                      onChange={(e) => setFocusInspectAttemptId(e.target.value)}
+                      placeholder="Attempt UUID"
+                      className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-2 font-mono text-xs text-slate-900 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                      spellCheck={false}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void loadFocusInspectEvents()}
+                      disabled={focusInspectLoading}
+                      className="shrink-0 rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-neutral-200 dark:text-neutral-900 dark:hover:bg-white"
+                    >
+                      {focusInspectLoading ? 'Loading…' : 'Load events'}
+                    </button>
+                  </div>
+                  {focusInspectError ? (
+                    <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">{focusInspectError}</p>
+                  ) : null}
+                  {focusInspectData ? (
+                    <div className="mt-3">
+                      <p className="text-xs font-medium text-slate-600 dark:text-neutral-300">
+                        {focusInspectData.total} event{focusInspectData.total === 1 ? '' : 's'}
+                      </p>
+                      <ul className="mt-2 max-h-48 space-y-1.5 overflow-y-auto text-[11px] leading-snug text-slate-700 dark:text-neutral-300">
+                        {focusInspectData.events.map((ev) => (
+                          <li
+                            key={ev.id}
+                            className="rounded border border-slate-100 bg-slate-50/80 px-2 py-1.5 dark:border-neutral-800 dark:bg-neutral-900/60"
+                          >
+                            <span className="font-mono text-slate-500 dark:text-neutral-500">
+                              {new Date(ev.createdAt).toLocaleString()}
+                            </span>{' '}
+                            <span className="font-medium">{ev.eventType}</span>
+                            {ev.durationMs != null ? (
+                              <span className="text-slate-500 dark:text-neutral-500">
+                                {' '}
+                                ({ev.durationMs} ms)
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </aside>
           </div>
         )}
@@ -1089,6 +1249,17 @@ export default function CourseModuleQuizPage() {
                     courseCode={courseCode}
                     quizItemId={itemId}
                     quizOutcomesQuestions={questions.map((q) => ({ id: q.id, prompt: q.prompt }))}
+                    lockdownDeliveryEnabled={courseLockdownEnabled}
+                    lockdownMode={draftLockdownMode}
+                    onLockdownModeChange={(mode) => {
+                      setDraftLockdownMode(mode)
+                      if (mode === 'kiosk' || mode === 'one_at_a_time') {
+                        setDraftOneQuestionAtATime(true)
+                        setDraftQuizAdvanced((prev) => ({ ...prev, allowBackNavigation: false }))
+                      }
+                    }}
+                    focusLossThreshold={draftFocusLossThreshold}
+                    onFocusLossThresholdChange={setDraftFocusLossThreshold}
                   />
                 ) : null
               }

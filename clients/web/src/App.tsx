@@ -8,6 +8,7 @@ import CourseEnrollments from './pages/lms/CourseEnrollments'
 import CourseFeedPage from './pages/lms/CourseFeedPage'
 import CourseGradebook from './pages/lms/CourseGradebook'
 import CourseMyGrades from './pages/lms/CourseMyGrades'
+import AdminAccommodationsPage from './pages/lms/AdminAccommodationsPage'
 import CourseCreate from './pages/lms/CourseCreate'
 import CourseDetail from './pages/lms/CourseDetail'
 import CourseLayout from './pages/lms/CourseLayout'
@@ -15,6 +16,7 @@ import CourseModuleAssignmentPage from './pages/lms/CourseModuleAssignmentPage'
 import CourseModuleContentPage from './pages/lms/CourseModuleContentPage'
 import CourseModuleExternalLinkPage from './pages/lms/CourseModuleExternalLinkPage'
 import CourseModuleQuizPage from './pages/lms/CourseModuleQuizPage.tsx'
+import { CourseQuestionBankPage } from './pages/lms/CourseQuestionBankPage'
 import CourseModules from './pages/lms/CourseModules'
 import CourseNotebookPage from './pages/lms/CourseNotebookPage'
 import CourseSettings from './pages/lms/CourseSettings'
@@ -75,6 +77,7 @@ export default function App() {
             <Route path="modules/assignment/:itemId" element={<CourseModuleAssignmentPage />} />
             <Route path="modules/quiz/:itemId" element={<CourseModuleQuizPage />} />
             <Route path="modules/external-link/:itemId" element={<CourseModuleExternalLinkPage />} />
+            <Route path="questions" element={<CourseQuestionBankPage />} />
             <Route path="modules" element={<CourseModules />} />
             <Route path="notebook" element={<CourseNotebookPage />} />
             <Route path="calendar" element={<CourseCalendarPage />} />
@@ -84,6 +87,7 @@ export default function App() {
             <Route index element={<CourseDetail />} />
           </Route>
           <Route path="/calendar" element={<Calendar />} />
+          <Route path="/admin/accommodations" element={<AdminAccommodationsPage />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/settings" element={<Navigate to="/settings/account" replace />} />

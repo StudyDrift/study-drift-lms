@@ -987,6 +987,8 @@ async fn canvas_export_append_quiz_details(
             shuffle_questions: false,
             shuffle_choices: false,
             allow_back_navigation: true,
+            lockdown_mode: "standard".into(),
+            focus_loss_threshold: None,
             quiz_access_code: None,
             adaptive_difficulty: "standard".into(),
             adaptive_topic_balance: true,
@@ -1808,6 +1810,8 @@ pub async fn build_export_from_canvas(
         notebook_enabled: true,
         feed_enabled: true,
         calendar_enabled: true,
+        question_bank_enabled: false,
+        lockdown_mode_enabled: false,
     };
 
     Ok(CourseExportV1 {

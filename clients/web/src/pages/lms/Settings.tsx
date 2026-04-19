@@ -75,6 +75,7 @@ type AccountProfile = {
   lastName?: string | null
   avatarUrl?: string | null
   uiTheme?: string | null
+  sid?: string | null
 }
 
 function defaultAvatarPrompt(firstName: string, lastName: string): string {
@@ -152,6 +153,7 @@ export default function Settings() {
   const [avatarGenStatus, setAvatarGenStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [avatarGenMessage, setAvatarGenMessage] = useState<string | null>(null)
   const [uiTheme, setUiTheme] = useState<UiTheme>('light')
+  const [studentId, setStudentId] = useState<string | null>(null)
 
   const loadModels = useCallback(async () => {
     setModelsError(null)
@@ -301,6 +303,7 @@ export default function Settings() {
       setAvatarUrl(currentAvatar)
       setAvatarPreviewUrl(currentAvatar || null)
       setUiTheme(parseUiTheme(data.uiTheme))
+      setStudentId(data.sid?.trim() ? data.sid.trim() : null)
     } catch {
       setAccountError('Could not load account settings.')
     } finally {
@@ -443,6 +446,7 @@ export default function Settings() {
       const data = raw as AccountProfile
       setFirstName(data.firstName ?? '')
       setLastName(data.lastName ?? '')
+      setStudentId(data.sid?.trim() ? data.sid.trim() : null)
       const nextAvatar = data.avatarUrl ?? ''
       setAvatarUrl(nextAvatar)
       setAvatarPreviewUrl(nextAvatar || null)
@@ -759,6 +763,24 @@ export default function Settings() {
                     disabled
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500"
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="account-sid" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Student ID
+                  </label>
+                  <input
+                    id="account-sid"
+                    type="text"
+                    value={studentId ?? ''}
+                    disabled
+                    placeholder="Not assigned"
+                    title="Your student ID is assigned by an administrator and cannot be changed here."
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500 placeholder:text-slate-400"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Assigned by your institution. Contact an administrator if this should be updated.
+                  </p>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">

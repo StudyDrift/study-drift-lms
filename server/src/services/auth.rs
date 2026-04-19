@@ -117,6 +117,7 @@ pub async fn signup(
             last_name: row.last_name,
             avatar_url: row.avatar_url,
             ui_theme: row.ui_theme,
+            sid: row.sid,
         },
     })
 }
@@ -147,6 +148,7 @@ pub async fn login(
             last_name: row.last_name,
             avatar_url: row.avatar_url,
             ui_theme: row.ui_theme,
+            sid: row.sid,
         },
     })
 }

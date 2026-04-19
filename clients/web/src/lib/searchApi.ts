@@ -8,6 +8,7 @@ export type SearchCourseItem = {
   notebookEnabled?: boolean
   feedEnabled?: boolean
   calendarEnabled?: boolean
+  questionBankEnabled?: boolean
 }
 
 export type SearchPersonItem = {

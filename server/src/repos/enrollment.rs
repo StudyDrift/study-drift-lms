@@ -422,6 +422,57 @@ impl CourseEnrollmentRow {
 }
 
 /// Returns `true` if a new student row was inserted, `false` if the user was already enrolled.
+#[derive(Debug, Clone)]
+pub struct EnrollmentById {
+    pub id: Uuid,
+    pub course_id: Uuid,
+    pub course_code: String,
+    pub user_id: Uuid,
+    pub role: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct EnrollmentByIdDb {
+    id: Uuid,
+    course_id: Uuid,
+    course_code: String,
+    user_id: Uuid,
+    role: String,
+}
+
+impl From<EnrollmentByIdDb> for EnrollmentById {
+    fn from(r: EnrollmentByIdDb) -> Self {
+        EnrollmentById {
+            id: r.id,
+            course_id: r.course_id,
+            course_code: r.course_code,
+            user_id: r.user_id,
+            role: r.role,
+        }
+    }
+}
+
+/// Resolve a roster row anywhere in the platform (used for accommodation summary authorization).
+pub async fn get_enrollment_by_id(
+    pool: &PgPool,
+    enrollment_id: Uuid,
+) -> Result<Option<EnrollmentById>, sqlx::Error> {
+    sqlx::query_as::<_, EnrollmentByIdDb>(&format!(
+        r#"
+        SELECT ce.id, ce.course_id, c.course_code, ce.user_id, ce.role
+        FROM {} ce
+        INNER JOIN {} c ON c.id = ce.course_id
+        WHERE ce.id = $1
+        "#,
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES
+    ))
+    .bind(enrollment_id)
+    .fetch_optional(pool)
+    .await
+    .map(|o| o.map(Into::into))
+}
+
 pub async fn insert_student_if_missing(
     pool: &PgPool,
     course_id: Uuid,

@@ -7,6 +7,7 @@ import {
   FileText,
   Layers,
   LayoutDashboard,
+  ListChecks,
   MessageSquare,
   NotebookPen,
   Settings,
@@ -18,6 +19,7 @@ import {
   courseEnrollmentsReadPermission,
   courseGradebookViewPermission,
   courseItemCreatePermission,
+  courseItemsCreatePermission,
   viewerIsCourseStaffEnrollment,
   viewerShouldHideCourseEnrollmentsNav,
   viewerShouldShowMyGradesNav,
@@ -31,7 +33,7 @@ type SideNavCourseLinksProps = {
 }
 
 export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
-  const { notebookEnabled, feedEnabled, calendarEnabled } = useCourseNavFeatures()
+  const { notebookEnabled, feedEnabled, calendarEnabled, questionBankEnabled } = useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
   const courseViewPreview = useCourseViewAs(courseCode)
   const viewerEnrollmentRoles = useViewerEnrollmentRoles(courseCode)
@@ -48,6 +50,8 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
   const canViewMyGrades = viewerShouldShowMyGradesNav(viewerEnrollmentRoles, courseViewPreview)
   const canManageCourse =
     !permLoading && allows(courseItemCreatePermission(courseCode))
+  const canManageQuestionBank =
+    !permLoading && allows(courseItemsCreatePermission(courseCode))
 
   return (
     <>
@@ -92,6 +96,15 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
         <Layers className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Modules
       </NavLink>
+      {canManageQuestionBank && questionBankEnabled && (
+        <NavLink
+          to={`${base}/questions`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <ListChecks className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Question bank
+        </NavLink>
+      )}
       {notebookEnabled && (
         <NavLink
           to={`${base}/notebook`}

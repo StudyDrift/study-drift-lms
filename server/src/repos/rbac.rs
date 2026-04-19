@@ -514,13 +514,23 @@ pub async fn user_exists(pool: &PgPool, user_id: Uuid) -> Result<bool, sqlx::Err
     .await
 }
 
+pub async fn get_user_brief(pool: &PgPool, user_id: Uuid) -> Result<Option<UserBrief>, sqlx::Error> {
+    sqlx::query_as::<_, UserBrief>(&format!(
+        r#"SELECT id, email, display_name, sid FROM {} WHERE id = $1"#,
+        schema::USERS
+    ))
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+}
+
 pub async fn list_users_in_role(
     pool: &PgPool,
     role_id: Uuid,
 ) -> Result<Vec<UserBrief>, sqlx::Error> {
     sqlx::query_as::<_, UserBrief>(&format!(
         r#"
-        SELECT u.id, u.email, u.display_name
+        SELECT u.id, u.email, u.display_name, u.sid
         FROM {} u
         INNER JOIN {} uar ON uar.user_id = u.id
         WHERE uar.role_id = $1
@@ -546,7 +556,7 @@ pub async fn list_users_eligible_for_role(
 
     sqlx::query_as::<_, UserBrief>(&format!(
         r#"
-        SELECT u.id, u.email, u.display_name
+        SELECT u.id, u.email, u.display_name, u.sid
         FROM {} u
         WHERE NOT EXISTS (
             SELECT 1 FROM {} uar
@@ -556,6 +566,7 @@ pub async fn list_users_eligible_for_role(
             $2::text = '%'
             OR u.email ILIKE $2
             OR COALESCE(u.display_name, '') ILIKE $2
+            OR COALESCE(u.sid, '') ILIKE $2
         )
         ORDER BY LOWER(u.email) ASC
         LIMIT 200

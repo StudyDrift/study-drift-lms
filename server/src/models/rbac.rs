@@ -89,6 +89,7 @@ pub struct UserBrief {
     pub id: Uuid,
     pub email: String,
     pub display_name: Option<String>,
+    pub sid: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

@@ -303,6 +303,11 @@ pub struct ModuleQuizResponse {
     pub shuffle_questions: bool,
     pub shuffle_choices: bool,
     pub allow_back_navigation: bool,
+    /// Stored delivery mode when the requester can edit; effective (flag-respecting) mode for learners.
+    pub lockdown_mode: String,
+    /// Instructor-only: auto-flag threshold for focus-loss count (kiosk). Omitted for learners.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focus_loss_threshold: Option<i32>,
     /// True when a non-empty access code is configured (learners see this without the code).
     pub requires_quiz_access_code: bool,
     /// Only included for course editors who can view secrets.
@@ -313,6 +318,9 @@ pub struct ModuleQuizResponse {
     pub adaptive_stop_rule: String,
     pub random_question_pool_count: Option<i32>,
     pub questions: Vec<QuizQuestion>,
+    /// When true, learners must start an attempt before questions load; `randomQuestionPoolCount` is ignored.
+    #[serde(default)]
+    pub uses_server_question_sampling: bool,
     pub updated_at: DateTime<Utc>,
     pub is_adaptive: bool,
     /// Present for instructors when `is_adaptive` is true; omitted for learners.
@@ -324,6 +332,13 @@ pub struct ModuleQuizResponse {
     pub adaptive_question_count: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assignment_group_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModuleQuizGetQuery {
+    #[serde(default)]
+    pub attempt_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -399,6 +414,10 @@ pub struct UpdateModuleQuizRequest {
     pub adaptive_stop_rule: Option<String>,
     #[serde(default)]
     pub random_question_pool_count: Option<Option<i32>>,
+    #[serde(default)]
+    pub lockdown_mode: Option<String>,
+    #[serde(default)]
+    pub focus_loss_threshold: Option<Option<i32>>,
     #[serde(default)]
     pub is_adaptive: Option<bool>,
     #[serde(default)]
@@ -481,9 +500,65 @@ pub struct QuizStartResponse {
     pub attempt_id: Uuid,
     pub attempt_number: i32,
     pub started_at: DateTime<Utc>,
+    pub lockdown_mode: String,
+    pub hints_disabled: bool,
+    pub back_navigation_allowed: bool,
+    pub current_question_index: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadline_at: Option<DateTime<Utc>>,
+    pub reduced_distraction_mode: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizCurrentQuestionResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub question: Option<QuizQuestion>,
+    pub question_index: i32,
+    pub total_questions: usize,
+    pub completed: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizAdvanceResponse {
+    pub locked: bool,
+    pub current_question_index: i32,
+    pub completed: bool,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizFocusLossRequest {
+    pub event_type: String,
+    #[serde(default)]
+    pub duration_ms: Option<i32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizFocusLossEventApi {
+    pub id: Uuid,
+    pub event_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<i32>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizFocusLossEventsResponse {
+    pub events: Vec<QuizFocusLossEventApi>,
+    pub total: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizAttemptHintRequest {
+    pub question_id: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct QuizQuestionResponseItem {
     pub question_id: String,
@@ -548,10 +623,15 @@ pub struct QuizResultsResponse {
     pub attempt_id: Uuid,
     pub attempt_number: i32,
     pub started_at: DateTime<Utc>,
+    #[serde(default)]
+    pub academic_integrity_flag: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub submitted_at: Option<DateTime<Utc>>,
     pub status: String,
     pub is_adaptive: bool,
+    /// Instructor-visible: extended time from accommodations was applied to this attempt.
+    #[serde(default)]
+    pub extended_time_active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub score: Option<QuizResultsScoreSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]

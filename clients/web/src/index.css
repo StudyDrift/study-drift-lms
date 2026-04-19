@@ -241,3 +241,12 @@ body {
 .copy-action-copied-fade {
   animation: copy-action-copied-fade 2s ease-out forwards;
 }
+
+/* Reduced-distraction quiz take (accommodation): suppress motion and decorative transitions inside the panel. */
+.lex-quiz-reduced-distract,
+.lex-quiz-reduced-distract * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

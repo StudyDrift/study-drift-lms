@@ -48,6 +48,8 @@ pub struct CourseItemQuizRow {
     pub adaptive_source_item_ids: Json<Vec<Uuid>>,
     pub adaptive_question_count: i32,
     pub assignment_group_id: Option<Uuid>,
+    pub lockdown_mode: String,
+    pub focus_loss_threshold: Option<i32>,
 }
 
 /// Full quiz scheduling / behavior row for PATCH merge + UPDATE.
@@ -77,6 +79,8 @@ pub struct QuizSettingsWrite {
     pub adaptive_topic_balance: bool,
     pub adaptive_stop_rule: String,
     pub random_question_pool_count: Option<i32>,
+    pub lockdown_mode: String,
+    pub focus_loss_threshold: Option<i32>,
 }
 
 impl From<&CourseItemQuizRow> for QuizSettingsWrite {
@@ -106,6 +110,8 @@ impl From<&CourseItemQuizRow> for QuizSettingsWrite {
             adaptive_topic_balance: row.adaptive_topic_balance,
             adaptive_stop_rule: row.adaptive_stop_rule.clone(),
             random_question_pool_count: row.random_question_pool_count,
+            lockdown_mode: row.lockdown_mode.clone(),
+            focus_loss_threshold: row.focus_loss_threshold,
         }
     }
 }
@@ -205,7 +211,9 @@ pub async fn get_for_course_item(
                m.quiz_access_code, m.adaptive_difficulty, m.adaptive_topic_balance, m.adaptive_stop_rule,
                m.random_question_pool_count,
                m.is_adaptive, m.adaptive_system_prompt, m.adaptive_source_item_ids, m.adaptive_question_count,
-               c.assignment_group_id
+               c.assignment_group_id,
+               m.lockdown_mode::text AS lockdown_mode,
+               m.focus_loss_threshold
         FROM {} c
         INNER JOIN {} m ON m.structure_item_id = c.id
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'quiz'
@@ -311,6 +319,8 @@ pub async fn write_quiz_settings(
             adaptive_topic_balance = $24,
             adaptive_stop_rule = $25,
             random_question_pool_count = $26,
+            lockdown_mode = $27::course.lockdown_mode,
+            focus_loss_threshold = $28,
             updated_at = NOW()
         FROM {} c
         WHERE m.structure_item_id = c.id
@@ -348,6 +358,8 @@ pub async fn write_quiz_settings(
     .bind(s.adaptive_topic_balance)
     .bind(&s.adaptive_stop_rule)
     .bind(s.random_question_pool_count)
+    .bind(&s.lockdown_mode)
+    .bind(s.focus_loss_threshold)
     .fetch_optional(pool)
     .await
 }
@@ -496,9 +508,13 @@ pub async fn upsert_import_body(
             one_question_at_a_time, shuffle_questions, shuffle_choices, allow_back_navigation,
             quiz_access_code, adaptive_difficulty, adaptive_topic_balance, adaptive_stop_rule,
             random_question_pool_count,
+            lockdown_mode, focus_loss_threshold,
             is_adaptive, adaptive_system_prompt, adaptive_source_item_ids, adaptive_question_count
         )
-        SELECT c.id, $3, $4::jsonb, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31::jsonb, $32
+        SELECT c.id, $3, $4::jsonb, NOW(),
+            $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
+            $29::course.lockdown_mode, $30,
+            $31, $32, $33::jsonb, $34
         FROM {} c
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'quiz'
         ON CONFLICT (structure_item_id) DO UPDATE SET
@@ -529,6 +545,8 @@ pub async fn upsert_import_body(
             adaptive_topic_balance = EXCLUDED.adaptive_topic_balance,
             adaptive_stop_rule = EXCLUDED.adaptive_stop_rule,
             random_question_pool_count = EXCLUDED.random_question_pool_count,
+            lockdown_mode = EXCLUDED.lockdown_mode,
+            focus_loss_threshold = EXCLUDED.focus_loss_threshold,
             is_adaptive = EXCLUDED.is_adaptive,
             adaptive_system_prompt = EXCLUDED.adaptive_system_prompt,
             adaptive_source_item_ids = EXCLUDED.adaptive_source_item_ids,
@@ -565,6 +583,8 @@ pub async fn upsert_import_body(
     .bind(settings.adaptive_topic_balance)
     .bind(&settings.adaptive_stop_rule)
     .bind(settings.random_question_pool_count)
+    .bind(&settings.lockdown_mode)
+    .bind(settings.focus_loss_threshold)
     .bind(is_adaptive)
     .bind(adaptive_system_prompt)
     .bind(Json(adaptive_source_item_ids.to_vec()))

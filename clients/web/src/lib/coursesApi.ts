@@ -37,6 +37,10 @@ export type Course = {
   feedEnabled?: boolean
   /** Course due-date calendar page (default true when omitted). */
   calendarEnabled?: boolean
+  /** Normalized question bank + server-side pool sampling (default false when omitted). */
+  questionBankEnabled?: boolean
+  /** When true, instructors can configure quiz lockdown / kiosk delivery (plan 2.10). */
+  lockdownModeEnabled?: boolean
   createdAt: string
   updatedAt: string
   /** Present on single-course GET: raw enrollment roles for the viewer (`teacher`, `student`, …). */
@@ -185,9 +189,46 @@ export async function patchCourseMarkdownTheme(
   return raw as Course
 }
 
+export type BankQuestionRow = {
+  id: string
+  courseId: string
+  questionType: string
+  stem: string
+  status: string
+  points: number
+  shared: boolean
+  source: string
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchCourseQuestions(
+  courseCode: string,
+  opts?: { q?: string; type?: string; conceptId?: string; status?: string },
+): Promise<BankQuestionRow[]> {
+  const params = new URLSearchParams()
+  if (opts?.q) params.set('q', opts.q)
+  if (opts?.type) params.set('type', opts.type)
+  if (opts?.conceptId) params.set('conceptId', opts.conceptId)
+  if (opts?.status) params.set('status', opts.status)
+  const qs = params.toString()
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/questions${qs ? `?${qs}` : ''}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return Array.isArray(raw) ? (raw as BankQuestionRow[]) : []
+}
+
 export async function patchCourseFeatures(
   courseCode: string,
-  body: { notebookEnabled: boolean; feedEnabled: boolean; calendarEnabled: boolean },
+  body: {
+    notebookEnabled: boolean
+    feedEnabled: boolean
+    calendarEnabled: boolean
+    questionBankEnabled: boolean
+    lockdownModeEnabled?: boolean
+  },
 ): Promise<Course> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/features`,
@@ -198,6 +239,8 @@ export async function patchCourseFeatures(
         notebookEnabled: body.notebookEnabled,
         feedEnabled: body.feedEnabled,
         calendarEnabled: body.calendarEnabled,
+        questionBankEnabled: body.questionBankEnabled,
+        lockdownModeEnabled: body.lockdownModeEnabled ?? false,
       }),
     },
   )
@@ -1024,6 +1067,8 @@ export type ReviewWhen = 'after_submit' | 'after_due' | 'always' | 'never'
 export type AdaptiveDifficulty = 'introductory' | 'standard' | 'challenging'
 export type AdaptiveStopRule = 'fixed_count' | 'mastery_estimate'
 
+export type LockdownMode = 'standard' | 'one_at_a_time' | 'kiosk'
+
 export type ModuleQuizPayload = {
   itemId: string
   title: string
@@ -1046,6 +1091,10 @@ export type ModuleQuizPayload = {
   reviewVisibility: ReviewVisibility
   reviewWhen: ReviewWhen
   oneQuestionAtATime: boolean
+  /** Effective for learners; stored value for editors when course lockdown feature is on. */
+  lockdownMode: LockdownMode
+  /** Instructor-only; omitted for learners. */
+  focusLossThreshold?: number | null
   shuffleQuestions: boolean
   shuffleChoices: boolean
   allowBackNavigation: boolean
@@ -1057,6 +1106,8 @@ export type ModuleQuizPayload = {
   adaptiveStopRule: AdaptiveStopRule
   randomQuestionPoolCount: number | null
   questions: QuizQuestion[]
+  /** When true, question order/pool is fixed server-side for the current attempt. */
+  usesServerQuestionSampling?: boolean
   updatedAt: string
   isAdaptive: boolean
   /** Omitted for learners when the quiz is adaptive. */
@@ -1166,6 +1217,13 @@ export function normalizeModuleQuizPayload(raw: unknown): ModuleQuizPayload {
     reviewVisibility: (r.reviewVisibility as ReviewVisibility) ?? 'full',
     reviewWhen: (r.reviewWhen as ReviewWhen) ?? 'always',
     oneQuestionAtATime: Boolean(r.oneQuestionAtATime),
+    lockdownMode: (r.lockdownMode as LockdownMode) ?? 'standard',
+    focusLossThreshold:
+      typeof r.focusLossThreshold === 'number'
+        ? r.focusLossThreshold
+        : r.focusLossThreshold === null
+          ? null
+          : undefined,
     shuffleQuestions: Boolean(r.shuffleQuestions),
     shuffleChoices: Boolean(r.shuffleChoices),
     allowBackNavigation: r.allowBackNavigation !== false,
@@ -1177,6 +1235,7 @@ export function normalizeModuleQuizPayload(raw: unknown): ModuleQuizPayload {
     randomQuestionPoolCount:
       typeof r.randomQuestionPoolCount === 'number' ? r.randomQuestionPoolCount : null,
     questions: Array.isArray(r.questions) ? (r.questions as QuizQuestion[]) : [],
+    usesServerQuestionSampling: Boolean(r.usesServerQuestionSampling),
     updatedAt: String(r.updatedAt ?? ''),
     isAdaptive: Boolean(r.isAdaptive),
     adaptiveSystemPrompt: (r.adaptiveSystemPrompt as string | null | undefined) ?? null,
@@ -1188,9 +1247,16 @@ export function normalizeModuleQuizPayload(raw: unknown): ModuleQuizPayload {
   }
 }
 
-export async function fetchModuleQuiz(courseCode: string, itemId: string): Promise<ModuleQuizPayload> {
+export async function fetchModuleQuiz(
+  courseCode: string,
+  itemId: string,
+  opts?: { attemptId?: string },
+): Promise<ModuleQuizPayload> {
+  const params = new URLSearchParams()
+  if (opts?.attemptId) params.set('attemptId', opts.attemptId)
+  const qs = params.toString()
   const res = await authorizedFetch(
-    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}`,
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}${qs ? `?${qs}` : ''}`,
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
@@ -1220,6 +1286,8 @@ export async function patchModuleQuiz(
     reviewVisibility?: ReviewVisibility
     reviewWhen?: ReviewWhen
     oneQuestionAtATime?: boolean
+    lockdownMode?: LockdownMode
+    focusLossThreshold?: number | null
     shuffleQuestions?: boolean
     shuffleChoices?: boolean
     allowBackNavigation?: boolean
@@ -1387,6 +1455,12 @@ export type QuizAttemptStartResponse = {
   attemptId: string
   attemptNumber: number
   startedAt: string
+  lockdownMode: LockdownMode
+  hintsDisabled: boolean
+  backNavigationAllowed: boolean
+  currentQuestionIndex: number
+  deadlineAt?: string | null
+  reducedDistractionMode?: boolean
 }
 
 export async function postQuizStart(
@@ -1406,7 +1480,100 @@ export async function postQuizStart(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as QuizAttemptStartResponse
+  const o = raw as Record<string, unknown>
+  return {
+    attemptId: String(o.attemptId ?? ''),
+    attemptNumber: typeof o.attemptNumber === 'number' ? o.attemptNumber : 1,
+    startedAt: String(o.startedAt ?? ''),
+    lockdownMode: (o.lockdownMode as LockdownMode) ?? 'standard',
+    hintsDisabled: Boolean(o.hintsDisabled),
+    backNavigationAllowed: o.backNavigationAllowed !== false,
+    currentQuestionIndex: typeof o.currentQuestionIndex === 'number' ? o.currentQuestionIndex : 0,
+    deadlineAt: typeof o.deadlineAt === 'string' ? o.deadlineAt : null,
+    reducedDistractionMode: Boolean(o.reducedDistractionMode),
+  }
+}
+
+export type QuizCurrentQuestionPayload = {
+  question: QuizQuestion | null
+  questionIndex: number
+  totalQuestions: number
+  completed: boolean
+}
+
+export async function fetchQuizCurrentQuestion(
+  courseCode: string,
+  itemId: string,
+  attemptId: string,
+): Promise<QuizCurrentQuestionPayload> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts/${encodeURIComponent(attemptId)}/current-question`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as QuizCurrentQuestionPayload
+}
+
+export async function postQuizAdvance(
+  courseCode: string,
+  itemId: string,
+  attemptId: string,
+  body: QuizQuestionResponseItem,
+): Promise<{ locked: boolean; currentQuestionIndex: number; completed: boolean }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts/${encodeURIComponent(attemptId)}/advance`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { locked: boolean; currentQuestionIndex: number; completed: boolean }
+}
+
+export async function postQuizFocusLoss(
+  courseCode: string,
+  itemId: string,
+  attemptId: string,
+  body: { eventType: string; durationMs?: number | null },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts/${encodeURIComponent(attemptId)}/focus-loss`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType: body.eventType, durationMs: body.durationMs }),
+    },
+  )
+  if (res.ok || res.status === 204) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+export type QuizFocusLossEventRow = {
+  id: string
+  eventType: string
+  durationMs?: number | null
+  createdAt: string
+}
+
+export async function fetchQuizFocusLossEvents(
+  courseCode: string,
+  itemId: string,
+  attemptId: string,
+): Promise<{ events: QuizFocusLossEventRow[]; total: number }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts/${encodeURIComponent(attemptId)}/focus-loss-events`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { events?: QuizFocusLossEventRow[]; total?: number }
+  return {
+    events: Array.isArray(o.events) ? o.events : [],
+    total: typeof o.total === 'number' ? o.total : 0,
+  }
 }
 
 export type QuizQuestionResponseItem = {
@@ -1461,6 +1628,10 @@ export type QuizResultsPayload = {
   attemptId: string
   attemptNumber: number
   startedAt: string
+  /** Set when kiosk focus-loss count exceeded the instructor threshold at submit. */
+  academicIntegrityFlag?: boolean
+  /** True when extended time from an accommodation was applied (instructor-visible). */
+  extendedTimeActive?: boolean
   submittedAt?: string | null
   status: string
   isAdaptive: boolean
@@ -1487,6 +1658,131 @@ export async function fetchQuizResults(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as QuizResultsPayload
+}
+
+export type AccommodationSummaryPayload = {
+  hasAccommodation: boolean
+  flags: string[]
+}
+
+export async function fetchEnrollmentAccommodationSummary(
+  enrollmentId: string,
+): Promise<AccommodationSummaryPayload> {
+  const res = await authorizedFetch(
+    `/api/v1/enrollments/${encodeURIComponent(enrollmentId)}/accommodation-summary`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as AccommodationSummaryPayload
+}
+
+export type AccommodationUserSearchHit = {
+  id: string
+  email: string
+  displayName?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  sid?: string | null
+}
+
+export async function searchAccommodationUsers(q: string): Promise<AccommodationUserSearchHit[]> {
+  const params = new URLSearchParams({ q: q.trim() })
+  const res = await authorizedFetch(`/api/v1/accommodations/users?${params}`)
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { users?: AccommodationUserSearchHit[] }
+  return o.users ?? []
+}
+
+export type StudentAccommodationRecord = {
+  id: string
+  userId: string
+  courseId?: string | null
+  courseCode?: string | null
+  timeMultiplier: number
+  extraAttempts: number
+  hintsAlwaysEnabled: boolean
+  reducedDistractionMode: boolean
+  alternativeFormat?: string | null
+  effectiveFrom?: string | null
+  effectiveUntil?: string | null
+  createdBy: string
+  updatedBy?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type CreateStudentAccommodationBody = {
+  courseCode?: string | null
+  timeMultiplier?: number
+  extraAttempts?: number
+  hintsAlwaysEnabled?: boolean
+  reducedDistractionMode?: boolean
+  alternativeFormat?: string | null
+  effectiveFrom?: string | null
+  effectiveUntil?: string | null
+}
+
+export async function fetchStudentAccommodationsForUser(
+  userId: string,
+): Promise<StudentAccommodationRecord[]> {
+  const res = await authorizedFetch(`/api/v1/users/${encodeURIComponent(userId)}/accommodations`)
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as StudentAccommodationRecord[]
+}
+
+export async function createStudentAccommodation(
+  userId: string,
+  body: CreateStudentAccommodationBody,
+): Promise<StudentAccommodationRecord> {
+  const res = await authorizedFetch(`/api/v1/users/${encodeURIComponent(userId)}/accommodations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as StudentAccommodationRecord
+}
+
+export type UpdateStudentAccommodationBody = {
+  timeMultiplier: number
+  extraAttempts: number
+  hintsAlwaysEnabled: boolean
+  reducedDistractionMode: boolean
+  alternativeFormat?: string | null
+  effectiveFrom?: string | null
+  effectiveUntil?: string | null
+}
+
+export async function updateStudentAccommodation(
+  userId: string,
+  accommodationId: string,
+  body: UpdateStudentAccommodationBody,
+): Promise<StudentAccommodationRecord> {
+  const res = await authorizedFetch(
+    `/api/v1/users/${encodeURIComponent(userId)}/accommodations/${encodeURIComponent(accommodationId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as StudentAccommodationRecord
+}
+
+export async function deleteStudentAccommodation(userId: string, accommodationId: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/users/${encodeURIComponent(userId)}/accommodations/${encodeURIComponent(accommodationId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
+  }
 }
 
 export async function fetchModuleContentPage(

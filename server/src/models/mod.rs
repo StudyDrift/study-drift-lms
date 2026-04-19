@@ -1,3 +1,4 @@
+pub mod accommodations;
 pub mod auth;
 pub mod communication;
 pub mod content_page_markups;
@@ -17,6 +18,7 @@ pub mod course_syllabus;
 pub mod enrollment;
 pub mod enrollment_group;
 pub mod me;
+pub mod question_bank;
 pub mod rbac;
 pub mod reports;
 pub mod search;

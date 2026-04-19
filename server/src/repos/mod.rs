@@ -25,3 +25,5 @@ pub mod user;
 pub mod user_ai_settings;
 pub mod user_audit;
 pub mod quiz_attempts;
+pub mod question_bank;
+pub mod student_accommodations;

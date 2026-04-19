@@ -9,6 +9,10 @@ pub struct SearchCourseItem {
     pub notebook_enabled: bool,
     pub feed_enabled: bool,
     pub calendar_enabled: bool,
+    #[serde(default)]
+    pub question_bank_enabled: bool,
+    #[serde(default)]
+    pub lockdown_mode_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]

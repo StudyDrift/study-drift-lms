@@ -5,6 +5,7 @@ import type {
   AdaptiveStopRule,
   GradeAttemptPolicy,
   LateSubmissionPolicy,
+  LockdownMode,
   QuizAdvancedSettings,
   ReviewVisibility,
   ReviewWhen,
@@ -39,6 +40,12 @@ export type QuizPageSettingsPanelProps = {
   courseCode?: string
   quizItemId?: string
   quizOutcomesQuestions?: { id: string; prompt: string }[]
+  /** Course-level feature; when false, lockdown controls are hidden. */
+  lockdownDeliveryEnabled?: boolean
+  lockdownMode?: LockdownMode
+  onLockdownModeChange?: (mode: LockdownMode) => void
+  focusLossThreshold?: number | null
+  onFocusLossThresholdChange?: (value: number | null) => void
 }
 
 const inputClass =
@@ -157,6 +164,11 @@ export function QuizPageSettingsPanel({
   courseCode,
   quizItemId,
   quizOutcomesQuestions,
+  lockdownDeliveryEnabled,
+  lockdownMode = 'standard',
+  onLockdownModeChange,
+  focusLossThreshold = null,
+  onFocusLossThresholdChange,
 }: QuizPageSettingsPanelProps) {
   function patch(p: Partial<QuizAdvancedSettings>) {
     onAdvancedChange({ ...advanced, ...p })
@@ -506,6 +518,59 @@ export function QuizPageSettingsPanel({
               onChange={(next) => patch({ allowBackNavigation: next })}
               disabled={disabled}
             />
+            {lockdownDeliveryEnabled ? (
+              <div className="space-y-3 border-t border-slate-100/90 py-3 dark:border-neutral-800/80">
+                <Field
+                  label="Lockdown delivery"
+                  htmlFor="quiz-lockdown-mode"
+                  hint={
+                    showAdaptiveSection
+                      ? 'Adaptive quizzes cannot use server-enforced lockdown. Turn off adaptive generation to enable these modes.'
+                      : 'Kiosk mode requests full-screen, logs tab or window changes, and disables hints.'
+                  }
+                >
+                  <select
+                    id="quiz-lockdown-mode"
+                    value={lockdownMode}
+                    onChange={(e) => onLockdownModeChange?.(e.target.value as LockdownMode)}
+                    disabled={disabled || showAdaptiveSection}
+                    className={inputClass}
+                  >
+                    <option value="standard">Standard</option>
+                    <option value="one_at_a_time">One question at a time (server enforced)</option>
+                    <option value="kiosk">Kiosk (fullscreen + focus logging)</option>
+                  </select>
+                </Field>
+                {lockdownMode === 'kiosk' ? (
+                  <Field
+                    label="Focus-loss flag threshold"
+                    htmlFor="quiz-focus-threshold"
+                    hint="Leave empty so attempts are never auto-flagged. When set, exceeding this many logged events marks the attempt for review on submit."
+                  >
+                    <input
+                      id="quiz-focus-threshold"
+                      type="number"
+                      min={1}
+                      max={99}
+                      placeholder="No auto-flag"
+                      value={focusLossThreshold ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value.trim()
+                        if (!v) {
+                          onFocusLossThresholdChange?.(null)
+                          return
+                        }
+                        const n = Math.floor(Number(v))
+                        if (!Number.isFinite(n)) return
+                        onFocusLossThresholdChange?.(Math.min(99, Math.max(1, n)))
+                      }}
+                      disabled={disabled || showAdaptiveSection}
+                      className={`max-w-[8rem] ${inputClass}`}
+                    />
+                  </Field>
+                ) : null}
+              </div>
+            ) : null}
             <div className="py-3">
               <Field
                 label="Random question pool size"

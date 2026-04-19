@@ -71,6 +71,10 @@ pub struct CoursePublic {
     pub feed_enabled: bool,
     /// Course-level due-date calendar view.
     pub calendar_enabled: bool,
+    /// Normalized question bank + pool delivery (see `services::question_bank`).
+    pub question_bank_enabled: bool,
+    /// When true, instructors may configure quiz lockdown / kiosk delivery (plan 2.10).
+    pub lockdown_mode_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -132,6 +136,9 @@ pub struct PatchCourseFeaturesRequest {
     pub notebook_enabled: bool,
     pub feed_enabled: bool,
     pub calendar_enabled: bool,
+    pub question_bank_enabled: bool,
+    #[serde(default)]
+    pub lockdown_mode_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]

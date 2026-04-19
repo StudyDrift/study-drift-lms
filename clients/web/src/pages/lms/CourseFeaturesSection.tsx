@@ -57,12 +57,16 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const notebookEnabled = course.notebookEnabled !== false
   const feedEnabled = course.feedEnabled !== false
   const calendarEnabled = course.calendarEnabled !== false
+  const questionBankEnabled = course.questionBankEnabled === true
+  const lockdownModeEnabled = course.lockdownModeEnabled === true
 
   const persist = useCallback(
     async (body: {
       notebookEnabled: boolean
       feedEnabled: boolean
       calendarEnabled: boolean
+      questionBankEnabled: boolean
+      lockdownModeEnabled: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -100,6 +104,8 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
               notebookEnabled: !notebookEnabled,
               feedEnabled,
               calendarEnabled,
+              questionBankEnabled,
+              lockdownModeEnabled,
             })
           }
         />
@@ -113,6 +119,8 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
               notebookEnabled,
               feedEnabled: !feedEnabled,
               calendarEnabled,
+              questionBankEnabled,
+              lockdownModeEnabled,
             })
           }
         />
@@ -126,6 +134,38 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
               notebookEnabled,
               feedEnabled,
               calendarEnabled: !calendarEnabled,
+              questionBankEnabled,
+              lockdownModeEnabled,
+            })
+          }
+        />
+        <FeatureToggleRow
+          label="Question bank"
+          description="Store quiz items in a reusable bank, optional random pools per attempt, and instructor-only bank APIs."
+          enabled={questionBankEnabled}
+          disabled={saving}
+          onToggle={() =>
+            void persist({
+              notebookEnabled,
+              feedEnabled,
+              calendarEnabled,
+              questionBankEnabled: !questionBankEnabled,
+              lockdownModeEnabled,
+            })
+          }
+        />
+        <FeatureToggleRow
+          label="Quiz lockdown / kiosk"
+          description="Lets instructors choose one-question-at-a-time or kiosk delivery on quizzes (server-enforced progression and optional focus-loss logging)."
+          enabled={lockdownModeEnabled}
+          disabled={saving}
+          onToggle={() =>
+            void persist({
+              notebookEnabled,
+              feedEnabled,
+              calendarEnabled,
+              questionBankEnabled,
+              lockdownModeEnabled: !lockdownModeEnabled,
             })
           }
         />

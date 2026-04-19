@@ -2,9 +2,15 @@
 name = "study_drift_server"
 version = "0.1.0"
 edition = "2021"
+# `src/main.rs` shares the package name; `migrate_question_bank` is explicit — keep plain `cargo run` on the API.
+default-run = "study_drift_server"
 
 [lib]
 path = "src/lib.rs"
+
+[[bin]]
+name = "migrate_question_bank"
+path = "src/bin/migrate_question_bank.rs"
 
 [dependencies]
 anyhow = "1"

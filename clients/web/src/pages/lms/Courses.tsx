@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MutableRefObject,
+} from 'react'
 import { Link } from 'react-router-dom'
 import {
   closestCorners,
@@ -60,8 +68,10 @@ function courseStatusBadgeLabel(c: Course): string {
 function CourseCard({
   course,
   sortable,
+  suppressNavigateAfterDragRef,
 }: {
   course: Course
+  suppressNavigateAfterDragRef?: MutableRefObject<boolean>
   sortable?: {
     listeners: Record<string, unknown>
     setNodeRef: (node: HTMLElement | null) => void
@@ -90,6 +100,12 @@ function CourseCard({
         to={courseHref}
         className="relative block focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
         aria-label={`Open ${course.title}`}
+        onClick={(e) => {
+          if (!suppressNavigateAfterDragRef?.current) return
+          e.preventDefault()
+          e.stopPropagation()
+          suppressNavigateAfterDragRef.current = false
+        }}
       >
         <img
           src={course.heroImageUrl ?? '/course-card-hero.png'}
@@ -120,7 +136,13 @@ function CourseCard({
   )
 }
 
-function SortableCourseCard({ course }: { course: Course }) {
+function SortableCourseCard({
+  course,
+  suppressNavigateAfterDragRef,
+}: {
+  course: Course
+  suppressNavigateAfterDragRef: MutableRefObject<boolean>
+}) {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: course.id,
   })
@@ -135,6 +157,7 @@ function SortableCourseCard({ course }: { course: Course }) {
     <div className="h-full min-h-0">
       <CourseCard
         course={course}
+        suppressNavigateAfterDragRef={suppressNavigateAfterDragRef}
         sortable={{
           listeners: listeners as Record<string, unknown>,
           setNodeRef,
@@ -149,6 +172,8 @@ function SortableCourseCard({ course }: { course: Course }) {
 export default function Courses() {
   const [courses, setCourses] = useState<Course[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** After a catalog drag, the browser may emit a click on the card link; block that navigation. */
+  const suppressNavigateAfterDragRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
@@ -183,9 +208,20 @@ export default function Courses() {
 
   const courseIds = useMemo(() => (courses ?? []).map((c) => c.id), [courses])
 
+  const clearSuppressNavigateAfterDragSoon = useCallback(() => {
+    window.setTimeout(() => {
+      suppressNavigateAfterDragRef.current = false
+    }, 200)
+  }, [])
+
+  const handleDragStart = useCallback(() => {
+    suppressNavigateAfterDragRef.current = true
+  }, [])
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event
+      clearSuppressNavigateAfterDragSoon()
       if (!over || active.id === over.id || !courses?.length) return
       setError(null)
       const oldIndex = courses.findIndex((c) => c.id === active.id)
@@ -199,8 +235,12 @@ export default function Courses() {
         setError('Could not save course order. Try again.')
       })
     },
-    [courses],
+    [courses, clearSuppressNavigateAfterDragSoon],
   )
+
+  const handleDragCancel = useCallback(() => {
+    clearSuppressNavigateAfterDragSoon()
+  }, [clearSuppressNavigateAfterDragSoon])
 
   return (
     <LmsPage
@@ -237,12 +277,18 @@ export default function Courses() {
           id={COURSE_GRID_SORT_ID}
           sensors={sensors}
           collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
         >
           <SortableContext items={courseIds} strategy={rectSortingStrategy}>
             <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {courses.map((c) => (
-                <SortableCourseCard key={c.id} course={c} />
+                <SortableCourseCard
+                  key={c.id}
+                  course={c}
+                  suppressNavigateAfterDragRef={suppressNavigateAfterDragRef}
+                />
               ))}
             </div>
           </SortableContext>

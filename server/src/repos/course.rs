@@ -57,6 +57,8 @@ pub async fn list_for_enrolled_user(
             c.notebook_enabled,
             c.feed_enabled,
             c.calendar_enabled,
+            c.question_bank_enabled,
+            c.lockdown_mode_enabled,
             c.created_at,
             c.updated_at
         FROM {} c
@@ -116,6 +118,8 @@ pub async fn create_course(
                 notebook_enabled,
                 feed_enabled,
                 calendar_enabled,
+                question_bank_enabled,
+                lockdown_mode_enabled,
                 created_at,
                 updated_at
             "#,
@@ -221,6 +225,8 @@ pub async fn get_by_course_code(
             notebook_enabled,
             feed_enabled,
             calendar_enabled,
+            question_bank_enabled,
+            lockdown_mode_enabled,
             created_at,
             updated_at
         FROM {}
@@ -242,6 +248,19 @@ pub async fn get_id_by_course_code(
         schema::COURSES
     ))
     .bind(course_code)
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn get_course_code_by_id(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar::<_, String>(&format!(
+        "SELECT course_code FROM {} WHERE id = $1",
+        schema::COURSES
+    ))
+    .bind(course_id)
     .fetch_optional(pool)
     .await
 }
@@ -303,6 +322,8 @@ pub async fn update_course(
             notebook_enabled,
             feed_enabled,
             calendar_enabled,
+            question_bank_enabled,
+            lockdown_mode_enabled,
             created_at,
             updated_at
         "#,
@@ -330,6 +351,8 @@ pub async fn patch_course_features(
     notebook_enabled: bool,
     feed_enabled: bool,
     calendar_enabled: bool,
+    question_bank_enabled: bool,
+    lockdown_mode_enabled: bool,
 ) -> Result<Option<CoursePublic>, sqlx::Error> {
     sqlx::query_as::<_, CoursePublic>(&format!(
         r#"
@@ -338,8 +361,10 @@ pub async fn patch_course_features(
             notebook_enabled = $1,
             feed_enabled = $2,
             calendar_enabled = $3,
+            question_bank_enabled = $4,
+            lockdown_mode_enabled = $5,
             updated_at = NOW()
-        WHERE course_code = $4
+        WHERE course_code = $6
         RETURNING
             id,
             course_code,
@@ -363,6 +388,8 @@ pub async fn patch_course_features(
             notebook_enabled,
             feed_enabled,
             calendar_enabled,
+            question_bank_enabled,
+            lockdown_mode_enabled,
             created_at,
             updated_at
         "#,
@@ -371,6 +398,8 @@ pub async fn patch_course_features(
     .bind(notebook_enabled)
     .bind(feed_enabled)
     .bind(calendar_enabled)
+    .bind(question_bank_enabled)
+    .bind(lockdown_mode_enabled)
     .bind(course_code)
     .fetch_optional(pool)
     .await
@@ -413,6 +442,8 @@ pub async fn set_hero_image_fields(
             notebook_enabled,
             feed_enabled,
             calendar_enabled,
+            question_bank_enabled,
+            lockdown_mode_enabled,
             created_at,
             updated_at
         "#,
@@ -465,6 +496,8 @@ pub async fn update_markdown_theme(
             notebook_enabled,
             feed_enabled,
             calendar_enabled,
+            question_bank_enabled,
+            lockdown_mode_enabled,
             created_at,
             updated_at
         "#,
@@ -593,6 +626,8 @@ pub async fn set_course_archived(
             notebook_enabled,
             feed_enabled,
             calendar_enabled,
+            question_bank_enabled,
+            lockdown_mode_enabled,
             created_at,
             updated_at
         "#,
@@ -657,6 +692,8 @@ pub async fn factory_reset_course(
     .bind(course_id)
     .execute(&mut *tx)
     .await?;
+
+    crate::repos::question_bank::delete_question_bank_for_course(&mut tx, course_id).await?;
 
     let file_keys: Vec<String> = sqlx::query_scalar(&format!(
         r#"SELECT storage_key FROM {} WHERE course_id = $1"#,
@@ -723,6 +760,8 @@ pub async fn factory_reset_course(
             notebook_enabled = true,
             feed_enabled = true,
             calendar_enabled = true,
+            question_bank_enabled = false,
+            lockdown_mode_enabled = false,
             updated_at = NOW()
         WHERE course_code = $1
         RETURNING
@@ -748,6 +787,8 @@ pub async fn factory_reset_course(
             notebook_enabled,
             feed_enabled,
             calendar_enabled,
+            question_bank_enabled,
+            lockdown_mode_enabled,
             created_at,
             updated_at
         "#,

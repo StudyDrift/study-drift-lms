@@ -1,3 +1,4 @@
+pub mod accommodations;
 pub mod auth;
 pub mod communication;
 pub mod course_feed;
@@ -5,6 +6,7 @@ pub mod course_files;
 pub mod courses;
 pub mod health;
 pub mod me;
+pub mod question_bank;
 pub mod rbac;
 pub mod reports;
 pub mod search;

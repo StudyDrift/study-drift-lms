@@ -21,6 +21,10 @@ pub struct QuizAttemptRow {
     pub points_possible: Option<f64>,
     pub score_percent: Option<f32>,
     pub adaptive_history_json: Option<JsonValue>,
+    pub current_question_index: i32,
+    pub academic_integrity_flag: bool,
+    pub deadline_at: Option<DateTime<Utc>>,
+    pub extended_time_applied: bool,
 }
 
 pub async fn get_attempt(
@@ -31,7 +35,8 @@ pub async fn get_attempt(
         r#"
         SELECT id, course_id, structure_item_id, student_user_id, attempt_number, status,
                is_adaptive, started_at, submitted_at, points_earned, points_possible, score_percent,
-               adaptive_history_json
+               adaptive_history_json, current_question_index, academic_integrity_flag,
+               deadline_at, extended_time_applied
         FROM {}
         WHERE id = $1
         "#,
@@ -53,7 +58,8 @@ pub async fn find_in_progress(
         r#"
         SELECT id, course_id, structure_item_id, student_user_id, attempt_number, status,
                is_adaptive, started_at, submitted_at, points_earned, points_possible, score_percent,
-               adaptive_history_json
+               adaptive_history_json, current_question_index, academic_integrity_flag,
+               deadline_at, extended_time_applied
         FROM {}
         WHERE course_id = $1 AND structure_item_id = $2 AND student_user_id = $3
           AND status = 'in_progress'
@@ -120,16 +126,20 @@ pub async fn create_attempt(
     user_id: Uuid,
     attempt_number: i32,
     is_adaptive: bool,
+    deadline_at: Option<DateTime<Utc>>,
+    extended_time_applied: bool,
 ) -> Result<QuizAttemptRow, sqlx::Error> {
     let row = sqlx::query_as::<_, QuizAttemptRowDb>(&format!(
         r#"
         INSERT INTO {} (
-            course_id, structure_item_id, student_user_id, attempt_number, status, is_adaptive
+            course_id, structure_item_id, student_user_id, attempt_number, status, is_adaptive,
+            deadline_at, extended_time_applied
         )
-        VALUES ($1, $2, $3, $4, 'in_progress', $5)
+        VALUES ($1, $2, $3, $4, 'in_progress', $5, $6, $7)
         RETURNING id, course_id, structure_item_id, student_user_id, attempt_number, status,
                   is_adaptive, started_at, submitted_at, points_earned, points_possible, score_percent,
-                  adaptive_history_json
+                  adaptive_history_json, current_question_index, academic_integrity_flag,
+                  deadline_at, extended_time_applied
         "#,
         schema::QUIZ_ATTEMPTS
     ))
@@ -138,6 +148,8 @@ pub async fn create_attempt(
     .bind(user_id)
     .bind(attempt_number)
     .bind(is_adaptive)
+    .bind(deadline_at)
+    .bind(extended_time_applied)
     .fetch_one(pool)
     .await?;
     Ok(row.into())
@@ -151,6 +163,7 @@ pub async fn finalize_attempt<'e, E>(
     points_possible: f64,
     score_percent: f32,
     adaptive_history: Option<&JsonValue>,
+    academic_integrity_flag: bool,
 ) -> Result<bool, sqlx::Error>
 where
     E: Executor<'e, Database = Postgres>,
@@ -163,7 +176,8 @@ where
             points_earned = $3,
             points_possible = $4,
             score_percent = $5,
-            adaptive_history_json = COALESCE($6, adaptive_history_json)
+            adaptive_history_json = COALESCE($6, adaptive_history_json),
+            academic_integrity_flag = $7
         WHERE id = $1 AND status = 'in_progress'
         "#,
         schema::QUIZ_ATTEMPTS
@@ -174,6 +188,7 @@ where
     .bind(points_possible)
     .bind(score_percent)
     .bind(adaptive_history)
+    .bind(academic_integrity_flag)
     .execute(executor)
     .await?;
     Ok(r.rows_affected() > 0)
@@ -189,6 +204,7 @@ pub struct QuizResponseRow {
     pub is_correct: Option<bool>,
     pub points_awarded: Option<f64>,
     pub max_points: f64,
+    pub locked: bool,
 }
 
 pub async fn list_responses(
@@ -198,7 +214,7 @@ pub async fn list_responses(
     sqlx::query_as::<_, QuizResponseRow>(&format!(
         r#"
         SELECT question_index, question_id, question_type, prompt_snapshot, response_json,
-               is_correct, points_awarded, max_points
+               is_correct, points_awarded, max_points, locked
         FROM {}
         WHERE attempt_id = $1
         ORDER BY question_index ASC
@@ -221,6 +237,7 @@ pub async fn insert_response<'e, E>(
     is_correct: Option<bool>,
     points_awarded: Option<f64>,
     max_points: f64,
+    locked: bool,
 ) -> Result<(), sqlx::Error>
 where
     E: Executor<'e, Database = Postgres>,
@@ -229,9 +246,9 @@ where
         r#"
         INSERT INTO {} (
             attempt_id, question_index, question_id, question_type, prompt_snapshot,
-            response_json, is_correct, points_awarded, max_points
+            response_json, is_correct, points_awarded, max_points, locked
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         "#,
         schema::QUIZ_RESPONSES
     ))
@@ -244,9 +261,108 @@ where
     .bind(is_correct)
     .bind(points_awarded)
     .bind(max_points)
+    .bind(locked)
     .execute(executor)
     .await?;
     Ok(())
+}
+
+/// Returns true if the row existed with `locked = true` (advance must reject).
+pub async fn response_is_locked(
+    pool: &PgPool,
+    attempt_id: Uuid,
+    question_index: i32,
+) -> Result<bool, sqlx::Error> {
+    let row: Option<(bool,)> = sqlx::query_as(&format!(
+        r#"SELECT locked FROM {} WHERE attempt_id = $1 AND question_index = $2"#,
+        schema::QUIZ_RESPONSES
+    ))
+    .bind(attempt_id)
+    .bind(question_index)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(l,)| l).unwrap_or(false))
+}
+
+pub async fn bump_current_question_index<'e, E>(
+    executor: E,
+    attempt_id: Uuid,
+    expected_index: i32,
+) -> Result<bool, sqlx::Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
+    let r = sqlx::query(&format!(
+        r#"
+        UPDATE {}
+        SET current_question_index = current_question_index + 1
+        WHERE id = $1 AND status = 'in_progress' AND current_question_index = $2
+        "#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(attempt_id)
+    .bind(expected_index)
+    .execute(executor)
+    .await?;
+    Ok(r.rows_affected() > 0)
+}
+
+pub async fn count_focus_loss_events(pool: &PgPool, attempt_id: Uuid) -> Result<i64, sqlx::Error> {
+    let (n,): (i64,) = sqlx::query_as(&format!(
+        r#"SELECT COUNT(*)::bigint FROM {} WHERE attempt_id = $1"#,
+        schema::ATTEMPT_FOCUS_LOSS_EVENTS
+    ))
+    .bind(attempt_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(n)
+}
+
+pub async fn insert_focus_loss_event(
+    pool: &PgPool,
+    attempt_id: Uuid,
+    event_type: &str,
+    duration_ms: Option<i32>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (attempt_id, event_type, duration_ms)
+        VALUES ($1, $2, $3)
+        "#,
+        schema::ATTEMPT_FOCUS_LOSS_EVENTS
+    ))
+    .bind(attempt_id)
+    .bind(event_type)
+    .bind(duration_ms)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FocusLossEventRow {
+    pub id: Uuid,
+    pub event_type: String,
+    pub duration_ms: Option<i32>,
+    pub created_at: DateTime<Utc>,
+}
+
+pub async fn list_focus_loss_events(
+    pool: &PgPool,
+    attempt_id: Uuid,
+) -> Result<Vec<FocusLossEventRow>, sqlx::Error> {
+    sqlx::query_as::<_, FocusLossEventRow>(&format!(
+        r#"
+        SELECT id, event_type, duration_ms, created_at
+        FROM {}
+        WHERE attempt_id = $1
+        ORDER BY created_at ASC
+        "#,
+        schema::ATTEMPT_FOCUS_LOSS_EVENTS
+    ))
+    .bind(attempt_id)
+    .fetch_all(pool)
+    .await
 }
 
 pub async fn delete_responses_for_attempt<'e, E>(executor: E, attempt_id: Uuid) -> Result<(), sqlx::Error>
@@ -263,6 +379,18 @@ where
     Ok(())
 }
 
+/// Removes an in-progress attempt row (responses and attempt selections cascade).
+pub async fn delete_attempt(pool: &PgPool, attempt_id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE id = $1"#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(attempt_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn list_submitted_attempts_for_item_student(
     pool: &PgPool,
     course_id: Uuid,
@@ -273,7 +401,8 @@ pub async fn list_submitted_attempts_for_item_student(
         r#"
         SELECT id, course_id, structure_item_id, student_user_id, attempt_number, status,
                is_adaptive, started_at, submitted_at, points_earned, points_possible, score_percent,
-               adaptive_history_json
+               adaptive_history_json, current_question_index, academic_integrity_flag,
+               deadline_at, extended_time_applied
         FROM {}
         WHERE course_id = $1 AND structure_item_id = $2 AND student_user_id = $3
           AND status = 'submitted'
@@ -299,7 +428,8 @@ pub async fn latest_submitted_attempt(
         r#"
         SELECT id, course_id, structure_item_id, student_user_id, attempt_number, status,
                is_adaptive, started_at, submitted_at, points_earned, points_possible, score_percent,
-               adaptive_history_json
+               adaptive_history_json, current_question_index, academic_integrity_flag,
+               deadline_at, extended_time_applied
         FROM {}
         WHERE course_id = $1 AND structure_item_id = $2 AND student_user_id = $3
           AND status = 'submitted'
@@ -331,6 +461,10 @@ struct QuizAttemptRowDb {
     points_possible: Option<f64>,
     score_percent: Option<f32>,
     adaptive_history_json: Option<JsonValue>,
+    current_question_index: i32,
+    academic_integrity_flag: bool,
+    deadline_at: Option<DateTime<Utc>>,
+    extended_time_applied: bool,
 }
 
 impl From<QuizAttemptRowDb> for QuizAttemptRow {
@@ -349,6 +483,10 @@ impl From<QuizAttemptRowDb> for QuizAttemptRow {
             points_possible: r.points_possible,
             score_percent: r.score_percent,
             adaptive_history_json: r.adaptive_history_json,
+            current_question_index: r.current_question_index,
+            academic_integrity_flag: r.academic_integrity_flag,
+            deadline_at: r.deadline_at,
+            extended_time_applied: r.extended_time_applied,
         }
     }
 }

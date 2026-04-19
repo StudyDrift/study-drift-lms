@@ -1,3 +1,4 @@
+pub mod accommodations;
 pub mod adaptive_quiz_ai;
 pub mod assignment_rubric_ai;
 pub mod ai;
@@ -8,6 +9,8 @@ pub mod course_export_import;
 pub mod course_image_upload;
 pub mod quiz_generation_ai;
 pub mod quiz_attempt_grading;
+pub mod quiz_lockdown;
+pub mod question_bank;
 pub mod relative_schedule;
 pub mod student_notebook_rag_ai;
 pub mod syllabus_section_ai;
