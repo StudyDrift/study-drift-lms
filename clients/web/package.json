@@ -50,9 +50,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@storybook/addon-a11y": "^8.6.18",
-    "@storybook/addon-essentials": "^8.6.14",
-    "@storybook/react-vite": "^8.6.18",
+    "@storybook/addon-a11y": "^10.3.5",
+    "@storybook/react-vite": "^10.3.5",
     "@tailwindcss/vite": "^4.2.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -78,11 +77,13 @@
     "openapi-typescript": "^7.13.0",
     "remark-parse": "^11.0.0",
     "rollup-plugin-visualizer": "^5.14.0",
-    "storybook": "^8.6.18",
+    "storybook": "^10.3.5",
     "tailwindcss": "^4.2.2",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0",
     "vite": "^8.0.4",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.2",
+    "eslint-plugin-storybook": "10.3.5",
+    "@storybook/addon-docs": "^10.3.5"
   }
 }

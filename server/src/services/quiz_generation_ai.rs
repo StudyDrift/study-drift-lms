@@ -164,6 +164,7 @@ fn normalize_raw_to_question(raw: AiQuestionRaw) -> Result<QuizQuestion, AppErro
         required: raw.required,
         points: raw.points.max(0),
         estimated_minutes: raw.estimated_minutes.max(0),
+        concept_ids: vec![],
     })
 }
 

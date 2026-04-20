@@ -236,6 +236,7 @@ pub fn quiz_question_from_entity(e: &QuestionEntity) -> Result<QuizQuestion, App
         required: true,
         points,
         estimated_minutes: 2,
+        concept_ids: vec![],
     })
 }
 

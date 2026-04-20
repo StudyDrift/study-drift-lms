@@ -242,6 +242,33 @@ pub async fn user_has_access(
     Ok(ok)
 }
 
+/// True when `staff_user_id` teaches or instructs a course where `student_user_id` is enrolled as a student.
+pub async fn staff_sees_student_in_shared_course(
+    pool: &PgPool,
+    staff_user_id: Uuid,
+    student_user_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let ok: bool = sqlx::query_scalar(&format!(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM {0} ce_staff
+            INNER JOIN {0} ce_stu ON ce_staff.course_id = ce_stu.course_id
+            WHERE ce_staff.user_id = $1
+              AND ce_staff.role IN ('teacher', 'instructor')
+              AND ce_stu.user_id = $2
+              AND ce_stu.role = 'student'
+        )
+        "#,
+        schema::COURSE_ENROLLMENTS,
+    ))
+    .bind(staff_user_id)
+    .bind(student_user_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(ok)
+}
+
 /// Course codes where the user is enrolled as course staff (`teacher` or `instructor`).
 /// Used to expand `course:<courseCode>:…` catalog permissions into concrete per-course strings.
 pub async fn list_course_codes_where_user_is_staff(

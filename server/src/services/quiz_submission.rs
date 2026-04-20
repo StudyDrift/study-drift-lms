@@ -14,6 +14,7 @@ use crate::repos::course_grades;
 use crate::repos::course_module_quizzes;
 use crate::repos::quiz_attempts;
 use crate::services::code_execution::{self, CodeTestCase, ExecuteCodeRequest};
+use crate::services::learner_state;
 use crate::services::question_bank;
 use crate::services::quiz_attempt_grading;
 use crate::services::quiz_lockdown;
@@ -252,8 +253,17 @@ pub async fn submit_module_quiz(
         by_id.insert(q.id.clone(), q);
     }
 
+    let qids: Vec<Uuid> = bank
+        .iter()
+        .filter_map(|q| Uuid::parse_str(&q.id).ok())
+        .collect();
+    let tag_map = crate::repos::concepts::concept_ids_for_question_ids(pool, &qids)
+        .await
+        .map_err(AppError::Db)?;
+
     let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, quiz_row);
 
+    let mut concept_touches: Vec<(Uuid, f64, i32)> = Vec::new();
     let (earned, possible, score_pct, academic_integrity_flag) = if quiz_lockdown::server_enforces_forward_lockdown(mode)
     {
         if !responses.is_empty() {
@@ -319,6 +329,18 @@ pub async fn submit_module_quiz(
                 false,
             )
             .await?;
+            let extra: &[Uuid] = Uuid::parse_str(qid)
+                .ok()
+                .and_then(|u| tag_map.get(&u).map(|v| v.as_slice()))
+                .unwrap_or(&[]);
+            learner_state::collect_concept_touches_from_question(
+                q,
+                i as i32,
+                pts,
+                max_pts,
+                extra,
+                &mut concept_touches,
+            );
         }
         let score_pct = if possible > 0.0 {
             ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
@@ -391,6 +413,18 @@ pub async fn submit_module_quiz(
                 false,
             )
             .await?;
+            let extra: &[Uuid] = Uuid::parse_str(&resp_item.question_id)
+                .ok()
+                .and_then(|u| tag_map.get(&u).map(|v| v.as_slice()))
+                .unwrap_or(&[]);
+            learner_state::collect_concept_touches_from_question(
+                q,
+                i as i32,
+                pts,
+                max_pts,
+                extra,
+                &mut concept_touches,
+            );
         }
 
         let score_pct = if possible > 0.0 {
@@ -403,6 +437,15 @@ pub async fn submit_module_quiz(
                 .await?;
         (earned, possible, score_pct, academic_integrity_flag)
     };
+
+    learner_state::apply_quiz_grades_mastery(
+        &mut *tx,
+        course_id,
+        user_id,
+        att.id,
+        &concept_touches,
+    )
+    .await?;
 
     let ok = quiz_attempts::finalize_attempt(
         &mut *tx,
@@ -465,6 +508,7 @@ mod tests {
             required: true,
             points: 1,
             estimated_minutes: 2,
+            concept_ids: vec![],
         }
     }
 

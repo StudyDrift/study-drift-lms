@@ -194,6 +194,8 @@ fn history_json(history: &[AdaptiveQuizHistoryTurn]) -> serde_json::Value {
 }
 
 /// Generates the next `batch_size` questions (1 or 2). `history` = completed steps only.
+///
+/// When `mastery_summary` is set (learner model), it is appended to the user message for calibration.
 pub async fn generate_adaptive_next_questions(
     pool: &sqlx::PgPool,
     client: &OpenRouterClient,
@@ -206,6 +208,7 @@ pub async fn generate_adaptive_next_questions(
     total_questions_allowed: i32,
     history: &[AdaptiveQuizHistoryTurn],
     batch_size: i32,
+    mastery_summary: Option<&str>,
 ) -> Result<Vec<AdaptiveQuizGeneratedQuestion>, AppError> {
     let system = system_prompts::get_content_by_key(pool, ADAPTIVE_QUIZ_PROMPT_KEY)
         .await?
@@ -244,6 +247,11 @@ pub async fn generate_adaptive_next_questions(
         "Generate exactly 2 new questions as a JSON array with two objects, in presentation order. The second must adapt to the same learner history as the first (anticipate no further answers between them), but must not repeat the first question's stem or choices."
     };
 
+    let mastery_block = mastery_summary
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| format!("\n\nKnown concept mastery in this course (0–1 scale; topic label, then score): {s}\n"))
+        .unwrap_or_default();
+
     let user_body = format!(
         "Reference course materials (for grounding only; do not quote long passages verbatim):\n\
          ---\n{reference_materials}\n---\n\n\
@@ -256,7 +264,8 @@ pub async fn generate_adaptive_next_questions(
          questionsAlreadyAnswered: {answered}\n\n\
          Learner history (most recent last). Each entry includes what they saw and how they answered. \
          choiceWeights are internal correctness scores (0–1) you assigned for that question; use them to adapt difficulty and to detect shallow guessing:\n\
-         {history}\n\n\
+         {history}\n\
+         {mastery_block}\n\
          {batch_instruction} following your system instructions.",
         reference_materials = reference_materials.trim(),
         instructor_system_prompt = instructor_system_prompt.trim(),

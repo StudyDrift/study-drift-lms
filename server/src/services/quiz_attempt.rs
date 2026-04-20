@@ -65,6 +65,7 @@ mod tests {
             required: true,
             points: 1,
             estimated_minutes: 2,
+            concept_ids: vec![],
         };
         // Display order: C, A, B  => perm [2,0,1]
         let out = apply_choice_display_order(q, &[2, 0, 1]);

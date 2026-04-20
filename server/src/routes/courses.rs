@@ -86,6 +86,7 @@ use crate::repos::syllabus_markups;
 use crate::repos::user_ai_settings;
 use crate::repos::user_audit;
 use crate::services::adaptive_quiz_ai;
+use crate::services::learner_state::{self, LearnerStateService, DEFAULT_LEARNER_STATE_SERVICE};
 use crate::services::assignment_rubric_ai;
 use crate::services::question_bank;
 use crate::services::accommodations;
@@ -2643,6 +2644,16 @@ async fn module_quiz_adaptive_next_handler(
     let remaining = total - answered;
     let batch_size = remaining.clamp(1, 2);
 
+    let mastery_summary = if can_edit {
+        None
+    } else if learner_state::learner_model_enabled() {
+        DEFAULT_LEARNER_STATE_SERVICE
+            .course_mastery_summary_for_prompt(&state.pool, course_id, user.user_id)
+            .await?
+    } else {
+        None
+    };
+
     let questions = adaptive_quiz_ai::generate_adaptive_next_questions(
         &state.pool,
         client.as_ref(),
@@ -2655,6 +2666,7 @@ async fn module_quiz_adaptive_next_handler(
         total,
         &req.history,
         batch_size,
+        mastery_summary.as_deref(),
     )
     .await?;
 

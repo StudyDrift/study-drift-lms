@@ -38,9 +38,9 @@ async fn full_http_walkthrough() {
     let pool = &state.pool;
     for sql in [
         r#"INSERT INTO "user".permissions (permission_string, description) VALUES ('global:app:course:create', 'Integration test') ON CONFLICT (permission_string) DO NOTHING"#,
-        r#"INSERT INTO "user".rbac_role_permissions (role_id, permission_id) SELECT r.id, p.id FROM "user".app_roles r JOIN "user".permissions p ON p.permission_string = 'global:app:course:create' WHERE r.name = 'Student' ON CONFLICT DO NOTHING"#,
-        r#"INSERT INTO "user".rbac_role_permissions (role_id, permission_id) SELECT r.id, p.id FROM "user".app_roles r JOIN "user".permissions p ON p.permission_string = 'global:app:reports:view' WHERE r.name = 'Student' ON CONFLICT DO NOTHING"#,
-        r#"INSERT INTO "user".rbac_role_permissions (role_id, permission_id) SELECT r.id, p.id FROM "user".app_roles r JOIN "user".permissions p ON p.permission_string = 'global:app:rbac:manage' WHERE r.name = 'Student' ON CONFLICT DO NOTHING"#,
+        r#"INSERT INTO "user".rbac_role_permissions (role_id, permission_id) SELECT r.id, p.id FROM "user".app_roles r JOIN "user".permissions p ON p.permission_string = 'global:app:course:create' WHERE r.name = 'Teacher' ON CONFLICT DO NOTHING"#,
+        r#"INSERT INTO "user".rbac_role_permissions (role_id, permission_id) SELECT r.id, p.id FROM "user".app_roles r JOIN "user".permissions p ON p.permission_string = 'global:app:reports:view' WHERE r.name = 'Teacher' ON CONFLICT DO NOTHING"#,
+        r#"INSERT INTO "user".rbac_role_permissions (role_id, permission_id) SELECT r.id, p.id FROM "user".app_roles r JOIN "user".permissions p ON p.permission_string = 'global:app:rbac:manage' WHERE r.name = 'Teacher' ON CONFLICT DO NOTHING"#,
     ] {
         sqlx::query(sql).execute(pool).await.expect(sql);
     }

@@ -6,6 +6,7 @@
 
 pub mod communication;
 pub mod content_page_markups;
+pub mod concepts;
 pub mod course;
 pub mod course_feed;
 pub mod course_files;
@@ -21,6 +22,7 @@ pub mod course_outcomes;
 pub mod course_structure;
 pub mod course_syllabus;
 pub mod enrollment;
+pub mod learner_model;
 pub mod enrollment_quiz_overrides;
 pub mod enrollment_groups;
 pub mod password_reset;

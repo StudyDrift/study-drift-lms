@@ -17,6 +17,7 @@ pub enum ErrorCode {
     InvalidCredentials,
     EmailTaken,
     InvalidInput,
+    CycleDetected,
     UnknownCourseCode,
     QuizSettingsInvalid,
     InvalidResetToken,
@@ -48,6 +49,8 @@ pub enum AppError {
         code: ErrorCode,
         message: String,
     },
+    #[error("unprocessable entity: {message}")]
+    UnprocessableEntity { message: String },
     #[error("invalid or expired password reset link")]
     InvalidResetToken,
     #[error("too many requests")]
@@ -162,6 +165,15 @@ impl IntoResponse for AppError {
                     error: ErrorDetail { code, message },
                 });
                 (StatusCode::BAD_REQUEST, body).into_response()
+            }
+            AppError::UnprocessableEntity { message } => {
+                let body = Json(ErrorBody {
+                    error: ErrorDetail {
+                        code: ErrorCode::CycleDetected,
+                        message,
+                    },
+                });
+                (StatusCode::UNPROCESSABLE_ENTITY, body).into_response()
             }
             AppError::InvalidResetToken => {
                 let body = Json(ErrorBody {
@@ -345,6 +357,12 @@ mod tests {
             (
                 AppError::Jwt(jsonwebtoken::errors::ErrorKind::InvalidToken.into()),
                 StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+            (
+                AppError::UnprocessableEntity {
+                    message: "cycle".into(),
+                },
+                StatusCode::UNPROCESSABLE_ENTITY,
             ),
         ];
         for (err, expected) in cases {

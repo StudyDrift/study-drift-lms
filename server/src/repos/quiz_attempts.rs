@@ -289,10 +289,13 @@ pub struct QuizResponseRow {
     pub locked: bool,
 }
 
-pub async fn list_responses(
-    pool: &PgPool,
+pub async fn list_responses<'e, E>(
+    executor: E,
     attempt_id: Uuid,
-) -> Result<Vec<QuizResponseRow>, sqlx::Error> {
+) -> Result<Vec<QuizResponseRow>, sqlx::Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
     sqlx::query_as::<_, QuizResponseRow>(&format!(
         r#"
         SELECT question_index, question_id, question_type, prompt_snapshot, response_json,
@@ -304,7 +307,7 @@ pub async fn list_responses(
         schema::QUIZ_RESPONSES
     ))
     .bind(attempt_id)
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await
 }
 

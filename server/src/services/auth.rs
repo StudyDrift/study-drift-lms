@@ -96,7 +96,7 @@ pub async fn signup(
     };
 
     let access_token = jwt.sign(row.id, &row.email)?;
-    rbac::assign_user_role_by_name(pool, row.id, "Student").await?;
+    rbac::assign_user_role_by_name(pool, row.id, "Teacher").await?;
 
     if let Err(e) = communication::send_welcome_message(pool, &email).await {
         tracing::warn!(

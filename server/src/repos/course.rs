@@ -239,6 +239,49 @@ pub async fn get_by_course_code(
     .await
 }
 
+pub async fn get_by_id(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<Option<CoursePublic>, sqlx::Error> {
+    sqlx::query_as::<_, CoursePublic>(&format!(
+        r#"
+        SELECT
+            id,
+            course_code,
+            title,
+            description,
+            hero_image_url,
+            hero_image_object_position,
+            starts_at,
+            ends_at,
+            visible_from,
+            hidden_at,
+            schedule_mode,
+            relative_end_after,
+            relative_hidden_after,
+            relative_schedule_anchor_at,
+            published,
+            markdown_theme_preset,
+            markdown_theme_custom,
+            grading_scale,
+            archived,
+            notebook_enabled,
+            feed_enabled,
+            calendar_enabled,
+            question_bank_enabled,
+            lockdown_mode_enabled,
+            created_at,
+            updated_at
+        FROM {}
+        WHERE id = $1
+        "#,
+        schema::COURSES
+    ))
+    .bind(course_id)
+    .fetch_optional(pool)
+    .await
+}
+
 pub async fn get_id_by_course_code(
     pool: &PgPool,
     course_code: &str,

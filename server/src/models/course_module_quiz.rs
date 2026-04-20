@@ -242,6 +242,19 @@ pub fn validate_quiz_questions(questions: &[QuizQuestion]) -> Result<(), AppErro
                 ));
             }
         }
+        if q.concept_ids.len() > 32 {
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                "Too many concept tag ids on a question (max 32).",
+            ));
+        }
+        for cid in &q.concept_ids {
+            Uuid::parse_str(cid.trim()).map_err(|_| {
+                AppError::invalid_input_code(
+                    crate::error::ErrorCode::QuizSettingsInvalid,
+                    "Each conceptIds entry must be a valid UUID.",
+                )
+            })?;
+        }
     }
     Ok(())
 }
@@ -269,6 +282,9 @@ pub struct QuizQuestion {
     pub points: i32,
     #[serde(default = "default_estimated_minutes")]
     pub estimated_minutes: i32,
+    /// Optional course concept UUIDs (`course.concepts`) for learner mastery tagging.
+    #[serde(default)]
+    pub concept_ids: Vec<String>,
 }
 
 fn default_required() -> bool {
