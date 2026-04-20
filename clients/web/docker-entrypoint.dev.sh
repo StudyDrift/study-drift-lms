@@ -27,7 +27,7 @@ fi
 
 if [ "$need_ci" = 1 ]; then
   echo "web: syncing node_modules with package.json / package-lock.json (npm ci)..."
-  npm ci
+  npm ci --ignore-scripts
   cp package-lock.json "$LOCK_STAMP"
   cp package.json "$PKG_STAMP"
 fi

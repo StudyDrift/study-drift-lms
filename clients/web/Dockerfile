@@ -6,8 +6,8 @@ WORKDIR /app
 ARG VITE_API_URL=http://localhost:8080
 ENV VITE_API_URL=$VITE_API_URL
 
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci --ignore-scripts
 
 COPY . .
 RUN npm run build
