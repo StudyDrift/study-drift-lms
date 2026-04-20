@@ -11,6 +11,20 @@
       href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..700;1,400..700&display=swap"
       rel="stylesheet"
     />
+    <script>
+      ;(() => {
+        try {
+          const key = 'lextures.uiTheme'
+          const theme = (localStorage.getItem(key) || '').trim().toLowerCase()
+          const isDark = theme === 'dark'
+          document.documentElement.classList.toggle('dark', isDark)
+          document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+        } catch {
+          document.documentElement.classList.remove('dark')
+          document.documentElement.style.colorScheme = 'light'
+        }
+      })()
+    </script>
     <title>Lextures</title>
   </head>
   <body>

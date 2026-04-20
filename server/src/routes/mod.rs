@@ -11,3 +11,4 @@ pub mod rbac;
 pub mod reports;
 pub mod search;
 pub mod settings;
+pub mod surveys;

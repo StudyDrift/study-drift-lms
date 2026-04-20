@@ -10,6 +10,7 @@ pub mod course_module_assignments;
 pub mod course_module_content;
 pub mod course_module_external_links;
 pub mod course_module_quizzes;
+pub mod course_module_surveys;
 pub mod course_outcomes;
 pub mod course_structure;
 pub mod course_syllabus;

@@ -13,6 +13,7 @@ pub mod course_module_assignment;
 pub mod course_module_content;
 pub mod late_submission_policy;
 pub mod course_module_quiz;
+pub mod course_module_survey;
 pub mod course_structure;
 pub mod course_syllabus;
 pub mod enrollment;

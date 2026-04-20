@@ -9,6 +9,7 @@ use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
 use crate::repos::course_module_external_links;
 use crate::repos::course_module_quizzes;
+use crate::repos::course_module_surveys;
 use crate::services::relative_schedule::{self, RelativeShiftContext};
 
 /// Counts how many of `ids` exist in this course with `kind` in `kinds`.
@@ -217,7 +218,7 @@ pub async fn list_archived_staff_structure(
         WHERE course_id = $1
           AND archived = true
           AND parent_id IS NOT NULL
-          AND kind IN ('heading', 'content_page', 'assignment', 'quiz', 'external_link')
+          AND kind IN ('heading', 'content_page', 'assignment', 'quiz', 'external_link', 'survey')
         ORDER BY parent_id, sort_order
         "#,
         schema::COURSE_STRUCTURE_ITEMS
@@ -692,6 +693,109 @@ pub async fn external_link_visible_to_student(
         .unwrap_or(false))
 }
 
+pub async fn survey_visible_to_student(
+    pool: &PgPool,
+    course_id: Uuid,
+    survey_id: Uuid,
+    user_id: Uuid,
+    now: DateTime<Utc>,
+) -> Result<bool, sqlx::Error> {
+    let row: Option<(
+        bool,
+        bool,
+        bool,
+        bool,
+        Option<DateTime<Utc>>,
+        String,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+    )> = sqlx::query_as(&format!(
+        r#"
+        SELECT
+            page.published,
+            page.archived,
+            m.published,
+            m.archived,
+            m.visible_from,
+            crs.schedule_mode,
+            crs.relative_schedule_anchor_at,
+            stu.created_at,
+            s.opens_at,
+            s.closes_at
+        FROM {items} page
+        INNER JOIN {items} m
+            ON m.id = page.parent_id AND m.course_id = page.course_id AND m.kind = 'module'
+        INNER JOIN {crs} crs ON crs.id = page.course_id
+        LEFT JOIN {enu} stu
+            ON stu.course_id = crs.id AND stu.user_id = $3 AND stu.role = 'student'
+        LEFT JOIN {surveys} s ON s.structure_item_id = page.id
+        WHERE page.id = $1 AND page.course_id = $2 AND page.kind = 'survey'
+        "#,
+        items = schema::COURSE_STRUCTURE_ITEMS,
+        crs = schema::COURSES,
+        enu = schema::COURSE_ENROLLMENTS,
+        surveys = schema::MODULE_SURVEYS,
+    ))
+    .bind(survey_id)
+    .bind(course_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row
+        .map(
+            |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at, opens_at, closes_at)| {
+                let effective_vf = if schedule_mode == "relative" {
+                    match (anchor, enrolled_at) {
+                        (Some(anchor), Some(enrollment_start)) => {
+                            let ctx = RelativeShiftContext {
+                                enrollment_start,
+                                anchor,
+                            };
+                            relative_schedule::shift_opt(&ctx, vf)
+                        }
+                        _ => vf,
+                    }
+                } else {
+                    vf
+                };
+                let eff_open = if schedule_mode == "relative" {
+                    match (anchor, enrolled_at) {
+                        (Some(anchor), Some(enrollment_start)) => {
+                            let ctx = RelativeShiftContext {
+                                enrollment_start,
+                                anchor,
+                            };
+                            relative_schedule::shift_opt(&ctx, opens_at)
+                        }
+                        _ => opens_at,
+                    }
+                } else {
+                    opens_at
+                };
+                let eff_close = if schedule_mode == "relative" {
+                    match (anchor, enrolled_at) {
+                        (Some(anchor), Some(enrollment_start)) => {
+                            let ctx = RelativeShiftContext {
+                                enrollment_start,
+                                anchor,
+                            };
+                            relative_schedule::shift_opt(&ctx, closes_at)
+                        }
+                        _ => closes_at,
+                    }
+                } else {
+                    closes_at
+                };
+                let within_window = eff_open.map_or(true, |t| now >= t) && eff_close.map_or(true, |t| now <= t);
+                c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now) && within_window
+            },
+        )
+        .unwrap_or(false))
+}
+
 pub async fn update_module(
     pool: &PgPool,
     course_id: Uuid,
@@ -1095,6 +1199,71 @@ pub async fn insert_external_link_under_module(
     Ok(row)
 }
 
+/// Appends a survey under an existing module (`kind = survey`) and creates an empty survey row.
+pub async fn insert_survey_under_module(
+    pool: &PgPool,
+    course_id: Uuid,
+    module_id: Uuid,
+    title: &str,
+) -> Result<CourseStructureItemRow, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query_scalar::<_, Uuid>(&format!(
+        "SELECT id FROM {} WHERE id = $1 FOR UPDATE",
+        schema::COURSES
+    ))
+    .bind(course_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| sqlx::Error::RowNotFound)?;
+
+    let parent_ok = sqlx::query_scalar::<_, bool>(&format!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM {}
+            WHERE id = $1 AND course_id = $2 AND kind = 'module'
+        )
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(module_id)
+    .bind(course_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    if !parent_ok {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    let new_id = Uuid::new_v4();
+    let row = sqlx::query_as::<_, CourseStructureItemRow>(&format!(
+        r#"
+        WITH mx AS (
+            SELECT COALESCE(MAX(sort_order), -1) AS max_ord
+            FROM {}
+            WHERE parent_id = $1
+        )
+        INSERT INTO {} (id, course_id, sort_order, kind, title, parent_id)
+        SELECT $2, $3, max_ord + 1, 'survey', $4, $1
+        FROM mx
+        RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(module_id)
+    .bind(new_id)
+    .bind(course_id)
+    .bind(title)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    course_module_surveys::insert_empty_for_item(&mut tx, new_id).await?;
+
+    tx.commit().await?;
+    Ok(row)
+}
+
 const REORDER_OFFSET: i32 = 10_000_000;
 
 /// Reassigns `sort_order` for top-level modules and each module's children. `module_ids_in_order`
@@ -1260,7 +1429,7 @@ pub async fn patch_child_structure_item(
         WHERE id = $1
           AND course_id = $2
           AND parent_id IS NOT NULL
-          AND kind IN ('heading', 'content_page', 'assignment', 'quiz', 'external_link')
+          AND kind IN ('heading', 'content_page', 'assignment', 'quiz', 'external_link', 'survey')
         RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         "#,
         schema::COURSE_STRUCTURE_ITEMS
@@ -1289,7 +1458,7 @@ pub async fn archive_child_structure_item(
         WHERE id = $1
           AND course_id = $2
           AND parent_id IS NOT NULL
-          AND kind IN ('heading', 'content_page', 'assignment', 'quiz', 'external_link')
+          AND kind IN ('heading', 'content_page', 'assignment', 'quiz', 'external_link', 'survey')
         RETURNING id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
         "#,
         schema::COURSE_STRUCTURE_ITEMS

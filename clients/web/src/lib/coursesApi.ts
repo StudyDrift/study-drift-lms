@@ -202,6 +202,41 @@ export type BankQuestionRow = {
   updatedAt: string
 }
 
+export type BankQuestionDetail = BankQuestionRow & {
+  options?: unknown
+  correctAnswer?: unknown
+  explanation?: string | null
+  metadata?: unknown
+  irtA?: number | null
+  irtB?: number | null
+  irtStatus?: string
+  createdBy?: string | null
+}
+
+export type CreateBankQuestionBody = {
+  questionType: string
+  stem: string
+  options?: unknown
+  correctAnswer?: unknown
+  explanation?: string
+  points?: number
+  status?: 'draft' | 'active' | 'retired'
+  shared?: boolean
+  metadata?: unknown
+}
+
+export type UpdateBankQuestionBody = {
+  questionType?: string
+  stem?: string
+  options?: unknown | null
+  correctAnswer?: unknown | null
+  explanation?: string | null
+  points?: number
+  status?: 'draft' | 'active' | 'retired'
+  shared?: boolean
+  metadata?: unknown
+}
+
 export async function fetchCourseQuestions(
   courseCode: string,
   opts?: { q?: string; type?: string; conceptId?: string; status?: string },
@@ -218,6 +253,53 @@ export async function fetchCourseQuestions(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return Array.isArray(raw) ? (raw as BankQuestionRow[]) : []
+}
+
+export async function fetchCourseQuestion(
+  courseCode: string,
+  questionId: string,
+): Promise<BankQuestionDetail> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/questions/${encodeURIComponent(questionId)}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as BankQuestionDetail
+}
+
+export async function createCourseQuestion(
+  courseCode: string,
+  body: CreateBankQuestionBody,
+): Promise<BankQuestionDetail> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/questions`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as BankQuestionDetail
+}
+
+export async function updateCourseQuestion(
+  courseCode: string,
+  questionId: string,
+  body: UpdateBankQuestionBody,
+): Promise<BankQuestionDetail> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/questions/${encodeURIComponent(questionId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as BankQuestionDetail
 }
 
 export async function patchCourseFeatures(

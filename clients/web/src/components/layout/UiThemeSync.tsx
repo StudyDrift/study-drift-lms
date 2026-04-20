@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { authorizedFetch } from '../../lib/api'
-import { applyUiTheme, parseUiTheme } from '../../lib/uiTheme'
+import { applyUiTheme, parseUiTheme, readStoredUiTheme } from '../../lib/uiTheme'
 
 /**
  * Loads the signed-in user's persisted UI theme and keeps the document root in sync
@@ -9,6 +9,7 @@ import { applyUiTheme, parseUiTheme } from '../../lib/uiTheme'
 export function UiThemeSync() {
   useEffect(() => {
     let cancelled = false
+    applyUiTheme(readStoredUiTheme())
     async function sync() {
       try {
         const res = await authorizedFetch('/api/v1/settings/account')
