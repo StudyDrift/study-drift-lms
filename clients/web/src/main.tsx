@@ -2,8 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
-import App from './App.tsx'
-import { PermissionsProvider } from './context/PermissionsProvider'
+import App from './app'
+import { PermissionsProvider } from './context/permissions-provider'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,10 +1,10 @@
 import { type FormEvent, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { BrandLogo } from '../components/BrandLogo'
+import { BrandLogo } from '../components/brand-logo'
 import { getAccessToken, setAccessToken } from '../lib/auth'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
-import { applyUiTheme, parseUiTheme } from '../lib/uiTheme'
+import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
 
 export default function Signup() {
   const navigate = useNavigate()

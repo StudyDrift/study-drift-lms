@@ -124,6 +124,19 @@ pub async fn run() -> anyhow::Result<()> {
         .init();
 
     let state = build_app_state_from_env().await?;
+    let sweep_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            let now = chrono::Utc::now();
+            match crate::services::quiz_auto_submit::sweep_expired_attempts(&sweep_state.pool, now, 200).await {
+                Ok(n) if n > 0 => tracing::info!(count = n, "auto-submit sweep completed"),
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "auto-submit sweep failed"),
+            }
+        }
+    });
     let app = app::router(state);
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8080));
     let listener = tokio::net::TcpListener::bind(addr).await?;

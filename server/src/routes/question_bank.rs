@@ -97,6 +97,7 @@ fn entity_to_api(e: qb_repo::QuestionEntity) -> QuestionBankRowResponse {
         updated_at: e.updated_at,
         version_number: e.version_number,
         is_published: e.is_published,
+        shuffle_choices_override: e.shuffle_choices_override,
     }
 }
 
@@ -211,6 +212,7 @@ async fn create_question_handler(
         "authored",
         &meta,
         Some(user.user_id),
+        req.shuffle_choices_override,
     )
     .await?;
     let now = Utc::now();
@@ -235,6 +237,7 @@ async fn create_question_handler(
         updated_at: now,
         version_number: 1,
         is_published: status == "active",
+        shuffle_choices_override: req.shuffle_choices_override,
     };
     qb_repo::insert_question_version_snapshot(
         &mut *tx,
@@ -331,6 +334,11 @@ async fn update_question_handler(
     if let Some(m) = req.metadata {
         meta = m;
     }
+    let shuffle_choices_override = match &req.shuffle_choices_override {
+        None => cur.shuffle_choices_override,
+        Some(None) => None,
+        Some(Some(b)) => Some(*b),
+    };
 
     let mut tx = state.pool.begin().await?;
     let next_version = qb_repo::update_question_row_with_versioning(
@@ -345,6 +353,7 @@ async fn update_question_handler(
         &status,
         shared,
         &meta,
+        shuffle_choices_override,
     )
     .await?;
     let mut snapshot_row = cur.clone();
@@ -357,6 +366,7 @@ async fn update_question_handler(
     snapshot_row.status = status.clone();
     snapshot_row.shared = shared;
     snapshot_row.metadata = meta.clone();
+    snapshot_row.shuffle_choices_override = shuffle_choices_override;
     snapshot_row.version_number = next_version;
     if status == "active" {
         snapshot_row.is_published = true;
@@ -466,6 +476,11 @@ async fn restore_question_version_handler(
     let status = snapshot.get("status").and_then(|v| v.as_str()).unwrap_or("draft");
     let shared = snapshot.get("shared").and_then(|v| v.as_bool()).unwrap_or(false);
     let metadata = snapshot.get("metadata").cloned().unwrap_or_else(|| json!({}));
+    let shuffle_choices_override = match snapshot.get("shuffle_choices_override") {
+        None => cur.shuffle_choices_override,
+        Some(v) if v.is_null() => None,
+        Some(v) => v.as_bool(),
+    };
     let mut tx = state.pool.begin().await?;
     let mut restore_base = cur.clone();
     restore_base.is_published = true;
@@ -481,6 +496,7 @@ async fn restore_question_version_handler(
         status,
         shared,
         &metadata,
+        shuffle_choices_override,
     )
     .await?;
     let mut snapshot_row = cur.clone();
@@ -493,6 +509,7 @@ async fn restore_question_version_handler(
     snapshot_row.status = status.to_string();
     snapshot_row.shared = shared;
     snapshot_row.metadata = metadata.clone();
+    snapshot_row.shuffle_choices_override = shuffle_choices_override;
     snapshot_row.version_number = new_version;
     if status == "active" {
         snapshot_row.is_published = true;
@@ -693,6 +710,7 @@ async fn bulk_import_questions_handler(
             "authored",
             &meta,
             Some(user.user_id),
+            None,
         )
         .await?;
         let now = Utc::now();
@@ -717,6 +735,7 @@ async fn bulk_import_questions_handler(
             updated_at: now,
             version_number: 1,
             is_published: status == "active",
+            shuffle_choices_override: None,
         };
         qb_repo::insert_question_version_snapshot(
             &mut *tx,

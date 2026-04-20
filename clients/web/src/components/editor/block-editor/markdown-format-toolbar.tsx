@@ -1,0 +1,162 @@
+import {
+  Bold,
+  Braces,
+  Code,
+  Image as ImageIcon,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  Sigma,
+} from 'lucide-react'
+import type { MouseEvent, RefObject } from 'react'
+import type { MarkdownEditKind } from './markdown-insert'
+
+export type MarkdownFormatToolbarProps = {
+  disabled?: boolean
+  onApply: (kind: MarkdownEditKind) => void
+  /** Insert course image: file picker and drag-and-drop onto the button. */
+  courseImage?: {
+    onPickClick: () => void
+    onFiles: (files: File[]) => void
+  }
+  /** Open math insert popover (LaTeX + KaTeX preview). */
+  mathInsert?: {
+    onOpen: () => void
+    buttonRef?: RefObject<HTMLButtonElement | null>
+  }
+}
+
+/**
+ * Markdown formatting buttons for use inside BlockFloatingToolbar children.
+ * Uses mousedown preventDefault so the textarea keeps focus while clicking.
+ */
+export function MarkdownFormatToolbar({ disabled, onApply, courseImage, mathInsert }: MarkdownFormatToolbarProps) {
+  function preventBlur(e: MouseEvent) {
+    e.preventDefault()
+  }
+
+  return (
+    <>
+      <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200 dark:bg-neutral-600" aria-hidden />
+      <button
+        type="button"
+        disabled={disabled}
+        onMouseDown={preventBlur}
+        onClick={() => onApply('bulletList')}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-700"
+        aria-label="Bullet list"
+        title="Bullet list"
+      >
+        <List className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onMouseDown={preventBlur}
+        onClick={() => onApply('orderedList')}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-700"
+        aria-label="Numbered list"
+        title="Numbered list"
+      >
+        <ListOrdered className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onMouseDown={preventBlur}
+        onClick={() => onApply('bold')}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-200 dark:hover:bg-neutral-700"
+        aria-label="Bold"
+        title="Bold"
+      >
+        <Bold className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onMouseDown={preventBlur}
+        onClick={() => onApply('italic')}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-200 dark:hover:bg-neutral-700"
+        aria-label="Italic"
+        title="Italic"
+      >
+        <Italic className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onMouseDown={preventBlur}
+        onClick={() => onApply('inlineCode')}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-700"
+        aria-label="Inline code"
+        title="Inline code"
+      >
+        <Code className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onMouseDown={preventBlur}
+        onClick={() => onApply('codeBlock')}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-700"
+        aria-label="Code block"
+        title="Code block"
+      >
+        <Braces className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onMouseDown={preventBlur}
+        onClick={() => onApply('link')}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-700"
+        aria-label="Link"
+        title="Link"
+      >
+        <LinkIcon className="h-4 w-4" />
+      </button>
+      {mathInsert ? (
+        <button
+          type="button"
+          ref={mathInsert.buttonRef}
+          disabled={disabled}
+          onMouseDown={preventBlur}
+          onClick={() => mathInsert.onOpen()}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-700"
+          aria-label="Insert math"
+          title="Insert math (LaTeX)"
+        >
+          <Sigma className="h-4 w-4" />
+        </button>
+      ) : null}
+      {courseImage ? (
+        <>
+          <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200 dark:bg-neutral-600" aria-hidden />
+          <button
+            type="button"
+            disabled={disabled}
+            onMouseDown={preventBlur}
+            onClick={() => courseImage.onPickClick()}
+            onDragOver={(e) => {
+              if (disabled) return
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'copy'
+            }}
+            onDrop={(e) => {
+              if (disabled) return
+              e.preventDefault()
+              const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'))
+              if (files.length) courseImage.onFiles(files)
+            }}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-700"
+            aria-label="Insert image"
+            title="Insert image (drop file here or click)"
+          >
+            <ImageIcon className="h-4 w-4" />
+          </button>
+        </>
+      ) : null}
+    </>
+  )
+}

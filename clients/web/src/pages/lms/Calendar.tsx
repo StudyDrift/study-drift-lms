@@ -1,4 +1,4 @@
-import { LmsPage } from './LmsPage'
+import { LmsPage } from './lms-page'
 
 export default function Calendar() {
   return (

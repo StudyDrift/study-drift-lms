@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BarChart3 } from 'lucide-react'
-import { RequirePermission } from '../../components/RequirePermission'
-import { LmsPage } from './LmsPage'
-import { fetchLearningActivityReport, type LearningActivityReport } from '../../lib/reportsApi'
-import { PERM_REPORTS_VIEW } from '../../lib/rbacApi'
+import { RequirePermission } from '../../components/require-permission'
+import { LmsPage } from './lms-page'
+import { fetchLearningActivityReport, type LearningActivityReport } from '../../lib/reports-api'
+import { PERM_REPORTS_VIEW } from '../../lib/rbac-api'
 
 type Preset = '7d' | '30d' | '90d'
 

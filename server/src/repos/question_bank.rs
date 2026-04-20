@@ -23,6 +23,7 @@ pub struct QuestionEntity {
     pub shared: bool,
     pub source: String,
     pub metadata: JsonValue,
+    pub shuffle_choices_override: Option<bool>,
     pub irt_a: Option<f64>,
     pub irt_b: Option<f64>,
     pub irt_status: String,
@@ -177,16 +178,18 @@ pub async fn insert_question(
     source: &str,
     metadata: &JsonValue,
     created_by: Option<Uuid>,
+    shuffle_choices_override: Option<bool>,
 ) -> Result<Uuid, sqlx::Error> {
     let id: Uuid = sqlx::query_scalar(&format!(
         r#"
         INSERT INTO {} (
             course_id, question_type, stem, options, correct_answer, explanation,
-            points, status, shared, source, metadata, created_by, is_published
+            points, status, shared, source, metadata, created_by, is_published,
+            shuffle_choices_override
         )
         VALUES (
             $1, $2::course.question_type, $3, $4, $5, $6,
-            $7, $8::course.question_status, $9, $10, $11, $12, $13
+            $7, $8::course.question_status, $9, $10, $11, $12, $13, $14
         )
         RETURNING id
         "#,
@@ -205,6 +208,7 @@ pub async fn insert_question(
     .bind(metadata)
     .bind(created_by)
     .bind(status == "active")
+    .bind(shuffle_choices_override)
     .fetch_one(tx.deref_mut())
     .await?;
     Ok(id)
@@ -269,7 +273,7 @@ pub async fn get_question(
     sqlx::query_as::<_, QuestionEntity>(&format!(
         r#"
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
-               points::float8, status::text, shared, source, metadata,
+               points::float8, status::text, shared, source, metadata, shuffle_choices_override,
                irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
                version_number, is_published
         FROM {}
@@ -324,7 +328,7 @@ pub async fn list_questions_filtered(
     let rows: Vec<QuestionEntity> = sqlx::query_as(&format!(
         r#"
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
-               points::float8, status::text, shared, source, metadata,
+               points::float8, status::text, shared, source, metadata, shuffle_choices_override,
                irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
                version_number, is_published
         FROM {}
@@ -395,6 +399,13 @@ pub async fn delete_attempt_selections(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"DELETE FROM {} WHERE attempt_id = $1"#,
+        schema::ATTEMPT_OPTION_ORDERS
+    ))
+    .bind(attempt_id)
+    .execute(tx.deref_mut())
+    .await?;
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE attempt_id = $1"#,
         schema::ATTEMPT_QUESTION_SELECTIONS
     ))
     .bind(attempt_id)
@@ -424,6 +435,45 @@ pub async fn insert_attempt_selection(
     .execute(tx.deref_mut())
     .await?;
     Ok(())
+}
+
+pub async fn insert_attempt_option_order(
+    tx: &mut Transaction<'_, Postgres>,
+    attempt_id: Uuid,
+    question_id: Uuid,
+    option_order: &[i16],
+) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (attempt_id, question_id, option_order)
+        VALUES ($1, $2, $3)
+        "#,
+        schema::ATTEMPT_OPTION_ORDERS
+    ))
+    .bind(attempt_id)
+    .bind(question_id)
+    .bind(option_order)
+    .execute(tx.deref_mut())
+    .await?;
+    Ok(())
+}
+
+pub async fn list_attempt_option_orders_map(
+    pool: &PgPool,
+    attempt_id: Uuid,
+) -> Result<std::collections::HashMap<Uuid, Vec<i16>>, sqlx::Error> {
+    use std::collections::HashMap;
+    let rows: Vec<(Uuid, Vec<i16>)> = sqlx::query_as(&format!(
+        r#"
+        SELECT question_id, option_order FROM {}
+        WHERE attempt_id = $1
+        "#,
+        schema::ATTEMPT_OPTION_ORDERS
+    ))
+    .bind(attempt_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect::<HashMap<_, _>>())
 }
 
 pub async fn list_attempt_selections_ordered(
@@ -511,6 +561,7 @@ where
         "shared": question.shared,
         "source": question.source,
         "metadata": question.metadata,
+        "shuffle_choices_override": question.shuffle_choices_override,
         "irt_a": question.irt_a,
         "irt_b": question.irt_b,
         "irt_status": question.irt_status,
@@ -551,11 +602,18 @@ pub async fn update_question_row_with_versioning<'e, E>(
     status: &str,
     shared: bool,
     metadata: &JsonValue,
+    shuffle_choices_override: Option<bool>,
 ) -> Result<i32, sqlx::Error>
 where
     E: Executor<'e, Database = Postgres>,
 {
-    let new_version = if current.is_published {
+    let is_effectively_published = current.is_published || current.status == "active";
+    let tracked_changed = current.stem != stem
+        || current.options.as_ref() != options
+        || current.correct_answer.as_ref() != correct_answer
+        || current.explanation.as_deref() != explanation
+        || (current.points - points).abs() > f64::EPSILON;
+    let new_version = if is_effectively_published && tracked_changed {
         current.version_number + 1
     } else {
         current.version_number
@@ -573,6 +631,7 @@ where
             shared = $9,
             metadata = $10,
             version_number = $11,
+            shuffle_choices_override = $12,
             is_published = CASE WHEN $8::course.question_status = 'active'::course.question_status THEN TRUE ELSE is_published END,
             updated_at = NOW()
         WHERE id = $1
@@ -590,6 +649,7 @@ where
     .bind(shared)
     .bind(metadata)
     .bind(new_version)
+    .bind(shuffle_choices_override)
     .execute(ex)
     .await?;
     Ok(new_version)

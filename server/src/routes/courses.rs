@@ -2938,6 +2938,8 @@ async fn module_quiz_start_handler(
                 created.id,
                 user.user_id,
                 &refs,
+                row.shuffle_questions,
+                row.shuffle_choices,
             )
             .await
             {

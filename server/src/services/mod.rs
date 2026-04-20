@@ -9,6 +9,8 @@ pub mod canvas_course_import;
 pub mod course_export_import;
 pub mod course_image_upload;
 pub mod quiz_generation_ai;
+pub mod quiz_attempt;
+pub mod quiz_auto_submit;
 pub mod quiz_attempt_grading;
 pub mod quiz_lockdown;
 pub mod question_bank;

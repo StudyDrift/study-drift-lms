@@ -118,9 +118,7 @@ pub fn effective_max_submitted_attempts(quiz_max_attempts: i32, unlimited: bool,
 pub fn require_attempt_within_deadline(att: &QuizAttemptRow, now: DateTime<Utc>) -> Result<(), AppError> {
     if let Some(dl) = att.deadline_at {
         if now > dl {
-            return Err(AppError::InvalidInput(
-                "The quiz time limit has expired.".into(),
-            ));
+            return Err(AppError::AttemptTimeExpired);
         }
     }
     Ok(())

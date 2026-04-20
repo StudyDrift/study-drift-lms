@@ -194,6 +194,88 @@ where
     Ok(r.rows_affected() > 0)
 }
 
+pub async fn finalize_attempt_auto_submitted<'e, E>(
+    executor: E,
+    attempt_id: Uuid,
+    submitted_at: DateTime<Utc>,
+    points_earned: f64,
+    points_possible: f64,
+    score_percent: f32,
+) -> Result<bool, sqlx::Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
+    let r = sqlx::query(&format!(
+        r#"
+        UPDATE {}
+        SET status = 'submitted',
+            submitted_at = $2,
+            points_earned = $3,
+            points_possible = $4,
+            score_percent = $5,
+            auto_submitted = TRUE
+        WHERE id = $1
+          AND status = 'in_progress'
+          AND deadline_at IS NOT NULL
+          AND deadline_at <= $2
+        "#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(attempt_id)
+    .bind(submitted_at)
+    .bind(points_earned)
+    .bind(points_possible)
+    .bind(score_percent)
+    .execute(executor)
+    .await?;
+    Ok(r.rows_affected() > 0)
+}
+
+pub async fn list_expired_in_progress_attempt_ids(
+    pool: &PgPool,
+    now: DateTime<Utc>,
+    limit: i64,
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(&format!(
+        r#"
+        SELECT id
+        FROM {}
+        WHERE status = 'in_progress'
+          AND deadline_at IS NOT NULL
+          AND deadline_at <= $1
+        ORDER BY deadline_at ASC
+        LIMIT $2
+        "#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(now)
+    .bind(limit.max(1))
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn sum_response_points_for_attempt<'e, E>(
+    executor: E,
+    attempt_id: Uuid,
+) -> Result<(f64, f64), sqlx::Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
+    let row: (Option<f64>, Option<f64>) = sqlx::query_as(&format!(
+        r#"
+        SELECT COALESCE(SUM(points_awarded), 0)::float8 AS earned,
+               COALESCE(SUM(max_points), 0)::float8 AS possible
+        FROM {}
+        WHERE attempt_id = $1
+        "#,
+        schema::QUIZ_RESPONSES
+    ))
+    .bind(attempt_id)
+    .fetch_one(executor)
+    .await?;
+    Ok((row.0.unwrap_or(0.0), row.1.unwrap_or(0.0)))
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct QuizResponseRow {
     pub question_index: i32,

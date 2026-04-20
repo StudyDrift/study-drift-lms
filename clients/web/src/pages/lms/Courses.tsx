@@ -26,15 +26,15 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Plus } from 'lucide-react'
-import { LmsPage } from './LmsPage'
-import { RequirePermission } from '../../components/RequirePermission'
+import { LmsPage } from './lms-page'
+import { RequirePermission } from '../../components/require-permission'
 import { authorizedFetch } from '../../lib/api'
-import { putCourseCatalogOrder, type Course } from '../../lib/coursesApi'
+import { putCourseCatalogOrder, type Course } from '../../lib/courses-api'
 import { readApiErrorMessage } from '../../lib/errors'
-import { heroImageObjectStyle } from '../../lib/heroImagePosition'
-import { PERM_COURSE_CREATE } from '../../lib/rbacApi'
+import { heroImageObjectStyle } from '../../lib/hero-image-position'
+import { PERM_COURSE_CREATE } from '../../lib/rbac-api'
 
-export type { Course } from '../../lib/coursesApi'
+export type { Course } from '../../lib/courses-api'
 
 const COURSE_GRID_SORT_ID = 'course-catalog-grid'
 

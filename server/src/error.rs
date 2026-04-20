@@ -29,6 +29,8 @@ pub enum AppError {
     TooManyRequests(String),
     #[error("question already locked")]
     QuestionAlreadyLocked,
+    #[error("attempt time expired")]
+    AttemptTimeExpired,
     #[error(transparent)]
     Db(#[from] sqlx::Error),
     #[error(transparent)]
@@ -148,6 +150,15 @@ impl IntoResponse for AppError {
                 });
                 (StatusCode::FORBIDDEN, body).into_response()
             }
+            AppError::AttemptTimeExpired => {
+                let body = Json(ErrorBody {
+                    error: ErrorDetail {
+                        code: "ATTEMPT_TIME_EXPIRED",
+                        message: "The quiz time limit has expired.".into(),
+                    },
+                });
+                (StatusCode::FORBIDDEN, body).into_response()
+            }
             AppError::Db(ref e) => {
                 tracing::error!(error = %e, "database error");
                 let body = Json(ErrorBody {
@@ -217,6 +228,7 @@ mod tests {
         for (err, code) in [
             (AppError::Forbidden, "FORBIDDEN"),
             (AppError::NotFound, "NOT_FOUND"),
+            (AppError::AttemptTimeExpired, "ATTEMPT_TIME_EXPIRED"),
             (
                 AppError::AiGenerationFailed("x".into()),
                 "AI_GENERATION_FAILED",

@@ -11,14 +11,14 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
-import { useMailboxRevision, useRefreshUnread } from '../../context/useInboxUnread'
+import { useMailboxRevision, useRefreshUnread } from '../../context/use-inbox-unread'
 import {
   fetchMailboxMessages,
   patchMailbox,
   sendMessage,
   type MailboxFolder,
   type MailboxMessage,
-} from '../../lib/communicationApi'
+} from '../../lib/communication-api'
 
 function formatListDate(iso: string) {
   const d = new Date(iso)

@@ -1,103 +1,247 @@
-# Security audit — Lextures / StudyDrift
+# Security Audit — Lextures LMS
 
-**Scope:** Rust API server (`server/`), React web client (`clients/web/`), Docker / nginx deployment glue.  
-**Method:** Static review of authentication, authorization, transport configuration, file handling, WebSockets, outbound HTTP (AI + Canvas import), error handling, and representative client storage / rendering paths. This is not a penetration test and does not replace dependency scanning, threat modeling, or formal review.
+_Last scan: 2026-04-20_
 
----
-
-## Strengths (defense already in place)
-
-- **Passwords:** Argon2 hashing and verification (`server/src/services/auth.rs`).
-- **SQL access:** Queries use bound parameters; dynamic SQL fragments observed use fixed schema identifiers (e.g. `schema::COURSES`), not user-controlled SQL text.
-- **Course file paths:** `course_code` is normalized to a safe directory segment before joining disk paths (`server/src/repos/course_files.rs`).
-- **Feed message bodies:** Client renders markdown images only for strict course-file URL patterns; other image URLs are rejected (`clients/web/src/pages/lms/CourseFeedPage.tsx`).
-- **RBAC:** Permission strings are validated to four non-empty segments before checks (`server/src/http_auth.rs`, `server/src/repos/rbac.rs`).
-- **Sensitive DB errors:** Generic client message for `sqlx` failures (`server/src/error.rs`).
-- **Container runtime user:** Server image runs as `nobody` (`server/Dockerfile`).
-- **JWT secret (remediated):** Startup requires `JWT_SECRET` of at least 32 characters unless `ALLOW_INSECURE_JWT=1` is set for local-only use (`server/src/config.rs`).
-- **WebSocket auth token in URL (remediated):** Realtime sockets now authenticate via the first WebSocket message (`authToken`) instead of URL query strings (`server/src/routes/communication.rs`, `server/src/routes/course_feed.rs`, `server/src/routes/courses.rs`, `clients/web/src/*` feed/mailbox/canvas helpers).
-- **Canvas import base-URL policy + redirect hardening (remediated):** Canvas imports now enforce host-suffix allowlist policy from config (`CANVAS_ALLOWED_HOST_SUFFIXES`, default `instructure.com`) and disable HTTP redirects for import fetches (`server/src/config.rs`, `server/src/services/canvas_course_import.rs`, `server/src/routes/courses.rs`).
+This document captures the findings of a full-codebase security review covering authentication, authorization, input validation, XSS/CSRF, secrets handling, transport security, rate limiting, business logic, and dependencies. Issues are grouped by severity with concrete fixes.
 
 ---
 
-## Ranked recommendations
+## Executive Summary
 
-Issues are ordered **critical → low**. Within a band, prefer fixing misconfiguration and token-handling issues before hardening niceties.
+Lextures is a Rust (Axum) backend + React/TypeScript frontend LMS. The codebase demonstrates generally **good security practices** — parameterized SQL (sqlx), Argon2id password hashing, RBAC-based permission checks, and proper JWT expiry. However, several **High severity issues** must be remediated before production: JWT storage in `localStorage`, no CSRF protection, no rate limiting on auth, and missing security headers.
 
-### Critical
+**Overall posture:** MEDIUM. Do not ship to production until all P0/P1 items below are resolved.
 
-No active critical findings at this time.
+### Strengths
+- `.env` is gitignored; only `server/.env.example` (placeholders) is tracked; pull requests are scanned for secrets with [Gitleaks](https://github.com/gitleaks/gitleaks) in CI (`.github/workflows/ci.yml`).
+- Argon2id password hashing (`server/src/services/auth.rs`)
+- Parameterized SQL via `sqlx` everywhere (no string-interpolated user input in queries)
+- JWT implementation uses `jsonwebtoken` with `rust_crypto` (no OpenSSL surface)
+- Reset tokens are SHA-256 hashed before DB storage, one-time use, 1h expiry
+- Comprehensive RBAC with explicit permission checks on routes
+- TLS via `rustls` in `reqwest` (no legacy TLS stacks)
 
-### High
-
-1. **CORS allows any origin**
-  **Risk:** Today the SPA relies on bearer tokens in `localStorage`, which limits classic cookie CSRF, but `allow_origin(Any)` weakens defense in depth and complicates any future cookie-based auth, native wrappers, or misconfigured subdomains.  
-   **Evidence:** `server/src/app.rs` (`CorsLayer::new().allow_origin(Any)`).  
-   **Remediation:** Set explicit allowed origins from configuration (per environment). Keep credentials disabled unless you intentionally add cookie auth with tight origin + CSRF design.
-2. **No authentication rate limiting or lockout**
-  **Risk:** `/api/v1/auth/login` and `/api/v1/auth/signup` are unauthenticated endpoints suitable for credential stuffing and registration spam.  
-   **Evidence:** `server/src/routes/auth.rs` — no middleware layer for throttling in `server/src/app.rs`.  
-   **Remediation:** Add IP- and account-based limits (reverse proxy, gateway, or Axum middleware), exponential backoff after failures, and optional CAPTCHA or invite-only signup for production deployments.
-3. `**/health/ready` exposes database error strings to clients**
-  **Risk:** Operational and schema details can aid an attacker mapping the stack or migration state.  
-   **Evidence:** `server/src/routes/health.rs` includes `"detail": detail` on failure.  
-   **Remediation:** Return a fixed message to the client; log the detailed error server-side only. Restrict this endpoint to internal networks or monitoring systems in production.
-4. **Default Docker Compose credentials and exposed database ports**
-  **Risk:** Accidental deployment of dev compose files, or a reachable host with default Postgres/Mongo passwords, leads to trivial data compromise. Mongo appears unused by the Rust server but is still bundled with weak defaults.  
-   **Evidence:** `docker-compose.yml` (`POSTGRES_PASSWORD`, `JWT_SECRET: change-me-…`, `mongo` service, published `5432` / `27017`).  
-   **Remediation:** Remove unused services from default stacks; use secrets management; do not publish DB ports in “production-style” profiles; document that compose files are dev-only unless hardened.
-
-### Medium
-
-1. **Long-lived access JWT (72 hours) with no revocation path**
-  **Risk:** Stolen token remains valid for days; no server-side invalidation on password change or “log out everywhere.”  
-   **Evidence:** `server/src/jwt.rs` (`Duration::hours(72)`).  
-   **Remediation:** Shorten access-token TTL; add refresh tokens with rotation and server-side revocation; or maintain a small denylist / session version in the database checked on each request.
-2. **Access token stored in `localStorage`**
-  **Risk:** Any XSS on the SPA origin reads the token and calls the API as the victim.  
-   **Evidence:** `clients/web/src/lib/auth.ts`.  
-   **Remediation:** Prefer `HttpOnly` `Secure` cookies with CSRF tokens for browser clients, or at least pair `localStorage` tokens with strict CSP + aggressive XSS review. Document residual XSS impact for operators.
-3. **Course image uploads trust client-declared MIME type without content sniffing**
-  **Risk:** Declared `image/png` with non-image bytes could be used for polyglot files or confused downstream tools (less likely to execute in browsers when served with correct `Content-Type`, but still undesirable).  
-    **Evidence:** `server/src/services/course_image_upload.rs` (`normalize_image_mime` from multipart `content_type` only; no magic-byte validation).  
-    **Remediation:** Verify magic bytes (PNG/JPEG/GIF/WebP signatures) or decode once with a strict image crate and reject on failure.
-4. **Public self-service signup**
-  **Risk:** Spam accounts, storage abuse, and unsolicited messaging to registered users if messaging is abused.  
-    **Evidence:** `server/src/routes/auth.rs` exposes `POST /api/v1/auth/signup`.  
-    **Remediation:** Gate signup behind invites, email verification, admin approval, or disable the route in production configuration if not required.
-5. **AI failure responses may echo upstream / transport details**
-  **Risk:** `AppError::AiGenerationFailed` returns the inner string to clients (`server/src/error.rs`); mapping code often passes through HTTP or parse errors (`server/src/routes/settings.rs`, `server/src/routes/courses.rs`, `server/src/services/*_ai.rs`).  
-    **Remediation:** Log full errors server-side; return generic messages to clients (optionally with a correlation id).
-
-### Low
-
-1. **No Content Security Policy (or other security headers) in the SPA shell**
-  **Risk:** XSS impact is maximized without CSP framing/navigation restrictions.  
-    **Evidence:** `clients/web/index.html` loads Google Fonts and Vite entry only; no meta CSP. `clients/web/nginx.conf` does not set `Content-Security-Policy`, `X-Frame-Options`, or `Strict-Transport-Security`.  
-    **Remediation:** Add a strict CSP for the built assets; set `HSTS` when TLS is terminated for real hostnames; consider `X-Content-Type-Options: nosniff`.
-2. **Markdown link `href` is not scheme-restricted**
-  **Risk:** `javascript:` URLs in user-controlled markdown could execute in some user-agent / React combinations when clicked (`clients/web/src/components/syllabus/SyllabusMarkdownView.tsx` `a` component passes `href` through).  
-    **Remediation:** Sanitize `href` to `http`, `https`, `mailto`, and same-origin relative paths; strip or neutralize `javascript:` and data URLs.
-3. **Operational hygiene**
-  **Remediation:** Run `cargo audit` / `npm audit` in CI; pin base images; enable automated Dependabot-style updates; periodic review of OpenRouter and third-party data processing agreements (student content may be sent to external models per AI routes).
+### Weaknesses
+- JWT stored in `localStorage` (XSS-exposable)
+- No CSRF protection; CORS wide open (`Any`)
+- No rate limiting on `/auth/login`, `/auth/signup`, `/auth/reset-password`
+- No security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
+- Client-side-only quiz lockdown enforcement
+- Potential IDOR on accommodations and quiz results endpoints
+- `dangerouslySetInnerHTML` without DOMPurify on KaTeX output
 
 ---
 
-## Summary table
+## HIGH
 
+### H1. JWT stored in `localStorage`
+- **File:** [clients/web/src/lib/auth.ts:14](clients/web/src/lib/auth.ts:14), [clients/web/src/lib/auth.ts:24](clients/web/src/lib/auth.ts:24)
+- **Issue:** Access token written to `localStorage`; readable by any script on the page.
+- **Risk:** A single XSS anywhere in the app leaks the JWT, enabling full session hijack.
+- **Fix:** Issue the token as an `HttpOnly; Secure; SameSite=Strict; Path=/api` cookie from the backend. Remove all `localStorage` token usage. Update `authorizedFetch` to rely on cookie transmission (`credentials: 'include'`).
 
-| Priority | Count | Themes                                                                                    |
-| -------- | ----- | ----------------------------------------------------------------------------------------- |
-| Critical | 0     | None                                                                                      |
-| High     | 4     | CORS; auth rate limits; health info leak; compose defaults                                 |
-| Medium   | 5     | JWT lifetime + revocation; localStorage; upload validation; open signup; AI error leakage |
-| Low      | 3     | CSP / headers; markdown `javascript:` links; dependency & ops hygiene                     |
+### H2. No CSRF protection
+- **Files:** [server/src/app.rs](server/src/app.rs), all mutating routes in `server/src/routes/`
+- **Issue:** No CSRF token validation and CORS is configured with `allow_origin(Any)` + `allow_headers(Any)`.
+- **Risk:** If JWT is moved to a cookie (H1), attacker-origin pages can forge state-changing requests (enrollments, grade edits, quiz submits).
+- **Fix:**
+  1. Restrict CORS to an explicit allowlist of trusted origins.
+  2. Implement double-submit CSRF token: issue a CSRF cookie on login, require matching `X-CSRF-Token` header on all non-GET routes.
+  3. Use `SameSite=Strict` on the auth cookie as defense-in-depth.
 
+### H3. Missing security headers
+- **File:** [server/src/app.rs](server/src/app.rs)
+- **Issue:** No CSP, HSTS, X-Frame-Options, X-Content-Type-Options, or Referrer-Policy set.
+- **Risk:** Clickjacking, MIME sniffing, unrestricted script sources.
+- **Fix:** Add `tower_http::set_header::SetResponseHeaderLayer` layers:
+  ```
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;
+  ```
+
+### H4. No rate limiting on auth endpoints
+- **File:** [server/src/routes/auth.rs](server/src/routes/auth.rs)
+- **Issue:** `/auth/login`, `/auth/signup`, `/auth/request-password-reset`, `/auth/reset-password` accept unlimited attempts.
+- **Risk:** Credential stuffing, brute force, account enumeration, password-reset spam.
+- **Fix:** Add `tower-governor` (or similar) middleware. Recommended buckets:
+  - Login: 5 failures / 15 min per IP, 10 / hr per email
+  - Signup: 3 / hr per IP
+  - Reset request: 3 / hr per email
+
+### H5. Weak path sanitization for course file uploads
+- **File:** [server/src/repos/course_files.rs:64](server/src/repos/course_files.rs:64)
+- **Issue:** `disk_course_dir_segment` replaces unsafe chars but does not reject `..`, multiple dots, or absolute segments pre-sanitization. File storage root relies on this being safe.
+- **Risk:** Path traversal to read/write outside `course_files_root`.
+- **Fix:** After joining, `canonicalize()` and assert the result is still prefixed by `course_files_root`. Reject any segment whose `Path::components()` contains `Component::ParentDir`. Use UUIDs (not user-supplied names) for on-disk filenames.
 
 ---
 
-## Next steps
+## MEDIUM
 
-1. Add **automated** checks (config validation, security headers in nginx for prod profiles, audit in CI) so regressions are caught early.
+### M1. IDOR — accommodations by `user_id`
+- **File:** [server/src/routes/accommodations.rs:152](server/src/routes/accommodations.rs:152)
+- **Issue:** Handler accepts `{user_id}` path param; only verifies caller has `MANAGE_ACCOMMODATIONS_PERM`. No check that the target belongs to a course the caller manages.
+- **Risk:** Any user with the permission (e.g., a single-course TA) can read/edit accommodations for every user system-wide.
+- **Fix:** Scope the permission check to courses: require `course:<code>:accommodations:manage` and verify the target user is enrolled in one of the caller's managed courses.
 
-If you want a follow-up pass, the highest-value dynamic work would be: authenticated fuzzing of course-scoped IDs for IDOR, a focused review of `server/src/routes/courses.rs` for any handler that skips `assert_permission`, and a CSP rollout plan tested against TipTap / markdown rendering.
+### M2. IDOR — quiz results `student_user_id` query param
+- **File:** [server/src/routes/courses.rs:3300](server/src/routes/courses.rs:3300)
+- **Issue:** `student_user_id` is trusted once `can_edit` is true; no verification that the student is enrolled in the course being viewed.
+- **Risk:** An instructor in course A can enumerate/download attempt data for a student only enrolled in course B.
+- **Fix:** After resolving `target_user`, call an `enrollment::user_is_enrolled(course_id, target_user)` check and return `Forbidden` if false.
+
+### M3. Grade tampering via `item:create` permission
+- **File:** [server/src/routes/courses.rs:3685](server/src/routes/courses.rs:3685) (`gradebook_grades_put_handler`)
+- **Issue:** Permission gate is `course_item_create_permission` — the same permission used for creating assignments. A role that is allowed to author items should not implicitly be allowed to overwrite grades.
+- **Risk:** Overly broad permission can be abused to change grades.
+- **Fix:** Introduce a distinct `course:<code>:gradebook:write` permission and gate grade mutations on it. Log all grade mutations to an audit table (course_id, actor_id, student_id, item_id, old→new, timestamp).
+
+### M4. Quiz lockdown enforced client-side only
+- **File:** [server/src/services/quiz_lockdown.rs](server/src/services/quiz_lockdown.rs), [clients/web/src/components/quiz/QuizStudentTakePanel.tsx](clients/web/src/components/quiz/QuizStudentTakePanel.tsx)
+- **Issue:** `one_at_a_time` and `kiosk` modes rely on the client hiding questions and disabling navigation. A student with DevTools can submit arbitrary combinations.
+- **Risk:** Bypasses intended exam integrity.
+- **Fix:** Track server-side attempt state per question (question index, first-seen timestamp, answered flag). Reject submissions that violate the mode's invariants (e.g., answering Q5 before Q4 in `one_at_a_time`).
+
+### M5. XSS surface in KaTeX rendering
+- **Files:** [clients/web/src/components/math/KatexExpression.tsx:51](clients/web/src/components/math/KatexExpression.tsx:51), [clients/web/src/components/editor/MathInsertPopover.tsx:176](clients/web/src/components/editor/MathInsertPopover.tsx:176)
+- **Issue:** Raw `dangerouslySetInnerHTML` on KaTeX-rendered HTML with no DOMPurify pass. KaTeX with `trust: true` or with a future CVE could emit attacker-controlled HTML from student-authored LaTeX.
+- **Risk:** Stored XSS via quiz answers / question content rendered to graders or other students.
+- **Fix:** Run all KaTeX output through `DOMPurify.sanitize(html, { USE_PROFILES: { mathMl: true, svg: true, html: true } })`. Confirm KaTeX is called with `trust: false, strict: 'ignore'`.
+
+### M6. Markdown rendered without sanitization
+- **File:** [clients/web/src/components/syllabus/SyllabusMarkdownView.tsx](clients/web/src/components/syllabus/SyllabusMarkdownView.tsx)
+- **Issue:** `react-markdown` + `rehype-katex` rendered without an explicit `rehype-sanitize` schema. Raw HTML in markdown is disabled by default in react-markdown, but the KaTeX `rehype-raw`/`rehype-katex` pipeline can reintroduce unsafe output if plugins change.
+- **Risk:** Any future config that enables raw HTML becomes a stored-XSS vector.
+- **Fix:** Pin a `rehype-sanitize` step at the end of the pipeline with a schema that allows KaTeX classes only. Add a regression test that injects `<img src=x onerror=alert(1)>` and asserts it is stripped.
+
+### M7. No failed-login audit logging
+- **File:** [server/src/services/auth.rs](server/src/services/auth.rs)
+- **Issue:** Failed password checks return silently; no `tracing::warn!` emitted.
+- **Risk:** Brute force and credential stuffing are undetectable from logs.
+- **Fix:** Emit `tracing::warn!(email, remote_ip, "failed_login")` on bad password and on unknown-email signup collision. Feed logs into a SIEM for alerting.
+
+### M8. Argon2 default parameters
+- **File:** [server/src/services/auth.rs:23](server/src/services/auth.rs:23)
+- **Issue:** `Argon2::default()` uses the library defaults — not tuned for your hardware.
+- **Risk:** Under-provisioned memory cost leaves hashes cheaper to crack than OWASP current guidance (19 MiB, t=2, p=1).
+- **Fix:**
+  ```rust
+  let params = argon2::Params::new(19_456, 2, 1, None).unwrap();
+  let argon2 = Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+  ```
+  Benchmark on the target host and adjust until hashing takes ~250–500 ms.
+
+### M9. No rate limit on quiz submission
+- **File:** [server/src/routes/courses.rs:2965](server/src/routes/courses.rs:2965) (`module_quiz_submit_handler`)
+- **Issue:** Unlimited submissions per user per quiz.
+- **Risk:** Abuse of adaptive-quiz AI generation (cost), attempt count exhaustion DoS.
+- **Fix:** Per (user, item) token bucket — e.g., 1 submission / 5 s, 20 / hour.
+
+### M10. Course-code input accepted with no format validation
+- **File:** [server/src/routes/courses.rs](server/src/routes/courses.rs) (multiple handlers)
+- **Issue:** Course codes flow from URL path into logs, file paths, permission strings without length/charset check.
+- **Risk:** Oversize or non-ASCII values pollute logs, permission strings, and filesystem segments.
+- **Fix:** Reject anything not matching `^[A-Za-z0-9_-]{1,20}$` at the top of every handler (or in a single extractor).
+
+---
+
+## LOW
+
+### L1. CORS `Any`
+- **File:** [server/src/app.rs:8](server/src/app.rs:8) — handled by H2 above; listed separately for tracking.
+
+### L2. No JWT key rotation strategy
+- **File:** [server/src/jwt.rs](server/src/jwt.rs)
+- **Issue:** Single static signing key; no key-id (`kid`) in header; rotating the secret invalidates every session.
+- **Fix:** Maintain a current + previous key, embed `kid` in JWT header, verify against both during the overlap window. Store secrets in a vault (AWS Secrets Manager, Doppler, HashiCorp Vault).
+
+### L3. `expect` / `unwrap` in production paths
+- **Files:** [server/src/services/course_image_upload.rs:115](server/src/services/course_image_upload.rs:115), [server/src/services/course_image_upload.rs:162](server/src/services/course_image_upload.rs:162), [server/src/repos/course_structure.rs:149](server/src/repos/course_structure.rs:149)
+- **Issue:** Unexpected state panics the worker thread. Not a direct security bug but turns input anomalies into availability incidents.
+- **Fix:** Replace with `ok_or(AppError::...)?` and a dedicated error variant.
+
+### L4. `format!` for table names in SQL
+- **Files:** various in `server/src/repos/`
+- **Issue:** Not injection (table names are internal constants), but the pattern is dangerous to extend. Future contributors may interpolate untrusted values.
+- **Fix:** Use compile-time `sqlx::query!` where possible, or wrap dynamic identifiers through a whitelisting helper.
+
+### L5. No HTTPS enforcement documented
+- **Files:** deploy configs
+- **Issue:** No reverse-proxy redirect or HSTS policy documented.
+- **Fix:** Document the production requirement: terminate TLS at the proxy, force 80→443, set HSTS preload. Add to deployment README.
+
+---
+
+## INFORMATIONAL
+
+### I1. Permission denials lack structured logging
+- **File:** [server/src/error.rs:70](server/src/error.rs:70)
+- **Fix:** Emit `warn!(user_id, required_permission, route, "permission_denied")` from the `Forbidden` branch. Aids forensics.
+
+### I2. Add `cargo audit` and `npm audit` to CI
+- **Fix:** Two-line additions to GitHub Actions. Fail the build on high-severity advisories. Enable Dependabot for both ecosystems. (Secret scanning is already covered by the `gitleaks` job in CI.)
+
+### I3. Add automated security tests
+- CSRF: cross-origin POST from fake origin returns 403.
+- Rate limit: 10 failed logins/60s are throttled.
+- XSS: stored quiz content with `<img src=x onerror=alert(1)>` is escaped in the rendered DOM.
+- IDOR: student A's token cannot read `/api/v1/users/{studentB}/accommodations`.
+
+---
+
+## Priority Fix Order
+
+### P0 — Block production launch
+1. Move JWT to `HttpOnly` cookie (**H1**)
+2. Implement CSRF + restrict CORS (**H2**)
+3. Add security headers (**H3**)
+4. Rate-limit auth endpoints (**H4**)
+5. Lock down file-upload path handling (**H5**)
+
+### P1 — Next sprint
+7. Close accommodations / quiz-results IDOR holes (**M1, M2**)
+8. Introduce dedicated gradebook-write permission (**M3**)
+9. Enforce quiz lockdown invariants server-side (**M4**)
+10. DOMPurify around all KaTeX / markdown render points (**M5, M6**)
+11. Failed-login and permission-denial audit logging (**M7, I1**)
+12. Rate-limit quiz submission (**M9**)
+13. Validate course-code input at the route boundary (**M10**)
+
+### P2 — Following quarter
+14. Tune Argon2 parameters (**M8**)
+15. JWT key rotation with `kid` (**L2**)
+16. Remove production `expect()` paths (**L3**)
+17. Document HTTPS/HSTS deployment contract (**L5**)
+18. Add `cargo audit` / `npm audit` to CI; enable Dependabot (**I2**)
+19. Add automated security regression tests (**I3**)
+
+### P3 — Backlog
+20. Refactor `format!`-based SQL table references (**L4**)
+
+---
+
+## Dependency Posture (2026-04-20)
+
+- `argon2 = 0.5` — current, good
+- `jsonwebtoken = 10.3` (rust_crypto feature) — current
+- `sqlx = 0.8` — current; compile-time checked queries are in use
+- `reqwest = 0.12` (rustls-tls) — current
+- `axum`, `tokio`, `serde` — current majors
+- Frontend: React 19.2, react-router 7.14, react-markdown + rehype-katex — current
+- **Missing on client:** `dompurify`. Add it as part of M5/M6 fix.
+
+Run `cargo audit` and `npm audit` on the current tree before merging the next release.
+
+---
+
+## Testing the Fixes
+
+Every P0/P1 item should land with regression coverage:
+- Unit tests where logic lives in a service module
+- Integration tests in `server/tests/` for end-to-end auth, CSRF, IDOR, and rate-limit behavior
+- Component/DOM tests in the client for sanitizer regressions
+
+A staging environment should be scanned with OWASP ZAP (or equivalent) before production cutover.

@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::models::course_module_quiz::QuizQuestion;
 use crate::repos::question_bank as qb_repo;
+use crate::services::quiz_attempt::{apply_choice_display_order, shuffle_indices};
 use qb_repo::{QuestionEntity, QuestionListFilters, QuizQuestionRefRow};
 
 fn sample_seed(attempt_id: Uuid, user_id: Uuid) -> u64 {
@@ -48,6 +49,24 @@ fn sample_n_from_pool(mut ids: Vec<Uuid>, n: usize, attempt_id: Uuid, user_id: U
     ids.shuffle(&mut rng);
     ids.truncate(n);
     ids
+}
+
+fn db_type_allows_option_shuffle(t: &str) -> bool {
+    matches!(t, "mc_single" | "mc_multiple" | "true_false")
+}
+
+fn choice_count_from_entity(e: &QuestionEntity) -> usize {
+    e.options
+        .as_ref()
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0)
+}
+
+fn effective_shuffle_choices_for_attempt(quiz_shuffle_choices: bool, entity: &QuestionEntity) -> bool {
+    quiz_shuffle_choices
+        && db_type_allows_option_shuffle(&entity.question_type)
+        && entity.shuffle_choices_override != Some(false)
 }
 
 fn question_entity_from_snapshot(snapshot: &JsonValue) -> Result<QuestionEntity, AppError> {
@@ -122,6 +141,10 @@ fn question_entity_from_snapshot(snapshot: &JsonValue) -> Result<QuestionEntity,
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let shuffle_choices_override = snapshot
+        .get("shuffle_choices_override")
+        .and_then(|v| v.as_bool());
+
     Ok(QuestionEntity {
         id,
         course_id,
@@ -135,6 +158,7 @@ fn question_entity_from_snapshot(snapshot: &JsonValue) -> Result<QuestionEntity,
         shared,
         source,
         metadata,
+        shuffle_choices_override,
         irt_a,
         irt_b,
         irt_status,
@@ -226,7 +250,7 @@ pub async fn load_quiz_questions_map(
     let rows: Vec<QuestionEntity> = sqlx::query_as(&format!(
         r#"
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
-               points::float8, status::text, shared, source, metadata,
+               points::float8, status::text, shared, source, metadata, shuffle_choices_override,
                irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
                version_number, is_published
         FROM {}
@@ -305,6 +329,7 @@ pub async fn sync_quiz_refs_from_editor_json(
                 "legacy_json",
                 &meta,
                 created_by,
+                None,
             )
             .await?
         };
@@ -324,7 +349,8 @@ pub async fn sync_quiz_refs_from_editor_json(
     Ok(())
 }
 
-/// Writes attempt_question_selections for a newly created attempt (pool + fixed ordering).
+/// Writes attempt_question_selections for a newly created attempt (pool + fixed ordering),
+/// optionally shuffling question order and/or MC/TF option order (persisted for reload stability).
 pub async fn materialize_attempt_questions(
     pool: &PgPool,
     course_id: Uuid,
@@ -332,46 +358,125 @@ pub async fn materialize_attempt_questions(
     attempt_id: Uuid,
     user_id: Uuid,
     refs: &[QuizQuestionRefRow],
+    shuffle_questions: bool,
+    shuffle_choices: bool,
 ) -> Result<(), AppError> {
-    let mut tx = pool.begin().await?;
-    qb_repo::delete_attempt_selections(&mut tx, attempt_id).await?;
+    tracing::debug!(
+        attempt_id = %attempt_id,
+        shuffle_questions,
+        shuffle_choices,
+        "materializing attempt question order / option permutations"
+    );
 
-    let mut pos: i16 = 0;
+    let mut picks: Vec<(Uuid, i32)> = Vec::new();
     for r in refs {
         if let Some(qid) = r.question_id {
             let version = qb_repo::get_question(pool, course_id, qid)
                 .await?
                 .ok_or_else(|| AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()))?
                 .version_number;
-            qb_repo::insert_attempt_selection(&mut tx, attempt_id, qid, version, pos).await?;
-            pos = pos
-                .checked_add(1)
-                .ok_or_else(|| AppError::InvalidInput("Quiz too long.".into()))?;
+            picks.push((qid, version));
             continue;
         }
         if let (Some(pid), Some(sn)) = (r.pool_id, r.sample_n) {
             let pool_ids = qb_repo::list_active_pool_question_ids(pool, pid, course_id).await?;
-            let picked = sample_n_from_pool(pool_ids, sn as usize, attempt_id, user_id);
-            if picked.len() != sn as usize {
+            let sampled = sample_n_from_pool(pool_ids, sn as usize, attempt_id, user_id);
+            if sampled.len() != sn as usize {
                 return Err(AppError::InvalidInput(
                     "Not enough active questions in the pool for this quiz.".into(),
                 ));
             }
-            for qid in picked {
+            for qid in sampled {
                 let version = qb_repo::get_question(pool, course_id, qid)
                     .await?
                     .ok_or_else(|| AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()))?
                     .version_number;
-                qb_repo::insert_attempt_selection(&mut tx, attempt_id, qid, version, pos).await?;
-                pos = pos
-                    .checked_add(1)
-                    .ok_or_else(|| AppError::InvalidInput("Quiz too long.".into()))?;
+                picks.push((qid, version));
             }
         }
     }
 
+    if shuffle_questions && picks.len() >= 2 {
+        picks.shuffle(&mut rand::rng());
+    }
+
+    let mut tx = pool.begin().await?;
+    qb_repo::delete_attempt_selections(&mut tx, attempt_id).await?;
+
+    let mut pos: i16 = 0;
+    for (qid, ver) in &picks {
+        qb_repo::insert_attempt_selection(&mut tx, attempt_id, *qid, *ver, pos).await?;
+        pos = pos
+            .checked_add(1)
+            .ok_or_else(|| AppError::InvalidInput("Quiz too long.".into()))?;
+    }
+
+    if shuffle_choices && !picks.is_empty() {
+        let ids: Vec<Uuid> = picks.iter().map(|p| p.0).collect();
+        let map = load_quiz_questions_map(pool, course_id, &ids).await?;
+        for (qid, _) in &picks {
+            let Some(ent) = map.get(qid) else {
+                return Err(AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()));
+            };
+            if !effective_shuffle_choices_for_attempt(shuffle_choices, ent) {
+                continue;
+            }
+            let n = choice_count_from_entity(ent);
+            if n < 2 {
+                continue;
+            }
+            let as_i16: Vec<i16> = {
+                let mut rng = rand::rng();
+                let perm = shuffle_indices(n, &mut rng);
+                perm.iter().map(|&x| x as i16).collect()
+            };
+            qb_repo::insert_attempt_option_order(&mut tx, attempt_id, *qid, &as_i16).await?;
+        }
+    }
+
     tx.commit().await?;
+    let _ = user_id;
     Ok(())
+}
+
+async fn quiz_questions_for_attempt_selections(
+    pool: &PgPool,
+    course_id: Uuid,
+    attempt_id: Uuid,
+) -> Result<Vec<QuizQuestion>, AppError> {
+    let ordered = qb_repo::list_attempt_selections_ordered(pool, attempt_id).await?;
+    let option_orders = qb_repo::list_attempt_option_orders_map(pool, attempt_id).await?;
+    let ids: Vec<Uuid> = ordered.iter().map(|r| r.question_id).collect();
+    let map = load_quiz_questions_map(pool, course_id, &ids).await?;
+    let mut out = Vec::new();
+    for picked in ordered {
+        let mut qq = {
+            let use_current = map
+                .get(&picked.question_id)
+                .filter(|c| c.version_number == picked.version_number);
+            if let Some(cur) = use_current {
+                quiz_question_from_entity(cur)?
+            } else {
+                let snapshot = qb_repo::get_question_version_snapshot(
+                    pool,
+                    course_id,
+                    picked.question_id,
+                    picked.version_number,
+                )
+                .await?
+                .ok_or_else(|| AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()))?;
+                let versioned = question_entity_from_snapshot(&snapshot)?;
+                quiz_question_from_entity(&versioned)?
+            }
+        };
+
+        if let Some(perm) = option_orders.get(&picked.question_id) {
+            let perm_u: Vec<usize> = perm.iter().map(|&x| x as usize).collect();
+            qq = apply_choice_display_order(qq, &perm_u);
+        }
+        out.push(qq);
+    }
+    Ok(out)
 }
 
 pub async fn resolve_delivery_questions(
@@ -411,52 +516,21 @@ pub async fn resolve_delivery_questions(
         });
     }
 
-    // Learner
-    if refs_use_pool(&refs) {
-        let Some(aid) = attempt_id else {
-            return Ok(ResolvedQuizQuestions {
-                questions: vec![],
-                uses_server_question_sampling: true,
-            });
-        };
-        let Some(uid) = user_id else {
-            return Ok(ResolvedQuizQuestions {
-                questions: vec![],
-                uses_server_question_sampling: true,
-            });
-        };
+    // Learner: use persisted attempt selections whenever present (pool draw and/or shuffle order).
+    if let (Some(aid), Some(_uid)) = (attempt_id, user_id) {
         let n = qb_repo::count_attempt_selections(pool, aid).await?;
-        if n == 0 {
+        if n > 0 {
+            let questions = quiz_questions_for_attempt_selections(pool, course_id, aid).await?;
             return Ok(ResolvedQuizQuestions {
-                questions: vec![],
+                questions,
                 uses_server_question_sampling: true,
             });
         }
-        let ordered = qb_repo::list_attempt_selections_ordered(pool, aid).await?;
-        let ids: Vec<Uuid> = ordered.iter().map(|r| r.question_id).collect();
-        let map = load_quiz_questions_map(pool, course_id, &ids).await?;
-        let mut out = Vec::new();
-        for picked in ordered {
-            if let Some(current) = map.get(&picked.question_id) {
-                if current.version_number == picked.version_number {
-                    out.push(quiz_question_from_entity(current)?);
-                    continue;
-                }
-            }
-            let snapshot = qb_repo::get_question_version_snapshot(
-                pool,
-                course_id,
-                picked.question_id,
-                picked.version_number,
-            )
-            .await?
-            .ok_or_else(|| AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()))?;
-            let versioned = question_entity_from_snapshot(&snapshot)?;
-            out.push(quiz_question_from_entity(&versioned)?);
-        }
-        let _ = uid; // reserved for future audit
+    }
+
+    if refs_use_pool(&refs) {
         return Ok(ResolvedQuizQuestions {
-            questions: out,
+            questions: vec![],
             uses_server_question_sampling: true,
         });
     }

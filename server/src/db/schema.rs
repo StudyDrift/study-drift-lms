@@ -44,5 +44,6 @@ pub const QUESTION_POOLS: &str = "course.question_pools";
 pub const QUESTION_POOL_MEMBERS: &str = "course.question_pool_members";
 pub const QUIZ_QUESTION_REFS: &str = "course.quiz_question_refs";
 pub const ATTEMPT_QUESTION_SELECTIONS: &str = "course.attempt_question_selections";
+pub const ATTEMPT_OPTION_ORDERS: &str = "course.attempt_option_orders";
 pub const ATTEMPT_FOCUS_LOSS_EVENTS: &str = "course.attempt_focus_loss_events";
 pub const STUDENT_ACCOMMODATIONS: &str = "course.student_accommodations";
