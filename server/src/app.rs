@@ -20,6 +20,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(routes::health::get))
         .route("/health/ready", get(routes::health::ready))
+        .merge(crate::openapi::swagger_router())
         .merge(routes::auth::router())
         .merge(routes::accommodations::router())
         .merge(routes::me::router())

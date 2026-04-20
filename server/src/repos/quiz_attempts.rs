@@ -119,7 +119,7 @@ pub async fn next_attempt_number(
     Ok(max_n.unwrap_or(0) + 1)
 }
 
-pub async fn create_attempt(
+pub async fn insert_attempt(
     pool: &PgPool,
     course_id: Uuid,
     item_id: Uuid,

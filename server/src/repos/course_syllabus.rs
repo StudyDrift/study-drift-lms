@@ -43,11 +43,12 @@ pub async fn upsert_syllabus(
     let json = Json(sections.to_vec());
     let updated: DateTime<Utc> = sqlx::query_scalar(&format!(
         r#"
-        INSERT INTO {} (course_id, sections, require_syllabus_acceptance, updated_at)
+        INSERT INTO {} AS s (course_id, sections, require_syllabus_acceptance, updated_at)
         VALUES ($1, $2::jsonb, $3, NOW())
         ON CONFLICT (course_id) DO UPDATE
         SET sections = EXCLUDED.sections,
             require_syllabus_acceptance = EXCLUDED.require_syllabus_acceptance,
+            settings_version = s.settings_version + 1,
             updated_at = NOW()
         RETURNING updated_at
         "#,

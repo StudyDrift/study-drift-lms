@@ -32,7 +32,7 @@ import {
   type FeedMessage,
   type FeedRosterPerson,
 } from '../../lib/course-feed-api'
-import { fetchCourse, type Course } from '../../lib/courses-api'
+import { fetchCourse, type CoursePublic } from '../../lib/courses-api'
 import { getAccessToken, getJwtSubject } from '../../lib/auth'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { useCourseFeedUnread } from '../../context/use-course-feed-unread'
@@ -303,7 +303,7 @@ export default function CourseFeedPage() {
   const { courseCode } = useParams<{ courseCode: string }>()
   const { feedEnabled: courseFeedEnabled, loading: courseFeatureFlagsLoading } =
     useCourseNavFeatures()
-  const [course, setCourse] = useState<Course | null>(null)
+  const [course, setCourse] = useState<CoursePublic | null>(null)
   const [channels, setChannels] = useState<FeedChannel[]>([])
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null)
   const [roster, setRoster] = useState<FeedRosterPerson[]>([])

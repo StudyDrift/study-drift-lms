@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { LmsPage } from './lms-page'
 import { authorizedFetch } from '../../lib/api'
-import { postCourseContext, type Course } from '../../lib/courses-api'
+import { postCourseContext, type CoursePublic } from '../../lib/courses-api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { heroImageObjectStyle } from '../../lib/hero-image-position'
 
@@ -31,7 +31,7 @@ function formatIsoDurationHuman(iso: string | null | undefined): string {
 
 export default function CourseDetail() {
   const { courseCode } = useParams<{ courseCode: string }>()
-  const [course, setCourse] = useState<Course | null>(null)
+  const [course, setCourse] = useState<CoursePublic | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -50,7 +50,7 @@ export default function CourseDetail() {
           return
         }
         if (!cancelled) {
-          setCourse(raw as Course)
+          setCourse(raw as CoursePublic)
           void postCourseContext(courseCode, { kind: 'course_visit' }).catch(() => {})
         }
       } catch {

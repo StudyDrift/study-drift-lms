@@ -1,0 +1,3 @@
+# cargo-audit: https://github.com/rustsec/cargo-audit/blob/main/audit.toml.example
+[advisories]
+ignore = ["RUSTSEC-2023-0071"]

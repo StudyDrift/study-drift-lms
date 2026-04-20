@@ -29,12 +29,12 @@ import { Plus } from 'lucide-react'
 import { LmsPage } from './lms-page'
 import { RequirePermission } from '../../components/require-permission'
 import { authorizedFetch } from '../../lib/api'
-import { putCourseCatalogOrder, type Course } from '../../lib/courses-api'
+import { putCourseCatalogOrder, type CoursePublic } from '../../lib/courses-api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { heroImageObjectStyle } from '../../lib/hero-image-position'
 import { PERM_COURSE_CREATE } from '../../lib/rbac-api'
 
-export type { Course } from '../../lib/courses-api'
+export type { CoursePublic } from '../../lib/courses-api'
 
 const COURSE_GRID_SORT_ID = 'course-catalog-grid'
 
@@ -51,7 +51,7 @@ function formatEditedAgo(iso: string): string {
 }
 
 /** Catalog pill: draft vs published schedule window (uses real `published`, `startsAt`, `endsAt`). */
-function courseStatusBadgeLabel(c: Course): string {
+function courseStatusBadgeLabel(c: CoursePublic): string {
   if (!c.published) return 'Draft'
   const now = Date.now()
   if (c.endsAt) {
@@ -70,7 +70,7 @@ function CourseCard({
   sortable,
   suppressNavigateAfterDragRef,
 }: {
-  course: Course
+  course: CoursePublic
   suppressNavigateAfterDragRef?: MutableRefObject<boolean>
   sortable?: {
     listeners: Record<string, unknown>
@@ -140,7 +140,7 @@ function SortableCourseCard({
   course,
   suppressNavigateAfterDragRef,
 }: {
-  course: Course
+  course: CoursePublic
   suppressNavigateAfterDragRef: MutableRefObject<boolean>
 }) {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -170,7 +170,7 @@ function SortableCourseCard({
 }
 
 export default function Courses() {
-  const [courses, setCourses] = useState<Course[] | null>(null)
+  const [courses, setCourses] = useState<CoursePublic[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** After a catalog drag, the browser may emit a click on the card link; block that navigation. */
   const suppressNavigateAfterDragRef = useRef(false)
@@ -187,7 +187,7 @@ export default function Courses() {
           setError(readApiErrorMessage(raw))
           return
         }
-        const data = raw as { courses?: Course[] }
+        const data = raw as { courses?: CoursePublic[] }
         if (!cancelled) setCourses(data.courses ?? [])
       } catch {
         if (!cancelled) {

@@ -1,3 +1,9 @@
+//! Database access (SQLx). **Function prefixes:** `get_` (single row or scalar by id/key),
+//! `list_` (collections), `insert_` (new rows), `update_` (full or partial row updates),
+//! `delete_`, `find_` (optional lookup, often by natural key). `upsert_` and `patch_` are
+//! reserved for merge-on-conflict and narrow column updates. Prefer `insert_*` over `create_*`
+//! for new rows to match the rest of the layer.
+
 pub mod communication;
 pub mod content_page_markups;
 pub mod course;

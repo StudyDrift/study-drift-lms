@@ -105,6 +105,38 @@ describe('authorizedFetch', () => {
     expect(n).toBe(2)
   })
 
+  it('retries GET on 503 then returns success', async () => {
+    let n = 0
+    server.use(
+      http.get('http://localhost:8080/api/v1/ping', () => {
+        n += 1
+        if (n < 2) {
+          return HttpResponse.json({ err: true }, { status: 503 })
+        }
+        return HttpResponse.json({ ok: true })
+      }),
+    )
+    const res = await authorizedFetch('/api/v1/ping')
+    expect(res.ok).toBe(true)
+    expect(n).toBe(2)
+  })
+
+  it('retries GET once when fetch throws a network error', async () => {
+    let n = 0
+    server.use(
+      http.get('http://localhost:8080/api/v1/ping', () => {
+        n += 1
+        if (n < 2) {
+          return HttpResponse.error()
+        }
+        return HttpResponse.json({ ok: true })
+      }),
+    )
+    const res = await authorizedFetch('/api/v1/ping')
+    expect(res.ok).toBe(true)
+    expect(n).toBe(2)
+  })
+
   it('does not retry POST on 502', async () => {
     let n = 0
     server.use(

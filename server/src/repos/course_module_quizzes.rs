@@ -437,6 +437,7 @@ pub async fn update_adaptive_config(
             adaptive_system_prompt = $4,
             adaptive_source_item_ids = $5::jsonb,
             adaptive_question_count = $6,
+            settings_version = m.settings_version + 1,
             updated_at = NOW()
         FROM {} c
         WHERE m.structure_item_id = c.id
@@ -467,7 +468,9 @@ pub async fn update_questions(
     sqlx::query_scalar(&format!(
         r#"
         UPDATE {} m
-        SET questions_json = $3, updated_at = NOW()
+        SET questions_json = $3,
+            settings_version = m.settings_version + 1,
+            updated_at = NOW()
         FROM {} c
         WHERE m.structure_item_id = c.id
           AND c.id = $1
@@ -499,7 +502,7 @@ pub async fn upsert_import_body(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"
-        INSERT INTO {} (
+        INSERT INTO {} AS m (
             structure_item_id, markdown, questions_json, updated_at,
             available_from, available_until, unlimited_attempts, max_attempts,
             grade_attempt_policy, passing_score_percent, points_worth, late_submission_policy, late_penalty_percent,
@@ -520,6 +523,7 @@ pub async fn upsert_import_body(
         ON CONFLICT (structure_item_id) DO UPDATE SET
             markdown = EXCLUDED.markdown,
             questions_json = EXCLUDED.questions_json,
+            settings_version = m.settings_version + 1,
             updated_at = NOW(),
             available_from = EXCLUDED.available_from,
             available_until = EXCLUDED.available_until,

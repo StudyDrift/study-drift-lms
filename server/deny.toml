@@ -1,0 +1,8 @@
+# Cargo-deny (RustSec). CI: cargo deny check advisories
+# https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
+
+[advisories]
+ignore = [
+    # Transitive `rsa` via jsonwebtoken + sqlx optional mysql stack; no patched release.
+    { id = "RUSTSEC-2023-0071", reason = "Accepted until upstream jsonwebtoken/sqlx drop vulnerable rsa." },
+]

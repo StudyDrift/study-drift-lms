@@ -6,6 +6,12 @@ use axum::Json;
 use crate::db::schema;
 use crate::state::AppState;
 
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "meta",
+    responses((status = 200, description = "JSON liveness payload"))
+)]
 pub async fn get() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "ok",

@@ -4,6 +4,7 @@ pub mod communication;
 pub mod content_page_markups;
 pub mod course;
 pub mod course_feed;
+pub mod course_outcomes_api;
 pub mod course_export;
 pub mod course_file;
 pub mod course_grading;

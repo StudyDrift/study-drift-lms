@@ -98,12 +98,16 @@ pub async fn update_survey(
 
     sqlx::query(&format!(
         r#"
-        UPDATE {}
+        UPDATE {} AS s
         SET description = COALESCE($2, description),
             anonymity_mode = COALESCE($3::course.survey_anonymity, anonymity_mode),
             opens_at = COALESCE($4, opens_at),
             closes_at = COALESCE($5, closes_at),
             questions_json = COALESCE($6, questions_json),
+            settings_version = CASE
+                WHEN $6::jsonb IS NOT NULL THEN s.settings_version + 1
+                ELSE s.settings_version
+            END,
             updated_at = NOW()
         WHERE structure_item_id = $1
         "#,

@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+cd clients/web || exit 1
+npx lint-staged
+npm run typecheck

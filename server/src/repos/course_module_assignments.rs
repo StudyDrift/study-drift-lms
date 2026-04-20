@@ -222,6 +222,7 @@ pub async fn write_assignment_body(
             late_submission_policy = $11,
             late_penalty_percent = $12,
             rubric_json = $13,
+            settings_version = m.settings_version + 1,
             updated_at = NOW()
         FROM {} c
         WHERE m.structure_item_id = c.id
@@ -268,7 +269,7 @@ pub async fn upsert_import_body(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"
-        INSERT INTO {} (
+        INSERT INTO {} AS m (
             structure_item_id, markdown, points_worth, updated_at,
             available_from, available_until, assignment_access_code,
             submission_allow_text, submission_allow_file_upload, submission_allow_url,
@@ -289,6 +290,7 @@ pub async fn upsert_import_body(
             late_submission_policy = EXCLUDED.late_submission_policy,
             late_penalty_percent = EXCLUDED.late_penalty_percent,
             rubric_json = EXCLUDED.rubric_json,
+            settings_version = m.settings_version + 1,
             updated_at = NOW()
         "#,
         schema::MODULE_ASSIGNMENTS,

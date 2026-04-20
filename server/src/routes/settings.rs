@@ -27,6 +27,7 @@ use crate::repos::user;
 use crate::repos::user_ai_settings;
 use crate::services::ai::OpenRouterError;
 use crate::services::ai::{list_image_models, list_text_models};
+use crate::services::settings_ops;
 use crate::state::AppState;
 
 /// Same permission as Roles & Permissions — system-wide configuration.
@@ -143,57 +144,6 @@ fn map_open_router_err(e: OpenRouterError) -> AppError {
     }
 }
 
-fn normalize_name(s: Option<String>, field_label: &str) -> Result<Option<String>, AppError> {
-    let Some(s) = s else {
-        return Ok(None);
-    };
-    let t = s.trim();
-    if t.is_empty() {
-        return Ok(None);
-    }
-    if t.len() > 80 {
-        return Err(AppError::invalid_input(format!(
-            "{field_label} is too long."
-        )));
-    }
-    Ok(Some(t.to_string()))
-}
-
-fn normalize_avatar_url(s: Option<String>) -> Result<Option<String>, AppError> {
-    let Some(s) = s else {
-        return Ok(None);
-    };
-    let t = s.trim();
-    if t.is_empty() {
-        return Ok(None);
-    }
-    if t.len() > 2_000_000 {
-        return Err(AppError::invalid_input(
-            "Avatar image URL is too long.",
-        ));
-    }
-    let is_http = t.starts_with("http://") || t.starts_with("https://");
-    let is_data = t.starts_with("data:image/");
-    if !is_http && !is_data {
-        return Err(AppError::invalid_input(
-            "Avatar must be an http(s) URL or a data:image upload.",
-        ));
-    }
-    Ok(Some(t.to_string()))
-}
-
-fn to_profile_response(row: user::UserProfileRow) -> AccountProfileResponse {
-    AccountProfileResponse {
-        email: row.email,
-        display_name: row.display_name,
-        first_name: row.first_name,
-        last_name: row.last_name,
-        avatar_url: row.avatar_url,
-        ui_theme: row.ui_theme,
-        sid: row.sid,
-    }
-}
-
 fn map_sid_unique_violation(e: SqlxError) -> AppError {
     if let Some(db) = e.as_database_error() {
         if db.code().as_deref() == Some("23505") {
@@ -219,19 +169,6 @@ fn normalize_student_id(s: Option<String>) -> Result<Option<String>, AppError> {
     Ok(Some(t.to_string()))
 }
 
-fn normalize_ui_theme(s: Option<String>) -> Result<Option<String>, AppError> {
-    let Some(s) = s else {
-        return Ok(None);
-    };
-    let t = s.trim().to_lowercase();
-    if t != "light" && t != "dark" {
-        return Err(AppError::invalid_input(
-            "Theme must be \"light\" or \"dark\".",
-        ));
-    }
-    Ok(Some(t))
-}
-
 async fn get_account_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -240,7 +177,7 @@ async fn get_account_handler(
     let row = user::get_profile_by_id(&state.pool, auth.user_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    Ok(Json(to_profile_response(row)))
+    Ok(Json(settings_ops::to_profile_response(row)))
 }
 
 async fn patch_user_student_id_handler(
@@ -269,21 +206,8 @@ async fn patch_account_handler(
     Json(req): Json<UpdateAccountProfileRequest>,
 ) -> Result<Json<AccountProfileResponse>, AppError> {
     let auth = auth_user(&state, &headers)?;
-    let first_name = normalize_name(req.first_name, "First name")?;
-    let last_name = normalize_name(req.last_name, "Last name")?;
-    let avatar_url = normalize_avatar_url(req.avatar_url)?;
-    let ui_theme = normalize_ui_theme(req.ui_theme)?;
-    let row = user::update_profile(
-        &state.pool,
-        auth.user_id,
-        first_name.as_deref(),
-        last_name.as_deref(),
-        avatar_url.as_deref(),
-        ui_theme.as_deref(),
-    )
-    .await?
-    .ok_or(AppError::NotFound)?;
-    Ok(Json(to_profile_response(row)))
+    let row = settings_ops::patch_account_profile(&state.pool, auth.user_id, req).await?;
+    Ok(Json(row))
 }
 
 async fn generate_avatar_handler(

@@ -1,12 +1,53 @@
 import { authorizedFetch } from './api'
 import { getAccessToken } from './auth'
 import { readApiErrorMessage } from './errors'
+import {
+  accommodationSummaryPayloadSchema,
+  accommodationUsersSearchResponseSchema,
+  adaptiveQuizNextResponseSchema,
+  bankQuestionDetailSchema,
+  bankQuestionRowSchema,
+  contentPageMarkupSchema,
+  courseExportBundleSchema,
+  courseFileUploadResponseSchema,
+  courseGradingSettingsResultSchema,
+  courseOutcomeLinkSchema,
+  courseOutcomeSchema,
+  courseOutcomesListResponseSchema,
+  courseSchema,
+  courseScopedRolesResponseSchema,
+  courseStructureItemSchema,
+  courseStructureItemsResponseSchema,
+  courseSyllabusPayloadSchema,
+  courseGradebookGridResponseSchema,
+  courseMyGradesRawSchema,
+  enrollmentGroupsTreeResponseSchema,
+  generateQuizQuestionsResponseSchema,
+  generatedSyllabusSectionMarkdownSchema,
+  idResponseSchema,
+  parseApiResponse,
+  quizAdvanceResponseSchema,
+  quizAttemptStartResponseSchema,
+  quizAttemptsListPayloadSchema,
+  quizCodeRunResponseSchema,
+  quizCurrentQuestionPayloadSchema,
+  quizFocusLossEventsResponseSchema,
+  quizResultsPayloadSchema,
+  quizSubmitResponseSchema,
+  readerMarkupsListResponseSchema,
+  restoreVersionResponseSchema,
+  studentAccommodationRecordSchema,
+  studentAccommodationRecordsListSchema,
+  syllabusAcceptanceStatusSchema,
+  versionsListResponseSchema,
+} from './courses-api-schemas'
 
 import type { MarkdownThemeCustom } from './markdown-theme'
 
 export type LateSubmissionPolicy = 'allow' | 'penalty' | 'block'
 
-export type Course = {
+/** Mirrors server `models::course::CoursePublic` (API JSON for a course). */
+export type CoursePublic = {
   id: string
   courseCode: string
   title: string
@@ -77,6 +118,11 @@ export type CourseGradingSettings = {
 
 /** Normalizes GET/PUT `/grading` JSON (camelCase or snake_case) without throwing on odd shapes. */
 export function parseCourseGradingSettings(raw: unknown): CourseGradingSettings {
+  const built = buildCourseGradingSettings(raw)
+  return courseGradingSettingsResultSchema.parse(built)
+}
+
+function buildCourseGradingSettings(raw: unknown): CourseGradingSettings {
   if (!raw || typeof raw !== 'object') {
     return { gradingScale: 'letter_standard', assignmentGroups: [] }
   }
@@ -122,11 +168,11 @@ export function parseCourseGradingSettings(raw: unknown): CourseGradingSettings 
   return { gradingScale, assignmentGroups }
 }
 
-export async function fetchCourse(courseCode: string): Promise<Course> {
+export async function fetchCourse(courseCode: string): Promise<CoursePublic> {
   const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}`)
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as Course
+  return parseApiResponse('fetchCourse', courseSchema, raw)
 }
 
 /** Persist display order for the signed-in user's course catalog (`PUT /api/v1/courses/catalog-order`). */
@@ -144,7 +190,7 @@ export async function putCourseCatalogOrder(courseIds: string[]): Promise<void> 
 export async function patchCourseArchived(
   courseCode: string,
   archived: boolean,
-): Promise<Course> {
+): Promise<CoursePublic> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/archived`,
     {
@@ -155,24 +201,24 @@ export async function patchCourseArchived(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as Course
+  return parseApiResponse('patchCourseArchived', courseSchema, raw)
 }
 
 /** Permanently removes module content, syllabus, files, and related data; course shell remains. */
-export async function postFactoryResetCourse(courseCode: string): Promise<Course> {
+export async function postFactoryResetCourse(courseCode: string): Promise<CoursePublic> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/factory-reset`,
     { method: 'POST' },
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as Course
+  return parseApiResponse('postFactoryResetCourse', courseSchema, raw)
 }
 
 export async function patchCourseMarkdownTheme(
   courseCode: string,
   body: { preset: string; custom?: MarkdownThemeCustom | null },
-): Promise<Course> {
+): Promise<CoursePublic> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/markdown-theme`,
     {
@@ -186,7 +232,7 @@ export async function patchCourseMarkdownTheme(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as Course
+  return parseApiResponse('patchCourseMarkdownTheme', courseSchema, raw)
 }
 
 export type BankQuestionRow = {
@@ -268,7 +314,8 @@ export async function fetchCourseQuestions(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return Array.isArray(raw) ? (raw as BankQuestionRow[]) : []
+  if (!Array.isArray(raw)) return []
+  return raw.map((row, i) => parseApiResponse(`fetchCourseQuestions[${i}]`, bankQuestionRowSchema, row))
 }
 
 export async function fetchCourseQuestion(
@@ -280,7 +327,7 @@ export async function fetchCourseQuestion(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as BankQuestionDetail
+  return parseApiResponse('fetchCourseQuestion', bankQuestionDetailSchema, raw)
 }
 
 export async function createCourseQuestion(
@@ -297,7 +344,7 @@ export async function createCourseQuestion(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as BankQuestionDetail
+  return parseApiResponse('createCourseQuestion', bankQuestionDetailSchema, raw)
 }
 
 export async function updateCourseQuestion(
@@ -315,7 +362,7 @@ export async function updateCourseQuestion(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as BankQuestionDetail
+  return parseApiResponse('updateCourseQuestion', bankQuestionDetailSchema, raw)
 }
 
 export async function fetchCourseQuestionVersions(
@@ -327,8 +374,8 @@ export async function fetchCourseQuestionVersions(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const body = raw as { versions?: BankQuestionVersionSummary[] }
-  return Array.isArray(body.versions) ? body.versions : []
+  const body = parseApiResponse('fetchCourseQuestionVersions', versionsListResponseSchema, raw)
+  return body.versions ?? []
 }
 
 export async function restoreCourseQuestionVersion(
@@ -347,7 +394,7 @@ export async function restoreCourseQuestionVersion(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const body = raw as { newVersionNumber?: number }
+  const body = parseApiResponse('restoreCourseQuestionVersion', restoreVersionResponseSchema, raw)
   return typeof body.newVersionNumber === 'number' ? body.newVersionNumber : versionNumber
 }
 
@@ -360,7 +407,7 @@ export async function patchCourseFeatures(
     questionBankEnabled: boolean
     lockdownModeEnabled?: boolean
   },
-): Promise<Course> {
+): Promise<CoursePublic> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/features`,
     {
@@ -377,7 +424,7 @@ export async function patchCourseFeatures(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as Course
+  return parseApiResponse('patchCourseFeatures', courseSchema, raw)
 }
 
 async function parseJson(res: Response): Promise<unknown> {
@@ -402,24 +449,13 @@ export async function uploadCourseFile(courseCode: string, file: File): Promise<
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const o = raw as {
-    id: string
-    content_path: string
-    mime_type: string
-    byte_size: number
-  }
-  return {
-    id: o.id,
-    contentPath: o.content_path,
-    mimeType: o.mime_type,
-    byteSize: o.byte_size,
-  }
+  return parseApiResponse('uploadCourseFile', courseFileUploadResponseSchema, raw)
 }
 
 export async function createCourse(body: {
   title: string
   description: string
-}): Promise<Course> {
+}): Promise<CoursePublic> {
   const res = await authorizedFetch('/api/v1/courses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -427,7 +463,7 @@ export async function createCourse(body: {
   })
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as Course
+  return parseApiResponse('createCourse', courseSchema, raw)
 }
 
 /**
@@ -503,7 +539,7 @@ export async function fetchEnrollmentGroupsTree(
   )
   const raw: unknown = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as EnrollmentGroupsTreeResponse
+  return parseApiResponse('fetchEnrollmentGroupsTree', enrollmentGroupsTreeResponseSchema, raw)
 }
 
 export async function postEnrollmentGroupSet(courseCode: string, name: string): Promise<string> {
@@ -517,9 +553,8 @@ export async function postEnrollmentGroupSet(courseCode: string, name: string): 
   )
   const raw: unknown = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const id = (raw as { id?: string }).id
-  if (!id) throw new Error('Invalid response.')
-  return id
+  const parsed = parseApiResponse('postEnrollmentGroupSet', idResponseSchema, raw)
+  return parsed.id
 }
 
 export async function postEnrollmentGroupInSet(
@@ -537,9 +572,8 @@ export async function postEnrollmentGroupInSet(
   )
   const raw: unknown = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const id = (raw as { id?: string }).id
-  if (!id) throw new Error('Invalid response.')
-  return id
+  const parsed = parseApiResponse('postEnrollmentGroupInSet', idResponseSchema, raw)
+  return parsed.id
 }
 
 export async function patchEnrollmentGroupSetName(
@@ -671,7 +705,8 @@ export function viewerShouldShowMyGradesNav(
   if (viewerEnrollmentRoles == null) return false
   if (!viewerEnrollmentRoles.length) return false
   const roles = viewerEnrollmentRoles.map((r) => r.trim().toLowerCase())
-  return roles.includes('student') && !roles.some((r) => r === 'teacher' || r === 'instructor' || r === 'ta')
+  // Teacher preview: show when the viewer has a learner enrollment, including dual student+staff.
+  return roles.includes('student')
 }
 
 export type CourseStructureItem = {
@@ -709,7 +744,7 @@ export async function fetchCourseStructure(courseCode: string): Promise<CourseSt
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const body = raw as { items: CourseStructureItem[] }
+  const body = parseApiResponse('fetchCourseStructure', courseStructureItemsResponseSchema, raw)
   return body.items
 }
 
@@ -764,18 +799,7 @@ export async function fetchCourseGradebookGrid(courseCode: string): Promise<Cour
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const body = raw as {
-    students?: CourseGradebookGridStudent[]
-    columns?: CourseGradebookGridColumn[]
-    grades?: Record<string, Record<string, string>>
-    rubricScores?: Record<string, Record<string, Record<string, string>>>
-  }
-  return {
-    students: body.students ?? [],
-    columns: body.columns ?? [],
-    grades: body.grades,
-    rubricScores: body.rubricScores,
-  }
+  return parseApiResponse('fetchCourseGradebookGrid', courseGradebookGridResponseSchema, raw)
 }
 
 /** GET `/my-grades` — current user’s grades (enrolled as student only). */
@@ -791,11 +815,7 @@ export async function fetchCourseMyGrades(courseCode: string): Promise<CourseMyG
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const body = raw as {
-    columns?: CourseGradebookGridColumn[]
-    grades?: Record<string, string>
-    assignmentGroups?: unknown
-  }
+  const body = parseApiResponse('fetchCourseMyGrades', courseMyGradesRawSchema, raw)
   const parsed = parseCourseGradingSettings({ assignmentGroups: body.assignmentGroups })
   return {
     columns: body.columns ?? [],
@@ -839,7 +859,7 @@ export async function fetchCourseArchivedStructure(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const body = raw as { items: CourseStructureItem[] }
+  const body = parseApiResponse('fetchCourseArchivedStructure', courseStructureItemsResponseSchema, raw)
   return body.items
 }
 
@@ -857,7 +877,7 @@ export async function reorderCourseStructure(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const data = raw as { items: CourseStructureItem[] }
+  const data = parseApiResponse('reorderCourseStructure', courseStructureItemsResponseSchema, raw)
   return data.items
 }
 
@@ -876,7 +896,7 @@ export async function patchCourseStructureItem(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseStructureItem
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
 /** Reschedule due date only; server requires `course:<code>:items:create`. */
@@ -935,7 +955,7 @@ export async function patchCourseModule(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseStructureItem
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
 export async function createCourseModule(
@@ -952,7 +972,7 @@ export async function createCourseModule(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseStructureItem
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
 export async function createModuleHeading(
@@ -970,7 +990,7 @@ export async function createModuleHeading(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseStructureItem
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
 export type ModuleContentPagePayload = {
@@ -1074,7 +1094,7 @@ export async function createModuleAssignment(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseStructureItem
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
 export async function createModuleContentPage(
@@ -1092,7 +1112,7 @@ export async function createModuleContentPage(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseStructureItem
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
 export async function createModuleQuiz(
@@ -1110,7 +1130,7 @@ export async function createModuleQuiz(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseStructureItem
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
 export async function createModuleExternalLink(
@@ -1128,7 +1148,7 @@ export async function createModuleExternalLink(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseStructureItem
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
 export type ModuleExternalLinkPayload = {
@@ -1480,7 +1500,7 @@ export async function generateModuleQuizQuestions(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as { questions: QuizQuestion[] }
+  return parseApiResponse('generateModuleQuizQuestions', generateQuizQuestionsResponseSchema, raw)
 }
 
 export type AdaptiveQuizHistoryTurn = {
@@ -1527,7 +1547,7 @@ export async function postAdaptiveQuizNext(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as AdaptiveQuizNextResponse
+  return parseApiResponse('postAdaptiveQuizNext', adaptiveQuizNextResponseSchema, raw)
 }
 
 /** Pick a choice index for automated adaptive runs (highest model weight, tie-break first). */
@@ -1639,7 +1659,7 @@ export async function postQuizStart(
       : typeof o.gradeAttemptPolicy === 'string'
         ? o.gradeAttemptPolicy
         : 'latest'
-  return {
+  return quizAttemptStartResponseSchema.parse({
     attemptId: String(o.attemptId ?? ''),
     attemptNumber: typeof o.attemptNumber === 'number' ? o.attemptNumber : 1,
     startedAt: String(o.startedAt ?? ''),
@@ -1657,7 +1677,7 @@ export async function postQuizStart(
         : o.remainingAttempts === null
           ? null
           : undefined,
-  }
+  })
 }
 
 export type QuizAttemptSummaryApi = {
@@ -1689,7 +1709,7 @@ export async function fetchQuizAttemptsList(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as QuizAttemptsListPayload
+  return parseApiResponse('fetchQuizAttemptsList', quizAttemptsListPayloadSchema, raw)
 }
 
 export async function putEnrollmentQuizOverride(
@@ -1747,7 +1767,7 @@ export async function fetchQuizCurrentQuestion(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as QuizCurrentQuestionPayload
+  return parseApiResponse('fetchQuizCurrentQuestion', quizCurrentQuestionPayloadSchema, raw)
 }
 
 export async function postQuizAdvance(
@@ -1766,7 +1786,7 @@ export async function postQuizAdvance(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as { locked: boolean; currentQuestionIndex: number; completed: boolean }
+  return parseApiResponse('postQuizAdvance', quizAdvanceResponseSchema, raw)
 }
 
 export type QuizCodeRunResult = {
@@ -1806,7 +1826,7 @@ export async function postQuizQuestionRun(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as QuizCodeRunResponse
+  return parseApiResponse('postQuizQuestionRun', quizCodeRunResponseSchema, raw)
 }
 
 export async function postQuizFocusLoss(
@@ -1845,11 +1865,7 @@ export async function fetchQuizFocusLossEvents(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const o = raw as { events?: QuizFocusLossEventRow[]; total?: number }
-  return {
-    events: Array.isArray(o.events) ? o.events : [],
-    total: typeof o.total === 'number' ? o.total : 0,
-  }
+  return parseApiResponse('fetchQuizFocusLossEvents', quizFocusLossEventsResponseSchema, raw)
 }
 
 export type QuizQuestionResponseItem = {
@@ -1894,7 +1910,7 @@ export async function postQuizSubmit(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as QuizSubmitResponse
+  return parseApiResponse('postQuizSubmit', quizSubmitResponseSchema, raw)
 }
 
 export type QuizResultsQuestionResult = {
@@ -1942,7 +1958,7 @@ export async function fetchQuizResults(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as QuizResultsPayload
+  return parseApiResponse('fetchQuizResults', quizResultsPayloadSchema, raw)
 }
 
 export type AccommodationSummaryPayload = {
@@ -1958,7 +1974,7 @@ export async function fetchEnrollmentAccommodationSummary(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as AccommodationSummaryPayload
+  return parseApiResponse('fetchEnrollmentAccommodationSummary', accommodationSummaryPayloadSchema, raw)
 }
 
 export type AccommodationUserSearchHit = {
@@ -1975,7 +1991,7 @@ export async function searchAccommodationUsers(q: string): Promise<Accommodation
   const res = await authorizedFetch(`/api/v1/accommodations/users?${params}`)
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const o = raw as { users?: AccommodationUserSearchHit[] }
+  const o = parseApiResponse('searchAccommodationUsers', accommodationUsersSearchResponseSchema, raw)
   return o.users ?? []
 }
 
@@ -2014,7 +2030,7 @@ export async function fetchStudentAccommodationsForUser(
   const res = await authorizedFetch(`/api/v1/users/${encodeURIComponent(userId)}/accommodations`)
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as StudentAccommodationRecord[]
+  return parseApiResponse('fetchStudentAccommodationsForUser', studentAccommodationRecordsListSchema, raw)
 }
 
 export async function createStudentAccommodation(
@@ -2028,7 +2044,7 @@ export async function createStudentAccommodation(
   })
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as StudentAccommodationRecord
+  return parseApiResponse('createStudentAccommodation', studentAccommodationRecordSchema, raw)
 }
 
 export type UpdateStudentAccommodationBody = {
@@ -2056,7 +2072,7 @@ export async function updateStudentAccommodation(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as StudentAccommodationRecord
+  return parseApiResponse('updateStudentAccommodation', studentAccommodationRecordSchema, raw)
 }
 
 export async function deleteStudentAccommodation(userId: string, accommodationId: string): Promise<void> {
@@ -2137,7 +2153,7 @@ export async function fetchReaderMarkups(
   const res = await authorizedFetch(readerMarkupsListPath(courseCode, target))
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const body = raw as { markups?: ContentPageMarkup[] }
+  const body = parseApiResponse('fetchReaderMarkups', readerMarkupsListResponseSchema, raw)
   return body.markups ?? []
 }
 
@@ -2158,7 +2174,7 @@ export async function postReaderMarkup(
   })
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as ContentPageMarkup
+  return parseApiResponse('postReaderMarkup', contentPageMarkupSchema, raw)
 }
 
 export async function deleteReaderMarkup(
@@ -2303,7 +2319,7 @@ export async function fetchCourseSyllabus(courseCode: string): Promise<CourseSyl
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseSyllabusPayload
+  return parseApiResponse('fetchCourseSyllabus', courseSyllabusPayloadSchema, raw)
 }
 
 export async function fetchSyllabusAcceptanceStatus(
@@ -2314,7 +2330,7 @@ export async function fetchSyllabusAcceptanceStatus(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as SyllabusAcceptanceStatus
+  return parseApiResponse('fetchSyllabusAcceptanceStatus', syllabusAcceptanceStatusSchema, raw)
 }
 
 export async function postSyllabusAccept(courseCode: string): Promise<void> {
@@ -2342,7 +2358,7 @@ export async function patchCourseSyllabus(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseSyllabusPayload
+  return parseApiResponse('patchCourseSyllabus', courseSyllabusPayloadSchema, raw)
 }
 
 export async function generateSyllabusSectionMarkdown(
@@ -2367,7 +2383,7 @@ export async function generateSyllabusSectionMarkdown(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as { markdown: string }
+  return parseApiResponse('generateSyllabusSectionMarkdown', generatedSyllabusSectionMarkdownSchema, raw)
 }
 
 export async function fetchCourseGradingSettings(courseCode: string): Promise<CourseGradingSettings> {
@@ -2450,7 +2466,7 @@ export async function fetchCourseOutcomes(courseCode: string): Promise<CourseOut
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseOutcomesListResponse
+  return parseApiResponse('fetchCourseOutcomes', courseOutcomesListResponseSchema, raw)
 }
 
 export async function createCourseOutcome(
@@ -2464,7 +2480,7 @@ export async function createCourseOutcome(
   })
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseOutcome
+  return parseApiResponse('createCourseOutcome', courseOutcomeSchema, raw)
 }
 
 export async function patchCourseOutcome(
@@ -2482,7 +2498,7 @@ export async function patchCourseOutcome(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseOutcome
+  return parseApiResponse('patchCourseOutcome', courseOutcomeSchema, raw)
 }
 
 export async function deleteCourseOutcome(courseCode: string, outcomeId: string): Promise<void> {
@@ -2517,7 +2533,7 @@ export async function addCourseOutcomeLink(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseOutcomeLink
+  return parseApiResponse('addCourseOutcomeLink', courseOutcomeLinkSchema, raw)
 }
 
 export async function deleteCourseOutcomeLink(
@@ -2550,7 +2566,7 @@ export async function patchCourseStructureItemAssignmentGroup(
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseStructureItem
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
 export async function fetchCourseScopedRoles(courseCode: string): Promise<CourseScopedAppRole[]> {
@@ -2559,7 +2575,7 @@ export async function fetchCourseScopedRoles(courseCode: string): Promise<Course
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const data = raw as { roles?: CourseScopedAppRole[] }
+  const data = parseApiResponse('fetchCourseScopedRoles', courseScopedRolesResponseSchema, raw)
   return data.roles ?? []
 }
 
@@ -2598,7 +2614,7 @@ export async function fetchCourseExport(courseCode: string): Promise<CourseExpor
   const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/export`)
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  return raw as CourseExportBundle
+  return parseApiResponse('fetchCourseExport', courseExportBundleSchema, raw)
 }
 
 export async function postCourseImport(

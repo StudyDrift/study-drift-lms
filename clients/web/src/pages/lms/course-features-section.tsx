@@ -1,12 +1,12 @@
 import { useCallback, useState } from 'react'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { patchCourseFeatures } from '../../lib/courses-api'
-import type { Course } from './courses'
+import type { CoursePublic } from './courses'
 
 type Props = {
   courseCode: string
-  course: Course
-  onCourseUpdated: (c: Course) => void
+  course: CoursePublic
+  onCourseUpdated: (c: CoursePublic) => void
 }
 
 function FeatureToggleRow({

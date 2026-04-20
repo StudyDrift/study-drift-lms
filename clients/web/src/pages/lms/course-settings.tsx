@@ -6,7 +6,7 @@ import { usePermissions } from '../../context/use-permissions'
 import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { courseItemCreatePermission, patchCourseMarkdownTheme } from '../../lib/courses-api'
-import type { Course } from './courses'
+import type { CoursePublic } from './courses'
 import {
   MARKDOWN_THEME_PRESET_META,
   markdownThemeCustomSeed,
@@ -111,7 +111,7 @@ export default function CourseSettings() {
   const { courseCode } = useParams<{ courseCode: string }>()
   const { allows, loading: permLoading } = usePermissions()
   const location = useLocation()
-  const [course, setCourse] = useState<Course | null>(null)
+  const [course, setCourse] = useState<CoursePublic | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -150,7 +150,7 @@ export default function CourseSettings() {
   const [mdThemeMessage, setMdThemeMessage] = useState<string | null>(null)
   const [customDraft, setCustomDraft] = useState<MarkdownThemeCustom>(markdownThemeCustomSeed)
 
-  const applyScheduleStateFromCourse = useCallback((c: Course) => {
+  const applyScheduleStateFromCourse = useCallback((c: CoursePublic) => {
     setStartsAt(isoToDatetimeLocal(c.startsAt))
     setEndsAt(isoToDatetimeLocal(c.endsAt))
     setVisibleFrom(isoToDatetimeLocal(c.visibleFrom))
@@ -175,7 +175,7 @@ export default function CourseSettings() {
         setLoadError(readApiErrorMessage(raw))
         return
       }
-      const c = raw as Course
+      const c = raw as CoursePublic
       setCourse(c)
       setTitle(c.title)
       setDescription(c.description)
@@ -281,7 +281,7 @@ export default function CourseSettings() {
         void loadCourse()
         return
       }
-      const updated = raw as Course
+      const updated = raw as CoursePublic
       setCourse(updated)
       setPublished(updated.published)
       applyScheduleStateFromCourse(updated)
@@ -369,7 +369,7 @@ export default function CourseSettings() {
         setPositionMessage(readApiErrorMessage(raw))
         return
       }
-      const updated = raw as Course
+      const updated = raw as CoursePublic
       setCourse(updated)
       setPositionSaveStatus('idle')
       setPositionMessage('Banner position saved.')
@@ -410,7 +410,7 @@ export default function CourseSettings() {
         setGenMessage(readApiErrorMessage(raw))
         return
       }
-      const updated = raw as Course
+      const updated = raw as CoursePublic
       setCourse(updated)
       setPreviewUrl(updated.heroImageUrl ?? pendingHeroUrl)
       setPendingHeroUrl(null)

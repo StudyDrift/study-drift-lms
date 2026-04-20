@@ -42,6 +42,10 @@ use crate::models::course_structure::{
     ModuleExternalLinkResponse, PatchCourseModuleRequest, PatchModuleExternalLinkRequest,
     PatchStructureItemDueAtRequest, PatchStructureItemRequest, ReorderCourseStructureRequest,
 };
+use crate::models::course_outcomes_api::{
+    CourseOutcomeApi, CourseOutcomeLinkApi, CourseOutcomesListResponse, PatchCourseOutcomeRequest,
+    PostCourseOutcomeLinkRequest, PostCourseOutcomeRequest,
+};
 use crate::models::course_syllabus::{
     CourseSyllabusResponse, GenerateSyllabusSectionRequest, GenerateSyllabusSectionResponse,
     SyllabusAcceptanceStatusResponse, SyllabusSection, UpdateCourseSyllabusRequest,
@@ -79,18 +83,19 @@ use crate::repos::quiz_attempts;
 use crate::repos::rbac;
 use crate::repos::syllabus_acceptance;
 use crate::repos::syllabus_markups;
-use crate::repos::user;
 use crate::repos::user_ai_settings;
 use crate::repos::user_audit;
 use crate::services::adaptive_quiz_ai;
 use crate::services::assignment_rubric_ai;
 use crate::services::question_bank;
 use crate::services::accommodations;
-use crate::services::code_execution::{self, CodeExecutionResult, CodeTestCase, ExecuteCodeRequest};
+use crate::services::code_execution::{self, CodeExecutionResult, ExecuteCodeRequest};
 use crate::services::quiz_attempt_grading;
 use crate::services::quiz_lockdown;
+use crate::services::enrollments as enrollments_service;
+use crate::services::outcomes as outcomes_service;
+use crate::services::quiz_submission;
 use crate::services::ai::OpenRouterError;
-use crate::services::auth;
 use crate::services::canvas_course_import;
 use crate::services::course_export_import;
 use crate::services::quiz_generation_ai;
@@ -424,22 +429,6 @@ pub fn router() -> Router<AppState> {
             "/api/v1/courses/{course_code}/structure/items/{item_id}",
             patch(patch_structure_item_handler).delete(archive_structure_item_handler),
         )
-}
-
-fn parse_email_list(raw: &str) -> Vec<String> {
-    use std::collections::HashSet;
-    let mut seen = HashSet::new();
-    let mut out = Vec::new();
-    for part in raw.split(|c: char| matches!(c, ',' | ';' | '\n' | '\r') || c.is_whitespace()) {
-        let e = auth::normalize_email(part);
-        if e.is_empty() || !e.contains('@') {
-            continue;
-        }
-        if seen.insert(e.clone()) {
-            out.push(e);
-        }
-    }
-    out
 }
 
 async fn require_course_access(
@@ -1152,7 +1141,7 @@ async fn create_handler(
     }
 
     let row =
-        course::create_course(&state.pool, title, req.description.trim(), user.user_id).await?;
+        course::insert_course(&state.pool, title, req.description.trim(), user.user_id).await?;
     Ok(Json(row))
 }
 
@@ -2732,41 +2721,6 @@ fn quiz_access_code_matches(
     }
 }
 
-/// Applies late penalty to gradebook-scaled quiz points when policy is `penalty` and submission is late.
-async fn academic_integrity_from_focus_loss(
-    mode: &str,
-    threshold: Option<i32>,
-    pool: &sqlx::PgPool,
-    attempt_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    if mode != quiz_lockdown::LOCKDOWN_KIOSK {
-        return Ok(false);
-    }
-    let Some(t) = threshold.filter(|t| *t >= 1) else {
-        return Ok(false);
-    };
-    let n = quiz_attempts::count_focus_loss_events(pool, attempt_id).await?;
-    Ok(n > t as i64)
-}
-
-fn quiz_gradebook_points_with_late_policy(
-    gb: f64,
-    quiz_row: &course_module_quizzes::CourseItemQuizRow,
-    due_effective: Option<DateTime<Utc>>,
-    submitted_at: DateTime<Utc>,
-) -> f64 {
-    if quiz_row.late_submission_policy != "penalty" {
-        return gb;
-    }
-    if !quiz_attempt_grading::quiz_submission_is_late(due_effective, submitted_at) {
-        return gb;
-    }
-    match quiz_row.late_penalty_percent {
-        Some(p) => quiz_attempt_grading::apply_late_penalty_to_gradebook_points(gb, p),
-        None => gb,
-    }
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct QuizCodeRunRequest {
@@ -2785,13 +2739,6 @@ struct QuizCodeRunResponse {
     points_possible: f64,
 }
 
-fn parse_code_test_cases(q: &QuizQuestion) -> Vec<CodeTestCase> {
-    q.type_config
-        .get("testCases")
-        .and_then(|v| serde_json::from_value::<Vec<CodeTestCase>>(v.clone()).ok())
-        .unwrap_or_default()
-}
-
 fn check_code_run_rate_limit(user_id: Uuid) -> Result<(), AppError> {
     let now = Utc::now();
     let cutoff = now - chrono::Duration::minutes(1);
@@ -2808,54 +2755,6 @@ fn check_code_run_rate_limit(user_id: Uuid) -> Result<(), AppError> {
     }
     runs.push(now);
     Ok(())
-}
-
-async fn grade_question_with_code_support(
-    q: &QuizQuestion,
-    resp: &QuizQuestionResponseItem,
-) -> Result<(f64, f64, Option<bool>), AppError> {
-    if q.question_type != "code" {
-        return Ok(quiz_attempt_grading::grade_static_question(q, resp));
-    }
-    let max = if q.points < 0 { 0.0 } else { q.points as f64 };
-    let Some(code_submission) = resp.code_submission.as_ref() else {
-        return Ok((0.0, max, Some(false)));
-    };
-    code_execution::validate_code_submission_size(&code_submission.code)?;
-    let test_cases = parse_code_test_cases(q);
-    if test_cases.is_empty() {
-        return Ok((0.0, max, None));
-    }
-    let language_id = q
-        .type_config
-        .get("languageId")
-        .and_then(|v| v.as_i64())
-        .map(|v| v as i32)
-        .or_else(|| {
-            q.type_config
-                .get("language")
-                .and_then(|v| v.as_str())
-                .map(code_execution::language_id_from_name)
-        })
-        .unwrap_or_else(|| code_execution::language_id_from_name(&code_submission.language));
-    let mut passed = 0usize;
-    for tc in &test_cases {
-        let res = code_execution::run_code(ExecuteCodeRequest {
-            language_id,
-            source_code: code_submission.code.clone(),
-            stdin: tc.input.clone(),
-            expected_output: tc.expected_output.clone(),
-            time_limit_ms: tc.time_limit_ms,
-            memory_limit_kb: tc.memory_limit_kb,
-        })
-        .await?;
-        if res.passed {
-            passed += 1;
-        }
-    }
-    let ratio = passed as f64 / test_cases.len() as f64;
-    let pts = (max * ratio).clamp(0.0, max);
-    Ok((pts, max, Some((ratio - 1.0).abs() < 1e-9)))
 }
 
 async fn module_quiz_start_handler(
@@ -2980,7 +2879,7 @@ async fn module_quiz_start_handler(
         row.time_limit_minutes,
         acc.time_multiplier,
     );
-    let created = quiz_attempts::create_attempt(
+    let created = quiz_attempts::insert_attempt(
         &state.pool,
         course_id,
         item_id,
@@ -3076,339 +2975,17 @@ async fn module_quiz_submit_handler(
         return Err(AppError::NotFound);
     };
 
-    let Some(att) = quiz_attempts::get_attempt(&state.pool, req.attempt_id).await? else {
-        return Err(AppError::NotFound);
-    };
-    if att.student_user_id != user.user_id
-        || att.course_id != course_id
-        || att.structure_item_id != item_id
-        || att.status != "in_progress"
-    {
-        return Err(AppError::Forbidden);
-    }
-
-    let shift_ctx =
-        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id)
-            .await?;
-    let due_effective = quiz_attempt_grading::quiz_effective_due_at(quiz_row.due_at, shift_ctx.as_ref());
-    let now = Utc::now();
-    accommodations::require_attempt_within_deadline(&att, now)?;
-    if quiz_row.late_submission_policy == "block"
-        && quiz_attempt_grading::quiz_submission_is_late(due_effective, now)
-    {
-        return Err(AppError::invalid_input(
-            "This quiz does not accept submissions after the due date.",
-        ));
-    }
-
-    let mut tx = state.pool.begin().await?;
-
-    if quiz_row.is_adaptive {
-        let hist = req.adaptive_history.ok_or_else(|| {
-            AppError::invalid_input("adaptiveHistory is required for adaptive quizzes.")
-        })?;
-        if hist.len() != quiz_row.adaptive_question_count as usize {
-            return Err(AppError::invalid_input(
-                "Adaptive history length does not match this quiz configuration.",
-            ));
-        }
-        quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
-        let hist_json = serde_json::to_value(&hist).map_err(|e| AppError::invalid_input(e.to_string()))?;
-        let mut earned = 0.0_f64;
-        let mut possible = 0.0_f64;
-        for (i, turn) in hist.iter().enumerate() {
-            let max_pts = quiz_attempt_grading::adaptive_turn_max_points(turn);
-            possible += max_pts;
-            let ok = quiz_attempt_grading::adaptive_turn_is_correct(turn);
-            let pts = if ok { max_pts } else { 0.0 };
-            earned += pts;
-            let rj = serde_json::json!({
-                "prompt": turn.prompt,
-                "questionType": turn.question_type,
-                "choices": turn.choices,
-                "choiceWeights": turn.choice_weights,
-                "selectedChoiceIndex": turn.selected_choice_index,
-            });
-            quiz_attempts::insert_response(
-                &mut *tx,
-                att.id,
-                i as i32,
-                None,
-                &turn.question_type,
-                Some(turn.prompt.as_str()),
-                &rj,
-                Some(ok),
-                Some(pts),
-                max_pts,
-                false,
-            )
-            .await?;
-        }
-        let score_pct = if possible > 0.0 {
-            ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
-        } else {
-            0.0
-        };
-        let ok = quiz_attempts::finalize_attempt(
-            &mut *tx,
-            att.id,
-            now,
-            earned,
-            possible,
-            score_pct,
-            Some(&hist_json),
-            false,
-        )
-        .await?;
-        if !ok {
-            return Err(AppError::invalid_input(
-                "This attempt was already submitted.",
-            ));
-        }
-        tx.commit().await?;
-
-        if quiz_row.show_score_timing != "manual" {
-            let attempts = quiz_attempts::list_submitted_attempts_for_item_student(
-                &state.pool,
-                course_id,
-                item_id,
-                user.user_id,
-            )
-            .await?;
-            if let Some((e, p)) = quiz_attempt_grading::pick_policy_points(&attempts, &quiz_row.grade_attempt_policy)
-            {
-                let gb = quiz_attempt_grading::points_for_gradebook(e, p, quiz_row.points_worth);
-                let gb = quiz_gradebook_points_with_late_policy(gb, &quiz_row, due_effective, now);
-                course_grades::upsert_points(&state.pool, course_id, user.user_id, item_id, gb).await?;
-            }
-        }
-
-        return Ok(Json(QuizSubmitResponse {
-            attempt_id: att.id,
-            points_earned: earned,
-            points_possible: possible,
-            score_percent: score_pct,
-        }));
-    }
-
-    let responses = req.responses.clone().unwrap_or_default();
-
-    let resolved = question_bank::resolve_delivery_questions(
+    let body = quiz_submission::submit_module_quiz(
         &state.pool,
+        &course_row,
         course_id,
         item_id,
-        course_row.question_bank_enabled,
-        &quiz_row.questions_json.0,
-        Some(att.id),
-        Some(user.user_id),
-        false,
+        user.user_id,
+        &quiz_row,
+        &req,
     )
     .await?;
-    let bank: Vec<QuizQuestion> = resolved.questions;
-    let mut by_id: HashMap<String, &QuizQuestion> = HashMap::new();
-    for q in &bank {
-        by_id.insert(q.id.clone(), q);
-    }
-
-    let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
-
-    let (earned, possible, score_pct, academic_integrity_flag) = if quiz_lockdown::server_enforces_forward_lockdown(mode)
-    {
-        if !responses.is_empty() {
-            return Err(AppError::invalid_input(
-                "For lockdown-mode quizzes, omit responses on submit; answers are taken from your saved progress.",
-            ));
-        }
-        let db_rows = quiz_attempts::list_responses(&state.pool, att.id).await?;
-        if db_rows.len() != bank.len() {
-            return Err(AppError::invalid_input(
-                "Complete each question in order before submitting this quiz.",
-            ));
-        }
-        for (i, db_row) in db_rows.iter().enumerate() {
-            if db_row.question_index != i as i32 || !db_row.locked {
-                return Err(AppError::invalid_input(
-                    "Quiz responses are incomplete. Use Next after each question, then submit.",
-                ));
-            }
-        }
-        quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
-        let mut earned = 0.0_f64;
-        let mut possible = 0.0_f64;
-        for (i, db_row) in db_rows.iter().enumerate() {
-            let qid = db_row.question_id.as_deref().ok_or_else(|| {
-                AppError::invalid_input("Missing question id on saved response.")
-            })?;
-            let q = by_id
-                .get(qid)
-                .ok_or_else(|| AppError::invalid_input("Invalid question id."))?;
-            let resp_item: QuizQuestionResponseItem =
-                serde_json::from_value(db_row.response_json.clone()).map_err(|e| {
-                    AppError::invalid_input(format!("Could not read saved answer: {e}"))
-                })?;
-            let (pts, max_pts, is_ok) = grade_question_with_code_support(q, &resp_item).await?;
-            earned += pts;
-            possible += max_pts;
-            let rj = serde_json::json!({
-                "selectedChoiceIndex": resp_item.selected_choice_index,
-                "selectedChoiceIndices": resp_item.selected_choice_indices,
-                "textAnswer": resp_item.text_answer,
-                "matchingPairs": &resp_item.matching_pairs,
-                "orderingSequence": &resp_item.ordering_sequence,
-                "hotspotClick": &resp_item.hotspot_click,
-                "numericValue": &resp_item.numeric_value,
-                "formulaLatex": &resp_item.formula_latex,
-                "codeSubmission": &resp_item.code_submission,
-                "fileKey": &resp_item.file_key,
-                "audioKey": &resp_item.audio_key,
-                "videoKey": &resp_item.video_key,
-            });
-            quiz_attempts::insert_response(
-                &mut *tx,
-                att.id,
-                i as i32,
-                Some(qid),
-                &q.question_type,
-                Some(q.prompt.as_str()),
-                &rj,
-                is_ok,
-                Some(pts),
-                max_pts,
-                false,
-            )
-            .await?;
-        }
-        let score_pct = if possible > 0.0 {
-            ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
-        } else {
-            0.0
-        };
-        let academic_integrity_flag = academic_integrity_from_focus_loss(
-            mode,
-            quiz_row.focus_loss_threshold,
-            &state.pool,
-            att.id,
-        )
-        .await?;
-        (earned, possible, score_pct, academic_integrity_flag)
-    } else {
-        if responses.is_empty() {
-            return Err(AppError::invalid_input(
-                "responses is required for non-adaptive quizzes.",
-            ));
-        }
-        if !resolved.uses_server_question_sampling {
-            if let Some(pool_n) = quiz_row.random_question_pool_count {
-                if pool_n >= 1 && responses.len() != pool_n as usize {
-                    return Err(AppError::invalid_input(
-                        "Submitted response count does not match the configured question pool size.",
-                    ));
-                }
-            }
-        }
-        for r in &responses {
-            if !by_id.contains_key(&r.question_id) {
-                return Err(AppError::invalid_input(
-                    "One or more question ids are not part of this quiz.",
-                ));
-            }
-        }
-
-        quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
-
-        let mut earned = 0.0_f64;
-        let mut possible = 0.0_f64;
-        for (i, resp_item) in responses.iter().enumerate() {
-            let q = by_id
-                .get(&resp_item.question_id)
-                .ok_or_else(|| AppError::invalid_input("Invalid question id."))?;
-            let (pts, max_pts, is_ok) = grade_question_with_code_support(q, resp_item).await?;
-            earned += pts;
-            possible += max_pts;
-            let rj = serde_json::json!({
-                "selectedChoiceIndex": resp_item.selected_choice_index,
-                "selectedChoiceIndices": resp_item.selected_choice_indices,
-                "textAnswer": resp_item.text_answer,
-                "matchingPairs": &resp_item.matching_pairs,
-                "orderingSequence": &resp_item.ordering_sequence,
-                "hotspotClick": &resp_item.hotspot_click,
-                "numericValue": &resp_item.numeric_value,
-                "formulaLatex": &resp_item.formula_latex,
-                "codeSubmission": &resp_item.code_submission,
-                "fileKey": &resp_item.file_key,
-                "audioKey": &resp_item.audio_key,
-                "videoKey": &resp_item.video_key,
-            });
-            quiz_attempts::insert_response(
-                &mut *tx,
-                att.id,
-                i as i32,
-                Some(resp_item.question_id.as_str()),
-                &q.question_type,
-                Some(q.prompt.as_str()),
-                &rj,
-                is_ok,
-                Some(pts),
-                max_pts,
-                false,
-            )
-            .await?;
-        }
-
-        let score_pct = if possible > 0.0 {
-            ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
-        } else {
-            0.0
-        };
-        let academic_integrity_flag = academic_integrity_from_focus_loss(
-            mode,
-            quiz_row.focus_loss_threshold,
-            &state.pool,
-            att.id,
-        )
-        .await?;
-        (earned, possible, score_pct, academic_integrity_flag)
-    };
-
-    let ok = quiz_attempts::finalize_attempt(
-        &mut *tx,
-        att.id,
-        now,
-        earned,
-        possible,
-        score_pct,
-        None,
-        academic_integrity_flag,
-    )
-    .await?;
-    if !ok {
-        return Err(AppError::invalid_input(
-            "This attempt was already submitted.",
-        ));
-    }
-    tx.commit().await?;
-
-    if quiz_row.show_score_timing != "manual" {
-        let attempts = quiz_attempts::list_submitted_attempts_for_item_student(
-            &state.pool,
-            course_id,
-            item_id,
-            user.user_id,
-        )
-        .await?;
-        if let Some((e, p)) = quiz_attempt_grading::pick_policy_points(&attempts, &quiz_row.grade_attempt_policy) {
-            let gb = quiz_attempt_grading::points_for_gradebook(e, p, quiz_row.points_worth);
-            let gb = quiz_gradebook_points_with_late_policy(gb, &quiz_row, due_effective, now);
-            course_grades::upsert_points(&state.pool, course_id, user.user_id, item_id, gb).await?;
-        }
-    }
-
-    Ok(Json(QuizSubmitResponse {
-        attempt_id: att.id,
-        points_earned: earned,
-        points_possible: possible,
-        score_percent: score_pct,
-    }))
+    Ok(Json(body))
 }
 
 async fn module_quiz_results_handler(
@@ -4069,118 +3646,6 @@ async fn grading_put_handler(
     }
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CourseOutcomesListResponse {
-    enrolled_learners: i32,
-    outcomes: Vec<CourseOutcomeApi>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CourseOutcomeApi {
-    id: Uuid,
-    title: String,
-    description: String,
-    sort_order: i32,
-    rollup_avg_score_percent: Option<f32>,
-    links: Vec<CourseOutcomeLinkApi>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CourseOutcomeLinkApi {
-    id: Uuid,
-    structure_item_id: Uuid,
-    target_kind: String,
-    quiz_question_id: String,
-    measurement_level: String,
-    intensity_level: String,
-    item_title: String,
-    item_kind: String,
-    progress: course_outcomes::OutcomeLinkProgress,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PostCourseOutcomeRequest {
-    title: String,
-    #[serde(default)]
-    description: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PatchCourseOutcomeRequest {
-    title: Option<String>,
-    description: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PostCourseOutcomeLinkRequest {
-    structure_item_id: Uuid,
-    target_kind: String,
-    #[serde(default)]
-    quiz_question_id: Option<String>,
-    #[serde(default)]
-    measurement_level: Option<String>,
-    #[serde(default)]
-    intensity_level: Option<String>,
-}
-
-fn validate_outcome_link_levels(
-    measurement: Option<&str>,
-    intensity: Option<&str>,
-) -> Result<(&'static str, &'static str), AppError> {
-    let m_raw = measurement.unwrap_or("").trim();
-    let m = if m_raw.is_empty() { "formative" } else { m_raw };
-    let i_raw = intensity.unwrap_or("").trim();
-    let i = if i_raw.is_empty() { "medium" } else { i_raw };
-
-    let m = course_outcomes::MEASUREMENT_LEVELS
-        .iter()
-        .copied()
-        .find(|v| *v == m)
-        .ok_or_else(|| {
-            AppError::invalid_input(format!(
-                "measurementLevel must be one of: {}.",
-                course_outcomes::MEASUREMENT_LEVELS.join(", ")
-            ))
-        })?;
-    let i = course_outcomes::INTENSITY_LEVELS
-        .iter()
-        .copied()
-        .find(|v| *v == i)
-        .ok_or_else(|| {
-            AppError::invalid_input(format!(
-                "intensityLevel must be one of: {}.",
-                course_outcomes::INTENSITY_LEVELS.join(", ")
-            ))
-        })?;
-    Ok((m, i))
-}
-
-/// One score per gradable evidence target so duplicate links (e.g. different measurement labels) do not double-count.
-fn rollup_avg_for_outcome_links(links: &[CourseOutcomeLinkApi]) -> Option<f32> {
-    let mut by_evidence: HashMap<(Uuid, String, String), f32> = HashMap::new();
-    for link in links {
-        if let Some(p) = link.progress.avg_score_percent {
-            let key = (
-                link.structure_item_id,
-                link.target_kind.clone(),
-                link.quiz_question_id.clone(),
-            );
-            by_evidence.entry(key).or_insert(p);
-        }
-    }
-    if by_evidence.is_empty() {
-        None
-    } else {
-        Some(by_evidence.values().sum::<f32>() / by_evidence.len() as f32)
-    }
-}
-
 async fn require_course_outcomes_edit(
     state: &AppState,
     course_code: &str,
@@ -4263,7 +3728,7 @@ async fn course_outcomes_list_handler(
             });
         }
 
-        let rollup_avg_score_percent = rollup_avg_for_outcome_links(&link_apis);
+        let rollup_avg_score_percent = outcomes_service::rollup_avg_for_outcome_links(&link_apis);
 
         outcomes_out.push(CourseOutcomeApi {
             id: o.id,
@@ -4402,7 +3867,7 @@ async fn course_outcomes_patch_handler(
         });
     }
 
-    let rollup_avg_score_percent = rollup_avg_for_outcome_links(&link_apis);
+    let rollup_avg_score_percent = outcomes_service::rollup_avg_for_outcome_links(&link_apis);
 
     Ok(Json(CourseOutcomeApi {
         id: updated.id,
@@ -4438,128 +3903,15 @@ async fn course_outcomes_add_link_handler(
     let user = auth_user(&state, &headers)?;
     let course_id = require_course_outcomes_edit(&state, &course_code, user.user_id).await?;
 
-    let outcomes = course_outcomes::list_outcomes(&state.pool, course_id).await?;
-    if !outcomes.iter().any(|o| o.id == outcome_id) {
-        return Err(AppError::NotFound);
-    }
-
-    let kind = req.target_kind.trim();
-    if !matches!(kind, "assignment" | "quiz" | "quiz_question") {
-        return Err(AppError::invalid_input(
-            "targetKind must be assignment, quiz, or quiz_question.",
-        ));
-    }
-
-    let Some(item) =
-        course_structure::get_item_row(&state.pool, course_id, req.structure_item_id).await?
-    else {
-        return Err(AppError::invalid_input(
-            "That module item is not part of this course.",
-        ));
-    };
-
-    let qid = req.quiz_question_id.as_deref().unwrap_or("").trim();
-    let qid_store = if kind == "quiz_question" {
-        if qid.is_empty() {
-            return Err(AppError::invalid_input(
-                "quizQuestionId is required when targetKind is quiz_question.",
-            ));
-        }
-        let Some(quiz_row) =
-            course_module_quizzes::get_for_course_item(&state.pool, course_id, req.structure_item_id)
-                .await?
-        else {
-            return Err(AppError::invalid_input("Quiz not found for that item."));
-        };
-        let questions: &[QuizQuestion] = quiz_row.questions_json.as_ref();
-        if !questions.iter().any(|q| q.id == qid) {
-            return Err(AppError::invalid_input(
-                "That quiz does not contain a question with the given id.",
-            ));
-        }
-        qid
-    } else {
-        ""
-    };
-
-    let expected_kind = match kind {
-        "assignment" => "assignment",
-        "quiz" | "quiz_question" => "quiz",
-        _ => "",
-    };
-    if item.kind != expected_kind {
-        return Err(AppError::invalid_input(
-            "The module item type does not match targetKind.",
-        ));
-    }
-
-    let (measurement_level, intensity_level) = validate_outcome_link_levels(
-        req.measurement_level.as_deref(),
-        req.intensity_level.as_deref(),
-    )?;
-
-    let inserted = match course_outcomes::insert_link(
+    let body = outcomes_service::add_outcome_link(
         &state.pool,
+        course_id,
+        &course_code,
         outcome_id,
-        req.structure_item_id,
-        kind,
-        qid_store,
-        measurement_level,
-        intensity_level,
+        &req,
     )
-    .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            if let sqlx::Error::Database(ref dbe) = e {
-                if dbe.constraint() == Some("ux_course_outcome_links_unique_target") {
-                    return Err(AppError::invalid_input(
-                        "This outcome already maps that item with the same measurement and intensity levels. Change the levels or remove the existing mapping first.",
-                    ));
-                }
-            }
-            return Err(e.into());
-        }
-    };
-
-    let enrolled =
-        enrollment::list_student_users_for_course_code(&state.pool, &course_code).await?.len() as i32;
-
-    let progress = match kind {
-        "quiz_question" => {
-            course_outcomes::progress_for_quiz_question(
-                &state.pool,
-                course_id,
-                req.structure_item_id,
-                qid_store,
-                enrolled,
-            )
-            .await?
-        }
-        "assignment" | "quiz" => {
-            course_outcomes::progress_for_graded_item(
-                &state.pool,
-                course_id,
-                req.structure_item_id,
-                item.kind.as_str(),
-                enrolled,
-            )
-            .await?
-        }
-        _ => unreachable!(),
-    };
-
-    Ok(Json(CourseOutcomeLinkApi {
-        id: inserted.id,
-        structure_item_id: inserted.structure_item_id,
-        target_kind: inserted.target_kind,
-        quiz_question_id: inserted.quiz_question_id,
-        measurement_level: inserted.measurement_level,
-        intensity_level: inserted.intensity_level,
-        item_title: item.title,
-        item_kind: item.kind,
-        progress,
-    }))
+    .await?;
+    Ok(Json(body))
 }
 
 async fn course_outcomes_delete_link_handler(
@@ -5561,95 +4913,19 @@ async fn add_enrollments_handler(
     let required = course_grants::course_enrollments_update_permission(&course_code);
     assert_permission(&state.pool, user.user_id, &required).await?;
 
-    let parsed = parse_email_list(&req.emails);
-    if parsed.is_empty() {
-        return Err(AppError::invalid_input(
-            "Enter at least one valid email address.",
-        ));
-    }
-
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
 
-    let is_creator =
-        enrollment::user_is_course_creator(&state.pool, &course_code, user.user_id).await?;
-
-    if req.app_role_id.is_some() && !is_creator {
-        return Err(AppError::Forbidden);
-    }
-    if is_creator && req.app_role_id.is_none() {
-        return Err(AppError::invalid_input(
-            "Select a course-scoped role for these enrollments.",
-        ));
-    }
-
-    let mut added = Vec::new();
-    let mut already_enrolled = Vec::new();
-    let mut not_found = Vec::new();
-
-    if let Some(role_id) = req.app_role_id {
-        let Some(role_row) = rbac::get_role(&state.pool, role_id).await? else {
-            return Err(AppError::invalid_input("Unknown role."));
-        };
-        if role_row.scope != "course" {
-            return Err(AppError::invalid_input(
-                "Only course-scoped roles can be used when enrolling with a role.",
-            ));
-        }
-
-        for email in parsed {
-            let Some(row) = user::find_by_email(&state.pool, &email).await? else {
-                not_found.push(email);
-                continue;
-            };
-            if enrollment::user_is_course_creator(&state.pool, &course_code, row.id).await? {
-                already_enrolled.push(row.email);
-                continue;
-            }
-            let existed_before =
-                !enrollment::user_roles_in_course(&state.pool, &course_code, row.id)
-                    .await?
-                    .is_empty();
-
-            enrollment::upsert_instructor_enrollment(&state.pool, &course_code, course_id, row.id)
-                .await?;
-            course_grants::apply_app_role_course_grants(
-                &state.pool,
-                row.id,
-                course_id,
-                &course_code,
-                role_id,
-            )
-            .await?;
-
-            if existed_before {
-                already_enrolled.push(row.email);
-            } else {
-                added.push(row.email);
-            }
-        }
-    } else {
-        for email in parsed {
-            let Some(row) = user::find_by_email(&state.pool, &email).await? else {
-                not_found.push(email);
-                continue;
-            };
-            let inserted =
-                enrollment::insert_student_if_missing(&state.pool, course_id, row.id).await?;
-            if inserted {
-                added.push(row.email);
-            } else {
-                already_enrolled.push(row.email);
-            }
-        }
-    }
-
-    Ok(Json(AddEnrollmentsResponse {
-        added,
-        already_enrolled,
-        not_found,
-    }))
+    let body = enrollments_service::add_enrollments(
+        &state.pool,
+        &course_code,
+        course_id,
+        user.user_id,
+        &req,
+    )
+    .await?;
+    Ok(Json(body))
 }
 
 async fn update_markdown_theme_handler(
@@ -6069,7 +5345,7 @@ async fn quiz_attempt_question_run_handler(
             "This question is not a runnable code question.",
         ));
     };
-    let test_cases = parse_code_test_cases(q)
+    let test_cases = quiz_submission::parse_code_test_cases(q)
         .into_iter()
         .filter(|tc| !tc.is_hidden)
         .collect::<Vec<_>>();
@@ -6191,7 +5467,7 @@ async fn quiz_attempt_advance_handler(
         return Err(AppError::QuestionAlreadyLocked);
     }
 
-    let (pts, max_pts, is_ok) = grade_question_with_code_support(q, &body).await?;
+    let (pts, max_pts, is_ok) = quiz_submission::grade_question_with_code_support(q, &body).await?;
     let rj = serde_json::json!({
         "selectedChoiceIndex": body.selected_choice_index,
         "selectedChoiceIndices": body.selected_choice_indices,
@@ -6387,7 +5663,7 @@ async fn quiz_attempt_hint_stub_handler(
 
 #[cfg(test)]
 mod parse_email_list_tests {
-    use super::parse_email_list;
+    use crate::services::enrollments::parse_email_list;
 
     #[test]
     fn splits_and_dedupes() {

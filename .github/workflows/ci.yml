@@ -24,6 +24,50 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  rust-supply-chain:
+    name: Rust supply chain (audit / deny)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + git sources
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('server/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo target (supply-chain job)
+        uses: actions/cache@v4
+        with:
+          path: server/target
+          key: ${{ runner.os }}-cargo-target-supply-${{ hashFiles('server/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-supply-
+
+      - name: Cache cargo-audit / cargo-deny installs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bins-audit-deny-v1
+
+      - name: Install cargo-audit and cargo-deny
+        run: cargo install cargo-audit cargo-deny --locked
+
+      - name: cargo audit
+        run: cargo audit
+
+      - name: cargo deny (advisories)
+        run: cargo deny check advisories
+
   server:
     name: Server
     runs-on: ubuntu-latest
@@ -55,6 +99,24 @@ jobs:
         with:
           components: rustfmt, clippy, llvm-tools-preview
 
+      - name: Cache cargo registry + git sources
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('server/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo target (server job)
+        uses: actions/cache@v4
+        with:
+          path: server/target
+          key: ${{ runner.os }}-cargo-target-server-${{ hashFiles('server/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-server-
+
       - name: Format
         run: cargo fmt --check
 
@@ -67,7 +129,7 @@ jobs:
       - name: Line coverage (library sources)
         run: |
           cargo install cargo-llvm-cov --locked
-          cargo llvm-cov --fail-under-lines 59 \
+          cargo llvm-cov --fail-under-lines 70 \
             --ignore-filename-regex '(^|/)main\.rs$'
 
       - name: Build
@@ -95,6 +157,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: npm audit (fail on high or critical)
+        run: npm audit --audit-level=high
+
       - name: Test
         run: npm test
 
@@ -103,3 +168,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Bundle size budget (JS gzip)
+        run: npm run bundle:check
+
+      - name: Storybook build
+        run: npm run build-storybook

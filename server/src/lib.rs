@@ -7,6 +7,7 @@ pub mod db;
 pub mod error;
 pub mod http_auth;
 pub mod jwt;
+pub mod openapi;
 pub mod models;
 pub mod repos;
 pub mod routes;

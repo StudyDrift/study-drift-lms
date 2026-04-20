@@ -103,13 +103,19 @@ pub async fn upsert_and_delete(
                 };
                 sqlx::query(&format!(
                     r#"
-                    INSERT INTO {} (course_id, student_user_id, module_item_id, points_earned, rubric_scores_json)
+                    INSERT INTO {} AS cg (course_id, student_user_id, module_item_id, points_earned, rubric_scores_json)
                     VALUES ($1, $2, $3, $4, $5)
                     ON CONFLICT (student_user_id, module_item_id)
                     DO UPDATE SET
                         course_id = EXCLUDED.course_id,
                         points_earned = EXCLUDED.points_earned,
                         rubric_scores_json = EXCLUDED.rubric_scores_json,
+                        settings_version = cg.settings_version + (
+                            CASE
+                                WHEN EXCLUDED.rubric_scores_json IS DISTINCT FROM cg.rubric_scores_json THEN 1
+                                ELSE 0
+                            END
+                        ),
                         updated_at = NOW()
                     "#,
                     schema::COURSE_GRADES
@@ -138,13 +144,19 @@ pub async fn upsert_points(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"
-        INSERT INTO {} (course_id, student_user_id, module_item_id, points_earned, rubric_scores_json)
+        INSERT INTO {} AS cg (course_id, student_user_id, module_item_id, points_earned, rubric_scores_json)
         VALUES ($1, $2, $3, $4, NULL)
         ON CONFLICT (student_user_id, module_item_id)
         DO UPDATE SET
             course_id = EXCLUDED.course_id,
             points_earned = EXCLUDED.points_earned,
             rubric_scores_json = NULL,
+            settings_version = cg.settings_version + (
+                CASE
+                    WHEN EXCLUDED.rubric_scores_json IS DISTINCT FROM cg.rubric_scores_json THEN 1
+                    ELSE 0
+                END
+            ),
             updated_at = NOW()
         "#,
         schema::COURSE_GRADES

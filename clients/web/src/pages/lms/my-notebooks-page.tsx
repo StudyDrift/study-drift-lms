@@ -4,7 +4,7 @@ import { NotebookPen, Search, Sparkles, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { authorizedFetch } from '../../lib/api'
-import { type Course } from '../../lib/courses-api'
+import { type CoursePublic } from '../../lib/courses-api'
 import { readApiErrorMessage } from '../../lib/errors'
 import {
   listStudentCourseNotebooks,
@@ -30,7 +30,7 @@ type NotebookRagResponse = {
 }
 
 export default function MyNotebooksPage() {
-  const [courses, setCourses] = useState<Course[] | null>(null)
+  const [courses, setCourses] = useState<CoursePublic[] | null>(null)
   const [coursesError, setCoursesError] = useState<string | null>(null)
   const [notebookVersion, setNotebookVersion] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
@@ -69,7 +69,7 @@ export default function MyNotebooksPage() {
           }
           return
         }
-        const data = raw as { courses?: Course[] }
+        const data = raw as { courses?: CoursePublic[] }
         if (!cancelled) setCourses(data.courses ?? [])
       } catch {
         if (!cancelled) {

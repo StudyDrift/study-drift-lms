@@ -1881,4 +1881,31 @@ mod tests {
             &policy
         ));
     }
+
+    #[test]
+    fn html_to_plain_strips_tags_and_br_canvas_style() {
+        let html = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/canvas_page_snippet.html"
+        ));
+        let plain = html_to_plain(html);
+        assert!(plain.contains("Read the syllabus"));
+        assert!(plain.contains("Key dates"));
+        assert!(plain.contains("Exam 1"));
+        assert!(!plain.contains("<div"));
+        assert!(!plain.contains("<a "));
+    }
+
+    #[test]
+    fn html_to_plain_normalizes_paragraph_breaks() {
+        let plain = html_to_plain("<p>One</p><p>Two</p>");
+        assert!(plain.contains("One"));
+        assert!(plain.contains("Two"));
+    }
+
+    #[test]
+    fn html_to_markdown_preserves_simple_text() {
+        let md = html_to_markdown("<p>Hello from Canvas</p>");
+        assert!(md.contains("Hello"));
+    }
 }

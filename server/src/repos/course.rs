@@ -82,7 +82,7 @@ fn new_course_code() -> String {
     format!("C-{}", &s[..6])
 }
 
-pub async fn create_course(
+pub async fn insert_course(
     pool: &PgPool,
     title: &str,
     description: &str,
