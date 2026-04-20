@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
+import { MathPlainText } from '../math/MathPlainText'
 import { BookLoader } from './BookLoader'
+import { MathKeyboard } from './MathKeyboard'
 import { MarkdownArticleView } from '../syllabus/SyllabusMarkdownView'
 import {
   postAdaptiveQuizNext,
@@ -82,9 +84,53 @@ function QuestionMeta({ q }: { q: QuizQuestion }) {
   return <p className="text-xs text-slate-500">{parts.join(' · ')}</p>
 }
 
+function orderingItemsForPreview(q: QuizQuestion): string[] {
+  const configured = q.typeConfig?.items
+  if (Array.isArray(configured)) {
+    const items = configured.map((x) => String(x).trim()).filter((x) => x.length > 0)
+    if (items.length > 0) return items
+  }
+  return visibleChoices(q)
+}
+
+type MatchingPairDraft = {
+  leftId?: string
+  rightId?: string
+  left?: string
+  right?: string
+}
+
+function matchingPairsForPreview(q: QuizQuestion): MatchingPairDraft[] {
+  const configured = q.typeConfig?.pairs
+  if (!Array.isArray(configured)) return []
+  return configured
+    .map((pair) => {
+      const p = pair as Record<string, unknown>
+      return {
+        leftId: typeof p.leftId === 'string' ? p.leftId : typeof p.left_id === 'string' ? p.left_id : undefined,
+        rightId:
+          typeof p.rightId === 'string' ? p.rightId : typeof p.right_id === 'string' ? p.right_id : undefined,
+        left: typeof p.left === 'string' ? p.left : undefined,
+        right: typeof p.right === 'string' ? p.right : undefined,
+      }
+    })
+    .filter((p) => (p.left ?? '').trim().length > 0 || (p.right ?? '').trim().length > 0)
+}
+
 function StudentQuestionBlock({ q, index }: { q: QuizQuestion; index: number }) {
   const choices = visibleChoices(q)
   const showChoices = q.questionType === 'multiple_choice' || q.questionType === 'true_false'
+  const textRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
+  const [ordering, setOrdering] = useState<string[]>(() => orderingItemsForPreview(q))
+  const baseOrdering = orderingItemsForPreview(q)
+  const [matchingAnswers, setMatchingAnswers] = useState<Record<string, string>>({})
+  const [hotspotClick, setHotspotClick] = useState<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    setOrdering(orderingItemsForPreview(q))
+    setMatchingAnswers({})
+    setHotspotClick(null)
+  }, [q.id, q.questionType, q.typeConfig, q.choices])
 
   return (
     <section
@@ -99,7 +145,9 @@ function StudentQuestionBlock({ q, index }: { q: QuizQuestion; index: number }) 
           Question {index + 1}
         </h2>
       </div>
-      <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-slate-900">{q.prompt || '—'}</p>
+      <p className="mt-2 text-sm font-medium text-slate-900">
+        <MathPlainText text={q.prompt || '—'} />
+      </p>
       <div className="mt-2">
         <QuestionMeta q={q} />
       </div>
@@ -120,7 +168,9 @@ function StudentQuestionBlock({ q, index }: { q: QuizQuestion; index: number }) 
                   value={String(i)}
                   className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30"
                 />
-                <span className="min-w-0 flex-1">{label}</span>
+                <span className="min-w-0 flex-1">
+                  <MathPlainText text={label} />
+                </span>
               </label>
             ))
           ) : (
@@ -135,7 +185,9 @@ function StudentQuestionBlock({ q, index }: { q: QuizQuestion; index: number }) 
                   value={String(i)}
                   className="mt-0.5 border-slate-300 text-indigo-600 focus:ring-indigo-500/30"
                 />
-                <span className="min-w-0 flex-1">{label}</span>
+                <span className="min-w-0 flex-1">
+                  <MathPlainText text={label} />
+                </span>
               </label>
             ))
           )}
@@ -148,10 +200,30 @@ function StudentQuestionBlock({ q, index }: { q: QuizQuestion; index: number }) 
             Your answer
           </label>
           <input
+            ref={(el) => {
+              textRef.current = el
+            }}
             id={`preview-fib-${q.id}`}
             type="text"
             placeholder="Type your answer"
             className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+          />
+          <MathKeyboard
+            className="mt-2"
+            onInsert={(snippet, caret) => {
+              const el = textRef.current
+              if (!el || !('value' in el)) return
+              const cur = el.value
+              const start = el.selectionStart ?? cur.length
+              const end = el.selectionEnd ?? cur.length
+              const next = cur.slice(0, start) + snippet + cur.slice(end)
+              el.value = next
+              const pos = start + (caret ?? snippet.length)
+              requestAnimationFrame(() => {
+                el.focus()
+                el.setSelectionRange(pos, pos)
+              })
+            }}
           />
         </div>
       )}
@@ -162,10 +234,30 @@ function StudentQuestionBlock({ q, index }: { q: QuizQuestion; index: number }) 
             Your answer
           </label>
           <textarea
+            ref={(el) => {
+              textRef.current = el
+            }}
             id={`preview-sa-${q.id}`}
             rows={3}
             placeholder="Type your answer"
             className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+          />
+          <MathKeyboard
+            className="mt-2"
+            onInsert={(snippet, caret) => {
+              const el = textRef.current
+              if (!el || !('value' in el)) return
+              const cur = el.value
+              const start = el.selectionStart ?? cur.length
+              const end = el.selectionEnd ?? cur.length
+              const next = cur.slice(0, start) + snippet + cur.slice(end)
+              el.value = next
+              const pos = start + (caret ?? snippet.length)
+              requestAnimationFrame(() => {
+                el.focus()
+                el.setSelectionRange(pos, pos)
+              })
+            }}
           />
         </div>
       )}
@@ -176,10 +268,230 @@ function StudentQuestionBlock({ q, index }: { q: QuizQuestion; index: number }) 
             Your response
           </label>
           <textarea
+            ref={(el) => {
+              textRef.current = el
+            }}
             id={`preview-essay-${q.id}`}
             rows={8}
             placeholder="Write your response"
             className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+          />
+          <MathKeyboard
+            className="mt-2"
+            onInsert={(snippet, caret) => {
+              const el = textRef.current
+              if (!el || !('value' in el)) return
+              const cur = el.value
+              const start = el.selectionStart ?? cur.length
+              const end = el.selectionEnd ?? cur.length
+              const next = cur.slice(0, start) + snippet + cur.slice(end)
+              el.value = next
+              const pos = start + (caret ?? snippet.length)
+              requestAnimationFrame(() => {
+                el.focus()
+                el.setSelectionRange(pos, pos)
+              })
+            }}
+          />
+        </div>
+      )}
+
+      {q.questionType === 'ordering' && (
+        <div className="mt-4 space-y-2">
+          {ordering.length === 0 ? (
+            <p className="text-sm italic text-slate-500">Add ordering items in the question editor.</p>
+          ) : (
+            ordering.map((item, i) => (
+              <div
+                key={`${q.id}-ordering-${i}-${item}`}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('text/plain', String(i))
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  const fromRaw = e.dataTransfer.getData('text/plain')
+                  const from = Number(fromRaw)
+                  if (!Number.isFinite(from) || from < 0 || from === i) return
+                  setOrdering((prev) => {
+                    const next = [...prev]
+                    const [moved] = next.splice(from, 1)
+                    next.splice(i, 0, moved)
+                    return next
+                  })
+                }}
+                className="flex cursor-grab items-center justify-between rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-sm text-slate-800"
+              >
+                <span className="truncate">
+                  {(baseOrdering.findIndex((x) => x === item) + 1 || i + 1)}. <MathPlainText text={item} />
+                </span>
+                <span className="text-xs text-slate-400">Drag</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {q.questionType === 'numeric' && (
+        <div className="mt-4">
+          <label className="sr-only" htmlFor={`preview-numeric-${q.id}`}>
+            Numeric answer
+          </label>
+          <input
+            id={`preview-numeric-${q.id}`}
+            type="number"
+            step="any"
+            placeholder="Enter a number"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+          />
+        </div>
+      )}
+
+      {q.questionType === 'code' && (
+        <div className="mt-4">
+          <label className="sr-only" htmlFor={`preview-code-${q.id}`}>
+            Code response
+          </label>
+          <textarea
+            id={`preview-code-${q.id}`}
+            rows={8}
+            placeholder="Write your code here"
+            className="w-full resize-y rounded-lg border border-slate-200 bg-slate-950 px-3 py-2.5 font-mono text-sm text-slate-100 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+          />
+        </div>
+      )}
+
+      {q.questionType === 'matching' && (
+        <div className="mt-4 space-y-2">
+          {matchingPairsForPreview(q).length === 0 ? (
+            <p className="text-sm italic text-slate-500">Add matching pairs in the question editor.</p>
+          ) : (
+            matchingPairsForPreview(q).map((pair, i) => {
+              const leftLabel = pair.left ?? ''
+              const key = pair.leftId ?? `left-${i}`
+              const options = shuffleArray(matchingPairsForPreview(q).map((p, idx) => p.right ?? `Option ${idx + 1}`))
+              return (
+                <div key={`${q.id}-matching-${i}`} className="grid gap-2 md:grid-cols-2">
+                  <p className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-sm text-slate-800">
+                    <MathPlainText text={leftLabel} />
+                  </p>
+                  <select
+                    value={matchingAnswers[key] ?? ''}
+                    onChange={(e) =>
+                      setMatchingAnswers((prev) => ({
+                        ...prev,
+                        [key]: e.target.value,
+                      }))
+                    }
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  >
+                    <option value="">Select match...</option>
+                    {options.map((opt, optIdx) => (
+                      <option key={`${q.id}-match-opt-${i}-${optIdx}`} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
+
+      {q.questionType === 'formula' && (
+        <div className="mt-4">
+          <label className="sr-only" htmlFor={`preview-formula-${q.id}`}>
+            Formula answer
+          </label>
+          <input
+            ref={(el) => {
+              textRef.current = el
+            }}
+            id={`preview-formula-${q.id}`}
+            type="text"
+            placeholder="Enter LaTeX, e.g. x^2+2x+1"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+          />
+          <MathKeyboard
+            className="mt-2"
+            onInsert={(snippet, caret) => {
+              const el = textRef.current
+              if (!el || !('value' in el)) return
+              const cur = el.value
+              const start = el.selectionStart ?? cur.length
+              const end = el.selectionEnd ?? cur.length
+              const next = cur.slice(0, start) + snippet + cur.slice(end)
+              el.value = next
+              const pos = start + (caret ?? snippet.length)
+              requestAnimationFrame(() => {
+                el.focus()
+                el.setSelectionRange(pos, pos)
+              })
+            }}
+          />
+        </div>
+      )}
+
+      {q.questionType === 'hotspot' && (
+        <div className="mt-4 space-y-2">
+          {typeof q.typeConfig?.imageUrl === 'string' && q.typeConfig.imageUrl.trim().length > 0 ? (
+            <div
+              className="relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+              onClick={(e) => {
+                const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+                const x = Math.round(e.clientX - rect.left)
+                const y = Math.round(e.clientY - rect.top)
+                setHotspotClick({ x, y })
+              }}
+            >
+              <img
+                src={q.typeConfig.imageUrl}
+                alt="Hotspot prompt"
+                className="max-h-72 w-full object-contain"
+              />
+              {hotspotClick ? (
+                <span
+                  className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-600 ring-2 ring-white"
+                  style={{ left: hotspotClick.x, top: hotspotClick.y }}
+                />
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-sm italic text-slate-500">Set an image URL in the question editor.</p>
+          )}
+          <p className="text-xs text-slate-500">
+            {hotspotClick ? `Selected point: (${hotspotClick.x}, ${hotspotClick.y})` : 'Click the image to choose a point.'}
+          </p>
+        </div>
+      )}
+
+      {q.questionType === 'file_upload' && (
+        <div className="mt-4">
+          <input
+            type="file"
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+          />
+        </div>
+      )}
+
+      {q.questionType === 'audio_response' && (
+        <div className="mt-4">
+          <input
+            type="file"
+            accept="audio/*"
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+          />
+        </div>
+      )}
+
+      {q.questionType === 'video_response' && (
+        <div className="mt-4">
+          <input
+            type="file"
+            accept="video/*"
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
           />
         </div>
       )}
@@ -524,7 +836,9 @@ function AdaptivePreviewPanel({
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Question {Math.min(history.length + 1, maxQuestions)} of {maxQuestions}
           </p>
-          <p className="whitespace-pre-wrap text-sm font-medium text-slate-900">{current.prompt}</p>
+          <p className="text-sm font-medium text-slate-900">
+            <MathPlainText text={current.prompt} />
+          </p>
           <div className="space-y-2">
             {current.choices.map((label, i) => (
               <label

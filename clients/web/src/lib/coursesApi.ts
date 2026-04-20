@@ -1050,8 +1050,23 @@ export async function patchModuleExternalLink(
 export type QuizQuestion = {
   id: string
   prompt: string
-  questionType: 'multiple_choice' | 'fill_in_blank' | 'essay' | 'true_false' | 'short_answer'
+  questionType:
+    | 'multiple_choice'
+    | 'fill_in_blank'
+    | 'essay'
+    | 'true_false'
+    | 'short_answer'
+    | 'matching'
+    | 'ordering'
+    | 'hotspot'
+    | 'numeric'
+    | 'formula'
+    | 'code'
+    | 'file_upload'
+    | 'audio_response'
+    | 'video_response'
   choices: string[]
+  typeConfig?: Record<string, unknown>
   correctChoiceIndex: number | null
   multipleAnswer: boolean
   answerWithImage: boolean
@@ -1533,6 +1548,46 @@ export async function postQuizAdvance(
   return raw as { locked: boolean; currentQuestionIndex: number; completed: boolean }
 }
 
+export type QuizCodeRunResult = {
+  status: 'pass' | 'fail' | 'tle' | 'mle' | 're' | 'ce'
+  passed: boolean
+  actualOutput: string
+  expectedOutput: string
+  stderr?: string | null
+  executionMs?: number | null
+  memoryKb?: number | null
+}
+
+export type QuizCodeRunResponse = {
+  questionId: string
+  results: QuizCodeRunResult[]
+  pointsEarned: number
+  pointsPossible: number
+}
+
+export async function postQuizQuestionRun(
+  courseCode: string,
+  itemId: string,
+  attemptId: string,
+  questionId: string,
+  body: { code: string; languageId?: number },
+): Promise<QuizCodeRunResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/run`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: body.code,
+        languageId: body.languageId,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as QuizCodeRunResponse
+}
+
 export async function postQuizFocusLoss(
   courseCode: string,
   itemId: string,
@@ -1581,6 +1636,15 @@ export type QuizQuestionResponseItem = {
   selectedChoiceIndex?: number
   selectedChoiceIndices?: number[]
   textAnswer?: string | null
+  matchingPairs?: { leftId: string; rightId: string }[]
+  orderingSequence?: string[]
+  hotspotClick?: { x: number; y: number }
+  numericValue?: number
+  formulaLatex?: string
+  codeSubmission?: { language: string; code: string }
+  fileKey?: string
+  audioKey?: string
+  videoKey?: string
 }
 
 export type QuizSubmitResponse = {

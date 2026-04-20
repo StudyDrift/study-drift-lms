@@ -24,6 +24,21 @@ fn sample_seed(attempt_id: Uuid, user_id: Uuid) -> u64 {
     u64::from_le_bytes(b[..8].try_into().unwrap_or([0u8; 8]))
 }
 
+fn is_extended_quiz_type(question_type: &str) -> bool {
+    matches!(
+        question_type,
+        "matching"
+            | "ordering"
+            | "hotspot"
+            | "numeric"
+            | "formula"
+            | "code"
+            | "file_upload"
+            | "audio_response"
+            | "video_response"
+    )
+}
+
 fn sample_n_from_pool(mut ids: Vec<Uuid>, n: usize, attempt_id: Uuid, user_id: Uuid) -> Vec<Uuid> {
     if ids.is_empty() || n == 0 {
         return vec![];
@@ -94,6 +109,7 @@ pub fn quiz_question_from_entity(e: &QuestionEntity) -> Result<QuizQuestion, App
         prompt: e.stem.clone(),
         question_type: editor_question_type_from_db(&e.question_type),
         choices,
+        type_config: serde_json::json!({}),
         correct_choice_index,
         multiple_answer: e.question_type == "mc_multiple",
         answer_with_image: false,
@@ -264,6 +280,17 @@ pub async fn resolve_delivery_questions(
     is_instructor_view: bool,
 ) -> Result<ResolvedQuizQuestions, AppError> {
     let refs = qb_repo::list_quiz_question_refs(pool, structure_item_id).await?;
+    // Question bank rows currently normalize to legacy types; keep authored JSON as source of truth
+    // for extended question types until bank schema fully supports them.
+    let has_extended_types = questions_json
+        .iter()
+        .any(|q| is_extended_quiz_type(q.question_type.as_str()));
+    if has_extended_types {
+        return Ok(ResolvedQuizQuestions {
+            questions: questions_json.to_vec(),
+            uses_server_question_sampling: false,
+        });
+    }
     if !bank_enabled || refs.is_empty() {
         return Ok(ResolvedQuizQuestions {
             questions: questions_json.to_vec(),

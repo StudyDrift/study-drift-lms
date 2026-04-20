@@ -8,10 +8,11 @@ WORKDIR /app
 # Warm the dependency cache (real sources come from the bind mount at runtime).
 COPY Cargo.toml Cargo.lock ./
 COPY migrations ./migrations
-# Crate has both [lib] and default binary; stubs must satisfy both for dependency caching.
-RUN mkdir -p src \
+# Stubs must match every [[bin]] / [lib] in Cargo.toml (see migrate_question_bank) for dependency caching.
+RUN mkdir -p src/bin \
     && printf '#![allow(dead_code)]\npub fn dummy() {}\n' > src/lib.rs \
     && printf 'fn main() {}\n' > src/main.rs \
+    && printf 'fn main() {}\n' > src/bin/migrate_question_bank.rs \
     && cargo build \
     && rm -rf src
 

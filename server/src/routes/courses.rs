@@ -84,6 +84,7 @@ use crate::services::adaptive_quiz_ai;
 use crate::services::assignment_rubric_ai;
 use crate::services::question_bank;
 use crate::services::accommodations;
+use crate::services::code_execution::{self, CodeExecutionResult, CodeTestCase, ExecuteCodeRequest};
 use crate::services::quiz_attempt_grading;
 use crate::services::quiz_lockdown;
 use crate::services::ai::OpenRouterError;
@@ -110,10 +111,13 @@ use chrono::{DateTime, Utc};
 use reqwest::Client;
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use uuid::Uuid;
 
 const PERM_COURSE_CREATE: &str = "global:app:course:create";
+const CODE_RUNS_PER_MINUTE: usize = 10;
+static CODE_RUN_RATE_LIMIT: OnceLock<Mutex<HashMap<Uuid, Vec<DateTime<Utc>>>>> = OnceLock::new();
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -217,6 +221,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/current-question",
             get(quiz_attempt_current_question_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/questions/{question_id}/run",
+            post(quiz_attempt_question_run_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/advance",
@@ -2711,6 +2719,97 @@ fn quiz_gradebook_points_with_late_policy(
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QuizCodeRunRequest {
+    #[serde(default)]
+    code: Option<String>,
+    #[serde(default)]
+    language_id: Option<i32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct QuizCodeRunResponse {
+    question_id: String,
+    results: Vec<CodeExecutionResult>,
+    points_earned: f64,
+    points_possible: f64,
+}
+
+fn parse_code_test_cases(q: &QuizQuestion) -> Vec<CodeTestCase> {
+    q.type_config
+        .get("testCases")
+        .and_then(|v| serde_json::from_value::<Vec<CodeTestCase>>(v.clone()).ok())
+        .unwrap_or_default()
+}
+
+fn check_code_run_rate_limit(user_id: Uuid) -> Result<(), AppError> {
+    let now = Utc::now();
+    let cutoff = now - chrono::Duration::minutes(1);
+    let lock = CODE_RUN_RATE_LIMIT.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = lock
+        .lock()
+        .map_err(|_| AppError::InvalidInput("Rate limiter lock error.".into()))?;
+    let runs = guard.entry(user_id).or_default();
+    runs.retain(|ts| *ts >= cutoff);
+    if runs.len() >= CODE_RUNS_PER_MINUTE {
+        return Err(AppError::TooManyRequests(
+            "Rate limit exceeded for code runs (max 10 per minute).".into(),
+        ));
+    }
+    runs.push(now);
+    Ok(())
+}
+
+async fn grade_question_with_code_support(
+    q: &QuizQuestion,
+    resp: &QuizQuestionResponseItem,
+) -> Result<(f64, f64, Option<bool>), AppError> {
+    if q.question_type != "code" {
+        return Ok(quiz_attempt_grading::grade_static_question(q, resp));
+    }
+    let max = if q.points < 0 { 0.0 } else { q.points as f64 };
+    let Some(code_submission) = resp.code_submission.as_ref() else {
+        return Ok((0.0, max, Some(false)));
+    };
+    code_execution::validate_code_submission_size(&code_submission.code)?;
+    let test_cases = parse_code_test_cases(q);
+    if test_cases.is_empty() {
+        return Ok((0.0, max, None));
+    }
+    let language_id = q
+        .type_config
+        .get("languageId")
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32)
+        .or_else(|| {
+            q.type_config
+                .get("language")
+                .and_then(|v| v.as_str())
+                .map(code_execution::language_id_from_name)
+        })
+        .unwrap_or_else(|| code_execution::language_id_from_name(&code_submission.language));
+    let mut passed = 0usize;
+    for tc in &test_cases {
+        let res = code_execution::run_code(ExecuteCodeRequest {
+            language_id,
+            source_code: code_submission.code.clone(),
+            stdin: tc.input.clone(),
+            expected_output: tc.expected_output.clone(),
+            time_limit_ms: tc.time_limit_ms,
+            memory_limit_kb: tc.memory_limit_kb,
+        })
+        .await?;
+        if res.passed {
+            passed += 1;
+        }
+    }
+    let ratio = passed as f64 / test_cases.len() as f64;
+    let pts = (max * ratio).clamp(0.0, max);
+    Ok((pts, max, Some((ratio - 1.0).abs() < 1e-9)))
+}
+
 async fn module_quiz_start_handler(
     State(state): State<AppState>,
     Path((course_code, item_id)): Path<(String, Uuid)>,
@@ -3068,13 +3167,22 @@ async fn module_quiz_submit_handler(
                 serde_json::from_value(db_row.response_json.clone()).map_err(|e| {
                     AppError::InvalidInput(format!("Could not read saved answer: {e}"))
                 })?;
-            let (pts, max_pts, is_ok) = quiz_attempt_grading::grade_static_question(q, &resp_item);
+            let (pts, max_pts, is_ok) = grade_question_with_code_support(q, &resp_item).await?;
             earned += pts;
             possible += max_pts;
             let rj = serde_json::json!({
                 "selectedChoiceIndex": resp_item.selected_choice_index,
                 "selectedChoiceIndices": resp_item.selected_choice_indices,
                 "textAnswer": resp_item.text_answer,
+                "matchingPairs": &resp_item.matching_pairs,
+                "orderingSequence": &resp_item.ordering_sequence,
+                "hotspotClick": &resp_item.hotspot_click,
+                "numericValue": &resp_item.numeric_value,
+                "formulaLatex": &resp_item.formula_latex,
+                "codeSubmission": &resp_item.code_submission,
+                "fileKey": &resp_item.file_key,
+                "audioKey": &resp_item.audio_key,
+                "videoKey": &resp_item.video_key,
             });
             quiz_attempts::insert_response(
                 &mut *tx,
@@ -3136,13 +3244,22 @@ async fn module_quiz_submit_handler(
             let q = by_id
                 .get(&resp_item.question_id)
                 .ok_or_else(|| AppError::InvalidInput("Invalid question id.".into()))?;
-            let (pts, max_pts, is_ok) = quiz_attempt_grading::grade_static_question(q, resp_item);
+            let (pts, max_pts, is_ok) = grade_question_with_code_support(q, resp_item).await?;
             earned += pts;
             possible += max_pts;
             let rj = serde_json::json!({
                 "selectedChoiceIndex": resp_item.selected_choice_index,
                 "selectedChoiceIndices": resp_item.selected_choice_indices,
                 "textAnswer": resp_item.text_answer,
+                "matchingPairs": &resp_item.matching_pairs,
+                "orderingSequence": &resp_item.ordering_sequence,
+                "hotspotClick": &resp_item.hotspot_click,
+                "numericValue": &resp_item.numeric_value,
+                "formulaLatex": &resp_item.formula_latex,
+                "codeSubmission": &resp_item.code_submission,
+                "fileKey": &resp_item.file_key,
+                "audioKey": &resp_item.audio_key,
+                "videoKey": &resp_item.video_key,
             });
             quiz_attempts::insert_response(
                 &mut *tx,
@@ -5676,6 +5793,110 @@ async fn quiz_attempt_current_question_handler(
     }))
 }
 
+async fn quiz_attempt_question_run_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, attempt_id, question_id)): Path<(String, Uuid, Uuid, String)>,
+    headers: HeaderMap,
+    Json(body): Json<QuizCodeRunRequest>,
+) -> Result<Json<QuizCodeRunResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    check_code_run_rate_limit(user.user_id)?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    let Some(att) = quiz_attempts::get_attempt(&state.pool, attempt_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if att.student_user_id != user.user_id
+        || att.course_id != course_id
+        || att.structure_item_id != item_id
+        || att.status != "in_progress"
+    {
+        return Err(AppError::Forbidden);
+    }
+    accommodations::require_attempt_within_deadline(&att, Utc::now())?;
+
+    let resolved = question_bank::resolve_delivery_questions(
+        &state.pool,
+        course_id,
+        item_id,
+        course_row.question_bank_enabled,
+        &quiz_row.questions_json.0,
+        Some(att.id),
+        Some(user.user_id),
+        false,
+    )
+    .await?;
+    let Some(q) = resolved
+        .questions
+        .iter()
+        .find(|q| q.id == question_id && q.question_type == "code")
+    else {
+        return Err(AppError::InvalidInput(
+            "This question is not a runnable code question.".into(),
+        ));
+    };
+    let test_cases = parse_code_test_cases(q)
+        .into_iter()
+        .filter(|tc| !tc.is_hidden)
+        .collect::<Vec<_>>();
+    if test_cases.is_empty() {
+        return Err(AppError::InvalidInput(
+            "No public test cases are configured for this question.".into(),
+        ));
+    }
+    let source_code = body.code.unwrap_or_default();
+    code_execution::validate_code_submission_size(&source_code)?;
+    let language_id = body
+        .language_id
+        .or_else(|| q.type_config.get("languageId").and_then(|v| v.as_i64()).map(|v| v as i32))
+        .or_else(|| {
+            q.type_config
+                .get("language")
+                .and_then(|v| v.as_str())
+                .map(code_execution::language_id_from_name)
+        })
+        .unwrap_or(63);
+
+    let mut results = Vec::with_capacity(test_cases.len());
+    let mut passed = 0usize;
+    for tc in test_cases {
+        let res = code_execution::run_code(ExecuteCodeRequest {
+            language_id,
+            source_code: source_code.clone(),
+            stdin: tc.input,
+            expected_output: tc.expected_output,
+            time_limit_ms: tc.time_limit_ms,
+            memory_limit_kb: tc.memory_limit_kb,
+        })
+        .await?;
+        if res.passed {
+            passed += 1;
+        }
+        results.push(res);
+    }
+    let points_possible = if q.points < 0 { 0.0 } else { q.points as f64 };
+    let points_earned = if results.is_empty() {
+        0.0
+    } else {
+        points_possible * (passed as f64 / results.len() as f64)
+    };
+    Ok(Json(QuizCodeRunResponse {
+        question_id,
+        results,
+        points_earned,
+        points_possible,
+    }))
+}
+
 async fn quiz_attempt_advance_handler(
     State(state): State<AppState>,
     Path((course_code, item_id, attempt_id)): Path<(String, Uuid, Uuid)>,
@@ -5745,11 +5966,20 @@ async fn quiz_attempt_advance_handler(
         return Err(AppError::QuestionAlreadyLocked);
     }
 
-    let (pts, max_pts, is_ok) = quiz_attempt_grading::grade_static_question(q, &body);
+    let (pts, max_pts, is_ok) = grade_question_with_code_support(q, &body).await?;
     let rj = serde_json::json!({
         "selectedChoiceIndex": body.selected_choice_index,
         "selectedChoiceIndices": body.selected_choice_indices,
         "textAnswer": body.text_answer,
+        "matchingPairs": &body.matching_pairs,
+        "orderingSequence": &body.ordering_sequence,
+        "hotspotClick": &body.hotspot_click,
+        "numericValue": &body.numeric_value,
+        "formulaLatex": &body.formula_latex,
+        "codeSubmission": &body.code_submission,
+        "fileKey": &body.file_key,
+        "audioKey": &body.audio_key,
+        "videoKey": &body.video_key,
     });
 
     let mut tx = state.pool.begin().await?;

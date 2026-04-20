@@ -12,6 +12,15 @@ pub const QUIZ_QUESTION_TYPES: &[&str] = &[
     "essay",
     "true_false",
     "short_answer",
+    "matching",
+    "ordering",
+    "hotspot",
+    "numeric",
+    "formula",
+    "code",
+    "file_upload",
+    "audio_response",
+    "video_response",
 ];
 
 pub const MAX_QUIZ_QUESTIONS: usize = 300;
@@ -247,6 +256,8 @@ pub struct QuizQuestion {
     pub question_type: String,
     #[serde(default)]
     pub choices: Vec<String>,
+    #[serde(default)]
+    pub type_config: serde_json::Value,
     #[serde(default)]
     pub correct_choice_index: Option<usize>,
     #[serde(default)]
@@ -568,6 +579,45 @@ pub struct QuizQuestionResponseItem {
     pub selected_choice_indices: Option<Vec<usize>>,
     #[serde(default)]
     pub text_answer: Option<String>,
+    #[serde(default)]
+    pub matching_pairs: Option<Vec<QuizMatchingPairResponse>>,
+    #[serde(default)]
+    pub ordering_sequence: Option<Vec<String>>,
+    #[serde(default)]
+    pub hotspot_click: Option<QuizHotspotClick>,
+    #[serde(default)]
+    pub numeric_value: Option<f64>,
+    #[serde(default)]
+    pub formula_latex: Option<String>,
+    #[serde(default)]
+    pub code_submission: Option<QuizCodeSubmission>,
+    #[serde(default)]
+    pub file_key: Option<String>,
+    #[serde(default)]
+    pub audio_key: Option<String>,
+    #[serde(default)]
+    pub video_key: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizMatchingPairResponse {
+    pub left_id: String,
+    pub right_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizHotspotClick {
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizCodeSubmission {
+    pub language: String,
+    pub code: String,
 }
 
 #[derive(Debug, Deserialize)]

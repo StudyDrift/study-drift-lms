@@ -40,6 +40,15 @@ const QUESTION_TYPE_OPTIONS = [
   { value: 'essay', label: 'Essay' },
   { value: 'true_false', label: 'True / False' },
   { value: 'short_answer', label: 'Short answer' },
+  { value: 'matching', label: 'Matching' },
+  { value: 'ordering', label: 'Ordering' },
+  { value: 'hotspot', label: 'Hotspot' },
+  { value: 'numeric', label: 'Numeric' },
+  { value: 'formula', label: 'Formula (LaTeX)' },
+  { value: 'code', label: 'Code' },
+  { value: 'file_upload', label: 'File upload' },
+  { value: 'audio_response', label: 'Audio response' },
+  { value: 'video_response', label: 'Video response' },
 ] as const
 type QuestionType = (typeof QUESTION_TYPE_OPTIONS)[number]['value']
 
@@ -118,6 +127,7 @@ function makeQuestion(): QuizQuestion {
     prompt: '',
     questionType: 'multiple_choice',
     choices: ['', '', '', ''],
+    typeConfig: {},
     correctChoiceIndex: null,
     multipleAnswer: false,
     answerWithImage: false,
@@ -125,6 +135,46 @@ function makeQuestion(): QuizQuestion {
     points: 1,
     estimatedMinutes: 2,
   }
+}
+
+function defaultTypeConfigFor(questionType: QuestionType): Record<string, unknown> {
+  if (questionType === 'matching') {
+    return {
+      pairs: [
+        { leftId: 'left-1', rightId: 'right-1', left: 'Item A', right: 'Match A' },
+        { leftId: 'left-2', rightId: 'right-2', left: 'Item B', right: 'Match B' },
+      ],
+    }
+  }
+  if (questionType === 'ordering') {
+    return { items: ['First item', 'Second item', 'Third item'] }
+  }
+  if (questionType === 'hotspot') {
+    return { imageUrl: '', regions: [] }
+  }
+  if (questionType === 'numeric') {
+    return { toleranceAbs: 0 }
+  }
+  if (questionType === 'formula') {
+    return { latexAnswer: '', equivalences: [] }
+  }
+  if (questionType === 'code') {
+    return {
+      language: 'javascript',
+      starterCode: '',
+      testCases: [{ input: '', expectedOutput: '', isHidden: false, timeLimitMs: 2000, memoryLimitKb: 262144 }],
+    }
+  }
+  if (questionType === 'file_upload') {
+    return { maxMb: 50, allowedMimeTypes: ['application/pdf'] }
+  }
+  if (questionType === 'audio_response') {
+    return { maxDurationS: 300 }
+  }
+  if (questionType === 'video_response') {
+    return { maxDurationS: 600, maxMb: 200 }
+  }
+  return {}
 }
 
 function QuestionTypeDropdown({
@@ -704,7 +754,13 @@ export default function CourseModuleQuizPage() {
   function openQuestionsEditor() {
     if (!canEditQuizItems) return
     setQuestionsError(null)
-    setQuestionsDraft(questions.map((q) => ({ ...q, choices: [...q.choices] })))
+    setQuestionsDraft(
+      questions.map((q) => ({
+        ...q,
+        choices: [...q.choices],
+        typeConfig: q.typeConfig ? { ...q.typeConfig } : {},
+      })),
+    )
     setQeAdaptiveOn(isAdaptive)
     setQeAdaptivePrompt(adaptiveSystemPrompt)
     setQeAdaptiveSources([...adaptiveSourceItemIds])
@@ -1578,6 +1634,10 @@ export default function CourseModuleQuizPage() {
                                         nextType === 'multiple_choice' || nextType === 'true_false'
                                           ? it.correctChoiceIndex
                                           : null,
+                                      typeConfig:
+                                        it.questionType === nextType
+                                          ? (it.typeConfig ?? {})
+                                          : defaultTypeConfigFor(nextType),
                                     }
                                   : it,
                               ),
@@ -1757,6 +1817,646 @@ export default function CourseModuleQuizPage() {
                       <p className="mt-3 text-xs text-slate-500">
                         Open-response question type. No answer choices are shown to learners.
                       </p>
+                    )}
+                    {q.questionType === 'ordering' && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-sm font-medium text-slate-800">Ordering items</p>
+                        {(
+                          Array.isArray(q.typeConfig?.items)
+                            ? q.typeConfig.items.map((x) => String(x))
+                            : []
+                        ).map((item, itemIdx) => (
+                          <div key={`${q.id}-ordering-${itemIdx}`} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={item}
+                              onChange={(e) =>
+                                setQuestionsDraft((prev) =>
+                                  prev.map((it) => {
+                                    if (it.id !== q.id) return it
+                                    const items = Array.isArray(it.typeConfig?.items)
+                                      ? it.typeConfig.items.map((x) => String(x))
+                                      : []
+                                    const nextItems = items.map((x, i) => (i === itemIdx ? e.target.value : x))
+                                    return { ...it, typeConfig: { ...(it.typeConfig ?? {}), items: nextItems } }
+                                  }),
+                                )
+                              }
+                              placeholder={`Ordering item ${itemIdx + 1}`}
+                              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setQuestionsDraft((prev) =>
+                                  prev.map((it) => {
+                                    if (it.id !== q.id) return it
+                                    const items = Array.isArray(it.typeConfig?.items)
+                                      ? it.typeConfig.items.map((x) => String(x))
+                                      : []
+                                    const nextItems = items.filter((_, i) => i !== itemIdx)
+                                    return { ...it, typeConfig: { ...(it.typeConfig ?? {}), items: nextItems } }
+                                  }),
+                                )
+                              }
+                              className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuestionsDraft((prev) =>
+                              prev.map((it) => {
+                                if (it.id !== q.id) return it
+                                const items = Array.isArray(it.typeConfig?.items)
+                                  ? it.typeConfig.items.map((x) => String(x))
+                                  : []
+                                return {
+                                  ...it,
+                                  typeConfig: { ...(it.typeConfig ?? {}), items: [...items, ''] },
+                                }
+                              }),
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
+                        >
+                          <Plus className="h-4 w-4" aria-hidden />
+                          Add ordering item
+                        </button>
+                      </div>
+                    )}
+                    {q.questionType === 'numeric' && (
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <label className="text-xs text-slate-600">
+                          Correct value
+                          <input
+                            type="number"
+                            step="any"
+                            value={String((q.typeConfig?.correct as number | undefined) ?? '')}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: {
+                                          ...(it.typeConfig ?? {}),
+                                          correct:
+                                            e.target.value.trim() === '' ? undefined : Number(e.target.value),
+                                        },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-600">
+                          Tolerance (+/-)
+                          <input
+                            type="number"
+                            step="any"
+                            value={String((q.typeConfig?.toleranceAbs as number | undefined) ?? '')}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: {
+                                          ...(it.typeConfig ?? {}),
+                                          toleranceAbs:
+                                            e.target.value.trim() === '' ? undefined : Number(e.target.value),
+                                        },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-600">
+                          Unit (optional)
+                          <input
+                            type="text"
+                            value={String((q.typeConfig?.unit as string | undefined) ?? '')}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: { ...(it.typeConfig ?? {}), unit: e.target.value },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                      </div>
+                    )}
+                    {q.questionType === 'code' && (
+                      <div className="mt-4 space-y-3">
+                        <label className="block text-xs text-slate-600">
+                          Language
+                          <input
+                            type="text"
+                            value={String((q.typeConfig?.language as string | undefined) ?? 'javascript')}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: { ...(it.typeConfig ?? {}), language: e.target.value },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <label className="block text-xs text-slate-600">
+                          Starter code (optional)
+                          <textarea
+                            rows={6}
+                            value={String((q.typeConfig?.starterCode as string | undefined) ?? '')}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: { ...(it.typeConfig ?? {}), starterCode: e.target.value },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm"
+                          />
+                        </label>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Test cases</p>
+                          <div className="mt-2 space-y-3">
+                            {(Array.isArray(q.typeConfig?.testCases) ? q.typeConfig.testCases : []).map((tc, tcIdx) => {
+                              const t = tc as {
+                                input?: string
+                                expectedOutput?: string
+                                isHidden?: boolean
+                                timeLimitMs?: number
+                                memoryLimitKb?: number
+                              }
+                              return (
+                                <div key={`${q.id}-code-tc-${tcIdx}`} className="rounded-md border border-slate-200 bg-white p-2">
+                                  <div className="grid gap-2 md:grid-cols-2">
+                                    <label className="text-xs text-slate-600">
+                                      Input
+                                      <textarea
+                                        rows={3}
+                                        value={t.input ?? ''}
+                                        onChange={(e) =>
+                                          setQuestionsDraft((prev) =>
+                                            prev.map((it) => {
+                                              if (it.id !== q.id) return it
+                                              const testCases = (
+                                                Array.isArray(it.typeConfig?.testCases) ? it.typeConfig.testCases : []
+                                              ).map((x) => ({ ...(x as Record<string, unknown>) }))
+                                              testCases[tcIdx] = { ...(testCases[tcIdx] ?? {}), input: e.target.value }
+                                              return { ...it, typeConfig: { ...(it.typeConfig ?? {}), testCases } }
+                                            }),
+                                          )
+                                        }
+                                        className="mt-1 w-full resize-y rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-xs"
+                                      />
+                                    </label>
+                                    <label className="text-xs text-slate-600">
+                                      Expected output
+                                      <textarea
+                                        rows={3}
+                                        value={t.expectedOutput ?? ''}
+                                        onChange={(e) =>
+                                          setQuestionsDraft((prev) =>
+                                            prev.map((it) => {
+                                              if (it.id !== q.id) return it
+                                              const testCases = (
+                                                Array.isArray(it.typeConfig?.testCases) ? it.typeConfig.testCases : []
+                                              ).map((x) => ({ ...(x as Record<string, unknown>) }))
+                                              testCases[tcIdx] = { ...(testCases[tcIdx] ?? {}), expectedOutput: e.target.value }
+                                              return { ...it, typeConfig: { ...(it.typeConfig ?? {}), testCases } }
+                                            }),
+                                          )
+                                        }
+                                        className="mt-1 w-full resize-y rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-xs"
+                                      />
+                                    </label>
+                                  </div>
+                                  <div className="mt-2 grid gap-2 md:grid-cols-3">
+                                    <label className="inline-flex items-center gap-2 text-xs text-slate-600">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(t.isHidden)}
+                                        onChange={(e) =>
+                                          setQuestionsDraft((prev) =>
+                                            prev.map((it) => {
+                                              if (it.id !== q.id) return it
+                                              const testCases = (
+                                                Array.isArray(it.typeConfig?.testCases) ? it.typeConfig.testCases : []
+                                              ).map((x) => ({ ...(x as Record<string, unknown>) }))
+                                              testCases[tcIdx] = { ...(testCases[tcIdx] ?? {}), isHidden: e.target.checked }
+                                              return { ...it, typeConfig: { ...(it.typeConfig ?? {}), testCases } }
+                                            }),
+                                          )
+                                        }
+                                      />
+                                      Hidden
+                                    </label>
+                                    <label className="text-xs text-slate-600">
+                                      Time limit (ms)
+                                      <input
+                                        type="number"
+                                        min={100}
+                                        value={String(t.timeLimitMs ?? 2000)}
+                                        onChange={(e) =>
+                                          setQuestionsDraft((prev) =>
+                                            prev.map((it) => {
+                                              if (it.id !== q.id) return it
+                                              const testCases = (
+                                                Array.isArray(it.typeConfig?.testCases) ? it.typeConfig.testCases : []
+                                              ).map((x) => ({ ...(x as Record<string, unknown>) }))
+                                              testCases[tcIdx] = {
+                                                ...(testCases[tcIdx] ?? {}),
+                                                timeLimitMs: Number(e.target.value) || 2000,
+                                              }
+                                              return { ...it, typeConfig: { ...(it.typeConfig ?? {}), testCases } }
+                                            }),
+                                          )
+                                        }
+                                        className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                                      />
+                                    </label>
+                                    <label className="text-xs text-slate-600">
+                                      Memory (KB)
+                                      <input
+                                        type="number"
+                                        min={1024}
+                                        value={String(t.memoryLimitKb ?? 262144)}
+                                        onChange={(e) =>
+                                          setQuestionsDraft((prev) =>
+                                            prev.map((it) => {
+                                              if (it.id !== q.id) return it
+                                              const testCases = (
+                                                Array.isArray(it.typeConfig?.testCases) ? it.typeConfig.testCases : []
+                                              ).map((x) => ({ ...(x as Record<string, unknown>) }))
+                                              testCases[tcIdx] = {
+                                                ...(testCases[tcIdx] ?? {}),
+                                                memoryLimitKb: Number(e.target.value) || 262144,
+                                              }
+                                              return { ...it, typeConfig: { ...(it.typeConfig ?? {}), testCases } }
+                                            }),
+                                          )
+                                        }
+                                        className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                                      />
+                                    </label>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) => {
+                                  if (it.id !== q.id) return it
+                                  const testCases = (Array.isArray(it.typeConfig?.testCases) ? it.typeConfig.testCases : []).map(
+                                    (x) => ({ ...(x as Record<string, unknown>) }),
+                                  )
+                                  testCases.push({
+                                    input: '',
+                                    expectedOutput: '',
+                                    isHidden: false,
+                                    timeLimitMs: 2000,
+                                    memoryLimitKb: 262144,
+                                  })
+                                  return { ...it, typeConfig: { ...(it.typeConfig ?? {}), testCases } }
+                                }),
+                              )
+                            }
+                            className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            <Plus className="h-3.5 w-3.5" aria-hidden />
+                            Add test case
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {q.questionType === 'matching' && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-sm font-medium text-slate-800">Matching pairs</p>
+                        {(Array.isArray(q.typeConfig?.pairs) ? q.typeConfig.pairs : []).map((pair, pairIdx) => {
+                          const p = pair as { left?: string; right?: string; leftId?: string; rightId?: string }
+                          return (
+                            <div key={`${q.id}-pair-${pairIdx}`} className="grid gap-2 md:grid-cols-2">
+                              <input
+                                type="text"
+                                value={p.left ?? ''}
+                                onChange={(e) =>
+                                  setQuestionsDraft((prev) =>
+                                    prev.map((it) => {
+                                      if (it.id !== q.id) return it
+                                      const pairs = (Array.isArray(it.typeConfig?.pairs) ? it.typeConfig.pairs : []).map(
+                                        (x) => ({ ...(x as Record<string, unknown>) }),
+                                      )
+                                      const existing = pairs[pairIdx] ?? {}
+                                      pairs[pairIdx] = { ...existing, left: e.target.value }
+                                      return { ...it, typeConfig: { ...(it.typeConfig ?? {}), pairs } }
+                                    }),
+                                  )
+                                }
+                                placeholder={`Left item ${pairIdx + 1}`}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                              />
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={p.right ?? ''}
+                                  onChange={(e) =>
+                                    setQuestionsDraft((prev) =>
+                                      prev.map((it) => {
+                                        if (it.id !== q.id) return it
+                                        const pairs = (Array.isArray(it.typeConfig?.pairs) ? it.typeConfig.pairs : []).map(
+                                          (x) => ({ ...(x as Record<string, unknown>) }),
+                                        )
+                                        const existing = pairs[pairIdx] ?? {}
+                                        pairs[pairIdx] = { ...existing, right: e.target.value }
+                                        return { ...it, typeConfig: { ...(it.typeConfig ?? {}), pairs } }
+                                      }),
+                                    )
+                                  }
+                                  placeholder={`Right item ${pairIdx + 1}`}
+                                  className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setQuestionsDraft((prev) =>
+                                      prev.map((it) => {
+                                        if (it.id !== q.id) return it
+                                        const pairs = (Array.isArray(it.typeConfig?.pairs) ? it.typeConfig.pairs : []).filter(
+                                          (_, i) => i !== pairIdx,
+                                        )
+                                        return { ...it, typeConfig: { ...(it.typeConfig ?? {}), pairs } }
+                                      }),
+                                    )
+                                  }
+                                  className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuestionsDraft((prev) =>
+                              prev.map((it) => {
+                                if (it.id !== q.id) return it
+                                const pairs = Array.isArray(it.typeConfig?.pairs) ? [...it.typeConfig.pairs] : []
+                                const n = pairs.length + 1
+                                pairs.push({
+                                  leftId: `left-${n}`,
+                                  rightId: `right-${n}`,
+                                  left: '',
+                                  right: '',
+                                })
+                                return { ...it, typeConfig: { ...(it.typeConfig ?? {}), pairs } }
+                              }),
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
+                        >
+                          <Plus className="h-4 w-4" aria-hidden />
+                          Add pair
+                        </button>
+                      </div>
+                    )}
+                    {q.questionType === 'formula' && (
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <label className="text-xs text-slate-600">
+                          Correct LaTeX answer
+                          <input
+                            type="text"
+                            value={String((q.typeConfig?.latexAnswer as string | undefined) ?? '')}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: { ...(it.typeConfig ?? {}), latexAnswer: e.target.value },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-600">
+                          Equivalent forms (comma-separated)
+                          <input
+                            type="text"
+                            value={Array.isArray(q.typeConfig?.equivalences) ? q.typeConfig.equivalences.join(', ') : ''}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: {
+                                          ...(it.typeConfig ?? {}),
+                                          equivalences: e.target.value
+                                            .split(',')
+                                            .map((x) => x.trim())
+                                            .filter((x) => x.length > 0),
+                                        },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                      </div>
+                    )}
+                    {q.questionType === 'hotspot' && (
+                      <div className="mt-4 space-y-3">
+                        <label className="block text-xs text-slate-600">
+                          Image URL
+                          <input
+                            type="url"
+                            value={String((q.typeConfig?.imageUrl as string | undefined) ?? '')}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? { ...it, typeConfig: { ...(it.typeConfig ?? {}), imageUrl: e.target.value } }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <p className="text-xs text-slate-500">
+                          Region editor is coordinate-based in this pass via JSON metadata.
+                        </p>
+                      </div>
+                    )}
+                    {q.questionType === 'file_upload' && (
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <label className="text-xs text-slate-600">
+                          Max file size (MB)
+                          <input
+                            type="number"
+                            min={1}
+                            value={String((q.typeConfig?.maxMb as number | undefined) ?? 50)}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: { ...(it.typeConfig ?? {}), maxMb: Number(e.target.value) || 50 },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-600">
+                          Allowed MIME types (comma-separated)
+                          <input
+                            type="text"
+                            value={
+                              Array.isArray(q.typeConfig?.allowedMimeTypes)
+                                ? q.typeConfig.allowedMimeTypes.join(', ')
+                                : ''
+                            }
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: {
+                                          ...(it.typeConfig ?? {}),
+                                          allowedMimeTypes: e.target.value
+                                            .split(',')
+                                            .map((x) => x.trim())
+                                            .filter((x) => x.length > 0),
+                                        },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                      </div>
+                    )}
+                    {q.questionType === 'audio_response' && (
+                      <div className="mt-4">
+                        <label className="text-xs text-slate-600">
+                          Max duration (seconds)
+                          <input
+                            type="number"
+                            min={10}
+                            value={String((q.typeConfig?.maxDurationS as number | undefined) ?? 300)}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: {
+                                          ...(it.typeConfig ?? {}),
+                                          maxDurationS: Number(e.target.value) || 300,
+                                        },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                      </div>
+                    )}
+                    {q.questionType === 'video_response' && (
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <label className="text-xs text-slate-600">
+                          Max duration (seconds)
+                          <input
+                            type="number"
+                            min={10}
+                            value={String((q.typeConfig?.maxDurationS as number | undefined) ?? 600)}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: {
+                                          ...(it.typeConfig ?? {}),
+                                          maxDurationS: Number(e.target.value) || 600,
+                                        },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-600">
+                          Max upload size (MB)
+                          <input
+                            type="number"
+                            min={1}
+                            value={String((q.typeConfig?.maxMb as number | undefined) ?? 200)}
+                            onChange={(e) =>
+                              setQuestionsDraft((prev) =>
+                                prev.map((it) =>
+                                  it.id === q.id
+                                    ? {
+                                        ...it,
+                                        typeConfig: { ...(it.typeConfig ?? {}), maxMb: Number(e.target.value) || 200 },
+                                      }
+                                    : it,
+                                ),
+                              )
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          />
+                        </label>
+                      </div>
                     )}
                     <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-4">
                       <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">

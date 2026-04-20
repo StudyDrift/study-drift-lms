@@ -24,6 +24,7 @@
     "@tiptap/pm": "^3.22.2",
     "@tiptap/react": "^3.22.2",
     "@tiptap/starter-kit": "^3.22.2",
+    "katex": "^0.16.45",
     "lucide-react": "^1.7.0",
     "mark.js": "^8.11.1",
     "marked": "^17.0.6",
@@ -31,7 +32,9 @@
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.14.0",
+    "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "unified": "^11.0.5"
   },
   "devDependencies": {
@@ -41,6 +44,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/jsdom": "^28.0.1",
+    "@types/katex": "^0.16.8",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

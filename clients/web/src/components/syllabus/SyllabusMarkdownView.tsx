@@ -1,14 +1,30 @@
 import type { Components } from 'react-markdown'
 import { forwardRef } from 'react'
 import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import 'katex/dist/katex.min.css'
 import { CourseFileMarkdownImage } from './CourseFileMarkdownImage'
 import { normalizeMarkdownLists } from './normalizeMarkdownLists'
 import { remarkMergeAdjacentLists } from './remarkMergeAdjacentLists'
 import type { SyllabusSection } from '../../lib/coursesApi'
 import type { ResolvedMarkdownTheme } from '../../lib/markdownTheme'
 import { resolveMarkdownTheme } from '../../lib/markdownTheme'
+import { isMathRenderingEnabled } from '../../lib/math'
 import { sectionsToMarkdown } from './syllabusSectionMarkdown'
+import type { PluggableList } from 'unified'
+
+const katexRehypePlugins: PluggableList = [
+  [rehypeKatex, { output: 'htmlAndMathml', strict: 'ignore' }],
+]
+
+const markdownMathPlugins = isMathRenderingEnabled()
+  ? {
+      remark: [remarkMath],
+      rehype: katexRehypePlugins,
+    }
+  : { remark: [], rehype: [] as PluggableList }
 
 function createMarkdownComponents(
   theme: ResolvedMarkdownTheme,
@@ -160,7 +176,11 @@ export const MarkdownArticleView = forwardRef<HTMLDivElement, MarkdownArticleVie
     const normalized = normalizeMarkdownLists(markdown)
     return (
       <div ref={ref} className={`syllabus-md ${theme.classes.article}`}>
-        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMergeAdjacentLists]} components={components}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkMergeAdjacentLists, ...markdownMathPlugins.remark]}
+          rehypePlugins={markdownMathPlugins.rehype}
+          components={components}
+        >
           {normalized}
         </ReactMarkdown>
       </div>
@@ -177,7 +197,11 @@ export function SyllabusMarkdownView({ sections, theme = defaultResolved, course
   const normalized = normalizeMarkdownLists(src)
   return (
     <div className={`syllabus-md ${theme.classes.article}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMergeAdjacentLists]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMergeAdjacentLists, ...markdownMathPlugins.remark]}
+        rehypePlugins={markdownMathPlugins.rehype}
+        components={components}
+      >
         {normalized}
       </ReactMarkdown>
     </div>

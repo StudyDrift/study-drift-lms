@@ -13,6 +13,7 @@ import { hrefForModuleCourseItem } from '../../../lib/courseItemRefTokens'
 import { filterTaggable, kindLabel } from '../../courseItemPromptMention'
 import { getBlockMentionRange } from './markdownBodyMention'
 import { CourseAwareTipTapImage } from './CourseAwareTipTapImage'
+import { MathBlock, MathInline } from '../extensions/mathTipTap'
 
 const editorShellClass = [
   'tiptap',
@@ -43,6 +44,9 @@ const editorShellClass = [
   '[&_blockquote]:mt-3 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-600',
   '[&_blockquote]:dark:border-neutral-600 [&_blockquote]:dark:text-neutral-400',
   '[&_figure]:my-3',
+  '[&_.katex]:text-inherit',
+  '[&_.lex-math-block-root]:my-2 [&_.lex-math-block-root]:w-full',
+  '[&_.katex-error-fallback]:align-middle',
 ].join(' ')
 
 function sanitizeImageAlt(name: string): string {
@@ -276,6 +280,8 @@ export function MarkdownBodyEditor({
         StarterKit.configure({
           heading: { levels: [1, 2, 3, 4, 5, 6] },
         }),
+        MathBlock,
+        MathInline,
         Markdown.configure({ markedOptions: { gfm: true } }),
         Link.configure({
           openOnClick: false,

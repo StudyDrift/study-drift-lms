@@ -25,6 +25,8 @@ pub enum AppError {
     InvalidInput(String),
     #[error("invalid or expired password reset link")]
     InvalidResetToken,
+    #[error("too many requests")]
+    TooManyRequests(String),
     #[error("question already locked")]
     QuestionAlreadyLocked,
     #[error(transparent)]
@@ -128,6 +130,15 @@ impl IntoResponse for AppError {
                 });
                 (StatusCode::BAD_REQUEST, body).into_response()
             }
+            AppError::TooManyRequests(message) => {
+                let body = Json(ErrorBody {
+                    error: ErrorDetail {
+                        code: "TOO_MANY_REQUESTS",
+                        message,
+                    },
+                });
+                (StatusCode::TOO_MANY_REQUESTS, body).into_response()
+            }
             AppError::QuestionAlreadyLocked => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
@@ -213,6 +224,10 @@ mod tests {
             (AppError::InvalidCredentials, "INVALID_CREDENTIALS"),
             (AppError::EmailTaken, "EMAIL_TAKEN"),
             (AppError::InvalidResetToken, "INVALID_RESET_TOKEN"),
+            (
+                AppError::TooManyRequests("slow down".into()),
+                "TOO_MANY_REQUESTS",
+            ),
         ] {
             let r = err.into_response();
             let v = body_json(r).await;

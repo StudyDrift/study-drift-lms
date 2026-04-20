@@ -1,6 +1,7 @@
 //! Scoring helpers for stored quiz attempts.
 
 use chrono::{DateTime, Utc};
+use serde_json::Value;
 
 use crate::models::course_module_quiz::{AdaptiveQuizHistoryTurn, QuizQuestion, QuizQuestionResponseItem};
 use crate::repos::quiz_attempts::QuizAttemptRow;
@@ -56,8 +57,137 @@ pub fn grade_static_question(
             (pts, max, Some(ok))
         }
         "fill_in_blank" | "short_answer" | "essay" => (0.0, max, None),
+        "numeric" => {
+            let Some(value) = resp.numeric_value else {
+                return (0.0, max, Some(false));
+            };
+            let Some(correct) = q.type_config.get("correct").and_then(Value::as_f64) else {
+                return (0.0, max, None);
+            };
+            let abs_tol = q
+                .type_config
+                .get("tolerance_abs")
+                .or_else(|| q.type_config.get("toleranceAbs"))
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
+                .max(0.0);
+            let rel_tol = q
+                .type_config
+                .get("tolerance_pct")
+                .or_else(|| q.type_config.get("tolerancePct"))
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
+                .max(0.0);
+            let tol_from_pct = correct.abs() * (rel_tol / 100.0);
+            let tol = abs_tol.max(tol_from_pct);
+            let ok = (value - correct).abs() <= tol;
+            (if ok { max } else { 0.0 }, max, Some(ok))
+        }
+        "formula" => {
+            let guess = resp.formula_latex.clone().unwrap_or_default();
+            let target = q
+                .type_config
+                .get("latex_answer")
+                .or_else(|| q.type_config.get("latexAnswer"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if target.is_empty() {
+                return (0.0, max, None);
+            }
+            let guess_norm = normalize_formula(&guess);
+            let mut ok = guess_norm == normalize_formula(target);
+            if !ok {
+                if let Some(eq) = q
+                    .type_config
+                    .get("equivalences")
+                    .and_then(Value::as_array)
+                    .or_else(|| q.type_config.get("equivalenceList").and_then(Value::as_array))
+                {
+                    ok = eq.iter().filter_map(Value::as_str).any(|s| normalize_formula(s) == guess_norm);
+                }
+            }
+            (if ok { max } else { 0.0 }, max, Some(ok))
+        }
+        "matching" => {
+            let authored = q.type_config.get("pairs").and_then(Value::as_array);
+            let Some(authored_pairs) = authored else {
+                return (0.0, max, None);
+            };
+            if authored_pairs.is_empty() {
+                return (0.0, max, None);
+            }
+            let selected = resp.matching_pairs.clone().unwrap_or_default();
+            let mut correct = 0usize;
+            for pair in authored_pairs {
+                let left = pair.get("left_id").or_else(|| pair.get("leftId")).and_then(Value::as_str);
+                let right = pair.get("right_id").or_else(|| pair.get("rightId")).and_then(Value::as_str);
+                if let (Some(l), Some(r)) = (left, right) {
+                    if selected.iter().any(|p| p.left_id == l && p.right_id == r) {
+                        correct += 1;
+                    }
+                }
+            }
+            let ratio = correct as f64 / authored_pairs.len() as f64;
+            let pts = (max * ratio).clamp(0.0, max);
+            (pts, max, Some((ratio - 1.0).abs() < 1e-9))
+        }
+        "ordering" => {
+            let authored = q
+                .type_config
+                .get("items")
+                .and_then(Value::as_array)
+                .map(|arr| arr.iter().filter_map(Value::as_str).collect::<Vec<_>>())
+                .unwrap_or_default();
+            if authored.is_empty() {
+                return (0.0, max, None);
+            }
+            let selected = resp.ordering_sequence.clone().unwrap_or_default();
+            if selected.len() != authored.len() {
+                return (0.0, max, Some(false));
+            }
+            let correct = authored
+                .iter()
+                .zip(selected.iter())
+                .filter(|(a, b)| *a == b)
+                .count();
+            let ratio = correct as f64 / authored.len() as f64;
+            let pts = (max * ratio).clamp(0.0, max);
+            (pts, max, Some((ratio - 1.0).abs() < 1e-9))
+        }
+        "hotspot" => {
+            let Some(click) = resp.hotspot_click.as_ref() else {
+                return (0.0, max, Some(false));
+            };
+            let regions = q
+                .type_config
+                .get("regions")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            if regions.is_empty() {
+                return (0.0, max, None);
+            }
+            let ok = regions.iter().any(|r| point_in_region(click.x, click.y, r));
+            (if ok { max } else { 0.0 }, max, Some(ok))
+        }
         _ => (0.0, max, None),
     }
+}
+
+fn normalize_formula(s: &str) -> String {
+    s.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+fn point_in_region(x: f64, y: f64, region: &Value) -> bool {
+    let shape = region.get("shape").and_then(Value::as_str).unwrap_or("rect");
+    if shape == "rect" {
+        let x0 = region.get("x").and_then(Value::as_f64).unwrap_or(f64::NAN);
+        let y0 = region.get("y").and_then(Value::as_f64).unwrap_or(f64::NAN);
+        let w = region.get("width").and_then(Value::as_f64).unwrap_or(f64::NAN);
+        let h = region.get("height").and_then(Value::as_f64).unwrap_or(f64::NAN);
+        return x0.is_finite() && y0.is_finite() && w.is_finite() && h.is_finite() && x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + h;
+    }
+    false
 }
 
 /// Effective due time for a learner (relative schedule shifts authored due dates).

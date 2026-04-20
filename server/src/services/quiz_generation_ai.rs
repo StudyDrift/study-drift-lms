@@ -157,6 +157,7 @@ fn normalize_raw_to_question(raw: AiQuestionRaw) -> Result<QuizQuestion, AppErro
         prompt,
         question_type: qt,
         choices,
+        type_config: serde_json::json!({}),
         correct_choice_index,
         multiple_answer: raw.multiple_answer,
         answer_with_image: raw.answer_with_image,

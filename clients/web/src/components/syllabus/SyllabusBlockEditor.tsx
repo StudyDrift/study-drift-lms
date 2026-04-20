@@ -21,6 +21,7 @@ import {
   useBlockEditor,
   type MarkdownEditKind,
 } from '../editor/block-editor'
+import { MathInsertPopover } from '../editor/MathInsertPopover'
 import { BookLoader } from '../quiz/BookLoader'
 
 function newLocalId(): string {
@@ -329,6 +330,7 @@ function SyllabusBlockEditorInner({
   const generateInputRef = useRef<HTMLInputElement>(null)
   const toolbarImageInputRef = useRef<HTMLInputElement>(null)
   const pendingToolbarImageSectionRef = useRef<string | null>(null)
+  const [mathPopoverSectionId, setMathPopoverSectionId] = useState<string | null>(null)
 
   const handleEditorChange = useCallback((sectionId: string, editor: Editor | null) => {
     editorRefs.current[sectionId] = editor
@@ -511,6 +513,14 @@ function SyllabusBlockEditorInner({
             <MarkdownFormatToolbar
               disabled={disabled || genBusy}
               onApply={(kind) => applyMarkdownForSection(section.id, kind)}
+              mathInsert={{
+                onOpen: () => {
+                  setSelectedId(section.id)
+                  setActiveField({ blockId: section.id, field: 'markdown' })
+                  editorRefs.current[section.id]?.chain().focus().run()
+                  setMathPopoverSectionId(section.id)
+                },
+              }}
               courseImage={
                 courseCode
                   ? {
@@ -704,6 +714,11 @@ function SyllabusBlockEditorInner({
         ))}
 
         <BlockInsertionRow onAdd={addSection} disabled={disabled} />
+        <MathInsertPopover
+          open={mathPopoverSectionId != null}
+          editor={mathPopoverSectionId ? editorRefs.current[mathPopoverSectionId] : null}
+          onClose={() => setMathPopoverSectionId(null)}
+        />
       </BlockCanvas>
     </BlockEditorShell>
   )

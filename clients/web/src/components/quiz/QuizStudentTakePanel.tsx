@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { X } from 'lucide-react'
+import { MathPlainText } from '../math/MathPlainText'
 import { BookLoader } from './BookLoader'
+import { MathKeyboard } from './MathKeyboard'
 import {
   fetchModuleQuiz,
   fetchQuizCurrentQuestion,
@@ -8,11 +10,13 @@ import {
   postAdaptiveQuizNext,
   postQuizAdvance,
   postQuizFocusLoss,
+  postQuizQuestionRun,
   postQuizStart,
   postQuizSubmit,
   type AdaptiveQuizGeneratedQuestion,
   type AdaptiveQuizHistoryTurn,
   type ModuleQuizPayload,
+  type QuizCodeRunResponse,
   type QuizAttemptStartResponse,
   type QuizAdvancedSettings,
   type QuizQuestion,
@@ -38,6 +42,63 @@ function shuffleArray<T>(items: T[]): T[] {
 
 function visibleChoices(q: QuizQuestion): string[] {
   return q.choices.map((c) => c.trim()).filter((c) => c.length > 0)
+}
+
+function orderingItemsForQuestion(q: QuizQuestion): string[] {
+  const configured = q.typeConfig?.items
+  if (Array.isArray(configured)) {
+    const items = configured.map((x) => String(x).trim()).filter((x) => x.length > 0)
+    if (items.length > 0) return items
+  }
+  return visibleChoices(q)
+}
+
+type MatchingPairDraft = {
+  leftId?: string
+  rightId?: string
+  left?: string
+  right?: string
+}
+
+function matchingPairsForQuestion(q: QuizQuestion): MatchingPairDraft[] {
+  const configured = q.typeConfig?.pairs
+  if (!Array.isArray(configured)) return []
+  return configured
+    .map((pair) => {
+      const p = pair as Record<string, unknown>
+      return {
+        leftId: typeof p.leftId === 'string' ? p.leftId : typeof p.left_id === 'string' ? p.left_id : undefined,
+        rightId:
+          typeof p.rightId === 'string' ? p.rightId : typeof p.right_id === 'string' ? p.right_id : undefined,
+        left: typeof p.left === 'string' ? p.left : undefined,
+        right: typeof p.right === 'string' ? p.right : undefined,
+      }
+    })
+    .filter((p) => (p.left ?? '').trim().length > 0 || (p.right ?? '').trim().length > 0)
+}
+
+function sortedRightOptionsForMatching(pairs: MatchingPairDraft[]): string[] {
+  const rights = pairs.map((p) => (p.right ?? '').trim()).filter((r) => r.length > 0)
+  return [...new Set(rights)].sort((a, b) => a.localeCompare(b))
+}
+
+function buildMatchingPairsPayload(
+  q: QuizQuestion,
+  a: QuizAnswerState | undefined,
+): { leftId: string; rightId: string }[] {
+  const pairs = matchingPairsForQuestion(q)
+  const out: { leftId: string; rightId: string }[] = []
+  for (let i = 0; i < pairs.length; i++) {
+    const p = pairs[i]
+    const key = p.leftId ?? `left-${i}`
+    const selectedRight = (a?.matching?.[key] ?? '').trim()
+    if (!selectedRight) continue
+    const match = pairs.find((x) => (x.right ?? '').trim() === selectedRight)
+    const rightId = match?.rightId
+    const leftId = p.leftId ?? `left-${i}`
+    if (leftId && rightId) out.push({ leftId, rightId })
+  }
+  return out
 }
 
 function withShuffledChoices(q: QuizQuestion): QuizQuestion {
@@ -79,6 +140,16 @@ function prepareStaticQuestions(
   return qs
 }
 
+function starterAnswersForCodeQuestions(questions: QuizQuestion[]): Record<string, QuizAnswerState> {
+  const out: Record<string, QuizAnswerState> = {}
+  for (const q of questions) {
+    if (q.questionType !== 'code') continue
+    const starter = typeof q.typeConfig?.starterCode === 'string' ? q.typeConfig.starterCode : ''
+    if (starter.trim().length > 0) out[q.id] = { text: starter }
+  }
+  return out
+}
+
 export type QuizStudentTakePanelProps = {
   open: boolean
   onClose: () => void
@@ -88,6 +159,16 @@ export type QuizStudentTakePanelProps = {
   advanced: QuizAdvancedSettings
   oneQuestionAtATime: boolean
   allowBackNavigation: boolean
+}
+
+type QuizAnswerState = {
+  choice?: number
+  text?: string
+  numeric?: number
+  ordering?: string[]
+  /** leftId -> selected right-side label */
+  matching?: Record<string, string>
+  hotspot?: { x: number; y: number }
 }
 
 type UiPhase =
@@ -124,7 +205,9 @@ export function QuizStudentTakePanel({
 
   const [staticQuestions, setStaticQuestions] = useState<QuizQuestion[]>([])
   const [attemptId, setAttemptId] = useState<string | null>(null)
-  const [answers, setAnswers] = useState<Record<string, { choice?: number; text?: string }>>({})
+  const [answers, setAnswers] = useState<Record<string, QuizAnswerState>>({})
+  const [codeRunByQuestion, setCodeRunByQuestion] = useState<Record<string, QuizCodeRunResponse>>({})
+  const [runningCodeQuestionId, setRunningCodeQuestionId] = useState<string | null>(null)
 
   const [adHistory, setAdHistory] = useState<AdaptiveQuizHistoryTurn[]>([])
   const [adPending, setAdPending] = useState<AdaptiveQuizGeneratedQuestion[]>([])
@@ -158,6 +241,8 @@ export function QuizStudentTakePanel({
     setStaticQuestions([])
     setAttemptId(null)
     setAnswers({})
+    setCodeRunByQuestion({})
+    setRunningCodeQuestionId(null)
     setAdHistory([])
     setAdPending([])
     setAdSelected(null)
@@ -272,6 +357,15 @@ export function QuizStudentTakePanel({
           setSrvIdx(cur.questionIndex)
           setSrvTotal(cur.totalQuestions)
           setSrvQuestion(cur.completed ? null : cur.question)
+          if (cur.question && cur.question.questionType === 'code') {
+            const starter =
+              typeof cur.question.typeConfig?.starterCode === 'string'
+                ? cur.question.typeConfig.starterCode
+                : ''
+            if (starter.trim().length > 0) {
+              setAnswers((prev) => ({ ...prev, [cur.question!.id]: prev[cur.question!.id] ?? { text: starter } }))
+            }
+          }
           if (!cur.completed && !cur.question) {
             throw new Error('No question was returned for this attempt.')
           }
@@ -288,6 +382,7 @@ export function QuizStudentTakePanel({
           throw new Error('This quiz has no questions yet.')
         }
         setStaticQuestions(prepared)
+        setAnswers((prev) => ({ ...starterAnswersForCodeQuestions(prepared), ...prev }))
         setUiPhase({ kind: 'static' })
         return
       }
@@ -339,6 +434,37 @@ export function QuizStudentTakePanel({
         if (q.questionType === 'multiple_choice' || q.questionType === 'true_false') {
           return { questionId: q.id, selectedChoiceIndex: a?.choice ?? undefined }
         }
+        if (q.questionType === 'numeric') {
+          return {
+            questionId: q.id,
+            numericValue: typeof a?.numeric === 'number' ? a.numeric : undefined,
+            textAnswer: a?.text ?? '',
+          }
+        }
+        if (q.questionType === 'formula') {
+          return { questionId: q.id, formulaLatex: a?.text ?? '' }
+        }
+        if (q.questionType === 'code') {
+          return {
+            questionId: q.id,
+            codeSubmission: {
+              language: String((q.typeConfig?.language as string | undefined) ?? 'text'),
+              code: a?.text ?? '',
+            },
+          }
+        }
+        if (q.questionType === 'ordering') {
+          return { questionId: q.id, orderingSequence: a?.ordering ?? orderingItemsForQuestion(q) }
+        }
+        if (q.questionType === 'matching') {
+          return { questionId: q.id, matchingPairs: buildMatchingPairsPayload(q, a) }
+        }
+        if (q.questionType === 'hotspot') {
+          return { questionId: q.id, hotspotClick: a?.hotspot }
+        }
+        if (q.questionType === 'file_upload' || q.questionType === 'audio_response' || q.questionType === 'video_response') {
+          return { questionId: q.id, textAnswer: a?.text ?? '' }
+        }
         return { questionId: q.id, textAnswer: a?.text ?? '' }
       })
       const sub = await postQuizSubmit(courseCode, itemId, { attemptId, responses })
@@ -353,9 +479,43 @@ export function QuizStudentTakePanel({
     setError(null)
     const q = srvQuestion
     const a = answers[q.id]
-    let body: { questionId: string; selectedChoiceIndex?: number; textAnswer?: string | null }
+    let body:
+      | { questionId: string; selectedChoiceIndex?: number }
+      | { questionId: string; textAnswer?: string | null; numericValue?: number; formulaLatex?: string }
+      | { questionId: string; orderingSequence?: string[] }
+      | { questionId: string; codeSubmission?: { language: string; code: string } }
+      | { questionId: string; matchingPairs?: { leftId: string; rightId: string }[] }
+      | { questionId: string; hotspotClick?: { x: number; y: number } }
     if (q.questionType === 'multiple_choice' || q.questionType === 'true_false') {
       body = { questionId: q.id, selectedChoiceIndex: a?.choice ?? undefined }
+    } else if (q.questionType === 'numeric') {
+      body = {
+        questionId: q.id,
+        numericValue: typeof a?.numeric === 'number' ? a.numeric : undefined,
+        textAnswer: a?.text ?? '',
+      }
+    } else if (q.questionType === 'formula') {
+      body = { questionId: q.id, formulaLatex: a?.text ?? '' }
+    } else if (q.questionType === 'code') {
+      body = {
+        questionId: q.id,
+        codeSubmission: {
+          language: String((q.typeConfig?.language as string | undefined) ?? 'text'),
+          code: a?.text ?? '',
+        },
+      }
+    } else if (q.questionType === 'ordering') {
+      body = { questionId: q.id, orderingSequence: a?.ordering ?? orderingItemsForQuestion(q) }
+    } else if (q.questionType === 'matching') {
+      body = { questionId: q.id, matchingPairs: buildMatchingPairsPayload(q, a) }
+    } else if (q.questionType === 'hotspot') {
+      body = { questionId: q.id, hotspotClick: a?.hotspot }
+    } else if (
+      q.questionType === 'file_upload' ||
+      q.questionType === 'audio_response' ||
+      q.questionType === 'video_response'
+    ) {
+      body = { questionId: q.id, textAnswer: a?.text ?? '' }
     } else {
       body = { questionId: q.id, textAnswer: a?.text ?? '' }
     }
@@ -691,6 +851,13 @@ export function QuizStudentTakePanel({
                   allowBackNavigation={false}
                   answers={answers}
                   setAnswers={setAnswers}
+                  attemptId={attemptId}
+                  courseCode={courseCode}
+                  itemId={itemId}
+                  codeRunByQuestion={codeRunByQuestion}
+                  setCodeRunByQuestion={setCodeRunByQuestion}
+                  runningCodeQuestionId={runningCodeQuestionId}
+                  setRunningCodeQuestionId={setRunningCodeQuestionId}
                   onSubmit={() => void advanceServerQuestion()}
                   advanceOnly
                 />
@@ -719,6 +886,13 @@ export function QuizStudentTakePanel({
               allowBackNavigation={allowBackNavigation}
               answers={answers}
               setAnswers={setAnswers}
+              attemptId={attemptId}
+              courseCode={courseCode}
+              itemId={itemId}
+              codeRunByQuestion={codeRunByQuestion}
+              setCodeRunByQuestion={setCodeRunByQuestion}
+              runningCodeQuestionId={runningCodeQuestionId}
+              setRunningCodeQuestionId={setRunningCodeQuestionId}
               onSubmit={() => void submitStatic()}
             />
           )}
@@ -738,8 +912,8 @@ export function QuizStudentTakePanel({
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
                     Question {Math.min(adHistory.length + 1, maxAdaptive)} of {maxAdaptive}
                   </p>
-                  <p className="whitespace-pre-wrap text-sm font-medium text-slate-900 dark:text-neutral-100">
-                    {currentAdaptive.prompt}
+                  <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">
+                    <MathPlainText text={currentAdaptive.prompt} />
                   </p>
                   <div className="space-y-2">
                     {currentAdaptive.choices.map((label, i) => (
@@ -757,7 +931,9 @@ export function QuizStudentTakePanel({
                           }}
                           className="mt-0.5 border-slate-300 text-indigo-600"
                         />
-                        <span className="min-w-0 flex-1">{label}</span>
+                        <span className="min-w-0 flex-1">
+                          <MathPlainText text={label} />
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -800,6 +976,13 @@ function StaticTakeBody({
   allowBackNavigation,
   answers,
   setAnswers,
+  attemptId,
+  courseCode,
+  itemId,
+  codeRunByQuestion,
+  setCodeRunByQuestion,
+  runningCodeQuestionId,
+  setRunningCodeQuestionId,
   onSubmit,
   advanceOnly,
   nextLabel,
@@ -807,22 +990,47 @@ function StaticTakeBody({
   questions: QuizQuestion[]
   oneQuestionAtATime: boolean
   allowBackNavigation: boolean
-  answers: Record<string, { choice?: number; text?: string }>
-  setAnswers: Dispatch<SetStateAction<Record<string, { choice?: number; text?: string }>>>
+  answers: Record<string, QuizAnswerState>
+  setAnswers: Dispatch<SetStateAction<Record<string, QuizAnswerState>>>
+  attemptId: string | null
+  courseCode: string
+  itemId: string
+  codeRunByQuestion: Record<string, QuizCodeRunResponse>
+  setCodeRunByQuestion: Dispatch<SetStateAction<Record<string, QuizCodeRunResponse>>>
+  runningCodeQuestionId: string | null
+  setRunningCodeQuestionId: Dispatch<SetStateAction<string | null>>
   onSubmit: () => void
   /** When true, one-question view always uses `nextLabel` and `onSubmit` advances (lockdown server flow). */
   advanceOnly?: boolean
   nextLabel?: string
 }) {
   const [step, setStep] = useState(0)
+  const textInputRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({})
+
   useEffect(() => {
     setStep(0)
   }, [questions])
+
+  async function runCodeQuestion(q: QuizQuestion) {
+    if (!attemptId) return
+    const code = answers[q.id]?.text ?? ''
+    const languageId = typeof q.typeConfig?.languageId === 'number' ? q.typeConfig.languageId : undefined
+    setRunningCodeQuestionId(q.id)
+    try {
+      const result = await postQuizQuestionRun(courseCode, itemId, attemptId, q.id, { code, languageId })
+      setCodeRunByQuestion((prev) => ({ ...prev, [q.id]: result }))
+    } finally {
+      setRunningCodeQuestionId(null)
+    }
+  }
 
   function renderQuestion(q: QuizQuestion, index: number) {
     const choices = visibleChoices(q)
     const showChoices = q.questionType === 'multiple_choice' || q.questionType === 'true_false'
     const a = answers[q.id] ?? {}
+    const configuredUnit = typeof q.typeConfig?.unit === 'string' ? q.typeConfig.unit : null
+    const orderingItems = a.ordering ?? orderingItemsForQuestion(q)
+    const baseOrderingItems = orderingItemsForQuestion(q)
 
     return (
       <section
@@ -832,7 +1040,9 @@ function StaticTakeBody({
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
           Question {index + 1}
         </p>
-        <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-slate-900 dark:text-neutral-100">{q.prompt || '—'}</p>
+        <p className="mt-2 text-sm font-medium text-slate-900 dark:text-neutral-100">
+          <MathPlainText text={q.prompt || '—'} />
+        </p>
         {showChoices && (
           <div className="mt-4 space-y-2">
             {choices.map((label, i) => (
@@ -852,38 +1062,406 @@ function StaticTakeBody({
                   }
                   className="mt-0.5 border-slate-300 text-indigo-600"
                 />
-                <span className="min-w-0 flex-1">{label}</span>
+                <span className="min-w-0 flex-1">
+                  <MathPlainText text={label} />
+                </span>
               </label>
             ))}
           </div>
         )}
         {q.questionType === 'fill_in_blank' && (
-          <input
-            type="text"
-            className="mt-4 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
-            value={a.text ?? ''}
-            onChange={(e) =>
-              setAnswers((prev) => ({
-                ...prev,
-                [q.id]: { ...prev[q.id], text: e.target.value },
-              }))
-            }
-            placeholder="Your answer"
-          />
+          <>
+            <input
+              ref={(el) => {
+                textInputRefs.current[q.id] = el
+              }}
+              type="text"
+              className="mt-4 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+              value={a.text ?? ''}
+              onChange={(e) =>
+                setAnswers((prev) => ({
+                  ...prev,
+                  [q.id]: { ...prev[q.id], text: e.target.value },
+                }))
+              }
+              placeholder="Your answer"
+            />
+            <MathKeyboard
+              className="mt-2"
+              onInsert={(snippet, caret) => {
+                const el = textInputRefs.current[q.id]
+                setAnswers((prevState) => {
+                  const cur = prevState[q.id]?.text ?? ''
+                  if (!el) {
+                    return {
+                      ...prevState,
+                      [q.id]: { ...prevState[q.id], text: cur + snippet },
+                    }
+                  }
+                  const start = el.selectionStart ?? cur.length
+                  const end = el.selectionEnd ?? cur.length
+                  const next = cur.slice(0, start) + snippet + cur.slice(end)
+                  const pos = start + (caret ?? snippet.length)
+                  requestAnimationFrame(() => {
+                    el.focus()
+                    el.setSelectionRange(pos, pos)
+                  })
+                  return { ...prevState, [q.id]: { ...prevState[q.id], text: next } }
+                })
+              }}
+            />
+          </>
         )}
         {(q.questionType === 'short_answer' || q.questionType === 'essay') && (
-          <textarea
-            rows={q.questionType === 'essay' ? 8 : 3}
-            className="mt-4 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
-            value={a.text ?? ''}
-            onChange={(e) =>
-              setAnswers((prev) => ({
-                ...prev,
-                [q.id]: { ...prev[q.id], text: e.target.value },
-              }))
-            }
-            placeholder="Your answer"
-          />
+          <>
+            <textarea
+              ref={(el) => {
+                textInputRefs.current[q.id] = el
+              }}
+              rows={q.questionType === 'essay' ? 8 : 3}
+              className="mt-4 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+              value={a.text ?? ''}
+              onChange={(e) =>
+                setAnswers((prev) => ({
+                  ...prev,
+                  [q.id]: { ...prev[q.id], text: e.target.value },
+                }))
+              }
+              placeholder="Your answer"
+            />
+            <MathKeyboard
+              className="mt-2"
+              onInsert={(snippet, caret) => {
+                const el = textInputRefs.current[q.id]
+                setAnswers((prevState) => {
+                  const cur = prevState[q.id]?.text ?? ''
+                  if (!el) {
+                    return {
+                      ...prevState,
+                      [q.id]: { ...prevState[q.id], text: cur + snippet },
+                    }
+                  }
+                  const start = el.selectionStart ?? cur.length
+                  const end = el.selectionEnd ?? cur.length
+                  const next = cur.slice(0, start) + snippet + cur.slice(end)
+                  const pos = start + (caret ?? snippet.length)
+                  requestAnimationFrame(() => {
+                    el.focus()
+                    el.setSelectionRange(pos, pos)
+                  })
+                  return { ...prevState, [q.id]: { ...prevState[q.id], text: next } }
+                })
+              }}
+            />
+          </>
+        )}
+        {q.questionType === 'numeric' && (
+          <div className="mt-4 space-y-2">
+            <input
+              type="number"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+              value={a.numeric ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value
+                setAnswers((prev) => ({
+                  ...prev,
+                  [q.id]: { ...prev[q.id], numeric: raw.trim() === '' ? undefined : Number(raw), text: raw },
+                }))
+              }}
+              placeholder="Enter a numeric value"
+            />
+            {configuredUnit && configuredUnit.trim().length > 0 ? (
+              <p className="text-xs text-slate-500 dark:text-neutral-400">Expected unit: {configuredUnit}</p>
+            ) : null}
+          </div>
+        )}
+        {q.questionType === 'formula' && (
+          <>
+            <input
+              ref={(el) => {
+                textInputRefs.current[q.id] = el
+              }}
+              type="text"
+              className="mt-4 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+              value={a.text ?? ''}
+              onChange={(e) =>
+                setAnswers((prev) => ({
+                  ...prev,
+                  [q.id]: { ...prev[q.id], text: e.target.value },
+                }))
+              }
+              placeholder="Enter LaTeX, e.g. x^2+1"
+            />
+            <MathKeyboard
+              className="mt-2"
+              onInsert={(snippet, caret) => {
+                const el = textInputRefs.current[q.id]
+                setAnswers((prevState) => {
+                  const cur = prevState[q.id]?.text ?? ''
+                  if (!el) return { ...prevState, [q.id]: { ...prevState[q.id], text: cur + snippet } }
+                  const start = el.selectionStart ?? cur.length
+                  const end = el.selectionEnd ?? cur.length
+                  const next = cur.slice(0, start) + snippet + cur.slice(end)
+                  const pos = start + (caret ?? snippet.length)
+                  requestAnimationFrame(() => {
+                    el.focus()
+                    el.setSelectionRange(pos, pos)
+                  })
+                  return { ...prevState, [q.id]: { ...prevState[q.id], text: next } }
+                })
+              }}
+            />
+          </>
+        )}
+        {q.questionType === 'code' && (
+          <div className="mt-4 space-y-3">
+            <textarea
+              rows={8}
+              className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm dark:border-neutral-600 dark:bg-neutral-900"
+              value={a.text ?? ''}
+              onChange={(e) =>
+                setAnswers((prev) => ({
+                  ...prev,
+                  [q.id]: { ...prev[q.id], text: e.target.value },
+                }))
+              }
+              placeholder="Write your code submission"
+            />
+            <button
+              type="button"
+              onClick={() => void runCodeQuestion(q)}
+              disabled={!attemptId || runningCodeQuestionId === q.id}
+              className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200"
+            >
+              {runningCodeQuestionId === q.id ? 'Running…' : 'Run public tests'}
+            </button>
+            {codeRunByQuestion[q.id] ? (
+              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-neutral-700" role="table">
+                <table className="min-w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-neutral-800">
+                    <tr>
+                      <th className="px-2 py-1.5 font-semibold">Test</th>
+                      <th className="px-2 py-1.5 font-semibold">Status</th>
+                      <th className="px-2 py-1.5 font-semibold">Expected</th>
+                      <th className="px-2 py-1.5 font-semibold">Actual</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {codeRunByQuestion[q.id].results.map((r, idx) => (
+                      <tr key={`${q.id}-run-${idx}`} className="border-t border-slate-100 dark:border-neutral-800">
+                        <td className="px-2 py-1.5">#{idx + 1}</td>
+                        <td className="px-2 py-1.5">{r.passed ? 'Pass' : r.status.toUpperCase()}</td>
+                        <td className="px-2 py-1.5 font-mono">{r.expectedOutput || '(empty)'}</td>
+                        <td className="px-2 py-1.5 font-mono">{r.actualOutput || r.stderr || '(empty)'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </div>
+        )}
+        {q.questionType === 'ordering' && (
+          <div className="mt-4 space-y-2">
+            {orderingItems.length === 0 ? (
+              <p className="text-sm italic text-slate-500 dark:text-neutral-400">
+                No ordering items are configured.
+              </p>
+            ) : (
+              orderingItems.map((item, i) => (
+                <div
+                  key={`${q.id}-ordering-${i}-${item}`}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData('text/plain', String(i))
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    const fromRaw = e.dataTransfer.getData('text/plain')
+                    const from = Number(fromRaw)
+                    if (!Number.isFinite(from) || from < 0 || from === i) return
+                    setAnswers((prev) => {
+                      const cur = prev[q.id]?.ordering ?? orderingItemsForQuestion(q)
+                      const next = [...cur]
+                      const [moved] = next.splice(from, 1)
+                      next.splice(i, 0, moved)
+                      return { ...prev, [q.id]: { ...prev[q.id], ordering: next } }
+                    })
+                  }}
+                  className="flex cursor-grab items-center justify-between rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-sm text-slate-800 dark:border-neutral-600 dark:bg-neutral-800/50 dark:text-neutral-100"
+                >
+                  <span>
+                    {(baseOrderingItems.findIndex((x) => x === item) + 1 || i + 1)}. {item}
+                  </span>
+                  <span className="text-xs text-slate-400 dark:text-neutral-500">Drag</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+        {q.questionType === 'matching' && (
+          <div className="mt-4 space-y-2">
+            {matchingPairsForQuestion(q).length === 0 ? (
+              <p className="text-sm italic text-slate-500 dark:text-neutral-400">
+                No matching pairs are configured.
+              </p>
+            ) : (
+              matchingPairsForQuestion(q).map((pair, i) => {
+                const leftLabel = pair.left ?? ''
+                const key = pair.leftId ?? `left-${i}`
+                const rightOptions = sortedRightOptionsForMatching(matchingPairsForQuestion(q))
+                return (
+                  <div key={`${q.id}-match-${i}`} className="grid gap-2 md:grid-cols-2">
+                    <p className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-sm text-slate-800 dark:border-neutral-600 dark:bg-neutral-800/50 dark:text-neutral-100">
+                      <MathPlainText text={leftLabel} />
+                    </p>
+                    <select
+                      value={a.matching?.[key] ?? ''}
+                      onChange={(e) =>
+                        setAnswers((prev) => ({
+                          ...prev,
+                          [q.id]: {
+                            ...prev[q.id],
+                            matching: { ...(prev[q.id]?.matching ?? {}), [key]: e.target.value },
+                          },
+                        }))
+                      }
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                    >
+                      <option value="">Select match…</option>
+                      {rightOptions.map((opt) => (
+                        <option key={`${q.id}-ro-${i}-${opt}`} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        )}
+        {q.questionType === 'hotspot' && (
+          <div className="mt-4 space-y-2">
+            {typeof q.typeConfig?.imageUrl === 'string' && q.typeConfig.imageUrl.trim().length > 0 ? (
+              <div
+                className="relative cursor-crosshair overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-neutral-600 dark:bg-neutral-900"
+                onClick={(e) => {
+                  const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+                  const x = Math.round(e.clientX - rect.left)
+                  const y = Math.round(e.clientY - rect.top)
+                  setAnswers((prev) => ({
+                    ...prev,
+                    [q.id]: { ...prev[q.id], hotspot: { x, y } },
+                  }))
+                }}
+              >
+                <img
+                  src={q.typeConfig.imageUrl}
+                  alt=""
+                  className="max-h-72 w-full object-contain"
+                />
+                {a.hotspot ? (
+                  <span
+                    className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-600 ring-2 ring-white"
+                    style={{ left: a.hotspot.x, top: a.hotspot.y }}
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm italic text-slate-500 dark:text-neutral-400">
+                No image URL is configured for this hotspot.
+              </p>
+            )}
+            {a.hotspot ? (
+              <p className="text-xs text-slate-500 dark:text-neutral-400">
+                Selected point: ({a.hotspot.x}, {a.hotspot.y})
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-neutral-400">Click the image to place your answer.</p>
+            )}
+          </div>
+        )}
+        {q.questionType === 'file_upload' && (
+          <div className="mt-4 space-y-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-neutral-200">
+              Upload a file
+              {typeof q.typeConfig?.maxMb === 'number' ? (
+                <span className="ml-1 font-normal text-slate-500 dark:text-neutral-400">
+                  (max {q.typeConfig.maxMb} MB)
+                </span>
+              ) : null}
+            </label>
+            <input
+              type="file"
+              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:border-neutral-600 dark:text-neutral-300 dark:file:bg-indigo-950/40 dark:file:text-indigo-200"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                setAnswers((prev) => ({
+                  ...prev,
+                  [q.id]: { ...prev[q.id], text: f ? f.name : '' },
+                }))
+              }}
+            />
+            {a.text ? (
+              <p className="text-xs text-slate-600 dark:text-neutral-400">Selected: {a.text}</p>
+            ) : null}
+          </div>
+        )}
+        {q.questionType === 'audio_response' && (
+          <div className="mt-4 space-y-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-neutral-200">
+              Upload audio
+              {typeof q.typeConfig?.maxDurationS === 'number' ? (
+                <span className="ml-1 font-normal text-slate-500 dark:text-neutral-400">
+                  (max {q.typeConfig.maxDurationS}s)
+                </span>
+              ) : null}
+            </label>
+            <input
+              type="file"
+              accept="audio/*"
+              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:border-neutral-600 dark:text-neutral-300 dark:file:bg-indigo-950/40 dark:file:text-indigo-200"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                setAnswers((prev) => ({
+                  ...prev,
+                  [q.id]: { ...prev[q.id], text: f ? f.name : '' },
+                }))
+              }}
+            />
+            {a.text ? (
+              <p className="text-xs text-slate-600 dark:text-neutral-400">Selected: {a.text}</p>
+            ) : null}
+          </div>
+        )}
+        {q.questionType === 'video_response' && (
+          <div className="mt-4 space-y-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-neutral-200">
+              Upload video
+              {typeof q.typeConfig?.maxMb === 'number' ? (
+                <span className="ml-1 font-normal text-slate-500 dark:text-neutral-400">
+                  (max {q.typeConfig.maxMb} MB)
+                </span>
+              ) : null}
+            </label>
+            <input
+              type="file"
+              accept="video/*"
+              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:border-neutral-600 dark:text-neutral-300 dark:file:bg-indigo-950/40 dark:file:text-indigo-200"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                setAnswers((prev) => ({
+                  ...prev,
+                  [q.id]: { ...prev[q.id], text: f ? f.name : '' },
+                }))
+              }}
+            />
+            {a.text ? (
+              <p className="text-xs text-slate-600 dark:text-neutral-400">Selected: {a.text}</p>
+            ) : null}
+          </div>
         )}
       </section>
     )

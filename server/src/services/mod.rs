@@ -3,6 +3,7 @@ pub mod adaptive_quiz_ai;
 pub mod assignment_rubric_ai;
 pub mod ai;
 pub mod auth;
+pub mod code_execution;
 pub mod mail;
 pub mod canvas_course_import;
 pub mod course_export_import;
