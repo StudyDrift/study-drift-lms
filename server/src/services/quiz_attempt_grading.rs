@@ -231,28 +231,48 @@ pub fn points_for_gradebook(raw_earned: f64, raw_possible: f64, points_worth: Op
     }
 }
 
+/// Which submitted attempt score feeds the gradebook when multiple tries exist.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetakePolicy {
+    Highest,
+    Latest,
+    First,
+    Average,
+}
+
+impl RetakePolicy {
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim() {
+            "highest" => Some(Self::Highest),
+            "latest" => Some(Self::Latest),
+            "first" => Some(Self::First),
+            "average" => Some(Self::Average),
+            _ => None,
+        }
+    }
+}
+
 pub fn pick_policy_points(attempts: &[QuizAttemptRow], policy: &str) -> Option<(f64, f64)> {
     if attempts.is_empty() {
         return None;
     }
-    let p = policy.trim();
-    match p {
-        "highest" => attempts.iter().max_by(|a, b| {
+    let pick_row = match RetakePolicy::parse(policy) {
+        Some(RetakePolicy::Highest) => attempts.iter().max_by(|a, b| {
             let ae = a.points_earned.unwrap_or(0.0);
             let be = b.points_earned.unwrap_or(0.0);
             ae.partial_cmp(&be).unwrap_or(std::cmp::Ordering::Equal)
         }),
-        "first" => attempts.first(),
-        "latest" => attempts.last(),
-        "average" => {
+        Some(RetakePolicy::First) => attempts.first(),
+        Some(RetakePolicy::Latest) => attempts.last(),
+        Some(RetakePolicy::Average) => {
             let n = attempts.len() as f64;
             let sum_e: f64 = attempts.iter().map(|a| a.points_earned.unwrap_or(0.0)).sum();
             let sum_p: f64 = attempts.iter().map(|a| a.points_possible.unwrap_or(0.0)).sum();
             return Some((sum_e / n, sum_p / n));
         }
-        _ => attempts.last(),
-    }
-    .map(|a| {
+        None => attempts.last(),
+    };
+    pick_row.map(|a| {
         (
             a.points_earned.unwrap_or(0.0),
             a.points_possible.unwrap_or(0.0),
@@ -260,11 +280,20 @@ pub fn pick_policy_points(attempts: &[QuizAttemptRow], policy: &str) -> Option<(
     })
 }
 
+/// Percent score (0–100) implied by policy-selected raw points, for reporting APIs.
+pub fn policy_score_percent(earned: f64, possible: f64) -> Option<f64> {
+    if possible <= 0.0 || !earned.is_finite() || !possible.is_finite() {
+        return None;
+    }
+    Some(((earned / possible) * 100.0).clamp(0.0, 100.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::TimeZone;
     use chrono::Utc;
+    use uuid::Uuid;
 
     #[test]
     fn late_penalty_scales_points() {
@@ -289,5 +318,53 @@ mod tests {
     #[test]
     fn no_due_means_not_late() {
         assert!(!quiz_submission_is_late(None, Utc::now()));
+    }
+
+    fn sample_attempt_row(earned: f64, possible: f64) -> QuizAttemptRow {
+        QuizAttemptRow {
+            id: Uuid::nil(),
+            course_id: Uuid::nil(),
+            structure_item_id: Uuid::nil(),
+            student_user_id: Uuid::nil(),
+            attempt_number: 1,
+            status: "submitted".into(),
+            is_adaptive: false,
+            started_at: Utc::now(),
+            submitted_at: Some(Utc::now()),
+            points_earned: Some(earned),
+            points_possible: Some(possible),
+            score_percent: None,
+            adaptive_history_json: None,
+            current_question_index: 0,
+            academic_integrity_flag: false,
+            deadline_at: None,
+            extended_time_applied: false,
+        }
+    }
+
+    #[test]
+    fn retake_policy_highest_picks_max() {
+        let attempts = vec![sample_attempt_row(60.0, 100.0), sample_attempt_row(80.0, 100.0)];
+        let (e, p) = pick_policy_points(&attempts, "highest").unwrap();
+        assert!((e - 80.0).abs() < 1e-9 && (p - 100.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn retake_policy_average_mean_score() {
+        let attempts = vec![sample_attempt_row(60.0, 100.0), sample_attempt_row(80.0, 100.0)];
+        let (e, p) = pick_policy_points(&attempts, "average").unwrap();
+        assert!((e - 70.0).abs() < 1e-9 && (p - 100.0).abs() < 1e-9);
+        assert!((policy_score_percent(e, p).unwrap() - 70.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn retake_policy_first_uses_earliest_submitted() {
+        let mut a = sample_attempt_row(60.0, 100.0);
+        let mut b = sample_attempt_row(80.0, 100.0);
+        a.attempt_number = 1;
+        b.attempt_number = 2;
+        let attempts = vec![a, b];
+        let (e, p) = pick_policy_points(&attempts, "first").unwrap();
+        assert!((e - 60.0).abs() < 1e-9 && (p - 100.0).abs() < 1e-9);
     }
 }

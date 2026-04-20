@@ -74,12 +74,12 @@ fn question_entity_from_snapshot(snapshot: &JsonValue) -> Result<QuestionEntity,
         .get("id")
         .and_then(|v| v.as_str())
         .and_then(|s| Uuid::parse_str(s).ok())
-        .ok_or_else(|| AppError::InvalidInput("Question version snapshot is invalid.".into()))?;
+        .ok_or_else(|| AppError::invalid_input("Question version snapshot is invalid."))?;
     let course_id = snapshot
         .get("course_id")
         .and_then(|v| v.as_str())
         .and_then(|s| Uuid::parse_str(s).ok())
-        .ok_or_else(|| AppError::InvalidInput("Question version snapshot is invalid.".into()))?;
+        .ok_or_else(|| AppError::invalid_input("Question version snapshot is invalid."))?;
     let question_type = snapshot
         .get("question_type")
         .and_then(|v| v.as_str())
@@ -281,7 +281,7 @@ pub async fn sync_quiz_refs_from_editor_json(
     qb_repo::delete_quiz_question_refs_for_item(&mut tx, structure_item_id).await?;
 
     for (pos, q) in questions.iter().enumerate() {
-        let pos = i16::try_from(pos).map_err(|_| AppError::InvalidInput("Too many questions.".into()))?;
+        let pos = i16::try_from(pos).map_err(|_| AppError::invalid_input("Too many questions."))?;
         let db_type = db_question_type_from_editor(q);
         let opts = options_json_from_quiz_question(q);
         let corr = correct_answer_json_from_quiz_question(q);
@@ -373,7 +373,7 @@ pub async fn materialize_attempt_questions(
         if let Some(qid) = r.question_id {
             let version = qb_repo::get_question(pool, course_id, qid)
                 .await?
-                .ok_or_else(|| AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()))?
+                .ok_or_else(|| AppError::invalid_input("Question bank data is inconsistent for this attempt."))?
                 .version_number;
             picks.push((qid, version));
             continue;
@@ -382,14 +382,14 @@ pub async fn materialize_attempt_questions(
             let pool_ids = qb_repo::list_active_pool_question_ids(pool, pid, course_id).await?;
             let sampled = sample_n_from_pool(pool_ids, sn as usize, attempt_id, user_id);
             if sampled.len() != sn as usize {
-                return Err(AppError::InvalidInput(
-                    "Not enough active questions in the pool for this quiz.".into(),
+                return Err(AppError::invalid_input(
+                    "Not enough active questions in the pool for this quiz.",
                 ));
             }
             for qid in sampled {
                 let version = qb_repo::get_question(pool, course_id, qid)
                     .await?
-                    .ok_or_else(|| AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()))?
+                    .ok_or_else(|| AppError::invalid_input("Question bank data is inconsistent for this attempt."))?
                     .version_number;
                 picks.push((qid, version));
             }
@@ -408,7 +408,7 @@ pub async fn materialize_attempt_questions(
         qb_repo::insert_attempt_selection(&mut tx, attempt_id, *qid, *ver, pos).await?;
         pos = pos
             .checked_add(1)
-            .ok_or_else(|| AppError::InvalidInput("Quiz too long.".into()))?;
+            .ok_or_else(|| AppError::invalid_input("Quiz too long."))?;
     }
 
     if shuffle_choices && !picks.is_empty() {
@@ -416,7 +416,7 @@ pub async fn materialize_attempt_questions(
         let map = load_quiz_questions_map(pool, course_id, &ids).await?;
         for (qid, _) in &picks {
             let Some(ent) = map.get(qid) else {
-                return Err(AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()));
+                return Err(AppError::invalid_input("Question bank data is inconsistent for this attempt."));
             };
             if !effective_shuffle_choices_for_attempt(shuffle_choices, ent) {
                 continue;
@@ -464,7 +464,7 @@ async fn quiz_questions_for_attempt_selections(
                     picked.version_number,
                 )
                 .await?
-                .ok_or_else(|| AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()))?;
+                .ok_or_else(|| AppError::invalid_input("Question bank data is inconsistent for this attempt."))?;
                 let versioned = question_entity_from_snapshot(&snapshot)?;
                 quiz_question_from_entity(&versioned)?
             }
@@ -542,7 +542,7 @@ pub async fn resolve_delivery_questions(
     for r in &refs {
         if let Some(qid) = r.question_id {
             let Some(row) = map.get(&qid) else {
-                return Err(AppError::InvalidInput("Question bank data is missing.".into()));
+                return Err(AppError::invalid_input("Question bank data is missing."));
             };
             out.push(quiz_question_from_entity(row)?);
         }
@@ -566,8 +566,8 @@ pub async fn set_quiz_delivery_pool_only(
     sample_n: i32,
 ) -> Result<(), AppError> {
     if sample_n < 1 || sample_n > 300 {
-        return Err(AppError::InvalidInput(
-            "sampleN must be between 1 and 300.".into(),
+        return Err(AppError::invalid_input(
+            "sampleN must be between 1 and 300.",
         ));
     }
     let _pool_row = qb_repo::get_pool(pool, course_id, pool_id)
@@ -625,8 +625,8 @@ pub async fn search_questions(
 pub fn validate_submitted_ids(_bank: &[QuizQuestion], responses_len: usize, random_pool: Option<i32>) -> Result<(), AppError> {
     if let Some(pool_n) = random_pool {
         if pool_n >= 1 && responses_len != pool_n as usize {
-            return Err(AppError::InvalidInput(
-                "Submitted response count does not match the configured question pool size.".into(),
+            return Err(AppError::invalid_input(
+                "Submitted response count does not match the configured question pool size.",
             ));
         }
     }

@@ -27,7 +27,7 @@ pub async fn require_permission(
     required: &str,
 ) -> Result<AuthUser, AppError> {
     let user = auth_user(state, headers)?;
-    rbac::validate_permission_string(required).map_err(AppError::InvalidInput)?;
+    rbac::validate_permission_string(required).map_err(AppError::invalid_input)?;
     let allowed = rbac::user_has_permission(&state.pool, user.user_id, required).await?;
     if !allowed {
         return Err(AppError::Forbidden);
@@ -42,7 +42,7 @@ pub async fn assert_permission(
     user_id: Uuid,
     required: &str,
 ) -> Result<(), AppError> {
-    rbac::validate_permission_string(required).map_err(AppError::InvalidInput)?;
+    rbac::validate_permission_string(required).map_err(AppError::invalid_input)?;
     let allowed = rbac::user_has_permission(pool, user_id, required).await?;
     if !allowed {
         return Err(AppError::Forbidden);

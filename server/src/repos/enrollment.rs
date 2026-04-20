@@ -53,6 +53,26 @@ pub async fn enrollment_course_meta(
     Ok(rows.into_iter().map(|(a, b, c)| (a, (b, c))).collect())
 }
 
+/// Student enrollment row id for this course, if any.
+pub async fn get_student_enrollment_id(
+    pool: &PgPool,
+    course_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(&format!(
+        r#"
+        SELECT id
+        FROM {}
+        WHERE course_id = $1 AND user_id = $2 AND role = 'student'
+        "#,
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(course_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+}
+
 pub async fn student_enrollment_started_at(
     pool: &PgPool,
     course_id: Uuid,

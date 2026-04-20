@@ -6,7 +6,7 @@ import { usePermissions } from '../../context/use-permissions'
 import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { courseItemCreatePermission, patchCourseMarkdownTheme } from '../../lib/courses-api'
-import type { Course } from './Courses'
+import type { Course } from './courses'
 import {
   MARKDOWN_THEME_PRESET_META,
   markdownThemeCustomSeed,

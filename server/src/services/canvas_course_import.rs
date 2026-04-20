@@ -113,31 +113,31 @@ fn host_allowed_by_suffix_policy(host: &str, allowed_host_suffixes: &[String]) -
 fn normalize_canvas_base_url(raw: &str, allowed_host_suffixes: &[String]) -> Result<String, AppError> {
     let t = raw.trim().trim_end_matches('/');
     if t.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Canvas base URL is required.".into(),
+        return Err(AppError::invalid_input(
+            "Canvas base URL is required.",
         ));
     }
     let url = reqwest::Url::parse(t).map_err(|_| {
-        AppError::InvalidInput("Canvas base URL must be a valid URL (https recommended).".into())
+        AppError::invalid_input("Canvas base URL must be a valid URL (https recommended).")
     })?;
     if url.scheme() != "https" {
-        return Err(AppError::InvalidInput(
-            "Canvas base URL must use https.".into(),
+        return Err(AppError::invalid_input(
+            "Canvas base URL must use https.",
         ));
     }
     let Some(host) = url.host_str() else {
-        return Err(AppError::InvalidInput(
-            "Canvas base URL must include a hostname.".into(),
+        return Err(AppError::invalid_input(
+            "Canvas base URL must include a hostname.",
         ));
     };
     if host.parse::<IpAddr>().is_ok() {
-        return Err(AppError::InvalidInput(
-            "Canvas base URL must use a DNS hostname, not an IP address.".into(),
+        return Err(AppError::invalid_input(
+            "Canvas base URL must use a DNS hostname, not an IP address.",
         ));
     }
     if !host_allowed_by_suffix_policy(host, allowed_host_suffixes) {
-        return Err(AppError::InvalidInput(
-            "Canvas base URL host is not allowed by server policy.".into(),
+        return Err(AppError::invalid_input(
+            "Canvas base URL host is not allowed by server policy.",
         ));
     }
     Ok(format!(
@@ -151,13 +151,13 @@ fn normalize_canvas_base_url(raw: &str, allowed_host_suffixes: &[String]) -> Res
 fn parse_canvas_course_id(raw: &str) -> Result<i64, AppError> {
     let t = raw.trim();
     if t.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Canvas course id is required.".into(),
+        return Err(AppError::invalid_input(
+            "Canvas course id is required.",
         ));
     }
     t.parse::<i64>().map_err(|_| {
-        AppError::InvalidInput(
-            "Canvas course id must be a number (the id from the Canvas course URL).".into(),
+        AppError::invalid_input(
+            "Canvas course id must be a number (the id from the Canvas course URL).",
         )
     })
 }
@@ -499,7 +499,7 @@ fn canvas_api_url(base: &str, segments: &[&str], query: &[(&str, &str)]) -> Resu
     let root = base.trim_end_matches('/');
     let path = segments.join("/");
     let mut url = reqwest::Url::parse(&format!("{}/api/v1/{}", root, path)).map_err(|_| {
-        AppError::InvalidInput("Invalid Canvas base URL or API path.".into())
+        AppError::invalid_input("Invalid Canvas base URL or API path.")
     })?;
     if !query.is_empty() {
         let mut qp = url.query_pairs_mut();
@@ -520,36 +520,34 @@ async fn canvas_get_json_url(client: &Client, url: reqwest::Url, token: &str) ->
         .send()
         .await
         .map_err(|e| {
-            AppError::InvalidInput(format!(
+            AppError::invalid_input(format!(
                 "Could not reach Canvas (network error). Check the base URL and try again. ({e})"
             ))
         })?;
     let status = resp.status();
     let bytes = resp.bytes().await.map_err(|e| {
-        AppError::InvalidInput(format!("Failed to read Canvas response: {e}"))
+        AppError::invalid_input(format!("Failed to read Canvas response: {e}"))
     })?;
     if !status.is_success() {
         let snippet = String::from_utf8_lossy(&bytes[..bytes.len().min(400)]);
         if status == reqwest::StatusCode::UNAUTHORIZED {
-            return Err(AppError::InvalidInput(
-                "Canvas rejected the access token (401). Create a token with read access to courses, modules, assignments, enrollments, and the course roster (users), then try again."
-                    .into(),
+            return Err(AppError::invalid_input(
+                "Canvas rejected the access token (401). Create a token with read access to courses, modules, assignments, enrollments, and the course roster (users), then try again.",
             ));
         }
         if status == reqwest::StatusCode::NOT_FOUND {
-            return Err(AppError::InvalidInput(
-                "Canvas returned 404 for this course or endpoint. Check the course id and token scope."
-                    .into(),
+            return Err(AppError::invalid_input(
+                "Canvas returned 404 for this course or endpoint. Check the course id and token scope.",
             ));
         }
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Canvas API error HTTP {}: {}",
             status.as_u16(),
             snippet.trim()
         )));
     }
     serde_json::from_slice(&bytes).map_err(|e| {
-        AppError::InvalidInput(format!("Canvas returned invalid JSON: {e}"))
+        AppError::invalid_input(format!("Canvas returned invalid JSON: {e}"))
     })
 }
 
@@ -568,7 +566,7 @@ async fn canvas_get_json_array_paginated(
     let mut page: u32 = 1;
     loop {
         let mut url = reqwest::Url::parse(&format!("{}/api/v1/{}", root, path))
-            .map_err(|_| AppError::InvalidInput("Invalid Canvas URL.".into()))?;
+            .map_err(|_| AppError::invalid_input("Invalid Canvas URL."))?;
         {
             let mut qp = url.query_pairs_mut();
             for (k, v) in extra_query {
@@ -580,7 +578,7 @@ async fn canvas_get_json_array_paginated(
         let arr = canvas_get_json_url(client, url, token).await?;
         let items = arr
             .as_array()
-            .ok_or_else(|| AppError::InvalidInput("Unexpected Canvas response (expected array).".into()))?;
+            .ok_or_else(|| AppError::invalid_input("Unexpected Canvas response (expected array)."))?;
         if items.is_empty() {
             break;
         }
@@ -599,7 +597,7 @@ fn canvas_course_subresource_url(base: &str, cid: i64, tail: &str) -> Result<req
     let root = base.trim_end_matches('/');
     let tail = tail.trim_start_matches('/');
     reqwest::Url::parse(&format!("{}/api/v1/courses/{cid}/{tail}", root)).map_err(|_| {
-        AppError::InvalidInput("Invalid Canvas API URL (check base URL and resource path).".into())
+        AppError::invalid_input("Invalid Canvas API URL (check base URL and resource path).")
     })
 }
 
@@ -1024,8 +1022,8 @@ pub async fn build_export_from_canvas(
 ) -> Result<CourseExportV1, AppError> {
     let token = access_token.trim();
     if token.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Canvas access token is required.".into(),
+        return Err(AppError::invalid_input(
+            "Canvas access token is required.",
         ));
     }
     emit_progress(progress, "Connecting to Canvas…");

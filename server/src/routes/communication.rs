@@ -34,9 +34,12 @@ struct WsAuthMessage {
 }
 
 fn notify_mailbox(state: &AppState, user_id: Uuid) {
-    let _ = state
+    if let Err(e) = state
         .comm_events
-        .send((user_id, r#"{"type":"mailbox_updated"}"#.to_string()));
+        .send((user_id, r#"{"type":"mailbox_updated"}"#.to_string()))
+    {
+        tracing::warn!(error = %e, user_id = %user_id, "mailbox_realtime_notify_failed");
+    }
 }
 
 pub fn router() -> Router<AppState> {
@@ -56,14 +59,14 @@ pub fn router() -> Router<AppState> {
 fn validate_folder(folder: &str) -> Result<(), AppError> {
     match folder {
         "inbox" | "starred" | "sent" | "drafts" | "trash" => Ok(()),
-        _ => Err(AppError::InvalidInput("Invalid folder.".into())),
+        _ => Err(AppError::invalid_input("Invalid folder.")),
     }
 }
 
 fn validate_mailbox_folder(folder: &str) -> Result<(), AppError> {
     match folder {
         "inbox" | "sent" | "drafts" | "trash" => Ok(()),
-        _ => Err(AppError::InvalidInput("Invalid folder.".into())),
+        _ => Err(AppError::invalid_input("Invalid folder.")),
     }
 }
 
@@ -119,11 +122,11 @@ async fn send_handler(
         .as_ref()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| AppError::InvalidInput("to_email is required to send.".into()))?;
+        .ok_or_else(|| AppError::invalid_input("to_email is required to send."))?;
 
     let id = communication::send_message(&state.pool, user.user_id, to_email, subject, body)
         .await?
-        .ok_or_else(|| AppError::InvalidInput("No user registered with that email.".into()))?;
+        .ok_or_else(|| AppError::invalid_input("No user registered with that email."))?;
 
     notify_mailbox(&state, user.user_id);
     if let Some(recipient) = crate::repos::user::find_by_email(&state.pool, to_email).await? {

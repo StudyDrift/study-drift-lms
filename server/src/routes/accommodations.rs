@@ -7,7 +7,7 @@ use axum::{
 use chrono::{NaiveDate, Utc};
 use uuid::Uuid;
 
-use crate::error::AppError;
+use crate::error::{AppError, ErrorCode};
 use crate::http_auth::{assert_permission, auth_user};
 use crate::models::accommodations::{
     AccommodationSummaryPublic, AccommodationUserSearchHit, AccommodationUserSearchQuery,
@@ -58,13 +58,13 @@ async fn search_accommodation_users_handler(
 
     let q = query.q.trim();
     if q.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Query parameter \"q\" is required (email, name, sid, or user id).".into(),
+        return Err(AppError::invalid_input(
+            "Query parameter \"q\" is required (email, name, sid, or user id).",
         ));
     }
     if q.len() < 2 && Uuid::parse_str(q).is_err() {
-        return Err(AppError::InvalidInput(
-            "Enter at least 2 characters, or paste the learner's full user id.".into(),
+        return Err(AppError::invalid_input(
+            "Enter at least 2 characters, or paste the learner's full user id.",
         ));
     }
 
@@ -173,13 +173,13 @@ async fn create_user_accommodation_handler(
 
     let tm = req.time_multiplier;
     if !(1.0..=99.99).contains(&tm) {
-        return Err(AppError::InvalidInput(
-            "timeMultiplier must be between 1.0 and 99.99.".into(),
+        return Err(AppError::invalid_input(
+            "timeMultiplier must be between 1.0 and 99.99.",
         ));
     }
     if !(0..=500).contains(&req.extra_attempts) {
-        return Err(AppError::InvalidInput(
-            "extraAttempts must be between 0 and 500.".into(),
+        return Err(AppError::invalid_input(
+            "extraAttempts must be between 0 and 500.",
         ));
     }
     let extra = req.extra_attempts.max(0);
@@ -187,7 +187,10 @@ async fn create_user_accommodation_handler(
     let course_id = match req.course_code.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(code) => {
             let Some(cid) = course::get_id_by_course_code(&state.pool, code).await? else {
-                return Err(AppError::InvalidInput("Unknown courseCode.".into()));
+                return Err(AppError::invalid_input_code(
+                    ErrorCode::UnknownCourseCode,
+                    "Unknown courseCode.",
+                ));
             };
             Some(cid)
         }
@@ -228,13 +231,13 @@ async fn update_user_accommodation_handler(
     require_manage_accommodations(&state.pool, user.user_id).await?;
 
     if !(1.0..=99.99).contains(&req.time_multiplier) {
-        return Err(AppError::InvalidInput(
-            "timeMultiplier must be between 1.0 and 99.99.".into(),
+        return Err(AppError::invalid_input(
+            "timeMultiplier must be between 1.0 and 99.99.",
         ));
     }
     if !(0..=500).contains(&req.extra_attempts) {
-        return Err(AppError::InvalidInput(
-            "extraAttempts must be between 0 and 500.".into(),
+        return Err(AppError::invalid_input(
+            "extraAttempts must be between 0 and 500.",
         ));
     }
 

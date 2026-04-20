@@ -51,7 +51,7 @@ pub const MAX_ITEM_POINTS_WORTH: i32 = 1_000_000;
 pub fn validate_item_points_worth(points_worth: Option<i32>) -> Result<(), AppError> {
     if let Some(p) = points_worth {
         if !(0..=MAX_ITEM_POINTS_WORTH).contains(&p) {
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
                 "pointsWorth must be between 0 and {MAX_ITEM_POINTS_WORTH}."
             )));
         }
@@ -85,76 +85,75 @@ pub fn validate_quiz_comprehensive_settings(
     let adaptive_stop_rule = adaptive_stop_rule.trim();
 
     if !GRADE_ATTEMPT_POLICIES.contains(&grade_attempt_policy) {
-        return Err(AppError::InvalidInput(
-            "gradeAttemptPolicy must be one of: highest, latest, first, average.".into(),
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            "gradeAttemptPolicy must be one of: highest, latest, first, average.",
         ));
     }
     validate_late_submission_policy_pair(late_submission_policy, late_penalty_percent)?;
     if !SHOW_SCORE_TIMINGS.contains(&show_score_timing) {
-        return Err(AppError::InvalidInput(
-            "showScoreTiming must be one of: immediate, after_due, manual.".into(),
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            "showScoreTiming must be one of: immediate, after_due, manual.",
         ));
     }
     if !REVIEW_VISIBILITIES.contains(&review_visibility) {
-        return Err(AppError::InvalidInput(
-            "reviewVisibility must be one of: none, score_only, responses, correct_answers, full."
-                .into(),
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            "reviewVisibility must be one of: none, score_only, responses, correct_answers, full.",
         ));
     }
     if !REVIEW_WHENS.contains(&review_when) {
-        return Err(AppError::InvalidInput(
-            "reviewWhen must be one of: after_submit, after_due, always, never.".into(),
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            "reviewWhen must be one of: after_submit, after_due, always, never.",
         ));
     }
     if !ADAPTIVE_DIFFICULTIES.contains(&adaptive_difficulty) {
-        return Err(AppError::InvalidInput(
-            "adaptiveDifficulty must be one of: introductory, standard, challenging.".into(),
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            "adaptiveDifficulty must be one of: introductory, standard, challenging.",
         ));
     }
     if !ADAPTIVE_STOP_RULES.contains(&adaptive_stop_rule) {
-        return Err(AppError::InvalidInput(
-            "adaptiveStopRule must be one of: fixed_count, mastery_estimate.".into(),
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            "adaptiveStopRule must be one of: fixed_count, mastery_estimate.",
         ));
     }
     if !unlimited_attempts {
         if max_attempts < MIN_MAX_ATTEMPTS || max_attempts > MAX_MAX_ATTEMPTS {
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
                 "maxAttempts must be between {MIN_MAX_ATTEMPTS} and {MAX_MAX_ATTEMPTS} when unlimitedAttempts is false."
             )));
         }
     }
     if let Some(p) = passing_score_percent {
         if !(0..=100).contains(&p) {
-            return Err(AppError::InvalidInput(
-                "passingScorePercent must be between 0 and 100.".into(),
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                "passingScorePercent must be between 0 and 100.",
             ));
         }
     }
     if let Some(m) = time_limit_minutes {
         if !(1..=10080).contains(&m) {
-            return Err(AppError::InvalidInput(
-                "timeLimitMinutes must be between 1 and 10080.".into(),
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                "timeLimitMinutes must be between 1 and 10080.",
             ));
         }
     }
     if let Some(s) = per_question_time_limit_seconds {
         if !(10..=86400).contains(&s) {
-            return Err(AppError::InvalidInput(
-                "perQuestionTimeLimitSeconds must be between 10 and 86400.".into(),
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                "perQuestionTimeLimitSeconds must be between 10 and 86400.",
             ));
         }
     }
     if let Some(n) = random_question_pool_count {
         if !(1..=300).contains(&n) {
-            return Err(AppError::InvalidInput(
-                "randomQuestionPoolCount must be between 1 and 300.".into(),
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                "randomQuestionPoolCount must be between 1 and 300.",
             ));
         }
     }
     if let Some(code) = quiz_access_code {
         if code.len() > MAX_QUIZ_ACCESS_CODE_LEN {
-            return Err(AppError::InvalidInput(
-                "quizAccessCode is too long (max 128 characters).".into(),
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                "quizAccessCode is too long (max 128 characters).",
             ));
         }
     }
@@ -171,24 +170,24 @@ pub fn validate_adaptive_quiz_settings(
         return Ok(());
     }
     if adaptive_system_prompt.len() > MAX_ADAPTIVE_SYSTEM_PROMPT_LEN {
-        return Err(AppError::InvalidInput(
-            "Adaptive system prompt is too long.".into(),
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            "Adaptive system prompt is too long.",
         ));
     }
     if adaptive_source_item_ids.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Adaptive mode requires at least one course item with source content.".into(),
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            "Adaptive mode requires at least one course item with source content.",
         ));
     }
     if adaptive_source_item_ids.len() > MAX_ADAPTIVE_SOURCE_ITEMS {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
             "Too many adaptive source items (max {MAX_ADAPTIVE_SOURCE_ITEMS})."
         )));
     }
     if adaptive_question_count < MIN_ADAPTIVE_QUESTION_COUNT
         || adaptive_question_count > MAX_ADAPTIVE_QUESTION_COUNT
     {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
             "adaptiveQuestionCount must be between {MIN_ADAPTIVE_QUESTION_COUNT} and {MAX_ADAPTIVE_QUESTION_COUNT}."
         )));
     }
@@ -204,42 +203,42 @@ pub fn sanitize_quiz_questions_for_learner(mut questions: Vec<QuizQuestion>) -> 
 
 pub fn validate_quiz_questions(questions: &[QuizQuestion]) -> Result<(), AppError> {
     if questions.len() > MAX_QUIZ_QUESTIONS {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
             "Too many quiz questions (max {MAX_QUIZ_QUESTIONS})."
         )));
     }
     for q in questions {
         if q.id.trim().is_empty() {
-            return Err(AppError::InvalidInput(
-                "Each quiz question needs an id.".into(),
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                "Each quiz question needs an id.",
             ));
         }
         if q.prompt.len() > MAX_QUIZ_PROMPT_LEN {
-            return Err(AppError::InvalidInput(
-                "A quiz question prompt is too long.".into(),
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                "A quiz question prompt is too long.",
             ));
         }
         if !QUIZ_QUESTION_TYPES.contains(&q.question_type.as_str()) {
-            return Err(AppError::InvalidInput(
-                "Unsupported quiz question type.".into(),
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                "Unsupported quiz question type.",
             ));
         }
         if q.choices.len() > MAX_QUIZ_CHOICES_PER_QUESTION {
-            return Err(AppError::InvalidInput(
-                "A quiz question has too many choices.".into(),
+            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                "A quiz question has too many choices.",
             ));
         }
         for c in &q.choices {
             if c.len() > MAX_QUIZ_CHOICE_LEN {
-                return Err(AppError::InvalidInput(
-                    "A quiz answer choice is too long.".into(),
+                return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                    "A quiz answer choice is too long.",
                 ));
             }
         }
         if let Some(idx) = q.correct_choice_index {
             if idx >= q.choices.len() {
-                return Err(AppError::InvalidInput(
-                    "A quiz correct answer index is out of range.".into(),
+                return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                    "A quiz correct answer index is out of range.",
                 ));
             }
         }
@@ -385,7 +384,8 @@ pub struct UpdateModuleQuizRequest {
     pub one_question_at_a_time: Option<bool>,
     #[serde(default)]
     pub max_attempts: Option<i32>,
-    #[serde(default)]
+    /// `gradeAttemptPolicy` or `retakePolicy` in JSON (same field).
+    #[serde(default, alias = "retakePolicy")]
     pub grade_attempt_policy: Option<String>,
     #[serde(default)]
     pub passing_score_percent: Option<Option<i32>>,
@@ -518,6 +518,43 @@ pub struct QuizStartResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deadline_at: Option<DateTime<Utc>>,
     pub reduced_distraction_mode: bool,
+    /// Same as quiz `gradeAttemptPolicy` (which score counts for the gradebook).
+    pub retake_policy: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_attempts: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remaining_attempts: Option<i32>,
+}
+
+/// Instructor / self: all submitted attempts for a quiz with policy-aggregated score.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizAttemptsListResponse {
+    pub attempts: Vec<QuizAttemptSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_score_percent: Option<f64>,
+    pub retake_policy: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizAttemptSummary {
+    pub id: Uuid,
+    pub attempt_number: i32,
+    pub submitted_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub score_percent: Option<f32>,
+    pub points_earned: f64,
+    pub points_possible: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnrollmentQuizOverrideUpsertRequest {
+    pub quiz_id: Uuid,
+    pub extra_attempts: i32,
+    #[serde(default)]
+    pub time_multiplier: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]

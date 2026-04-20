@@ -73,7 +73,7 @@ async fn create_course_survey_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Survey title is required.".into()));
+        return Err(AppError::invalid_input("Survey title is required."));
     }
     let mode = if req.anonymity_mode.trim().is_empty() {
         "identified"
@@ -81,16 +81,16 @@ async fn create_course_survey_handler(
         req.anonymity_mode.trim()
     };
     if !validate_anonymity_mode(mode) {
-        return Err(AppError::InvalidInput(
-            "anonymityMode must be identified, anonymous, or pseudo_anonymous.".into(),
+        return Err(AppError::invalid_input(
+            "anonymityMode must be identified, anonymous, or pseudo_anonymous.",
         ));
     }
     if let (Some(opens_at), Some(closes_at)) = (req.opens_at, req.closes_at) {
         if opens_at > closes_at {
-            return Err(AppError::InvalidInput("opensAt must be before closesAt.".into()));
+            return Err(AppError::invalid_input("opensAt must be before closesAt."));
         }
     }
-    validate_questions(&req.questions).map_err(AppError::InvalidInput)?;
+    validate_questions(&req.questions).map_err(AppError::invalid_input)?;
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
@@ -168,22 +168,22 @@ async fn update_survey_handler(
 
     if let Some(title) = &req.title {
         if title.trim().is_empty() {
-            return Err(AppError::InvalidInput("Survey title is required.".into()));
+            return Err(AppError::invalid_input("Survey title is required."));
         }
     }
     if let Some(mode) = &req.anonymity_mode {
         if !validate_anonymity_mode(mode.trim()) {
-            return Err(AppError::InvalidInput(
-                "anonymityMode must be identified, anonymous, or pseudo_anonymous.".into(),
+            return Err(AppError::invalid_input(
+                "anonymityMode must be identified, anonymous, or pseudo_anonymous.",
             ));
         }
     }
     if let Some(questions) = &req.questions {
-        validate_questions(questions).map_err(AppError::InvalidInput)?;
+        validate_questions(questions).map_err(AppError::invalid_input)?;
     }
     if let (Some(opens_at), Some(closes_at)) = (req.opens_at, req.closes_at) {
         if opens_at > closes_at {
-            return Err(AppError::InvalidInput("opensAt must be before closesAt.".into()));
+            return Err(AppError::invalid_input("opensAt must be before closesAt."));
         }
     }
 

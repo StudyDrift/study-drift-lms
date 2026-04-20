@@ -75,7 +75,7 @@ pub async fn ingest_multipart_image_field(
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|e| AppError::InvalidInput(format!("multipart read failed: {e}")))?
+        .map_err(|e| AppError::invalid_input(format!("multipart read failed: {e}")))?
     {
         if field.name() != Some("file") {
             continue;
@@ -88,16 +88,16 @@ pub async fn ingest_multipart_image_field(
         let bytes = field
             .bytes()
             .await
-            .map_err(|e| AppError::InvalidInput(format!("could not read file field: {e}")))?;
+            .map_err(|e| AppError::invalid_input(format!("could not read file field: {e}")))?;
         if bytes.len() > MAX_COURSE_IMAGE_BYTES {
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input(format!(
                 "Image is too large (max {} MB).",
                 MAX_COURSE_IMAGE_BYTES / (1024 * 1024)
             )));
         }
         let Some(m) = normalize_image_mime(ct.as_deref()) else {
-            return Err(AppError::InvalidInput(
-                "Only PNG, JPEG, GIF, and WebP images are allowed.".into(),
+            return Err(AppError::invalid_input(
+                "Only PNG, JPEG, GIF, and WebP images are allowed.",
             ));
         };
         file_bytes = Some(bytes.to_vec());
@@ -107,12 +107,19 @@ pub async fn ingest_multipart_image_field(
     }
 
     let Some(bytes) = file_bytes else {
-        return Err(AppError::InvalidInput(
-            "Missing multipart field `file`.".into(),
+        return Err(AppError::invalid_input(
+            "Missing multipart field `file`.",
         ));
     };
     let original_filename = original_name.unwrap_or_else(|| "upload".into());
-    let mime_type = mime.expect("set with bytes");
+    let mime_type = match mime {
+        Some(m) => m,
+        None => {
+            return Err(AppError::invalid_input(
+                "Missing multipart field `file`.",
+            ));
+        }
+    };
     Ok((bytes, original_filename, mime_type))
 }
 
@@ -134,13 +141,13 @@ pub async fn persist_course_image(
 
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent).await.map_err(|e| {
-            AppError::InvalidInput(format!("could not create storage directory: {e}"))
+            AppError::invalid_input(format!("could not create storage directory: {e}"))
         })?;
     }
 
     tokio::fs::write(&path, &bytes)
         .await
-        .map_err(|e| AppError::InvalidInput(format!("could not save file: {e}")))?;
+        .map_err(|e| AppError::invalid_input(format!("could not save file: {e}")))?;
 
     let insert_res = course_files::insert(
         pool,
@@ -154,12 +161,13 @@ pub async fn persist_course_image(
     )
     .await;
 
-    if let Err(e) = insert_res {
-        let _ = tokio::fs::remove_file(&path).await;
-        return Err(e.into());
-    }
-
-    let row = insert_res.expect("checked");
+    let row = match insert_res {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = tokio::fs::remove_file(&path).await;
+            return Err(e.into());
+        }
+    };
     let content_path = course_file_content_path(course_code, row.id);
 
     Ok(CourseFileUploadResponse {

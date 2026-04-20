@@ -43,39 +43,39 @@ fn normalize_enrollment_email(raw: &str) -> String {
 
 fn validate_export_enrollments(rows: &[ExportedCourseEnrollment]) -> Result<(), AppError> {
     if rows.len() > MAX_EXPORT_ENROLLMENTS {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Too many enrollments in export (max {MAX_EXPORT_ENROLLMENTS})."
         )));
     }
     for row in rows {
         let e = normalize_enrollment_email(&row.email);
         if e.is_empty() || !e.contains('@') || e.len() > MAX_ENROLLMENT_EMAIL_LEN {
-            return Err(AppError::InvalidInput(
-                "Each enrollment needs a valid email address.".into(),
+            return Err(AppError::invalid_input(
+                "Each enrollment needs a valid email address.",
             ));
         }
         let role = row.role.trim();
         if role != "student" && role != "instructor" && role != "teacher" {
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input(format!(
                 "Invalid enrollment role `{role}` (expected student, instructor, or teacher)."
             )));
         }
         if let Some(ref g) = row.instructor_grant_role {
             let g = g.trim();
             if g != "Teacher" && g != "TA" {
-                return Err(AppError::InvalidInput(
-                    "instructorGrantRole must be Teacher or TA when set.".into(),
+                return Err(AppError::invalid_input(
+                    "instructorGrantRole must be Teacher or TA when set.",
                 ));
             }
             if role != "instructor" {
-                return Err(AppError::InvalidInput(
-                    "instructorGrantRole may only be set when role is instructor.".into(),
+                return Err(AppError::invalid_input(
+                    "instructorGrantRole may only be set when role is instructor.",
                 ));
             }
         }
         if let Some(ref d) = row.display_name {
             if d.len() > MAX_ENROLLMENT_DISPLAY_NAME_LEN {
-                return Err(AppError::InvalidInput(format!(
+                return Err(AppError::invalid_input(format!(
                     "Enrollment display name is too long (max {MAX_ENROLLMENT_DISPLAY_NAME_LEN})."
                 )));
             }
@@ -95,7 +95,7 @@ async fn apply_course_staff_grants_from_catalog(
         .await
         .map_err(AppError::from)?
     else {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Missing RBAC catalog role `{catalog_role_name}`."
         )));
     };
@@ -205,8 +205,8 @@ async fn apply_enrollments_from_export(
             .await
             .map_err(AppError::from)?
     else {
-        return Err(AppError::InvalidInput(
-            "Course is missing a creator; cannot apply enrollments.".into(),
+        return Err(AppError::invalid_input(
+            "Course is missing a creator; cannot apply enrollments.",
         ));
     };
 
@@ -285,22 +285,22 @@ const MAX_MODULE_CONTENT_MARKDOWN_LEN: usize = 200_000;
 
 fn validate_syllabus_sections(sections: &[SyllabusSection]) -> Result<(), AppError> {
     if sections.len() > MAX_SYLLABUS_SECTIONS {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Too many sections (max {MAX_SYLLABUS_SECTIONS})."
         )));
     }
     for s in sections {
         if s.id.trim().is_empty() {
-            return Err(AppError::InvalidInput("Each section needs an id.".into()));
+            return Err(AppError::invalid_input("Each section needs an id."));
         }
         if s.heading.len() > MAX_SYLLABUS_HEADING_LEN {
-            return Err(AppError::InvalidInput(
-                "Section heading is too long.".into(),
+            return Err(AppError::invalid_input(
+                "Section heading is too long.",
             ));
         }
         if s.markdown.len() > MAX_SYLLABUS_MARKDOWN_LEN {
-            return Err(AppError::InvalidInput(
-                "Section content is too long.".into(),
+            return Err(AppError::invalid_input(
+                "Section content is too long.",
             ));
         }
     }
@@ -319,26 +319,25 @@ fn validate_structure_export(items: &[CourseStructureItemResponse]) -> Result<()
     let mut seen: HashSet<Uuid> = HashSet::new();
     for it in items {
         if !allowed.contains(&it.kind.as_str()) {
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input(format!(
                 "Unsupported structure kind: {}.",
                 it.kind
             )));
         }
         if let Some(pid) = it.parent_id {
             if !seen.contains(&pid) {
-                return Err(AppError::InvalidInput(
-                    "Structure items must be ordered so each parent appears before its children."
-                        .into(),
+                return Err(AppError::invalid_input(
+                    "Structure items must be ordered so each parent appears before its children.",
                 ));
             }
         } else if it.kind != "module" {
-            return Err(AppError::InvalidInput(
-                "Only modules may have a null parent.".into(),
+            return Err(AppError::invalid_input(
+                "Only modules may have a null parent.",
             ));
         }
         if !seen.insert(it.id) {
-            return Err(AppError::InvalidInput(
-                "Duplicate structure item id.".into(),
+            return Err(AppError::invalid_input(
+                "Duplicate structure item id.",
             ));
         }
     }
@@ -347,25 +346,25 @@ fn validate_structure_export(items: &[CourseStructureItemResponse]) -> Result<()
 
 fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
     if ex.format_version != EXPORT_FORMAT_VERSION {
-        return Err(AppError::InvalidInput(
-            "Unsupported export formatVersion (expected 1).".into(),
+        return Err(AppError::invalid_input(
+            "Unsupported export formatVersion (expected 1).",
         ));
     }
     if ex.course_code.trim().is_empty() {
-        return Err(AppError::InvalidInput(
-            "Export is missing courseCode.".into(),
+        return Err(AppError::invalid_input(
+            "Export is missing courseCode.",
         ));
     }
     // `courseCode` in the file records the source course; imports may target any course.
     if !GRADING_SCALES.contains(&ex.grading.grading_scale.as_str()) {
-        return Err(AppError::InvalidInput(
-            "Invalid grading scale in export.".into(),
+        return Err(AppError::invalid_input(
+            "Invalid grading scale in export.",
         ));
     }
     for g in &ex.grading.assignment_groups {
         if g.name.trim().is_empty() {
-            return Err(AppError::InvalidInput(
-                "Each assignment group in the export needs a name.".into(),
+            return Err(AppError::invalid_input(
+                "Each assignment group in the export needs a name.",
             ));
         }
     }
@@ -373,14 +372,14 @@ fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
     validate_structure_export(&ex.structure)?;
     for (id, body) in &ex.content_pages {
         if body.markdown.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input(format!(
                 "Content page {id} markdown is too long."
             )));
         }
     }
     for (id, body) in &ex.assignments {
         if body.markdown.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input(format!(
                 "Assignment {id} markdown is too long."
             )));
         }
@@ -388,7 +387,7 @@ fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
     }
     for (id, body) in &ex.quizzes {
         if body.markdown.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input(format!(
                 "Quiz {id} markdown is too long."
             )));
         }
@@ -578,8 +577,8 @@ async fn apply_module_bodies(
                     course_structure::set_content_page_due_at(pool, course_id, it.id, body.due_at)
                         .await
                         .map_err(|e| match e {
-                            sqlx::Error::RowNotFound => AppError::InvalidInput(
-                                "Content page due date update failed.".into(),
+                            sqlx::Error::RowNotFound => AppError::invalid_input(
+                                "Content page due date update failed.",
                             ),
                             _ => e.into(),
                         })?;
@@ -592,7 +591,7 @@ async fn apply_module_bodies(
                         Some(v) => {
                             let r: crate::models::assignment_rubric::RubricDefinition =
                                 serde_json::from_value(v.clone()).map_err(|_| {
-                                    AppError::InvalidInput("Invalid rubric in course export.".into())
+                                    AppError::invalid_input("Invalid rubric in course export.")
                                 })?;
                             crate::models::assignment_rubric::validate_rubric_definition(&r)?;
                             crate::models::assignment_rubric::validate_rubric_against_points_worth(
@@ -623,7 +622,7 @@ async fn apply_module_bodies(
                         .await
                         .map_err(|e| match e {
                             sqlx::Error::RowNotFound => {
-                                AppError::InvalidInput("Assignment due date update failed.".into())
+                                AppError::invalid_input("Assignment due date update failed.")
                             }
                             _ => e.into(),
                         })?;
@@ -649,7 +648,7 @@ async fn apply_module_bodies(
                         .await
                         .map_err(|e| match e {
                             sqlx::Error::RowNotFound => {
-                                AppError::InvalidInput("Quiz due date update failed.".into())
+                                AppError::invalid_input("Quiz due date update failed.")
                             }
                             _ => e.into(),
                         })?;
@@ -708,7 +707,7 @@ async fn apply_module_bodies_for_new_items_only(
                         Some(v) => {
                             let r: crate::models::assignment_rubric::RubricDefinition =
                                 serde_json::from_value(v.clone()).map_err(|_| {
-                                    AppError::InvalidInput("Invalid rubric in course export.".into())
+                                    AppError::invalid_input("Invalid rubric in course export.")
                                 })?;
                             crate::models::assignment_rubric::validate_rubric_definition(&r)?;
                             crate::models::assignment_rubric::validate_rubric_against_points_worth(
@@ -841,7 +840,7 @@ async fn merge_syllabus_sections(
         }
     }
     if out.len() > MAX_SYLLABUS_SECTIONS {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Too many syllabus sections after merge (max {MAX_SYLLABUS_SECTIONS})."
         )));
     }

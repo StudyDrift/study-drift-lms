@@ -106,14 +106,14 @@ async fn put_system_prompt_handler(
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
     {
-        return Err(AppError::InvalidInput("Invalid prompt key.".into()));
+        return Err(AppError::invalid_input("Invalid prompt key."));
     }
     let content = req.content.trim();
     if content.is_empty() {
-        return Err(AppError::InvalidInput("Prompt content is required.".into()));
+        return Err(AppError::invalid_input("Prompt content is required."));
     }
     if content.len() > 500_000 {
-        return Err(AppError::InvalidInput("Prompt is too long.".into()));
+        return Err(AppError::invalid_input("Prompt is too long."));
     }
     let row = system_prompts::update_system_prompt(&state.pool, key, content, user.user_id)
         .await
@@ -152,7 +152,7 @@ fn normalize_name(s: Option<String>, field_label: &str) -> Result<Option<String>
         return Ok(None);
     }
     if t.len() > 80 {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "{field_label} is too long."
         )));
     }
@@ -168,15 +168,15 @@ fn normalize_avatar_url(s: Option<String>) -> Result<Option<String>, AppError> {
         return Ok(None);
     }
     if t.len() > 2_000_000 {
-        return Err(AppError::InvalidInput(
-            "Avatar image URL is too long.".into(),
+        return Err(AppError::invalid_input(
+            "Avatar image URL is too long.",
         ));
     }
     let is_http = t.starts_with("http://") || t.starts_with("https://");
     let is_data = t.starts_with("data:image/");
     if !is_http && !is_data {
-        return Err(AppError::InvalidInput(
-            "Avatar must be an http(s) URL or a data:image upload.".into(),
+        return Err(AppError::invalid_input(
+            "Avatar must be an http(s) URL or a data:image upload.",
         ));
     }
     Ok(Some(t.to_string()))
@@ -197,7 +197,7 @@ fn to_profile_response(row: user::UserProfileRow) -> AccountProfileResponse {
 fn map_sid_unique_violation(e: SqlxError) -> AppError {
     if let Some(db) = e.as_database_error() {
         if db.code().as_deref() == Some("23505") {
-            return AppError::InvalidInput("That student ID is already assigned to another user.".into());
+            return AppError::invalid_input("That student ID is already assigned to another user.");
         }
     }
     AppError::Db(e)
@@ -212,8 +212,8 @@ fn normalize_student_id(s: Option<String>) -> Result<Option<String>, AppError> {
         return Ok(None);
     }
     if t.len() > 128 {
-        return Err(AppError::InvalidInput(
-            "Student ID must be at most 128 characters.".into(),
+        return Err(AppError::invalid_input(
+            "Student ID must be at most 128 characters.",
         ));
     }
     Ok(Some(t.to_string()))
@@ -225,8 +225,8 @@ fn normalize_ui_theme(s: Option<String>) -> Result<Option<String>, AppError> {
     };
     let t = s.trim().to_lowercase();
     if t != "light" && t != "dark" {
-        return Err(AppError::InvalidInput(
-            "Theme must be \"light\" or \"dark\".".into(),
+        return Err(AppError::invalid_input(
+            "Theme must be \"light\" or \"dark\".",
         ));
     }
     Ok(Some(t))
@@ -294,8 +294,8 @@ async fn generate_avatar_handler(
     let auth = auth_user(&state, &headers)?;
     let prompt = req.prompt.trim();
     if prompt.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Describe the avatar you want.".into(),
+        return Err(AppError::invalid_input(
+            "Describe the avatar you want.",
         ));
     }
     let client = state
@@ -323,7 +323,7 @@ async fn get_ai_models_handler(
     }
     .map_err(|e| {
         tracing::error!(error = %e, "OpenRouter list models failed");
-        AppError::InvalidInput(format!(
+        AppError::invalid_input(format!(
             "Could not load models from OpenRouter. Try again. ({e})"
         ))
     })?;
@@ -368,12 +368,12 @@ async fn put_ai_handler(
     let user = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
     let image_model_id = req.image_model_id.trim();
     if image_model_id.is_empty() {
-        return Err(AppError::InvalidInput("Choose an image model.".into()));
+        return Err(AppError::invalid_input("Choose an image model."));
     }
     let course_setup_model_id = req.course_setup_model_id.trim();
     if course_setup_model_id.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Choose a course setup model.".into(),
+        return Err(AppError::invalid_input(
+            "Choose a course setup model.",
         ));
     }
     let (image_model_id, course_setup_model_id) = user_ai_settings::upsert_ai_settings(

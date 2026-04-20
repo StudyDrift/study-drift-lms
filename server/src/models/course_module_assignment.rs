@@ -15,21 +15,21 @@ pub fn validate_assignment_delivery_settings(
 ) -> Result<(), AppError> {
     if let (Some(a), Some(b)) = (available_from, available_until) {
         if a > b {
-            return Err(AppError::InvalidInput(
-                "availableFrom must be before or equal to availableUntil.".into(),
+            return Err(AppError::invalid_input(
+                "availableFrom must be before or equal to availableUntil.",
             ));
         }
     }
     if let Some(code) = assignment_access_code {
         if code.len() > MAX_ASSIGNMENT_ACCESS_CODE_LEN {
-            return Err(AppError::InvalidInput(
-                "assignmentAccessCode is too long (max 128 characters).".into(),
+            return Err(AppError::invalid_input(
+                "assignmentAccessCode is too long (max 128 characters).",
             ));
         }
     }
     if !submission_allow_text && !submission_allow_file_upload && !submission_allow_url {
-        return Err(AppError::InvalidInput(
-            "At least one submission type must be enabled (text, file upload, or URL).".into(),
+        return Err(AppError::invalid_input(
+            "At least one submission type must be enabled (text, file upload, or URL).",
         ));
     }
     Ok(())

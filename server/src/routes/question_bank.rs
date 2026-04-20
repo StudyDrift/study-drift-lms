@@ -160,8 +160,8 @@ fn normalize_create_status(s: Option<String>) -> Result<String, AppError> {
     let v = s.unwrap_or_else(|| "draft".into());
     let t = v.trim();
     if !matches!(t, "draft" | "active" | "retired") {
-        return Err(AppError::InvalidInput(
-            "status must be draft, active, or retired.".into(),
+        return Err(AppError::invalid_input(
+            "status must be draft, active, or retired.",
         ));
     }
     Ok(t.to_string())
@@ -186,11 +186,11 @@ async fn create_question_handler(
 
     let stem = req.stem.trim();
     if stem.is_empty() {
-        return Err(AppError::InvalidInput("stem is required.".into()));
+        return Err(AppError::invalid_input("stem is required."));
     }
     let qt = req.question_type.trim();
     if qt.is_empty() {
-        return Err(AppError::InvalidInput("questionType is required.".into()));
+        return Err(AppError::invalid_input("questionType is required."));
     }
     let status = normalize_create_status(req.status)?;
     let points = req.points.unwrap_or(1.0).max(0.0);
@@ -303,7 +303,7 @@ async fn update_question_handler(
         .to_string();
     let stem = req.stem.as_deref().unwrap_or(&cur.stem).trim().to_string();
     if stem.is_empty() {
-        return Err(AppError::InvalidInput("stem cannot be empty.".into()));
+        return Err(AppError::invalid_input("stem cannot be empty."));
     }
     let options = match req.options {
         None => cur.options.clone(),
@@ -327,7 +327,7 @@ async fn update_question_handler(
         .map(|s| s.trim().to_string())
         .unwrap_or(cur.status.clone());
     if !matches!(status.as_str(), "draft" | "active" | "retired") {
-        return Err(AppError::InvalidInput("Invalid status.".into()));
+        return Err(AppError::invalid_input("Invalid status."));
     }
     let shared = req.shared.unwrap_or(cur.shared);
     let mut meta = cur.metadata.clone();
@@ -598,7 +598,7 @@ async fn create_pool_handler(
     };
     let name = req.name.trim();
     if name.is_empty() {
-        return Err(AppError::InvalidInput("name is required.".into()));
+        return Err(AppError::invalid_input("name is required."));
     }
     let row = qb_repo::insert_pool(&state.pool, course_id, name, req.description.as_deref()).await?;
     Ok(Json(QuestionPoolResponse {
@@ -678,7 +678,7 @@ async fn bulk_import_questions_handler(
         return Err(AppError::NotFound);
     };
     if items.len() > 500 {
-        return Err(AppError::InvalidInput("Maximum 500 questions per import.".into()));
+        return Err(AppError::invalid_input("Maximum 500 questions per import."));
     }
 
     let mut tx = state.pool.begin().await?;
@@ -775,15 +775,15 @@ async fn set_quiz_delivery_handler(
     match mode.as_str() {
         "json" => question_bank::clear_quiz_delivery_refs(&state.pool, item_id).await?,
         "pool" => {
-            let pid = req.pool_id.ok_or_else(|| AppError::InvalidInput("poolId is required.".into()))?;
+            let pid = req.pool_id.ok_or_else(|| AppError::invalid_input("poolId is required."))?;
             let sn = req
                 .sample_n
-                .ok_or_else(|| AppError::InvalidInput("sampleN is required.".into()))?;
+                .ok_or_else(|| AppError::invalid_input("sampleN is required."))?;
             question_bank::set_quiz_delivery_pool_only(&state.pool, course_id, item_id, pid, sn).await?;
         }
         _ => {
-            return Err(AppError::InvalidInput(
-                "mode must be \"json\" or \"pool\".".into(),
+            return Err(AppError::invalid_input(
+                "mode must be \"json\" or \"pool\".",
             ));
         }
     }

@@ -32,8 +32,8 @@ fn parse_rfc3339(s: &str) -> Result<DateTime<Utc>, AppError> {
     chrono::DateTime::parse_from_rfc3339(s)
         .map(|dt| dt.with_timezone(&Utc))
         .map_err(|_| {
-            AppError::InvalidInput(
-                "Invalid `from` or `to`: use RFC 3339 (e.g. 2026-04-01T00:00:00Z).".into(),
+            AppError::invalid_input(
+                "Invalid `from` or `to`: use RFC 3339 (e.g. 2026-04-01T00:00:00Z).",
             )
         })
 }
@@ -49,11 +49,11 @@ fn resolve_range(q: &LearningActivityQuery) -> Result<(DateTime<Utc>, DateTime<U
         None => to - Duration::days(30),
     };
     if from >= to {
-        return Err(AppError::InvalidInput("`from` must be before `to`.".into()));
+        return Err(AppError::invalid_input("`from` must be before `to`."));
     }
     let days = (to - from).num_days();
     if days > MAX_RANGE_DAYS {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Date range cannot exceed {MAX_RANGE_DAYS} days."
         )));
     }

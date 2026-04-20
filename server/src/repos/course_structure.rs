@@ -146,7 +146,7 @@ pub async fn row_to_response_with_quiz_adaptive(
     row: CourseStructureItemRow,
 ) -> Result<CourseStructureItemResponse, sqlx::Error> {
     let mut items = rows_to_responses_with_quiz_adaptive(pool, course_id, vec![row]).await?;
-    Ok(items.pop().expect("one row"))
+    items.pop().ok_or(sqlx::Error::RowNotFound)
 }
 
 /// Top-level items by `sort_order`, then each module's child headings in order.

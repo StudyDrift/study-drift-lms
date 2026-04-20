@@ -5,6 +5,28 @@ use axum::{
 };
 use serde::Serialize;
 
+/// Machine-readable API error codes (JSON `error.code`). Human text stays in `error.message`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ErrorCode {
+    Unauthorized,
+    NotFound,
+    Forbidden,
+    AiNotConfigured,
+    AiGenerationFailed,
+    InvalidCredentials,
+    EmailTaken,
+    InvalidInput,
+    UnknownCourseCode,
+    QuizSettingsInvalid,
+    InvalidResetToken,
+    TooManyRequests,
+    QuestionAlreadyLocked,
+    AttemptTimeExpired,
+    MaxAttemptsReached,
+    Internal,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("unauthorized")]
@@ -22,7 +44,10 @@ pub enum AppError {
     #[error("email already registered")]
     EmailTaken,
     #[error("invalid input")]
-    InvalidInput(String),
+    InvalidInput {
+        code: ErrorCode,
+        message: String,
+    },
     #[error("invalid or expired password reset link")]
     InvalidResetToken,
     #[error("too many requests")]
@@ -31,10 +56,28 @@ pub enum AppError {
     QuestionAlreadyLocked,
     #[error("attempt time expired")]
     AttemptTimeExpired,
+    #[error("max quiz attempts reached")]
+    MaxAttemptsReached,
     #[error(transparent)]
     Db(#[from] sqlx::Error),
     #[error(transparent)]
     Jwt(#[from] jsonwebtoken::errors::Error),
+}
+
+impl AppError {
+    pub fn invalid_input(message: impl AsRef<str>) -> Self {
+        Self::InvalidInput {
+            code: ErrorCode::InvalidInput,
+            message: message.as_ref().to_string(),
+        }
+    }
+
+    pub fn invalid_input_code(code: ErrorCode, message: impl AsRef<str>) -> Self {
+        Self::InvalidInput {
+            code,
+            message: message.as_ref().to_string(),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -44,7 +87,7 @@ struct ErrorBody {
 
 #[derive(Serialize)]
 struct ErrorDetail {
-    code: &'static str,
+    code: ErrorCode,
     message: String,
 }
 
@@ -54,7 +97,7 @@ impl IntoResponse for AppError {
             AppError::Unauthorized => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "UNAUTHORIZED",
+                        code: ErrorCode::Unauthorized,
                         message: "Sign in required.".into(),
                     },
                 });
@@ -63,7 +106,7 @@ impl IntoResponse for AppError {
             AppError::NotFound => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "NOT_FOUND",
+                        code: ErrorCode::NotFound,
                         message: "Resource not found.".into(),
                     },
                 });
@@ -72,7 +115,7 @@ impl IntoResponse for AppError {
             AppError::Forbidden => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "FORBIDDEN",
+                        code: ErrorCode::Forbidden,
                         message: "You do not have permission for this action.".into(),
                     },
                 });
@@ -81,7 +124,7 @@ impl IntoResponse for AppError {
             AppError::AiNotConfigured => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "AI_NOT_CONFIGURED",
+                        code: ErrorCode::AiNotConfigured,
                         message: "AI features are not configured on this server.".into(),
                     },
                 });
@@ -90,7 +133,7 @@ impl IntoResponse for AppError {
             AppError::AiGenerationFailed(message) => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "AI_GENERATION_FAILED",
+                        code: ErrorCode::AiGenerationFailed,
                         message,
                     },
                 });
@@ -99,7 +142,7 @@ impl IntoResponse for AppError {
             AppError::InvalidCredentials => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "INVALID_CREDENTIALS",
+                        code: ErrorCode::InvalidCredentials,
                         message: "Invalid email or password.".into(),
                     },
                 });
@@ -108,25 +151,22 @@ impl IntoResponse for AppError {
             AppError::EmailTaken => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "EMAIL_TAKEN",
+                        code: ErrorCode::EmailTaken,
                         message: "This email is already registered.".into(),
                     },
                 });
                 (StatusCode::CONFLICT, body).into_response()
             }
-            AppError::InvalidInput(message) => {
+            AppError::InvalidInput { code, message } => {
                 let body = Json(ErrorBody {
-                    error: ErrorDetail {
-                        code: "INVALID_INPUT",
-                        message,
-                    },
+                    error: ErrorDetail { code, message },
                 });
                 (StatusCode::BAD_REQUEST, body).into_response()
             }
             AppError::InvalidResetToken => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "INVALID_RESET_TOKEN",
+                        code: ErrorCode::InvalidResetToken,
                         message: "This reset link is invalid or has expired. Request a new one from the sign-in page.".into(),
                     },
                 });
@@ -135,7 +175,7 @@ impl IntoResponse for AppError {
             AppError::TooManyRequests(message) => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "TOO_MANY_REQUESTS",
+                        code: ErrorCode::TooManyRequests,
                         message,
                     },
                 });
@@ -144,7 +184,7 @@ impl IntoResponse for AppError {
             AppError::QuestionAlreadyLocked => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "QUESTION_ALREADY_LOCKED",
+                        code: ErrorCode::QuestionAlreadyLocked,
                         message: "This question has already been submitted for this attempt.".into(),
                     },
                 });
@@ -153,8 +193,17 @@ impl IntoResponse for AppError {
             AppError::AttemptTimeExpired => {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "ATTEMPT_TIME_EXPIRED",
+                        code: ErrorCode::AttemptTimeExpired,
                         message: "The quiz time limit has expired.".into(),
+                    },
+                });
+                (StatusCode::FORBIDDEN, body).into_response()
+            }
+            AppError::MaxAttemptsReached => {
+                let body = Json(ErrorBody {
+                    error: ErrorDetail {
+                        code: ErrorCode::MaxAttemptsReached,
+                        message: "No quiz attempts remaining for this quiz.".into(),
                     },
                 });
                 (StatusCode::FORBIDDEN, body).into_response()
@@ -163,7 +212,7 @@ impl IntoResponse for AppError {
                 tracing::error!(error = %e, "database error");
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "INTERNAL",
+                        code: ErrorCode::Internal,
                         message: "Something went wrong.".into(),
                     },
                 });
@@ -173,7 +222,7 @@ impl IntoResponse for AppError {
                 tracing::error!(error = %e, "jwt error");
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
-                        code: "INTERNAL",
+                        code: ErrorCode::Internal,
                         message: "Something went wrong.".into(),
                     },
                 });
@@ -204,11 +253,20 @@ mod tests {
 
     #[tokio::test]
     async fn invalid_input_carries_message() {
-        let r = AppError::InvalidInput("bad".into()).into_response();
+        let r = AppError::invalid_input("bad").into_response();
         assert_eq!(r.status(), StatusCode::BAD_REQUEST);
         let v = body_json(r).await;
         assert_eq!(v["error"]["code"], "INVALID_INPUT");
         assert_eq!(v["error"]["message"], "bad");
+    }
+
+    #[tokio::test]
+    async fn invalid_input_custom_code() {
+        let r = AppError::invalid_input_code(ErrorCode::UnknownCourseCode, "nope").into_response();
+        assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+        let v = body_json(r).await;
+        assert_eq!(v["error"]["code"], "UNKNOWN_COURSE_CODE");
+        assert_eq!(v["error"]["message"], "nope");
     }
 
     #[tokio::test]
@@ -229,6 +287,7 @@ mod tests {
             (AppError::Forbidden, "FORBIDDEN"),
             (AppError::NotFound, "NOT_FOUND"),
             (AppError::AttemptTimeExpired, "ATTEMPT_TIME_EXPIRED"),
+            (AppError::MaxAttemptsReached, "MAX_ATTEMPTS_REACHED"),
             (
                 AppError::AiGenerationFailed("x".into()),
                 "AI_GENERATION_FAILED",
@@ -251,5 +310,47 @@ mod tests {
     async fn jwt_error_maps_to_500() {
         let r = AppError::Jwt(jsonwebtoken::errors::ErrorKind::InvalidToken.into()).into_response();
         assert_eq!(r.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn all_variants_status_codes() {
+        let cases: Vec<(AppError, StatusCode)> = vec![
+            (AppError::Unauthorized, StatusCode::UNAUTHORIZED),
+            (AppError::NotFound, StatusCode::NOT_FOUND),
+            (AppError::Forbidden, StatusCode::FORBIDDEN),
+            (
+                AppError::AiNotConfigured,
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
+            (AppError::AiGenerationFailed("e".into()), StatusCode::BAD_GATEWAY),
+            (AppError::InvalidCredentials, StatusCode::UNAUTHORIZED),
+            (AppError::EmailTaken, StatusCode::CONFLICT),
+            (AppError::invalid_input("x"), StatusCode::BAD_REQUEST),
+            (
+                AppError::invalid_input_code(ErrorCode::QuizSettingsInvalid, "x"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (AppError::InvalidResetToken, StatusCode::BAD_REQUEST),
+            (
+                AppError::TooManyRequests("x".into()),
+                StatusCode::TOO_MANY_REQUESTS,
+            ),
+            (AppError::QuestionAlreadyLocked, StatusCode::FORBIDDEN),
+            (AppError::AttemptTimeExpired, StatusCode::FORBIDDEN),
+            (AppError::MaxAttemptsReached, StatusCode::FORBIDDEN),
+            (
+                AppError::Db(sqlx::Error::RowNotFound),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+            (
+                AppError::Jwt(jsonwebtoken::errors::ErrorKind::InvalidToken.into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+        ];
+        for (err, expected) in cases {
+            let label = format!("{err:?}");
+            let status = err.into_response().status();
+            assert_eq!(status, expected, "{label}");
+        }
     }
 }

@@ -31,6 +31,21 @@ import {
   visibleChoices,
 } from './quiz-take-utils'
 
+function formatRetakePolicyNotice(policy: string): string {
+  switch (policy) {
+    case 'highest':
+      return 'Your highest score counts toward the course grade.'
+    case 'latest':
+      return 'Your most recent attempt counts toward the course grade.'
+    case 'first':
+      return 'Your first submitted attempt counts toward the course grade.'
+    case 'average':
+      return 'The average of your attempts counts toward the course grade.'
+    default:
+      return 'Your instructor chose how multiple attempts are scored.'
+  }
+}
+
 export type QuizStudentTakePanelProps = {
   open: boolean
   onClose: () => void
@@ -711,6 +726,38 @@ export function QuizStudentTakePanel({
               {error}
             </p>
           )}
+
+          {startMeta && uiPhase.kind === 'static' ? (
+            <div
+              className="mb-4 space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-neutral-600 dark:bg-neutral-900/60 dark:text-neutral-100"
+              aria-live="polite"
+              aria-label={[
+                startMeta.maxAttempts != null
+                  ? `Attempt ${startMeta.attemptNumber} of ${startMeta.maxAttempts}`
+                  : `Attempt ${startMeta.attemptNumber}, unlimited attempts`,
+                typeof startMeta.remainingAttempts === 'number'
+                  ? `${startMeta.remainingAttempts} attempts remaining after this one`
+                  : null,
+                formatRetakePolicyNotice(startMeta.retakePolicy),
+              ]
+                .filter(Boolean)
+                .join('. ')}
+            >
+              <p className="font-medium text-slate-900 dark:text-neutral-50">
+                {startMeta.maxAttempts != null
+                  ? `Attempt ${startMeta.attemptNumber} of ${startMeta.maxAttempts}`
+                  : `Attempt ${startMeta.attemptNumber} (unlimited attempts)`}
+              </p>
+              {startMeta.maxAttempts != null && typeof startMeta.remainingAttempts === 'number' ? (
+                <p className="text-slate-600 dark:text-neutral-300">
+                  {startMeta.remainingAttempts === 0
+                    ? 'This is your last allowed attempt for this quiz.'
+                    : `${startMeta.remainingAttempts} more attempt${startMeta.remainingAttempts === 1 ? '' : 's'} allowed after this one.`}
+                </p>
+              ) : null}
+              <p className="text-slate-600 dark:text-neutral-300">{formatRetakePolicyNotice(startMeta.retakePolicy)}</p>
+            </div>
+          ) : null}
 
           {timeLabel != null && uiPhase.kind === 'static' && (
             <div

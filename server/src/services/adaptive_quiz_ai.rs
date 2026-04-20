@@ -213,16 +213,16 @@ pub async fn generate_adaptive_next_questions(
 
     let answered = history.len() as i32;
     if answered >= total_questions_allowed {
-        return Err(AppError::InvalidInput(
-            "No more questions in this adaptive attempt.".into(),
+        return Err(AppError::invalid_input(
+            "No more questions in this adaptive attempt.",
         ));
     }
 
     let expected = batch_size.clamp(1, 2) as usize;
     let remaining_after_batch = (total_questions_allowed - answered) as usize;
     if expected > remaining_after_batch {
-        return Err(AppError::InvalidInput(
-            "Adaptive batch size exceeds remaining questions.".into(),
+        return Err(AppError::invalid_input(
+            "Adaptive batch size exceeds remaining questions.",
         ));
     }
 

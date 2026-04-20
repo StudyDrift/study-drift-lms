@@ -92,5 +92,5 @@ async fn download_course_file_handler(
         .header(header::CONTENT_TYPE, row.mime_type.as_str())
         .header(header::CACHE_CONTROL, "private, max-age=86400")
         .body(Body::from(bytes))
-        .map_err(|e| AppError::InvalidInput(e.to_string()))?)
+        .map_err(|e| AppError::invalid_input(e.to_string()))?)
 }

@@ -49,23 +49,23 @@ pub fn validate_rubric_definition(r: &RubricDefinition) -> Result<(), AppError> 
     if let Some(t) = &r.title {
         let tt = t.trim();
         if tt.is_empty() {
-            return Err(AppError::InvalidInput(
-                "Rubric title cannot be whitespace only.".into(),
+            return Err(AppError::invalid_input(
+                "Rubric title cannot be whitespace only.",
             ));
         }
         if tt.len() > MAX_TITLE_LEN {
-            return Err(AppError::InvalidInput(
-                "Rubric title is too long.".into(),
+            return Err(AppError::invalid_input(
+                "Rubric title is too long.",
             ));
         }
     }
     if r.criteria.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Rubric must include at least one criterion.".into(),
+        return Err(AppError::invalid_input(
+            "Rubric must include at least one criterion.",
         ));
     }
     if r.criteria.len() > MAX_CRITERIA {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Rubric cannot have more than {} criteria.",
             MAX_CRITERIA
         )));
@@ -73,35 +73,35 @@ pub fn validate_rubric_definition(r: &RubricDefinition) -> Result<(), AppError> 
     let mut seen_ids = HashSet::new();
     for c in &r.criteria {
         if !seen_ids.insert(c.id) {
-            return Err(AppError::InvalidInput(
-                "Rubric criterion ids must be unique.".into(),
+            return Err(AppError::invalid_input(
+                "Rubric criterion ids must be unique.",
             ));
         }
         let t = c.title.trim();
         if t.is_empty() {
-            return Err(AppError::InvalidInput(
-                "Each rubric criterion needs a title.".into(),
+            return Err(AppError::invalid_input(
+                "Each rubric criterion needs a title.",
             ));
         }
         if t.len() > MAX_TITLE_LEN {
-            return Err(AppError::InvalidInput(
-                "Rubric criterion title is too long.".into(),
+            return Err(AppError::invalid_input(
+                "Rubric criterion title is too long.",
             ));
         }
         if let Some(d) = &c.description {
             if d.len() > MAX_DESC_LEN {
-                return Err(AppError::InvalidInput(
-                    "Rubric criterion description is too long.".into(),
+                return Err(AppError::invalid_input(
+                    "Rubric criterion description is too long.",
                 ));
             }
         }
         if c.levels.is_empty() {
-            return Err(AppError::InvalidInput(
-                "Each rubric criterion needs at least one level.".into(),
+            return Err(AppError::invalid_input(
+                "Each rubric criterion needs at least one level.",
             ));
         }
         if c.levels.len() > MAX_LEVELS_PER_CRITERION {
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input(format!(
                 "Each rubric criterion cannot have more than {} levels.",
                 MAX_LEVELS_PER_CRITERION
             )));
@@ -109,25 +109,25 @@ pub fn validate_rubric_definition(r: &RubricDefinition) -> Result<(), AppError> 
         for lvl in &c.levels {
             let lab = lvl.label.trim();
             if lab.is_empty() {
-                return Err(AppError::InvalidInput(
-                    "Each rubric level needs a label.".into(),
+                return Err(AppError::invalid_input(
+                    "Each rubric level needs a label.",
                 ));
             }
             if lab.len() > MAX_LEVEL_LABEL_LEN {
-                return Err(AppError::InvalidInput(
-                    "Rubric level label is too long.".into(),
+                return Err(AppError::invalid_input(
+                    "Rubric level label is too long.",
                 ));
             }
             if let Some(d) = &lvl.description {
                 if d.len() > MAX_LEVEL_DESC_LEN {
-                    return Err(AppError::InvalidInput(
-                        "Rubric level description is too long.".into(),
+                    return Err(AppError::invalid_input(
+                        "Rubric level description is too long.",
                     ));
                 }
             }
             if !lvl.points.is_finite() || lvl.points < 0.0 {
-                return Err(AppError::InvalidInput(
-                    "Rubric level points must be a non-negative finite number.".into(),
+                return Err(AppError::invalid_input(
+                    "Rubric level points must be a non-negative finite number.",
                 ));
             }
         }
@@ -155,7 +155,7 @@ pub fn validate_rubric_against_points_worth(
         .sum();
     let expected = pw as f64;
     if (sum_max - expected).abs() > 1e-3 {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Rubric total (sum of each criterion's highest level) must equal the assignment points ({}).",
             pw
         )));
@@ -171,27 +171,26 @@ pub fn validate_rubric_scores_for_grade(
     let mut total = 0.0_f64;
     for c in &rubric.criteria {
         let Some(p) = scores.get(&c.id).copied() else {
-            return Err(AppError::InvalidInput(
-                "Rubric grading must include a score for every criterion.".into(),
+            return Err(AppError::invalid_input(
+                "Rubric grading must include a score for every criterion.",
             ));
         };
         if !p.is_finite() || p < 0.0 {
-            return Err(AppError::InvalidInput(
-                "Rubric criterion score must be a non-negative finite number.".into(),
+            return Err(AppError::invalid_input(
+                "Rubric criterion score must be a non-negative finite number.",
             ));
         }
         let allowed: Vec<f64> = c.levels.iter().map(|l| l.points).collect();
         if !allowed.iter().any(|a| (a - p).abs() < 1e-6) {
-            return Err(AppError::InvalidInput(
-                "Each rubric score must match one of the level point values for that criterion."
-                    .into(),
+            return Err(AppError::invalid_input(
+                "Each rubric score must match one of the level point values for that criterion.",
             ));
         }
         total += p;
     }
     if scores.len() != rubric.criteria.len() {
-        return Err(AppError::InvalidInput(
-            "Rubric grading includes unknown criteria.".into(),
+        return Err(AppError::invalid_input(
+            "Rubric grading includes unknown criteria.",
         ));
     }
     Ok(total)

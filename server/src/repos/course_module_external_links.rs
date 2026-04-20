@@ -15,21 +15,21 @@ const MAX_EXTERNAL_URL_LEN: usize = 2048;
 pub fn validate_external_http_url(raw: &str) -> Result<String, AppError> {
     let s = raw.trim();
     if s.is_empty() {
-        return Err(AppError::InvalidInput("URL is required.".into()));
+        return Err(AppError::invalid_input("URL is required."));
     }
     if s.len() > MAX_EXTERNAL_URL_LEN {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "URL must be at most {MAX_EXTERNAL_URL_LEN} characters."
         )));
     }
     let lower = s.to_ascii_lowercase();
     if !lower.starts_with("http://") && !lower.starts_with("https://") {
-        return Err(AppError::InvalidInput(
-            "URL must start with http:// or https://.".into(),
+        return Err(AppError::invalid_input(
+            "URL must start with http:// or https://.",
         ));
     }
     if lower.starts_with("javascript:") || lower.starts_with("data:") {
-        return Err(AppError::InvalidInput("Invalid URL.".into()));
+        return Err(AppError::invalid_input("Invalid URL."));
     }
     Ok(s.to_string())
 }

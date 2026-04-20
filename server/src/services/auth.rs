@@ -23,7 +23,7 @@ fn hash_password(raw: &str) -> Result<String, AppError> {
     Argon2::default()
         .hash_password(raw.as_bytes(), &salt)
         .map(|h| h.to_string())
-        .map_err(|_| AppError::InvalidInput("Could not process password.".into()))
+        .map_err(|_| AppError::invalid_input("Could not process password."))
 }
 
 /// Argon2 hash of a long random secret for accounts created without a known password (e.g. roster import).
@@ -48,13 +48,13 @@ pub fn normalize_email(s: &str) -> String {
 fn validate_signup(req: &SignupRequest) -> Result<(), AppError> {
     let email = normalize_email(&req.email);
     if email.is_empty() || !email.contains('@') || email.len() > 254 {
-        return Err(AppError::InvalidInput(
-            "Enter a valid email address.".into(),
+        return Err(AppError::invalid_input(
+            "Enter a valid email address.",
         ));
     }
     if req.password.len() < 8 {
-        return Err(AppError::InvalidInput(
-            "Password must be at least 8 characters.".into(),
+        return Err(AppError::invalid_input(
+            "Password must be at least 8 characters.",
         ));
     }
     Ok(())
@@ -62,8 +62,8 @@ fn validate_signup(req: &SignupRequest) -> Result<(), AppError> {
 
 fn validate_login(req: &LoginRequest) -> Result<(), AppError> {
     if req.email.trim().is_empty() || req.password.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Email and password are required.".into(),
+        return Err(AppError::invalid_input(
+            "Email and password are required.",
         ));
     }
     Ok(())
@@ -167,8 +167,8 @@ pub async fn request_password_reset(
 ) -> Result<ForgotPasswordResponse, AppError> {
     let email = normalize_email(&req.email);
     if email.is_empty() || !email.contains('@') || email.len() > 254 {
-        return Err(AppError::InvalidInput(
-            "Enter a valid email address.".into(),
+        return Err(AppError::invalid_input(
+            "Enter a valid email address.",
         ));
     }
 
@@ -207,8 +207,8 @@ pub async fn reset_password(
         return Err(AppError::InvalidResetToken);
     }
     if req.password.len() < 8 {
-        return Err(AppError::InvalidInput(
-            "Password must be at least 8 characters.".into(),
+        return Err(AppError::invalid_input(
+            "Password must be at least 8 characters.",
         ));
     }
 

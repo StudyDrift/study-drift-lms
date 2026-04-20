@@ -68,7 +68,7 @@ fn valid_role_scope(s: &str) -> bool {
 fn map_unique_violation(e: SqlxError) -> AppError {
     if let Some(db) = e.as_database_error() {
         if db.code().as_deref() == Some("23505") {
-            return AppError::InvalidInput("That value already exists.".into());
+            return AppError::invalid_input("That value already exists.");
         }
     }
     AppError::Db(e)
@@ -91,11 +91,11 @@ async fn create_permission(
     require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
     let permission_string = req.permission_string.trim();
     if permission_string.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Permission string is required.".into(),
+        return Err(AppError::invalid_input(
+            "Permission string is required.",
         ));
     }
-    rbac::validate_permission_string(permission_string).map_err(AppError::InvalidInput)?;
+    rbac::validate_permission_string(permission_string).map_err(AppError::invalid_input)?;
     let description = req.description.trim();
     let row = rbac::create_permission(&state.pool, permission_string, description)
         .await
@@ -146,7 +146,7 @@ async fn create_role(
     require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
     let name = req.name.trim();
     if name.is_empty() {
-        return Err(AppError::InvalidInput("Role name is required.".into()));
+        return Err(AppError::invalid_input("Role name is required."));
     }
     let description = req.description.trim();
     let mut scope = req.scope.trim();
@@ -154,8 +154,8 @@ async fn create_role(
         scope = "global";
     }
     if !valid_role_scope(scope) {
-        return Err(AppError::InvalidInput(
-            "Scope must be \"global\" or \"course\".".into(),
+        return Err(AppError::invalid_input(
+            "Scope must be \"global\" or \"course\".",
         ));
     }
     let role = rbac::create_role(&state.pool, name, description, scope)
@@ -176,7 +176,7 @@ async fn patch_role(
     require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
     let name = req.name.trim();
     if name.is_empty() {
-        return Err(AppError::InvalidInput("Role name is required.".into()));
+        return Err(AppError::invalid_input("Role name is required."));
     }
     let description = req.description.trim();
     let mut scope = req.scope.trim();
@@ -184,8 +184,8 @@ async fn patch_role(
         scope = "global";
     }
     if !valid_role_scope(scope) {
-        return Err(AppError::InvalidInput(
-            "Scope must be \"global\" or \"course\".".into(),
+        return Err(AppError::invalid_input(
+            "Scope must be \"global\" or \"course\".",
         ));
     }
     let row = rbac::patch_role(&state.pool, id, name, description, scope)

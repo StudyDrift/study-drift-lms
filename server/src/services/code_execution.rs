@@ -110,18 +110,18 @@ pub async fn run_code(req: ExecuteCodeRequest) -> Result<CodeExecutionResult, Ap
     let submit = submit_req
         .send()
         .await
-        .map_err(|e| AppError::InvalidInput(format!("Code execution backend request failed: {e}")))?;
+        .map_err(|e| AppError::invalid_input(format!("Code execution backend request failed: {e}")))?;
     if !submit.status().is_success() {
         let status = submit.status();
         let body = submit.text().await.unwrap_or_default();
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Code execution backend rejected request ({status}): {body}"
         )));
     }
     let submitted: Judge0SubmitResponse = submit
         .json()
         .await
-        .map_err(|e| AppError::InvalidInput(format!("Invalid code execution response: {e}")))?;
+        .map_err(|e| AppError::invalid_input(format!("Invalid code execution response: {e}")))?;
 
     let result_url = format!(
         "{}/submissions/{}?base64_encoded=false",
@@ -138,18 +138,18 @@ pub async fn run_code(req: ExecuteCodeRequest) -> Result<CodeExecutionResult, Ap
         let poll = poll_req
             .send()
             .await
-            .map_err(|e| AppError::InvalidInput(format!("Code execution polling failed: {e}")))?;
+            .map_err(|e| AppError::invalid_input(format!("Code execution polling failed: {e}")))?;
         if !poll.status().is_success() {
             let status = poll.status();
             let body = poll.text().await.unwrap_or_default();
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input(format!(
                 "Code execution polling failed ({status}): {body}"
             )));
         }
         let out: Judge0ResultResponse = poll
             .json()
             .await
-            .map_err(|e| AppError::InvalidInput(format!("Invalid code execution poll response: {e}")))?;
+            .map_err(|e| AppError::invalid_input(format!("Invalid code execution poll response: {e}")))?;
 
         if out.status.id <= 2 {
             if attempts >= 30 {
@@ -206,8 +206,8 @@ pub fn language_id_from_name(language: &str) -> i32 {
 
 pub fn validate_code_submission_size(code: &str) -> Result<(), AppError> {
     if code.as_bytes().len() > MAX_CODE_BYTES {
-        return Err(AppError::InvalidInput(
-            "Code submission exceeds 64 KB limit.".into(),
+        return Err(AppError::invalid_input(
+            "Code submission exceeds 64 KB limit.",
         ));
     }
     Ok(())

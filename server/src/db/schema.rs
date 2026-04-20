@@ -47,3 +47,4 @@ pub const ATTEMPT_QUESTION_SELECTIONS: &str = "course.attempt_question_selection
 pub const ATTEMPT_OPTION_ORDERS: &str = "course.attempt_option_orders";
 pub const ATTEMPT_FOCUS_LOSS_EVENTS: &str = "course.attempt_focus_loss_events";
 pub const STUDENT_ACCOMMODATIONS: &str = "course.student_accommodations";
+pub const ENROLLMENT_QUIZ_OVERRIDES: &str = "course.enrollment_quiz_overrides";

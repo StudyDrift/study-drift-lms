@@ -174,7 +174,7 @@ fn excerpt(s: &str) -> String {
     t.chars().take(SOURCE_EXCERPT_CHARS.saturating_sub(1)).collect::<String>() + "…"
 }
 
-/// Validates input sizes and returns an error message key for [`AppError::InvalidInput`].
+/// Validates input sizes and maps failures to [`crate::error::AppError`] via `invalid_input`.
 pub fn validate_notebook_rag_request(
     question: &str,
     notebooks: &[StudentNotebookDocInput],
@@ -220,7 +220,7 @@ pub async fn answer_notebook_question(
     question: &str,
     notebooks: &[StudentNotebookDocInput],
 ) -> Result<StudentNotebookRagResponse, AppError> {
-    validate_notebook_rag_request(question, notebooks).map_err(AppError::InvalidInput)?;
+    validate_notebook_rag_request(question, notebooks).map_err(AppError::invalid_input)?;
 
     let model = user_ai_settings::get_course_setup_model_id(pool, user_id).await?;
     let q = question.trim();

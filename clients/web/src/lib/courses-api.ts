@@ -1607,6 +1607,12 @@ export type QuizAttemptStartResponse = {
   currentQuestionIndex: number
   deadlineAt?: string | null
   reducedDistractionMode?: boolean
+  /** Same as quiz grade policy (which score counts). */
+  retakePolicy: string
+  /** Omitted when unlimited attempts. */
+  maxAttempts?: number | null
+  /** Omitted when unlimited; tries left after this one. */
+  remainingAttempts?: number | null
 }
 
 export async function postQuizStart(
@@ -1627,6 +1633,12 @@ export async function postQuizStart(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   const o = raw as Record<string, unknown>
+  const retakePolicy =
+    typeof o.retakePolicy === 'string'
+      ? o.retakePolicy
+      : typeof o.gradeAttemptPolicy === 'string'
+        ? o.gradeAttemptPolicy
+        : 'latest'
   return {
     attemptId: String(o.attemptId ?? ''),
     attemptNumber: typeof o.attemptNumber === 'number' ? o.attemptNumber : 1,
@@ -1637,6 +1649,84 @@ export async function postQuizStart(
     currentQuestionIndex: typeof o.currentQuestionIndex === 'number' ? o.currentQuestionIndex : 0,
     deadlineAt: typeof o.deadlineAt === 'string' ? o.deadlineAt : null,
     reducedDistractionMode: Boolean(o.reducedDistractionMode),
+    retakePolicy,
+    maxAttempts: typeof o.maxAttempts === 'number' ? o.maxAttempts : (o.maxAttempts === null ? null : undefined),
+    remainingAttempts:
+      typeof o.remainingAttempts === 'number'
+        ? o.remainingAttempts
+        : o.remainingAttempts === null
+          ? null
+          : undefined,
+  }
+}
+
+export type QuizAttemptSummaryApi = {
+  id: string
+  attemptNumber: number
+  submittedAt: string
+  scorePercent?: number | null
+  pointsEarned: number
+  pointsPossible: number
+}
+
+export type QuizAttemptsListPayload = {
+  attempts: QuizAttemptSummaryApi[]
+  policyScorePercent?: number | null
+  retakePolicy: string
+}
+
+export async function fetchQuizAttemptsList(
+  courseCode: string,
+  itemId: string,
+  opts?: { userId?: string },
+): Promise<QuizAttemptsListPayload> {
+  const qs =
+    opts?.userId != null && opts.userId !== ''
+      ? `?userId=${encodeURIComponent(opts.userId)}`
+      : ''
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts${qs}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as QuizAttemptsListPayload
+}
+
+export async function putEnrollmentQuizOverride(
+  courseCode: string,
+  enrollmentId: string,
+  body: { quizId: string; extraAttempts: number; timeMultiplier?: number | null },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollments/${encodeURIComponent(enrollmentId)}/quiz-overrides`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        quizId: body.quizId,
+        extraAttempts: body.extraAttempts,
+        timeMultiplier: body.timeMultiplier ?? undefined,
+      }),
+    },
+  )
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
+  }
+}
+
+export async function deleteEnrollmentQuizOverride(
+  courseCode: string,
+  enrollmentId: string,
+  quizItemId: string,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollments/${encodeURIComponent(enrollmentId)}/quiz-overrides/${encodeURIComponent(quizItemId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
   }
 }
 

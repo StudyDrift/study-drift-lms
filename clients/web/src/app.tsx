@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { RequireAuth } from './auth/require-auth'
+import { ApiErrorBoundary } from './components/api-error-boundary'
 import { AppShell } from './components/layout/app-shell'
 import Calendar from './pages/lms/calendar'
 import CourseCalendarPage from './pages/lms/course-calendar-page'
@@ -64,7 +65,13 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<RequireAuth />}>
-        <Route element={<AppShell />}>
+        <Route
+          element={
+            <ApiErrorBoundary>
+              <AppShell />
+            </ApiErrorBoundary>
+          }
+        >
           <Route path="/" element={<Dashboard />} />
           <Route path="/courses" element={<Courses />} />
           <Route path="/notebooks" element={<MyNotebooksPage />} />

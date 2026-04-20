@@ -44,8 +44,8 @@ async fn feed_course_id(state: &AppState, course_code: &str) -> Result<Uuid, App
         .await?
         .ok_or(AppError::NotFound)?;
     if !course.feed_enabled {
-        return Err(AppError::InvalidInput(
-            "The course feed is disabled for this course.".into(),
+        return Err(AppError::invalid_input(
+            "The course feed is disabled for this course.",
         ));
     }
     Ok(course.id)
@@ -138,8 +138,8 @@ async fn create_channel_handler(
     let course_id = feed_course_id(&state, &course_code).await?;
     let name = req.name.trim();
     if name.is_empty() || name.len() > 80 {
-        return Err(AppError::InvalidInput(
-            "Channel name must be 1–80 characters.".into(),
+        return Err(AppError::invalid_input(
+            "Channel name must be 1–80 characters.",
         ));
     }
     let ch = course_feed::create_channel(&state.pool, course_id, user.user_id, name).await?;
@@ -171,8 +171,8 @@ async fn upload_feed_image_handler(
         return Err(AppError::NotFound);
     };
     if !course_row.feed_enabled {
-        return Err(AppError::InvalidInput(
-            "The course feed is disabled for this course.".into(),
+        return Err(AppError::invalid_input(
+            "The course feed is disabled for this course.",
         ));
     }
 
@@ -225,8 +225,8 @@ async fn create_message_handler(
 
     let body = req.body.trim();
     if body.is_empty() || body.len() > 8000 {
-        return Err(AppError::InvalidInput(
-            "Message body must be 1–8000 characters.".into(),
+        return Err(AppError::invalid_input(
+            "Message body must be 1–8000 characters.",
         ));
     }
 
@@ -238,8 +238,8 @@ async fn create_message_handler(
 
     if let Some(pid) = req.parent_message_id {
         if !course_feed::parent_is_root_in_channel(&state.pool, channel_id, pid).await? {
-            return Err(AppError::InvalidInput(
-                "Replies must reference a top-level message in this channel.".into(),
+            return Err(AppError::invalid_input(
+                "Replies must reference a top-level message in this channel.",
             ));
         }
     }
@@ -254,7 +254,7 @@ async fn create_message_handler(
     mention_ids.sort_unstable();
     mention_ids.dedup();
     if mention_ids.len() > 40 {
-        return Err(AppError::InvalidInput("Too many @mentions.".into()));
+        return Err(AppError::invalid_input("Too many @mentions."));
     }
 
     let id = course_feed::create_message(
@@ -297,8 +297,8 @@ async fn patch_message_handler(
 
     let body = req.body.trim();
     if body.is_empty() || body.len() > 8000 {
-        return Err(AppError::InvalidInput(
-            "Message body must be 1–8000 characters.".into(),
+        return Err(AppError::invalid_input(
+            "Message body must be 1–8000 characters.",
         ));
     }
 

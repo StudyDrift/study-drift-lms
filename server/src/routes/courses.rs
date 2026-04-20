@@ -31,6 +31,7 @@ use crate::models::course_module_quiz::{
     AdaptiveQuizNextResponse, CreateCourseQuizRequest, GenerateModuleQuizQuestionsRequest,
     GenerateModuleQuizQuestionsResponse, ModuleQuizGetQuery, ModuleQuizResponse, QuizQuestion,
     QuizQuestionResponseItem,     QuizAdvanceResponse, QuizAttemptHintRequest, QuizCurrentQuestionResponse, QuizFocusLossEventApi,
+    EnrollmentQuizOverrideUpsertRequest, QuizAttemptSummary, QuizAttemptsListResponse,
     QuizFocusLossEventsResponse, QuizFocusLossRequest, QuizResultsQuestionResult,
     QuizResultsResponse, QuizResultsScoreSummary, QuizStartRequest, QuizStartResponse, QuizSubmitRequest,
     QuizSubmitResponse, UpdateModuleQuizRequest, ADAPTIVE_SOURCE_KINDS,
@@ -72,6 +73,7 @@ use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
 use crate::repos::enrollment_groups;
+use crate::repos::enrollment_quiz_overrides;
 use crate::repos::question_bank as qb_repo;
 use crate::repos::quiz_attempts;
 use crate::repos::rbac;
@@ -219,6 +221,10 @@ pub fn router() -> Router<AppState> {
             get(module_quiz_results_handler),
         )
         .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts",
+            get(module_quiz_attempts_list_handler),
+        )
+        .route(
             "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/current-question",
             get(quiz_attempt_current_question_handler),
         )
@@ -277,6 +283,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/enrollments/{enrollment_id}",
             delete(delete_enrollment_handler).patch(patch_enrollment_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/enrollments/{enrollment_id}/quiz-overrides",
+            post(enrollment_quiz_override_upsert_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/enrollments/{enrollment_id}/quiz-overrides/{item_id}",
+            delete(enrollment_quiz_override_delete_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/enrollment-groups/enable",
@@ -457,16 +471,16 @@ async fn post_course_context_handler(
     match req.kind.as_str() {
         "course_visit" => {
             if req.structure_item_id.is_some() {
-                return Err(AppError::InvalidInput(
-                    "course_visit must not include structureItemId.".into(),
+                return Err(AppError::invalid_input(
+                    "course_visit must not include structureItemId.",
                 ));
             }
             user_audit::insert(&state.pool, user.user_id, course_id, None, "course_visit").await?;
         }
         "content_open" | "content_leave" => {
             let Some(sid) = req.structure_item_id else {
-                return Err(AppError::InvalidInput(
-                    "content_open and content_leave require structureItemId.".into(),
+                return Err(AppError::invalid_input(
+                    "content_open and content_leave require structureItemId.",
                 ));
             };
             if !user_audit::structure_item_is_course_content_page(&state.pool, course_id, sid)
@@ -484,8 +498,8 @@ async fn post_course_context_handler(
             .await?;
         }
         _ => {
-            return Err(AppError::InvalidInput(
-                "Invalid kind. Expected course_visit, content_open, or content_leave.".into(),
+            return Err(AppError::invalid_input(
+                "Invalid kind. Expected course_visit, content_open, or content_leave.",
             ));
         }
     }
@@ -613,7 +627,7 @@ fn merge_assignment_body_write(
         None => cur.rubric_json.clone(),
         Some(None) => None,
         Some(Some(r)) => Some(
-            serde_json::to_value(r).map_err(|e| AppError::InvalidInput(e.to_string()))?,
+            serde_json::to_value(r).map_err(|e| AppError::invalid_input(e.to_string()))?,
         ),
     };
     Ok(course_module_assignments::AssignmentBodyWrite {
@@ -835,22 +849,22 @@ fn merge_quiz_settings_write(
 
 fn validate_syllabus_sections(sections: &[SyllabusSection]) -> Result<(), AppError> {
     if sections.len() > MAX_SYLLABUS_SECTIONS {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Too many sections (max {MAX_SYLLABUS_SECTIONS})."
         )));
     }
     for s in sections {
         if s.id.trim().is_empty() {
-            return Err(AppError::InvalidInput("Each section needs an id.".into()));
+            return Err(AppError::invalid_input("Each section needs an id."));
         }
         if s.heading.len() > MAX_SYLLABUS_HEADING_LEN {
-            return Err(AppError::InvalidInput(
-                "Section heading is too long.".into(),
+            return Err(AppError::invalid_input(
+                "Section heading is too long.",
             ));
         }
         if s.markdown.len() > MAX_SYLLABUS_MARKDOWN_LEN {
-            return Err(AppError::InvalidInput(
-                "Section content is too long.".into(),
+            return Err(AppError::invalid_input(
+                "Section content is too long.",
             ));
         }
     }
@@ -982,10 +996,10 @@ async fn syllabus_generate_section_handler(
 
     let instructions = req.instructions.trim();
     if instructions.is_empty() {
-        return Err(AppError::InvalidInput("Instructions are required.".into()));
+        return Err(AppError::invalid_input("Instructions are required."));
     }
     if instructions.len() > MAX_SYLLABUS_SECTION_INSTRUCTIONS_LEN {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "Instructions are too long (max {MAX_SYLLABUS_SECTION_INSTRUCTIONS_LEN} characters)."
         )));
     }
@@ -1111,13 +1125,13 @@ async fn put_course_catalog_order_handler(
 
     let got: HashSet<Uuid> = req.course_ids.iter().copied().collect();
     if got.len() != req.course_ids.len() {
-        return Err(AppError::InvalidInput(
-            "courseIds must not contain duplicates.".into(),
+        return Err(AppError::invalid_input(
+            "courseIds must not contain duplicates.",
         ));
     }
     if req.course_ids.len() != expected.len() || got != expected {
-        return Err(AppError::InvalidInput(
-            "courseIds must list each catalog course exactly once.".into(),
+        return Err(AppError::invalid_input(
+            "courseIds must list each catalog course exactly once.",
         ));
     }
 
@@ -1134,7 +1148,7 @@ async fn create_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Course title is required.".into()));
+        return Err(AppError::invalid_input("Course title is required."));
     }
 
     let row =
@@ -1222,8 +1236,8 @@ async fn structure_reorder_handler(
     )
     .await
     .map_err(|e| match e {
-        sqlx::Error::RowNotFound => AppError::InvalidInput(
-            "Invalid reorder: module or child ids must match the current structure.".into(),
+        sqlx::Error::RowNotFound => AppError::invalid_input(
+            "Invalid reorder: module or child ids must match the current structure.",
         ),
         _ => e.into(),
     })?;
@@ -1250,7 +1264,7 @@ async fn create_course_module_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Module name is required.".into()));
+        return Err(AppError::invalid_input("Module name is required."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -1277,7 +1291,7 @@ async fn patch_course_module_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Module name is required.".into()));
+        return Err(AppError::invalid_input("Module name is required."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -1316,7 +1330,7 @@ async fn create_module_heading_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Heading title is required.".into()));
+        return Err(AppError::invalid_input("Heading title is required."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -1349,8 +1363,8 @@ async fn create_module_assignment_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Assignment name is required.".into(),
+        return Err(AppError::invalid_input(
+            "Assignment name is required.",
         ));
     }
 
@@ -1384,7 +1398,7 @@ async fn create_module_content_page_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Page name is required.".into()));
+        return Err(AppError::invalid_input("Page name is required."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -1421,7 +1435,7 @@ async fn create_module_quiz_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Quiz name is required.".into()));
+        return Err(AppError::invalid_input("Quiz name is required."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -1453,7 +1467,7 @@ async fn create_module_external_link_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Link title is required.".into()));
+        return Err(AppError::invalid_input("Link title is required."));
     }
     let url = course_module_external_links::validate_external_http_url(&req.url)?;
 
@@ -1719,7 +1733,7 @@ async fn module_content_page_patch_handler(
     assert_permission(&state.pool, user.user_id, &required).await?;
 
     if req.markdown.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
-        return Err(AppError::InvalidInput("Content is too long.".into()));
+        return Err(AppError::invalid_input("Content is too long."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -1804,7 +1818,7 @@ async fn create_content_page_markup_handler(
         &req.notebook_page_id,
         &req.comment_text,
     ) {
-        return Err(AppError::InvalidInput(msg));
+        return Err(AppError::invalid_input(msg));
     }
 
     let row = content_page_markups::insert(
@@ -1882,7 +1896,7 @@ async fn create_assignment_markup_handler(
         &req.notebook_page_id,
         &req.comment_text,
     ) {
-        return Err(AppError::InvalidInput(msg));
+        return Err(AppError::invalid_input(msg));
     }
 
     let row = content_page_markups::insert(
@@ -1959,7 +1973,7 @@ async fn create_quiz_markup_handler(
         &req.notebook_page_id,
         &req.comment_text,
     ) {
-        return Err(AppError::InvalidInput(msg));
+        return Err(AppError::invalid_input(msg));
     }
 
     let row = content_page_markups::insert(
@@ -2037,7 +2051,7 @@ async fn create_syllabus_markup_handler(
         &req.notebook_page_id,
         &req.comment_text,
     ) {
-        return Err(AppError::InvalidInput(msg));
+        return Err(AppError::invalid_input(msg));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -2139,7 +2153,7 @@ async fn module_assignment_patch_handler(
     assert_permission(&state.pool, user.user_id, &required).await?;
 
     if req.markdown.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
-        return Err(AppError::InvalidInput("Content is too long.".into()));
+        return Err(AppError::invalid_input("Content is too long."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -2168,7 +2182,7 @@ async fn module_assignment_patch_handler(
 
     if let Some(ref v) = merged_write.rubric_json {
         let r: RubricDefinition = serde_json::from_value(v.clone())
-            .map_err(|_| AppError::InvalidInput("Invalid rubric.".into()))?;
+            .map_err(|_| AppError::invalid_input("Invalid rubric."))?;
         assignment_rubric::validate_rubric_definition(&r)?;
         assignment_rubric::validate_rubric_against_points_worth(&r, merged_write.points_worth)?;
     }
@@ -2216,14 +2230,14 @@ async fn module_assignment_generate_rubric_handler(
 
     let prompt = req.prompt.trim();
     if prompt.is_empty() {
-        return Err(AppError::InvalidInput("Instructions are required.".into()));
+        return Err(AppError::invalid_input("Instructions are required."));
     }
     if prompt.len() > MAX_ASSIGNMENT_RUBRIC_PROMPT_LEN {
-        return Err(AppError::InvalidInput("Instructions are too long.".into()));
+        return Err(AppError::invalid_input("Instructions are too long."));
     }
     if let Some(ref s) = req.assignment_markdown {
         if s.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
-            return Err(AppError::InvalidInput("Assignment body is too long.".into()));
+            return Err(AppError::invalid_input("Assignment body is too long."));
         }
     }
 
@@ -2344,7 +2358,7 @@ async fn module_quiz_patch_handler(
 
     if let Some(markdown) = &req.markdown {
         if markdown.len() > MAX_MODULE_CONTENT_MARKDOWN_LEN {
-            return Err(AppError::InvalidInput("Content is too long.".into()));
+            return Err(AppError::invalid_input("Content is too long."));
         }
     }
     if let Some(questions) = &req.questions {
@@ -2385,8 +2399,8 @@ async fn module_quiz_patch_handler(
         )?;
         validate_item_points_worth(merged.points_worth)?;
         if quiz_lockdown::parse_lockdown_mode_setting(&merged.lockdown_mode).is_none() {
-            return Err(AppError::InvalidInput(
-                "lockdownMode must be one of: standard, one_at_a_time, kiosk.".into(),
+            return Err(AppError::invalid_input(
+                "lockdownMode must be one of: standard, one_at_a_time, kiosk.",
             ));
         }
         quiz_settings_write = Some(merged);
@@ -2395,7 +2409,7 @@ async fn module_quiz_patch_handler(
     if let Some(title) = &req.title {
         let title = title.trim();
         if title.is_empty() {
-            return Err(AppError::InvalidInput("Quiz title is required.".into()));
+            return Err(AppError::invalid_input("Quiz title is required."));
         }
         let updated =
             course_module_quizzes::update_title(&state.pool, course_id, item_id, title).await?;
@@ -2488,8 +2502,8 @@ async fn module_quiz_patch_handler(
             )
             .await?;
             if n != next_ids.len() as i64 {
-                return Err(AppError::InvalidInput(
-                    "One or more adaptive source items are invalid for this course.".into(),
+                return Err(AppError::invalid_input(
+                    "One or more adaptive source items are invalid for this course.",
                 ));
             }
             let updated = course_module_quizzes::update_adaptive_config(
@@ -2530,8 +2544,8 @@ async fn module_quiz_patch_handler(
 
     let eff = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &row);
     if row.is_adaptive && quiz_lockdown::server_enforces_forward_lockdown(eff) {
-        return Err(AppError::InvalidInput(
-            "Adaptive quizzes cannot use lockdown delivery modes.".into(),
+        return Err(AppError::invalid_input(
+            "Adaptive quizzes cannot use lockdown delivery modes.",
         ));
     }
 
@@ -2580,15 +2594,15 @@ async fn module_quiz_adaptive_next_handler(
     };
 
     if !row.is_adaptive {
-        return Err(AppError::InvalidInput(
-            "This quiz is not configured for adaptive mode.".into(),
+        return Err(AppError::invalid_input(
+            "This quiz is not configured for adaptive mode.",
         ));
     }
 
     if !can_edit {
         let Some(aid) = req.attempt_id else {
-            return Err(AppError::InvalidInput(
-                "attemptId is required to take an adaptive quiz.".into(),
+            return Err(AppError::invalid_input(
+                "attemptId is required to take an adaptive quiz.",
             ));
         };
         let Some(att) = quiz_attempts::get_attempt(&state.pool, aid).await? else {
@@ -2616,8 +2630,8 @@ async fn module_quiz_adaptive_next_handler(
 
     for turn in &req.history {
         if turn.choice_weights.len() != turn.choices.len() {
-            return Err(AppError::InvalidInput(
-                "Each history entry must have choiceWeights aligned with choices.".into(),
+            return Err(AppError::invalid_input(
+                "Each history entry must have choiceWeights aligned with choices.",
             ));
         }
     }
@@ -2667,6 +2681,40 @@ async fn module_quiz_adaptive_next_handler(
 struct QuizResultsQuery {
     attempt_id: Option<Uuid>,
     student_user_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QuizAttemptsListQuery {
+    /// When omitted, lists attempts for the current user. Instructors may pass another learner id.
+    user_id: Option<Uuid>,
+}
+
+fn effective_quiz_attempt_cap(
+    row: &course_module_quizzes::CourseItemQuizRow,
+    acc_extra: i32,
+    enrollment_extra: i32,
+) -> Option<i64> {
+    if row.unlimited_attempts {
+        None
+    } else {
+        Some(
+            row.max_attempts as i64
+                + acc_extra.max(0) as i64
+                + enrollment_extra.max(0) as i64,
+        )
+    }
+}
+
+fn remaining_quiz_attempt_starts(
+    cap: Option<i64>,
+    submitted_count: i64,
+    has_in_progress: bool,
+) -> Option<i32> {
+    let cap = cap?;
+    let in_flight = if has_in_progress { 1i64 } else { 0 };
+    let rem = cap - submitted_count - in_flight;
+    Some(rem.max(0) as i32)
 }
 
 fn quiz_access_code_matches(
@@ -2750,7 +2798,7 @@ fn check_code_run_rate_limit(user_id: Uuid) -> Result<(), AppError> {
     let lock = CODE_RUN_RATE_LIMIT.get_or_init(|| Mutex::new(HashMap::new()));
     let mut guard = lock
         .lock()
-        .map_err(|_| AppError::InvalidInput("Rate limiter lock error.".into()))?;
+        .map_err(|_| AppError::invalid_input("Rate limiter lock error."))?;
     let runs = guard.entry(user_id).or_default();
     runs.retain(|ts| *ts >= cutoff);
     if runs.len() >= CODE_RUNS_PER_MINUTE {
@@ -2847,22 +2895,41 @@ async fn module_quiz_start_handler(
     };
 
     if !quiz_access_code_matches(&row, req.quiz_access_code.as_deref()) {
-        return Err(AppError::InvalidInput("Invalid quiz access code.".into()));
+        return Err(AppError::invalid_input("Invalid quiz access code."));
     }
 
     let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &row);
     if row.is_adaptive && quiz_lockdown::server_enforces_forward_lockdown(mode) {
-        return Err(AppError::InvalidInput(
-            "Adaptive quizzes cannot use lockdown delivery modes.".into(),
+        return Err(AppError::invalid_input(
+            "Adaptive quizzes cannot use lockdown delivery modes.",
         ));
     }
 
     let acc = accommodations::resolve_effective_or_default(&state.pool, user.user_id, course_id).await;
     let hints_disabled = quiz_lockdown::hints_disabled(mode) && !acc.hints_always_enabled;
 
+    let enrollment_id = enrollment::get_student_enrollment_id(&state.pool, course_id, user.user_id)
+        .await?;
+    let enrollment_extra = if let Some(eid) = enrollment_id {
+        enrollment_quiz_overrides::get_extra_attempts_for_enrollment_quiz(
+            &state.pool,
+            eid,
+            item_id,
+        )
+        .await?
+    } else {
+        0
+    };
+    let attempt_cap = effective_quiz_attempt_cap(&row, acc.extra_attempts, enrollment_extra);
+
     if let Some(existing) =
         quiz_attempts::find_in_progress(&state.pool, course_id, item_id, user.user_id).await?
     {
+        let submitted_count =
+            quiz_attempts::count_submitted_attempts(&state.pool, course_id, item_id, user.user_id)
+                .await?;
+        let remaining = remaining_quiz_attempt_starts(attempt_cap, submitted_count, true);
+        let max_attempts = (!row.unlimited_attempts).then_some(row.max_attempts);
         return Ok(Json(QuizStartResponse {
             attempt_id: existing.id,
             attempt_number: existing.attempt_number,
@@ -2873,18 +2940,23 @@ async fn module_quiz_start_handler(
             current_question_index: existing.current_question_index,
             deadline_at: existing.deadline_at,
             reduced_distraction_mode: acc.reduced_distraction_mode,
+            retake_policy: row.grade_attempt_policy.clone(),
+            max_attempts,
+            remaining_attempts: remaining,
         }));
     }
 
     let submitted_count =
         quiz_attempts::count_submitted_attempts(&state.pool, course_id, item_id, user.user_id)
             .await?;
-    if !row.unlimited_attempts {
-        let cap = row.max_attempts as i64 + acc.extra_attempts.max(0) as i64;
+    if let Some(cap) = attempt_cap {
         if submitted_count >= cap {
-            return Err(AppError::InvalidInput(
-                "No quiz attempts remaining for this quiz.".into(),
-            ));
+            tracing::warn!(
+                user_id = %user.user_id,
+                quiz_item_id = %item_id,
+                "quiz_attempts.blocked_max_attempts"
+            );
+            return Err(AppError::MaxAttemptsReached);
         }
     }
 
@@ -2896,8 +2968,8 @@ async fn module_quiz_start_handler(
     if row.late_submission_policy == "block"
         && quiz_attempt_grading::quiz_submission_is_late(due_effective, now)
     {
-        return Err(AppError::InvalidInput(
-            "No new attempts may be started after the due date for this quiz.".into(),
+        return Err(AppError::invalid_input(
+            "No new attempts may be started after the due date for this quiz.",
         ));
     }
 
@@ -2949,6 +3021,9 @@ async fn module_quiz_start_handler(
         }
     }
 
+    let remaining = remaining_quiz_attempt_starts(attempt_cap, submitted_count, true);
+    let max_attempts = (!row.unlimited_attempts).then_some(row.max_attempts);
+
     Ok(Json(QuizStartResponse {
         attempt_id: created.id,
         attempt_number: created.attempt_number,
@@ -2959,6 +3034,9 @@ async fn module_quiz_start_handler(
         current_question_index: created.current_question_index,
         deadline_at: created.deadline_at,
         reduced_distraction_mode: acc.reduced_distraction_mode,
+        retake_policy: row.grade_attempt_policy.clone(),
+        max_attempts,
+        remaining_attempts: remaining,
     }))
 }
 
@@ -3018,8 +3096,8 @@ async fn module_quiz_submit_handler(
     if quiz_row.late_submission_policy == "block"
         && quiz_attempt_grading::quiz_submission_is_late(due_effective, now)
     {
-        return Err(AppError::InvalidInput(
-            "This quiz does not accept submissions after the due date.".into(),
+        return Err(AppError::invalid_input(
+            "This quiz does not accept submissions after the due date.",
         ));
     }
 
@@ -3027,15 +3105,15 @@ async fn module_quiz_submit_handler(
 
     if quiz_row.is_adaptive {
         let hist = req.adaptive_history.ok_or_else(|| {
-            AppError::InvalidInput("adaptiveHistory is required for adaptive quizzes.".into())
+            AppError::invalid_input("adaptiveHistory is required for adaptive quizzes.")
         })?;
         if hist.len() != quiz_row.adaptive_question_count as usize {
-            return Err(AppError::InvalidInput(
-                "Adaptive history length does not match this quiz configuration.".into(),
+            return Err(AppError::invalid_input(
+                "Adaptive history length does not match this quiz configuration.",
             ));
         }
         quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
-        let hist_json = serde_json::to_value(&hist).map_err(|e| AppError::InvalidInput(e.to_string()))?;
+        let hist_json = serde_json::to_value(&hist).map_err(|e| AppError::invalid_input(e.to_string()))?;
         let mut earned = 0.0_f64;
         let mut possible = 0.0_f64;
         for (i, turn) in hist.iter().enumerate() {
@@ -3083,8 +3161,8 @@ async fn module_quiz_submit_handler(
         )
         .await?;
         if !ok {
-            return Err(AppError::InvalidInput(
-                "This attempt was already submitted.".into(),
+            return Err(AppError::invalid_input(
+                "This attempt was already submitted.",
             ));
         }
         tx.commit().await?;
@@ -3137,21 +3215,20 @@ async fn module_quiz_submit_handler(
     let (earned, possible, score_pct, academic_integrity_flag) = if quiz_lockdown::server_enforces_forward_lockdown(mode)
     {
         if !responses.is_empty() {
-            return Err(AppError::InvalidInput(
-                "For lockdown-mode quizzes, omit responses on submit; answers are taken from your saved progress."
-                    .into(),
+            return Err(AppError::invalid_input(
+                "For lockdown-mode quizzes, omit responses on submit; answers are taken from your saved progress.",
             ));
         }
         let db_rows = quiz_attempts::list_responses(&state.pool, att.id).await?;
         if db_rows.len() != bank.len() {
-            return Err(AppError::InvalidInput(
-                "Complete each question in order before submitting this quiz.".into(),
+            return Err(AppError::invalid_input(
+                "Complete each question in order before submitting this quiz.",
             ));
         }
         for (i, db_row) in db_rows.iter().enumerate() {
             if db_row.question_index != i as i32 || !db_row.locked {
-                return Err(AppError::InvalidInput(
-                    "Quiz responses are incomplete. Use Next after each question, then submit.".into(),
+                return Err(AppError::invalid_input(
+                    "Quiz responses are incomplete. Use Next after each question, then submit.",
                 ));
             }
         }
@@ -3160,14 +3237,14 @@ async fn module_quiz_submit_handler(
         let mut possible = 0.0_f64;
         for (i, db_row) in db_rows.iter().enumerate() {
             let qid = db_row.question_id.as_deref().ok_or_else(|| {
-                AppError::InvalidInput("Missing question id on saved response.".into())
+                AppError::invalid_input("Missing question id on saved response.")
             })?;
             let q = by_id
                 .get(qid)
-                .ok_or_else(|| AppError::InvalidInput("Invalid question id.".into()))?;
+                .ok_or_else(|| AppError::invalid_input("Invalid question id."))?;
             let resp_item: QuizQuestionResponseItem =
                 serde_json::from_value(db_row.response_json.clone()).map_err(|e| {
-                    AppError::InvalidInput(format!("Could not read saved answer: {e}"))
+                    AppError::invalid_input(format!("Could not read saved answer: {e}"))
                 })?;
             let (pts, max_pts, is_ok) = grade_question_with_code_support(q, &resp_item).await?;
             earned += pts;
@@ -3216,24 +3293,23 @@ async fn module_quiz_submit_handler(
         (earned, possible, score_pct, academic_integrity_flag)
     } else {
         if responses.is_empty() {
-            return Err(AppError::InvalidInput(
-                "responses is required for non-adaptive quizzes.".into(),
+            return Err(AppError::invalid_input(
+                "responses is required for non-adaptive quizzes.",
             ));
         }
         if !resolved.uses_server_question_sampling {
             if let Some(pool_n) = quiz_row.random_question_pool_count {
                 if pool_n >= 1 && responses.len() != pool_n as usize {
-                    return Err(AppError::InvalidInput(
-                        "Submitted response count does not match the configured question pool size."
-                            .into(),
+                    return Err(AppError::invalid_input(
+                        "Submitted response count does not match the configured question pool size.",
                     ));
                 }
             }
         }
         for r in &responses {
             if !by_id.contains_key(&r.question_id) {
-                return Err(AppError::InvalidInput(
-                    "One or more question ids are not part of this quiz.".into(),
+                return Err(AppError::invalid_input(
+                    "One or more question ids are not part of this quiz.",
                 ));
             }
         }
@@ -3245,7 +3321,7 @@ async fn module_quiz_submit_handler(
         for (i, resp_item) in responses.iter().enumerate() {
             let q = by_id
                 .get(&resp_item.question_id)
-                .ok_or_else(|| AppError::InvalidInput("Invalid question id.".into()))?;
+                .ok_or_else(|| AppError::invalid_input("Invalid question id."))?;
             let (pts, max_pts, is_ok) = grade_question_with_code_support(q, resp_item).await?;
             earned += pts;
             possible += max_pts;
@@ -3306,8 +3382,8 @@ async fn module_quiz_submit_handler(
     )
     .await?;
     if !ok {
-        return Err(AppError::InvalidInput(
-            "This attempt was already submitted.".into(),
+        return Err(AppError::invalid_input(
+            "This attempt was already submitted.",
         ));
     }
     tx.commit().await?;
@@ -3489,6 +3565,156 @@ async fn module_quiz_results_handler(
     }))
 }
 
+async fn module_quiz_attempts_list_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    Query(q): Query<QuizAttemptsListQuery>,
+    headers: HeaderMap,
+) -> Result<Json<QuizAttemptsListResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+
+    let target_user = q.user_id.unwrap_or(user.user_id);
+    if target_user != user.user_id && !can_edit {
+        return Err(AppError::Forbidden);
+    }
+
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    let attempts = quiz_attempts::list_submitted_attempts_for_item_student(
+        &state.pool,
+        course_id,
+        item_id,
+        target_user,
+    )
+    .await?;
+    let policy_score_percent = quiz_attempt_grading::pick_policy_points(
+        &attempts,
+        &quiz_row.grade_attempt_policy,
+    )
+    .and_then(|(e, p)| quiz_attempt_grading::policy_score_percent(e, p));
+
+    let mut out: Vec<QuizAttemptSummary> = Vec::with_capacity(attempts.len());
+    for a in attempts {
+        let submitted_at = a.submitted_at.unwrap_or(a.started_at);
+        out.push(QuizAttemptSummary {
+            id: a.id,
+            attempt_number: a.attempt_number,
+            submitted_at,
+            score_percent: a.score_percent,
+            points_earned: a.points_earned.unwrap_or(0.0),
+            points_possible: a.points_possible.unwrap_or(0.0),
+        });
+    }
+
+    Ok(Json(QuizAttemptsListResponse {
+        attempts: out,
+        policy_score_percent,
+        retake_policy: quiz_row.grade_attempt_policy.clone(),
+    }))
+}
+
+async fn enrollment_quiz_override_upsert_handler(
+    State(state): State<AppState>,
+    Path((course_code, enrollment_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<EnrollmentQuizOverrideUpsertRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let Some(enr) = enrollment::get_enrollment_by_id(&state.pool, enrollment_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if enr.course_id != course_id {
+        return Err(AppError::NotFound);
+    }
+
+    let Some(_) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, req.quiz_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+
+    if !(0..=500).contains(&req.extra_attempts) {
+        return Err(AppError::invalid_input(
+            "extraAttempts must be between 0 and 500.",
+        ));
+    }
+    if let Some(m) = req.time_multiplier {
+        if !m.is_finite() || m < 1.0 {
+            return Err(AppError::invalid_input(
+                "timeMultiplier must be at least 1.0.",
+            ));
+        }
+    }
+
+    enrollment_quiz_overrides::upsert_override(
+        &state.pool,
+        enrollment_id,
+        req.quiz_id,
+        user.user_id,
+        &enrollment_quiz_overrides::EnrollmentQuizOverrideWrite {
+            extra_attempts: req.extra_attempts,
+            time_multiplier: req.time_multiplier,
+        },
+    )
+    .await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn enrollment_quiz_override_delete_handler(
+    State(state): State<AppState>,
+    Path((course_code, enrollment_id, item_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let course_id = course_row.id;
+
+    let Some(enr) = enrollment::get_enrollment_by_id(&state.pool, enrollment_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if enr.course_id != course_id {
+        return Err(AppError::NotFound);
+    }
+
+    let ok =
+        enrollment_quiz_overrides::delete_override(&state.pool, enrollment_id, item_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn module_quiz_generate_questions_handler(
     State(state): State<AppState>,
     Path((course_code, item_id)): Path<(String, Uuid)>,
@@ -3503,15 +3729,15 @@ async fn module_quiz_generate_questions_handler(
 
     let prompt = req.prompt.trim();
     if prompt.is_empty() {
-        return Err(AppError::InvalidInput("Prompt is required.".into()));
+        return Err(AppError::invalid_input("Prompt is required."));
     }
     if prompt.len() > MAX_QUIZ_GENERATION_PROMPT_LEN {
-        return Err(AppError::InvalidInput("Prompt is too long.".into()));
+        return Err(AppError::invalid_input("Prompt is too long."));
     }
     if req.question_count < MIN_QUIZ_GENERATION_COUNT
         || req.question_count > MAX_QUIZ_GENERATION_COUNT
     {
-        return Err(AppError::InvalidInput(format!(
+        return Err(AppError::invalid_input(format!(
             "questionCount must be between {MIN_QUIZ_GENERATION_COUNT} and {MAX_QUIZ_GENERATION_COUNT}."
         )));
     }
@@ -3631,10 +3857,10 @@ fn parse_gradebook_points_str(raw: &str) -> Result<Option<f64>, AppError> {
     let cleaned: String = t.chars().filter(|c| *c != ',' && !c.is_whitespace()).collect();
     let n: f64 = cleaned
         .parse()
-        .map_err(|_| AppError::InvalidInput("Each score must be a valid number.".into()))?;
+        .map_err(|_| AppError::invalid_input("Each score must be a valid number."))?;
     if !n.is_finite() || n < 0.0 {
-        return Err(AppError::InvalidInput(
-            "Each score must be a non-negative number.".into(),
+        return Err(AppError::invalid_input(
+            "Each score must be a non-negative number.",
         ));
     }
     Ok(Some(n))
@@ -3643,7 +3869,7 @@ fn parse_gradebook_points_str(raw: &str) -> Result<Option<f64>, AppError> {
 fn ensure_points_within_max(points: f64, max_points: Option<i32>) -> Result<(), AppError> {
     if let Some(m) = max_points {
         if m > 0 && points > m as f64 + 1e-6 {
-            return Err(AppError::InvalidInput(format!(
+            return Err(AppError::invalid_input(format!(
                 "Score cannot exceed {} points for this item.",
                 m
             )));
@@ -3736,15 +3962,14 @@ async fn gradebook_grades_put_handler(
 
     for (user_id, row) in req.grades {
         if !student_ok.contains(&user_id) {
-            return Err(AppError::InvalidInput(
-                "Grades include a user who is not enrolled as a student in this course.".into(),
+            return Err(AppError::invalid_input(
+                "Grades include a user who is not enrolled as a student in this course.",
             ));
         }
         for (item_id, raw) in row {
             let Some(max_p) = item_meta.get(&item_id).copied() else {
-                return Err(AppError::InvalidInput(
-                    "Grades include a module item that is not part of this course gradebook."
-                        .into(),
+                return Err(AppError::invalid_input(
+                    "Grades include a module item that is not part of this course gradebook.",
                 ));
             };
             let parsed = parse_gradebook_points_str(&raw)?;
@@ -3760,8 +3985,8 @@ async fn gradebook_grades_put_handler(
                         ensure_points_within_max(total, max_p)?;
                         if let Some(p) = parsed {
                             if (p - total).abs() > 1e-3 {
-                                return Err(AppError::InvalidInput(
-                                    "Rubric total must match the score entered for this cell.".into(),
+                                return Err(AppError::invalid_input(
+                                    "Rubric total must match the score entered for this cell.",
                                 ));
                             }
                         }
@@ -3816,18 +4041,18 @@ async fn grading_put_handler(
 
     let scale = req.grading_scale.trim();
     if !GRADING_SCALES.contains(&scale) {
-        return Err(AppError::InvalidInput("Invalid grading scale.".into()));
+        return Err(AppError::invalid_input("Invalid grading scale."));
     }
 
     for g in &req.assignment_groups {
         if g.name.trim().is_empty() {
-            return Err(AppError::InvalidInput(
-                "Each assignment group needs a name.".into(),
+            return Err(AppError::invalid_input(
+                "Each assignment group needs a name.",
             ));
         }
         if !g.weight_percent.is_finite() || g.weight_percent < 0.0 || g.weight_percent > 100.0 {
-            return Err(AppError::InvalidInput(
-                "Weights must be between 0 and 100.".into(),
+            return Err(AppError::invalid_input(
+                "Weights must be between 0 and 100.",
             ));
         }
     }
@@ -3837,7 +4062,7 @@ async fn grading_put_handler(
     {
         Ok(Some(row)) => Ok(Json(row)),
         Ok(None) => Err(AppError::NotFound),
-        Err(PutError::UnknownGroupId(id)) => Err(AppError::InvalidInput(format!(
+        Err(PutError::UnknownGroupId(id)) => Err(AppError::invalid_input(format!(
             "Unknown assignment group id: {id}"
         ))),
         Err(PutError::Db(e)) => Err(e.into()),
@@ -3918,7 +4143,7 @@ fn validate_outcome_link_levels(
         .copied()
         .find(|v| *v == m)
         .ok_or_else(|| {
-            AppError::InvalidInput(format!(
+            AppError::invalid_input(format!(
                 "measurementLevel must be one of: {}.",
                 course_outcomes::MEASUREMENT_LEVELS.join(", ")
             ))
@@ -3928,7 +4153,7 @@ fn validate_outcome_link_levels(
         .copied()
         .find(|v| *v == i)
         .ok_or_else(|| {
-            AppError::InvalidInput(format!(
+            AppError::invalid_input(format!(
                 "intensityLevel must be one of: {}.",
                 course_outcomes::INTENSITY_LEVELS.join(", ")
             ))
@@ -4067,13 +4292,13 @@ async fn course_outcomes_create_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Title is required.".into()));
+        return Err(AppError::invalid_input("Title is required."));
     }
     if title.len() > 500 {
-        return Err(AppError::InvalidInput("Title is too long.".into()));
+        return Err(AppError::invalid_input("Title is too long."));
     }
     if req.description.len() > 20_000 {
-        return Err(AppError::InvalidInput("Description is too long.".into()));
+        return Err(AppError::invalid_input("Description is too long."));
     }
 
     let row = course_outcomes::insert_outcome(
@@ -4106,15 +4331,15 @@ async fn course_outcomes_patch_handler(
     if let Some(ref t) = req.title {
         let t = t.trim();
         if t.is_empty() {
-            return Err(AppError::InvalidInput("Title cannot be empty.".into()));
+            return Err(AppError::invalid_input("Title cannot be empty."));
         }
         if t.len() > 500 {
-            return Err(AppError::InvalidInput("Title is too long.".into()));
+            return Err(AppError::invalid_input("Title is too long."));
         }
     }
     if let Some(ref d) = req.description {
         if d.len() > 20_000 {
-            return Err(AppError::InvalidInput("Description is too long.".into()));
+            return Err(AppError::invalid_input("Description is too long."));
         }
     }
 
@@ -4220,36 +4445,36 @@ async fn course_outcomes_add_link_handler(
 
     let kind = req.target_kind.trim();
     if !matches!(kind, "assignment" | "quiz" | "quiz_question") {
-        return Err(AppError::InvalidInput(
-            "targetKind must be assignment, quiz, or quiz_question.".into(),
+        return Err(AppError::invalid_input(
+            "targetKind must be assignment, quiz, or quiz_question.",
         ));
     }
 
     let Some(item) =
         course_structure::get_item_row(&state.pool, course_id, req.structure_item_id).await?
     else {
-        return Err(AppError::InvalidInput(
-            "That module item is not part of this course.".into(),
+        return Err(AppError::invalid_input(
+            "That module item is not part of this course.",
         ));
     };
 
     let qid = req.quiz_question_id.as_deref().unwrap_or("").trim();
     let qid_store = if kind == "quiz_question" {
         if qid.is_empty() {
-            return Err(AppError::InvalidInput(
-                "quizQuestionId is required when targetKind is quiz_question.".into(),
+            return Err(AppError::invalid_input(
+                "quizQuestionId is required when targetKind is quiz_question.",
             ));
         }
         let Some(quiz_row) =
             course_module_quizzes::get_for_course_item(&state.pool, course_id, req.structure_item_id)
                 .await?
         else {
-            return Err(AppError::InvalidInput("Quiz not found for that item.".into()));
+            return Err(AppError::invalid_input("Quiz not found for that item."));
         };
         let questions: &[QuizQuestion] = quiz_row.questions_json.as_ref();
         if !questions.iter().any(|q| q.id == qid) {
-            return Err(AppError::InvalidInput(
-                "That quiz does not contain a question with the given id.".into(),
+            return Err(AppError::invalid_input(
+                "That quiz does not contain a question with the given id.",
             ));
         }
         qid
@@ -4263,8 +4488,8 @@ async fn course_outcomes_add_link_handler(
         _ => "",
     };
     if item.kind != expected_kind {
-        return Err(AppError::InvalidInput(
-            "The module item type does not match targetKind.".into(),
+        return Err(AppError::invalid_input(
+            "The module item type does not match targetKind.",
         ));
     }
 
@@ -4288,8 +4513,8 @@ async fn course_outcomes_add_link_handler(
         Err(e) => {
             if let sqlx::Error::Database(ref dbe) = e {
                 if dbe.constraint() == Some("ux_course_outcome_links_unique_target") {
-                    return Err(AppError::InvalidInput(
-                        "This outcome already maps that item with the same measurement and intensity levels. Change the levels or remove the existing mapping first.".into(),
+                    return Err(AppError::invalid_input(
+                        "This outcome already maps that item with the same measurement and intensity levels. Change the levels or remove the existing mapping first.",
                     ));
                 }
             }
@@ -4373,8 +4598,8 @@ async fn structure_item_due_at_patch_handler(
     };
 
     if row.archived {
-        return Err(AppError::InvalidInput(
-            "Archived module items cannot be rescheduled from the calendar.".into(),
+        return Err(AppError::invalid_input(
+            "Archived module items cannot be rescheduled from the calendar.",
         ));
     }
 
@@ -4402,8 +4627,8 @@ async fn structure_item_due_at_patch_handler(
                 .await
         }
         _ => {
-            return Err(AppError::InvalidInput(
-                "Only content pages, assignments, and quizzes support a due date.".into(),
+            return Err(AppError::invalid_input(
+                "Only content pages, assignments, and quizzes support a due date.",
             ));
         }
     }
@@ -4428,8 +4653,8 @@ async fn patch_structure_item_handler(
     assert_permission(&state.pool, user.user_id, &required).await?;
 
     if req.title.is_none() && req.published.is_none() && req.archived.is_none() {
-        return Err(AppError::InvalidInput(
-            "Provide title, published, and/or archived.".into(),
+        return Err(AppError::invalid_input(
+            "Provide title, published, and/or archived.",
         ));
     }
 
@@ -4438,7 +4663,7 @@ async fn patch_structure_item_handler(
         Some(s) => {
             let t = s.trim();
             if t.is_empty() {
-                return Err(AppError::InvalidInput("Title cannot be empty.".into()));
+                return Err(AppError::invalid_input("Title cannot be empty."));
             }
             Some(t)
         }
@@ -4510,16 +4735,15 @@ async fn structure_item_assignment_group_patch_handler(
         return Err(AppError::NotFound);
     };
     if row.kind != "content_page" && row.kind != "assignment" && row.kind != "quiz" {
-        return Err(AppError::InvalidInput(
-            "Only content pages, assignments, and quizzes can belong to an assignment group."
-                .into(),
+        return Err(AppError::invalid_input(
+            "Only content pages, assignments, and quizzes can belong to an assignment group.",
         ));
     }
 
     if let Some(gid) = req.assignment_group_id {
         if !course_grading::group_belongs_to_course(&state.pool, course_id, gid).await? {
-            return Err(AppError::InvalidInput(
-                "That assignment group does not belong to this course.".into(),
+            return Err(AppError::invalid_input(
+                "That assignment group does not belong to this course.",
             ));
         }
     }
@@ -4628,7 +4852,7 @@ async fn course_import_canvas_ws_handler(
 
 fn canvas_import_ws_error_message(err: &AppError) -> String {
     match err {
-        AppError::InvalidInput(msg) => msg.clone(),
+        AppError::InvalidInput { message, .. } => message.clone(),
         AppError::Unauthorized => "Sign in required.".into(),
         AppError::Forbidden => "You do not have permission for this action.".into(),
         AppError::NotFound => "Course not found or you do not have access.".into(),
@@ -4739,7 +4963,7 @@ async fn handle_canvas_import_ws(
                 .user_agent(concat!("lextures/", env!("CARGO_PKG_VERSION")))
                 .build()
                 .map_err(|e| {
-                    AppError::InvalidInput(format!("Could not start HTTP client: {e}"))
+                    AppError::invalid_input(format!("Could not start HTTP client: {e}"))
                 })?;
 
             let export = canvas_course_import::build_export_from_canvas_wire(
@@ -4837,8 +5061,8 @@ async fn enrollment_groups_require_enabled(
     course_code: &str,
 ) -> Result<(), AppError> {
     if !enrollment_groups::enrollment_groups_enabled_for_course(pool, course_code).await? {
-        return Err(AppError::InvalidInput(
-            "Enrollment groups are not enabled for this course.".into(),
+        return Err(AppError::invalid_input(
+            "Enrollment groups are not enabled for this course.",
         ));
     }
     Ok(())
@@ -4883,8 +5107,8 @@ async fn enrollment_groups_tree_handler(
     assert_permission(&state.pool, user.user_id, &required).await?;
 
     if !enrollment_groups::enrollment_groups_enabled_for_course(&state.pool, &course_code).await? {
-        return Err(AppError::InvalidInput(
-            "Enrollment groups are not enabled for this course.".into(),
+        return Err(AppError::invalid_input(
+            "Enrollment groups are not enabled for this course.",
         ));
     }
 
@@ -4912,7 +5136,7 @@ async fn enrollment_group_sets_create_handler(
 
     let name = req.name.trim();
     if name.is_empty() {
-        return Err(AppError::InvalidInput("Group set name is required.".into()));
+        return Err(AppError::invalid_input("Group set name is required."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -4943,7 +5167,7 @@ async fn enrollment_group_sets_patch_handler(
 
     let name = req.name.trim();
     if name.is_empty() {
-        return Err(AppError::InvalidInput("Group set name is required.".into()));
+        return Err(AppError::invalid_input("Group set name is required."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -5009,7 +5233,7 @@ async fn enrollment_groups_create_handler(
 
     let name = req.name.trim();
     if name.is_empty() {
-        return Err(AppError::InvalidInput("Group name is required.".into()));
+        return Err(AppError::invalid_input("Group name is required."));
     }
 
     let id = enrollment_groups::create_group_in_set(&state.pool, set_id, name).await?;
@@ -5036,7 +5260,7 @@ async fn enrollment_groups_patch_handler(
 
     let name = req.name.trim();
     if name.is_empty() {
-        return Err(AppError::InvalidInput("Group name is required.".into()));
+        return Err(AppError::invalid_input("Group name is required."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -5103,8 +5327,8 @@ async fn enrollment_groups_membership_put_handler(
     )
     .await?
     {
-        return Err(AppError::InvalidInput(
-            "Only student enrollments can be assigned to groups.".into(),
+        return Err(AppError::invalid_input(
+            "Only student enrollments can be assigned to groups.",
         ));
     }
 
@@ -5118,8 +5342,8 @@ async fn enrollment_groups_membership_put_handler(
     .await?;
 
     if !ok {
-        return Err(AppError::InvalidInput(
-            "Enrollment or group is not part of this course.".into(),
+        return Err(AppError::invalid_input(
+            "Enrollment or group is not part of this course.",
         ));
     }
     Ok(StatusCode::NO_CONTENT)
@@ -5148,16 +5372,16 @@ async fn patch_enrollment_handler(
         .filter(|s| !s.is_empty());
 
     match (req.app_role_id, role_norm.as_deref()) {
-        (None, None) => Err(AppError::InvalidInput(
-            "Send appRoleId or role (\"student\").".into(),
+        (None, None) => Err(AppError::invalid_input(
+            "Send appRoleId or role (\"student\").",
         )),
-        (Some(_), Some(_)) => Err(AppError::InvalidInput(
-            "Send only one of appRoleId or role.".into(),
+        (Some(_), Some(_)) => Err(AppError::invalid_input(
+            "Send only one of appRoleId or role.",
         )),
         (None, Some(role_val)) => {
             if role_val != "student" {
-                return Err(AppError::InvalidInput(
-                    "Only role: \"student\" is supported.".into(),
+                return Err(AppError::invalid_input(
+                    "Only role: \"student\" is supported.",
                 ));
             }
             let Some(row) =
@@ -5167,13 +5391,13 @@ async fn patch_enrollment_handler(
                 return Err(AppError::NotFound);
             };
             if row.role == "teacher" {
-                return Err(AppError::InvalidInput(
-                    "The teacher enrollment cannot be changed here.".into(),
+                return Err(AppError::invalid_input(
+                    "The teacher enrollment cannot be changed here.",
                 ));
             }
             if row.role != "instructor" {
-                return Err(AppError::InvalidInput(
-                    "Only instructor enrollments can be demoted to student.".into(),
+                return Err(AppError::invalid_input(
+                    "Only instructor enrollments can be demoted to student.",
                 ));
             }
             let ok = enrollment::demote_instructor_enrollment_row(
@@ -5197,34 +5421,34 @@ async fn patch_enrollment_handler(
                 return Err(AppError::NotFound);
             };
             if row.role == "teacher" {
-                return Err(AppError::InvalidInput(
-                    "The teacher enrollment cannot be changed here.".into(),
+                return Err(AppError::invalid_input(
+                    "The teacher enrollment cannot be changed here.",
                 ));
             }
             let Some(role_row) = rbac::get_role(&state.pool, app_role_id).await? else {
-                return Err(AppError::InvalidInput("Unknown role.".into()));
+                return Err(AppError::invalid_input("Unknown role."));
             };
             if role_row.scope != "course" {
-                return Err(AppError::InvalidInput(
-                    "Only course-scoped roles can be used when setting a course role.".into(),
+                return Err(AppError::invalid_input(
+                    "Only course-scoped roles can be used when setting a course role.",
                 ));
             }
 
             let target_roles =
                 enrollment::user_roles_in_course(&state.pool, &course_code, row.user_id).await?;
             if target_roles.iter().any(|r| r == "teacher") {
-                return Err(AppError::InvalidInput(
-                    "This person's teacher enrollment can't be updated this way.".into(),
+                return Err(AppError::invalid_input(
+                    "This person's teacher enrollment can't be updated this way.",
                 ));
             }
             if row.role == "student" && target_roles.iter().any(|r| r == "instructor") {
-                return Err(AppError::InvalidInput(
-                    "This person already has instructor access in this course.".into(),
+                return Err(AppError::invalid_input(
+                    "This person already has instructor access in this course.",
                 ));
             }
             if enrollment::user_is_course_creator(&state.pool, &course_code, row.user_id).await? {
-                return Err(AppError::InvalidInput(
-                    "The course creator's enrollment can't be changed this way.".into(),
+                return Err(AppError::invalid_input(
+                    "The course creator's enrollment can't be changed this way.",
                 ));
             }
 
@@ -5274,9 +5498,8 @@ async fn delete_enrollment_handler(
     match enrollment::delete_enrollment_for_course(&state.pool, &course_code, enrollment_id).await? {
         enrollment::EnrollmentDeleteOutcome::Deleted => Ok(StatusCode::NO_CONTENT),
         enrollment::EnrollmentDeleteOutcome::NotFound => Err(AppError::NotFound),
-        enrollment::EnrollmentDeleteOutcome::CannotRemoveHighestRole => Err(AppError::InvalidInput(
-            "You can't remove this enrollment while it's the person's primary role in the course."
-                .into(),
+        enrollment::EnrollmentDeleteOutcome::CannotRemoveHighestRole => Err(AppError::invalid_input(
+            "You can't remove this enrollment while it's the person's primary role in the course.",
         )),
     }
 }
@@ -5340,8 +5563,8 @@ async fn add_enrollments_handler(
 
     let parsed = parse_email_list(&req.emails);
     if parsed.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Enter at least one valid email address.".into(),
+        return Err(AppError::invalid_input(
+            "Enter at least one valid email address.",
         ));
     }
 
@@ -5356,8 +5579,8 @@ async fn add_enrollments_handler(
         return Err(AppError::Forbidden);
     }
     if is_creator && req.app_role_id.is_none() {
-        return Err(AppError::InvalidInput(
-            "Select a course-scoped role for these enrollments.".into(),
+        return Err(AppError::invalid_input(
+            "Select a course-scoped role for these enrollments.",
         ));
     }
 
@@ -5367,11 +5590,11 @@ async fn add_enrollments_handler(
 
     if let Some(role_id) = req.app_role_id {
         let Some(role_row) = rbac::get_role(&state.pool, role_id).await? else {
-            return Err(AppError::InvalidInput("Unknown role.".into()));
+            return Err(AppError::invalid_input("Unknown role."));
         };
         if role_row.scope != "course" {
-            return Err(AppError::InvalidInput(
-                "Only course-scoped roles can be used when enrolling with a role.".into(),
+            return Err(AppError::invalid_input(
+                "Only course-scoped roles can be used when enrolling with a role.",
             ));
         }
 
@@ -5443,8 +5666,8 @@ async fn update_markdown_theme_handler(
 
     let preset = req.preset.trim();
     if preset.is_empty() || !MARKDOWN_THEME_PRESETS.contains(&preset) {
-        return Err(AppError::InvalidInput(
-            "Unknown markdown theme preset.".into(),
+        return Err(AppError::invalid_input(
+            "Unknown markdown theme preset.",
         ));
     }
 
@@ -5544,7 +5767,7 @@ async fn update_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::InvalidInput("Course title is required.".into()));
+        return Err(AppError::invalid_input("Course title is required."));
     }
 
     let existing = course::get_by_course_code(&state.pool, &course_code)
@@ -5557,7 +5780,7 @@ async fn update_handler(
         .unwrap_or(existing.schedule_mode.as_str())
         .trim();
     if mode_str != "fixed" && mode_str != "relative" {
-        return Err(AppError::InvalidInput("Invalid scheduleMode.".into()));
+        return Err(AppError::invalid_input("Invalid scheduleMode."));
     }
 
     let rel_end = normalize_relative_duration_iso(req.relative_end_after.as_deref())?;
@@ -5630,7 +5853,7 @@ fn normalize_relative_duration_iso(input: Option<&str>) -> Result<Option<String>
     if t.is_empty() {
         return Ok(None);
     }
-    relative_schedule::parse_iso8601_duration(t).map_err(|m| AppError::InvalidInput(m.into()))?;
+    relative_schedule::parse_iso8601_duration(t).map_err(|m| AppError::invalid_input(m))?;
     Ok(Some(t.to_ascii_uppercase()))
 }
 
@@ -5648,8 +5871,8 @@ async fn generate_image_handler(
 
     let prompt = req.prompt.trim();
     if prompt.is_empty() {
-        return Err(AppError::InvalidInput(
-            "Describe the image you want.".into(),
+        return Err(AppError::invalid_input(
+            "Describe the image you want.",
         ));
     }
 
@@ -5685,8 +5908,8 @@ async fn set_hero_image_handler(
     assert_permission(&state.pool, user.user_id, &required).await?;
 
     if req.image_url.is_none() && req.object_position.is_none() {
-        return Err(AppError::InvalidInput(
-            "Provide imageUrl and/or objectPosition.".into(),
+        return Err(AppError::invalid_input(
+            "Provide imageUrl and/or objectPosition.",
         ));
     }
 
@@ -5696,12 +5919,12 @@ async fn set_hero_image_handler(
 
     let new_url = match &req.image_url {
         None => current.hero_image_url.clone().ok_or_else(|| {
-            AppError::InvalidInput("Set a hero image before adjusting position.".into())
+            AppError::invalid_input("Set a hero image before adjusting position.")
         })?,
         Some(s) => {
             let t = s.trim();
             if t.is_empty() {
-                return Err(AppError::InvalidInput("Image URL cannot be empty.".into()));
+                return Err(AppError::invalid_input("Image URL cannot be empty."));
             }
             t.to_string()
         }
@@ -5760,8 +5983,8 @@ async fn quiz_attempt_current_question_handler(
 
     let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
     if !quiz_lockdown::server_enforces_forward_lockdown(mode) {
-        return Err(AppError::InvalidInput(
-            "This endpoint is only used for lockdown-mode quizzes.".into(),
+        return Err(AppError::invalid_input(
+            "This endpoint is only used for lockdown-mode quizzes.",
         ));
     }
 
@@ -5842,8 +6065,8 @@ async fn quiz_attempt_question_run_handler(
         .iter()
         .find(|q| q.id == question_id && q.question_type == "code")
     else {
-        return Err(AppError::InvalidInput(
-            "This question is not a runnable code question.".into(),
+        return Err(AppError::invalid_input(
+            "This question is not a runnable code question.",
         ));
     };
     let test_cases = parse_code_test_cases(q)
@@ -5851,8 +6074,8 @@ async fn quiz_attempt_question_run_handler(
         .filter(|tc| !tc.is_hidden)
         .collect::<Vec<_>>();
     if test_cases.is_empty() {
-        return Err(AppError::InvalidInput(
-            "No public test cases are configured for this question.".into(),
+        return Err(AppError::invalid_input(
+            "No public test cases are configured for this question.",
         ));
     }
     let source_code = body.code.unwrap_or_default();
@@ -5933,8 +6156,8 @@ async fn quiz_attempt_advance_handler(
 
     let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
     if !quiz_lockdown::server_enforces_forward_lockdown(mode) {
-        return Err(AppError::InvalidInput(
-            "Advance is only available for lockdown-mode quizzes.".into(),
+        return Err(AppError::invalid_input(
+            "Advance is only available for lockdown-mode quizzes.",
         ));
     }
 
@@ -5953,14 +6176,14 @@ async fn quiz_attempt_advance_handler(
     let cur = att.current_question_index;
     let cur_usize = cur as usize;
     if cur_usize >= bank.len() {
-        return Err(AppError::InvalidInput(
-            "There is no current question to answer for this attempt.".into(),
+        return Err(AppError::invalid_input(
+            "There is no current question to answer for this attempt.",
         ));
     }
     let q = &bank[cur_usize];
     if body.question_id != q.id {
-        return Err(AppError::InvalidInput(
-            "The answer does not match the current question.".into(),
+        return Err(AppError::invalid_input(
+            "The answer does not match the current question.",
         ));
     }
 
@@ -6009,8 +6232,8 @@ async fn quiz_attempt_advance_handler(
     })?;
 
     if !quiz_attempts::bump_current_question_index(&mut *tx, att.id, cur).await? {
-        return Err(AppError::InvalidInput(
-            "Could not advance this attempt. Refresh and try again.".into(),
+        return Err(AppError::invalid_input(
+            "Could not advance this attempt. Refresh and try again.",
         ));
     }
     tx.commit().await?;
@@ -6056,14 +6279,14 @@ async fn quiz_attempt_focus_loss_handler(
 
     let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
     if mode != quiz_lockdown::LOCKDOWN_KIOSK {
-        return Err(AppError::InvalidInput(
-            "Focus-loss reporting is only active in kiosk mode.".into(),
+        return Err(AppError::invalid_input(
+            "Focus-loss reporting is only active in kiosk mode.",
         ));
     }
 
     let et = req.event_type.trim();
     if et.is_empty() || et.len() > 64 {
-        return Err(AppError::InvalidInput("eventType is invalid.".into()));
+        return Err(AppError::invalid_input("eventType is invalid."));
     }
 
     quiz_attempts::insert_focus_loss_event(&state.pool, att.id, et, req.duration_ms).await?;
@@ -6157,8 +6380,8 @@ async fn quiz_attempt_hint_stub_handler(
     if quiz_lockdown::hints_disabled(mode) && !acc.hints_always_enabled {
         return Err(AppError::Forbidden);
     }
-    Err(AppError::InvalidInput(
-        "Hints are not implemented for this quiz yet.".into(),
+    Err(AppError::invalid_input(
+        "Hints are not implemented for this quiz yet.",
     ))
 }
 

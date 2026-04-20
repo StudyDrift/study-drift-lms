@@ -48,8 +48,8 @@ async fn get_my_permissions(
                 None | Some("") | Some("teacher") => false,
                 Some("student") => true,
                 Some(_) => {
-                    return Err(AppError::InvalidInput(
-                        "viewAs must be \"teacher\" or \"student\".".into(),
+                    return Err(AppError::invalid_input(
+                        "viewAs must be \"teacher\" or \"student\".",
                     ));
                 }
             };
@@ -63,8 +63,8 @@ async fn get_my_permissions(
                 if !enrollment::user_has_enrollment_role(&state.pool, cc, user.user_id, "student")
                     .await?
                 {
-                    return Err(AppError::InvalidInput(
-                        "Not enrolled as a student in this course.".into(),
+                    return Err(AppError::invalid_input(
+                        "Not enrolled as a student in this course.",
                     ));
                 }
                 rbac::list_granted_permission_strings_course_view(
@@ -88,8 +88,8 @@ async fn get_my_permissions(
         }
         None => {
             if query.view_as.is_some() {
-                return Err(AppError::InvalidInput(
-                    "courseCode is required when viewAs is set.".into(),
+                return Err(AppError::invalid_input(
+                    "courseCode is required when viewAs is set.",
                 ));
             }
             rbac::list_granted_permission_strings(&state.pool, user.user_id).await?

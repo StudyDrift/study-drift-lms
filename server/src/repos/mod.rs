@@ -15,6 +15,7 @@ pub mod course_outcomes;
 pub mod course_structure;
 pub mod course_syllabus;
 pub mod enrollment;
+pub mod enrollment_quiz_overrides;
 pub mod enrollment_groups;
 pub mod password_reset;
 pub mod rbac;
