@@ -50,6 +50,102 @@ fn sample_n_from_pool(mut ids: Vec<Uuid>, n: usize, attempt_id: Uuid, user_id: U
     ids
 }
 
+fn question_entity_from_snapshot(snapshot: &JsonValue) -> Result<QuestionEntity, AppError> {
+    let id = snapshot
+        .get("id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .ok_or_else(|| AppError::InvalidInput("Question version snapshot is invalid.".into()))?;
+    let course_id = snapshot
+        .get("course_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .ok_or_else(|| AppError::InvalidInput("Question version snapshot is invalid.".into()))?;
+    let question_type = snapshot
+        .get("question_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("mc_single")
+        .to_string();
+    let stem = snapshot
+        .get("stem")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let options = snapshot.get("options").cloned().filter(|v| !v.is_null());
+    let correct_answer = snapshot.get("correct_answer").cloned().filter(|v| !v.is_null());
+    let explanation = snapshot
+        .get("explanation")
+        .and_then(|v| v.as_str())
+        .map(ToString::to_string);
+    let points = snapshot.get("points").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let status = snapshot
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("draft")
+        .to_string();
+    let shared = snapshot.get("shared").and_then(|v| v.as_bool()).unwrap_or(false);
+    let source = snapshot
+        .get("source")
+        .and_then(|v| v.as_str())
+        .unwrap_or("authored")
+        .to_string();
+    let metadata = snapshot.get("metadata").cloned().unwrap_or_else(|| json!({}));
+    let irt_a = snapshot.get("irt_a").and_then(|v| v.as_f64());
+    let irt_b = snapshot.get("irt_b").and_then(|v| v.as_f64());
+    let irt_status = snapshot
+        .get("irt_status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("uncalibrated")
+        .to_string();
+    let created_by = snapshot
+        .get("created_by")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok());
+    let created_at = snapshot
+        .get("created_at")
+        .and_then(|v| v.as_str())
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|v| v.with_timezone(&chrono::Utc))
+        .unwrap_or_else(chrono::Utc::now);
+    let updated_at = snapshot
+        .get("updated_at")
+        .and_then(|v| v.as_str())
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|v| v.with_timezone(&chrono::Utc))
+        .unwrap_or(created_at);
+    let version_number = snapshot
+        .get("version_number")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1) as i32;
+    let is_published = snapshot
+        .get("is_published")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    Ok(QuestionEntity {
+        id,
+        course_id,
+        question_type,
+        stem,
+        options,
+        correct_answer,
+        explanation,
+        points,
+        status,
+        shared,
+        source,
+        metadata,
+        irt_a,
+        irt_b,
+        irt_status,
+        created_by,
+        created_at,
+        updated_at,
+        version_number,
+        is_published,
+    })
+}
+
 /// Maps editor [`QuizQuestion`] into DB `question_type` label (Postgres enum member).
 pub fn db_question_type_from_editor(q: &QuizQuestion) -> &'static str {
     match q.question_type.as_str() {
@@ -131,7 +227,8 @@ pub async fn load_quiz_questions_map(
         r#"
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
                points::float8, status::text, shared, source, metadata,
-               irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at
+               irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
+               version_number, is_published
         FROM {}
         WHERE course_id = $1 AND id = ANY($2)
         "#,
@@ -242,7 +339,11 @@ pub async fn materialize_attempt_questions(
     let mut pos: i16 = 0;
     for r in refs {
         if let Some(qid) = r.question_id {
-            qb_repo::insert_attempt_selection(&mut tx, attempt_id, qid, pos).await?;
+            let version = qb_repo::get_question(pool, course_id, qid)
+                .await?
+                .ok_or_else(|| AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()))?
+                .version_number;
+            qb_repo::insert_attempt_selection(&mut tx, attempt_id, qid, version, pos).await?;
             pos = pos
                 .checked_add(1)
                 .ok_or_else(|| AppError::InvalidInput("Quiz too long.".into()))?;
@@ -257,7 +358,11 @@ pub async fn materialize_attempt_questions(
                 ));
             }
             for qid in picked {
-                qb_repo::insert_attempt_selection(&mut tx, attempt_id, qid, pos).await?;
+                let version = qb_repo::get_question(pool, course_id, qid)
+                    .await?
+                    .ok_or_else(|| AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()))?
+                    .version_number;
+                qb_repo::insert_attempt_selection(&mut tx, attempt_id, qid, version, pos).await?;
                 pos = pos
                     .checked_add(1)
                     .ok_or_else(|| AppError::InvalidInput("Quiz too long.".into()))?;
@@ -328,15 +433,26 @@ pub async fn resolve_delivery_questions(
             });
         }
         let ordered = qb_repo::list_attempt_selections_ordered(pool, aid).await?;
-        let map = load_quiz_questions_map(pool, course_id, &ordered).await?;
+        let ids: Vec<Uuid> = ordered.iter().map(|r| r.question_id).collect();
+        let map = load_quiz_questions_map(pool, course_id, &ids).await?;
         let mut out = Vec::new();
-        for id in ordered {
-            let Some(row) = map.get(&id) else {
-                return Err(AppError::InvalidInput(
-                    "Question bank data is inconsistent for this attempt.".into(),
-                ));
-            };
-            out.push(quiz_question_from_entity(row)?);
+        for picked in ordered {
+            if let Some(current) = map.get(&picked.question_id) {
+                if current.version_number == picked.version_number {
+                    out.push(quiz_question_from_entity(current)?);
+                    continue;
+                }
+            }
+            let snapshot = qb_repo::get_question_version_snapshot(
+                pool,
+                course_id,
+                picked.question_id,
+                picked.version_number,
+            )
+            .await?
+            .ok_or_else(|| AppError::InvalidInput("Question bank data is inconsistent for this attempt.".into()))?;
+            let versioned = question_entity_from_snapshot(&snapshot)?;
+            out.push(quiz_question_from_entity(&versioned)?);
         }
         let _ = uid; // reserved for future audit
         return Ok(ResolvedQuizQuestions {

@@ -29,6 +29,23 @@ pub struct QuestionEntity {
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub version_number: i32,
+    pub is_published: bool,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct QuestionVersionSummary {
+    pub version_number: i32,
+    pub change_note: Option<String>,
+    pub change_summary: Option<JsonValue>,
+    pub created_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct AttemptSelectionRow {
+    pub question_id: Uuid,
+    pub version_number: i32,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -165,11 +182,11 @@ pub async fn insert_question(
         r#"
         INSERT INTO {} (
             course_id, question_type, stem, options, correct_answer, explanation,
-            points, status, shared, source, metadata, created_by
+            points, status, shared, source, metadata, created_by, is_published
         )
         VALUES (
             $1, $2::course.question_type, $3, $4, $5, $6,
-            $7, $8::course.question_status, $9, $10, $11, $12
+            $7, $8::course.question_status, $9, $10, $11, $12, $13
         )
         RETURNING id
         "#,
@@ -187,6 +204,7 @@ pub async fn insert_question(
     .bind(source)
     .bind(metadata)
     .bind(created_by)
+    .bind(status == "active")
     .fetch_one(tx.deref_mut())
     .await?;
     Ok(id)
@@ -221,6 +239,7 @@ where
             status = $9::course.question_status,
             shared = $10,
             metadata = $11,
+            is_published = CASE WHEN $9::course.question_status = 'active'::course.question_status THEN TRUE ELSE is_published END,
             updated_at = NOW()
         WHERE id = $2 AND course_id = $1
         "#,
@@ -251,7 +270,8 @@ pub async fn get_question(
         r#"
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
                points::float8, status::text, shared, source, metadata,
-               irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at
+               irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
+               version_number, is_published
         FROM {}
         WHERE id = $2 AND course_id = $1
         "#,
@@ -305,7 +325,8 @@ pub async fn list_questions_filtered(
         r#"
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
                points::float8, status::text, shared, source, metadata,
-               irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at
+               irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
+               version_number, is_published
         FROM {}
         WHERE course_id = $1
           AND ($2::text = '' OR to_tsvector('english', stem) @@ plainto_tsquery('english', $2))
@@ -386,17 +407,19 @@ pub async fn insert_attempt_selection(
     tx: &mut Transaction<'_, Postgres>,
     attempt_id: Uuid,
     question_id: Uuid,
+    version_number: i32,
     position: i16,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"
-        INSERT INTO {} (attempt_id, question_id, position)
-        VALUES ($1, $2, $3)
+        INSERT INTO {} (attempt_id, question_id, version_number, position)
+        VALUES ($1, $2, $3, $4)
         "#,
         schema::ATTEMPT_QUESTION_SELECTIONS
     ))
     .bind(attempt_id)
     .bind(question_id)
+    .bind(version_number)
     .bind(position)
     .execute(tx.deref_mut())
     .await?;
@@ -406,10 +429,10 @@ pub async fn insert_attempt_selection(
 pub async fn list_attempt_selections_ordered(
     pool: &PgPool,
     attempt_id: Uuid,
-) -> Result<Vec<Uuid>, sqlx::Error> {
-    sqlx::query_scalar(&format!(
+) -> Result<Vec<AttemptSelectionRow>, sqlx::Error> {
+    sqlx::query_as::<_, AttemptSelectionRow>(&format!(
         r#"
-        SELECT question_id FROM {}
+        SELECT question_id, version_number FROM {}
         WHERE attempt_id = $1
         ORDER BY position ASC
         "#,
@@ -418,6 +441,158 @@ pub async fn list_attempt_selections_ordered(
     .bind(attempt_id)
     .fetch_all(pool)
     .await
+}
+
+pub async fn list_question_versions(
+    pool: &PgPool,
+    course_id: Uuid,
+    question_id: Uuid,
+) -> Result<Vec<QuestionVersionSummary>, sqlx::Error> {
+    sqlx::query_as::<_, QuestionVersionSummary>(&format!(
+        r#"
+        SELECT qv.version_number, qv.change_note, qv.change_summary, qv.created_by, qv.created_at
+        FROM {} qv
+        INNER JOIN {} q ON q.id = qv.question_id
+        WHERE qv.question_id = $1 AND q.course_id = $2
+        ORDER BY qv.version_number DESC
+        "#,
+        schema::QUESTION_VERSIONS,
+        schema::QUESTIONS
+    ))
+    .bind(question_id)
+    .bind(course_id)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_question_version_snapshot(
+    pool: &PgPool,
+    course_id: Uuid,
+    question_id: Uuid,
+    version_number: i32,
+) -> Result<Option<JsonValue>, sqlx::Error> {
+    sqlx::query_scalar(&format!(
+        r#"
+        SELECT qv.snapshot
+        FROM {} qv
+        INNER JOIN {} q ON q.id = qv.question_id
+        WHERE qv.question_id = $1 AND q.course_id = $2 AND qv.version_number = $3
+        "#,
+        schema::QUESTION_VERSIONS,
+        schema::QUESTIONS
+    ))
+    .bind(question_id)
+    .bind(course_id)
+    .bind(version_number)
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn insert_question_version_snapshot<'e, E>(
+    ex: E,
+    question: &QuestionEntity,
+    change_note: Option<&str>,
+    change_summary: Option<&JsonValue>,
+    created_by: Option<Uuid>,
+) -> Result<(), sqlx::Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
+    let snapshot = serde_json::json!({
+        "id": question.id,
+        "course_id": question.course_id,
+        "question_type": question.question_type,
+        "stem": question.stem,
+        "options": question.options,
+        "correct_answer": question.correct_answer,
+        "explanation": question.explanation,
+        "points": question.points,
+        "status": question.status,
+        "shared": question.shared,
+        "source": question.source,
+        "metadata": question.metadata,
+        "irt_a": question.irt_a,
+        "irt_b": question.irt_b,
+        "irt_status": question.irt_status,
+        "created_by": question.created_by,
+        "created_at": question.created_at,
+        "updated_at": question.updated_at,
+        "version_number": question.version_number,
+        "is_published": question.is_published
+    });
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (question_id, version_number, snapshot, change_note, change_summary, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (question_id, version_number) DO NOTHING
+        "#,
+        schema::QUESTION_VERSIONS
+    ))
+    .bind(question.id)
+    .bind(question.version_number)
+    .bind(snapshot)
+    .bind(change_note)
+    .bind(change_summary)
+    .bind(created_by)
+    .execute(ex)
+    .await?;
+    Ok(())
+}
+
+pub async fn update_question_row_with_versioning<'e, E>(
+    ex: E,
+    current: &QuestionEntity,
+    question_type: &str,
+    stem: &str,
+    options: Option<&JsonValue>,
+    correct_answer: Option<&JsonValue>,
+    explanation: Option<&str>,
+    points: f64,
+    status: &str,
+    shared: bool,
+    metadata: &JsonValue,
+) -> Result<i32, sqlx::Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
+    let new_version = if current.is_published {
+        current.version_number + 1
+    } else {
+        current.version_number
+    };
+    sqlx::query(&format!(
+        r#"
+        UPDATE {}
+        SET question_type = $2::course.question_type,
+            stem = $3,
+            options = $4,
+            correct_answer = $5,
+            explanation = $6,
+            points = $7,
+            status = $8::course.question_status,
+            shared = $9,
+            metadata = $10,
+            version_number = $11,
+            is_published = CASE WHEN $8::course.question_status = 'active'::course.question_status THEN TRUE ELSE is_published END,
+            updated_at = NOW()
+        WHERE id = $1
+        "#,
+        schema::QUESTIONS
+    ))
+    .bind(current.id)
+    .bind(question_type)
+    .bind(stem)
+    .bind(options)
+    .bind(correct_answer)
+    .bind(explanation)
+    .bind(points)
+    .bind(status)
+    .bind(shared)
+    .bind(metadata)
+    .bind(new_version)
+    .execute(ex)
+    .await?;
+    Ok(new_version)
 }
 
 pub async fn count_attempt_selections(pool: &PgPool, attempt_id: Uuid) -> Result<i64, sqlx::Error> {

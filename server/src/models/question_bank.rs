@@ -30,6 +30,8 @@ pub struct QuestionBankRowResponse {
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub version_number: i32,
+    pub is_published: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -74,6 +76,28 @@ pub struct UpdateQuestionRequest {
     pub shared: Option<bool>,
     #[serde(default)]
     pub metadata: Option<JsonValue>,
+    #[serde(default)]
+    pub change_note: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionVersionSummaryResponse {
+    pub version_number: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change_note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change_summary: Option<JsonValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreQuestionVersionRequest {
+    #[serde(default)]
+    pub change_note: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

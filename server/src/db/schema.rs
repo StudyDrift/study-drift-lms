@@ -39,6 +39,7 @@ pub const ENROLLMENT_GROUP_MEMBERSHIPS: &str = "course.enrollment_group_membersh
 pub const COURSE_LEARNING_OUTCOMES: &str = "course.course_learning_outcomes";
 pub const COURSE_OUTCOME_LINKS: &str = "course.course_outcome_links";
 pub const QUESTIONS: &str = "course.questions";
+pub const QUESTION_VERSIONS: &str = "course.question_versions";
 pub const QUESTION_POOLS: &str = "course.question_pools";
 pub const QUESTION_POOL_MEMBERS: &str = "course.question_pool_members";
 pub const QUIZ_QUESTION_REFS: &str = "course.quiz_question_refs";

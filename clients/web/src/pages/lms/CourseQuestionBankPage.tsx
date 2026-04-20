@@ -7,9 +7,12 @@ import {
   fetchCourse,
   fetchCourseQuestion,
   fetchCourseQuestions,
+  fetchCourseQuestionVersions,
+  restoreCourseQuestionVersion,
   updateCourseQuestion,
   type BankQuestionDetail,
   type BankQuestionRow,
+  type BankQuestionVersionSummary,
   type CreateBankQuestionBody,
   type UpdateBankQuestionBody,
 } from '../../lib/coursesApi'
@@ -23,6 +26,7 @@ type QuestionDraft = {
   explanation: string
   optionsJson: string
   correctAnswerJson: string
+  changeNote: string
 }
 
 const QUESTION_TYPE_OPTIONS = [
@@ -50,6 +54,7 @@ function defaultDraft(): QuestionDraft {
     explanation: '',
     optionsJson: '',
     correctAnswerJson: '',
+    changeNote: '',
   }
 }
 
@@ -91,6 +96,7 @@ function toUpdatePayload(draft: QuestionDraft): UpdateBankQuestionBody {
     explanation: base.explanation ?? null,
     options: base.options ?? null,
     correctAnswer: base.correctAnswer ?? null,
+    changeNote: draft.changeNote.trim() || undefined,
   }
 }
 
@@ -106,6 +112,7 @@ function draftFromDetail(detail: BankQuestionDetail): QuestionDraft {
     explanation: detail.explanation ?? '',
     optionsJson: detail.options == null ? '' : JSON.stringify(detail.options, null, 2),
     correctAnswerJson: detail.correctAnswer == null ? '' : JSON.stringify(detail.correctAnswer, null, 2),
+    changeNote: '',
   }
 }
 
@@ -128,6 +135,9 @@ export function CourseQuestionBankPage() {
   const [modalError, setModalError] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewQuestion, setPreviewQuestion] = useState<BankQuestionDetail | null>(null)
+  const [historyId, setHistoryId] = useState<string | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyRows, setHistoryRows] = useState<BankQuestionVersionSummary[]>([])
 
   const load = useCallback(async () => {
     if (!courseCode) return
@@ -204,6 +214,42 @@ export function CourseQuestionBankPage() {
       setBusy(false)
     }
   }, [courseCode, draft, editId, load])
+
+  const openHistory = useCallback(
+    async (questionId: string) => {
+      if (!courseCode) return
+      setHistoryId(questionId)
+      setHistoryLoading(true)
+      setModalError(null)
+      try {
+        const versions = await fetchCourseQuestionVersions(courseCode, questionId)
+        setHistoryRows(versions)
+      } catch (e) {
+        setModalError(e instanceof Error ? e.message : 'Could not load version history.')
+      } finally {
+        setHistoryLoading(false)
+      }
+    },
+    [courseCode],
+  )
+
+  const restoreVersion = useCallback(
+    async (versionNumber: number) => {
+      if (!courseCode || !historyId) return
+      setBusy(true)
+      setModalError(null)
+      try {
+        await restoreCourseQuestionVersion(courseCode, historyId, versionNumber)
+        await openHistory(historyId)
+        await load()
+      } catch (e) {
+        setModalError(e instanceof Error ? e.message : 'Could not restore version.')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [courseCode, historyId, load, openHistory],
+  )
 
   useEffect(() => {
     void load()
@@ -308,6 +354,9 @@ export function CourseQuestionBankPage() {
                     Points
                   </th>
                   <th scope="col" className="px-4 py-3">
+                    Version
+                  </th>
+                  <th scope="col" className="px-4 py-3">
                     Actions
                   </th>
                 </tr>
@@ -315,7 +364,7 @@ export function CourseQuestionBankPage() {
               <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-slate-500 dark:text-neutral-400">
+                    <td colSpan={6} className="px-4 py-6 text-slate-500 dark:text-neutral-400">
                       No questions found. Save a module quiz while the bank is enabled to sync items from the
                       editor.
                     </td>
@@ -329,6 +378,9 @@ export function CourseQuestionBankPage() {
                       <td className="px-4 py-3 text-slate-600 dark:text-neutral-300">{r.questionType}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-neutral-300">{r.status}</td>
                       <td className="px-4 py-3 tabular-nums text-slate-600 dark:text-neutral-300">{r.points}</td>
+                      <td className="px-4 py-3 tabular-nums text-slate-600 dark:text-neutral-300">
+                        {r.versionNumber}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <button
@@ -344,6 +396,13 @@ export function CourseQuestionBankPage() {
                             className="rounded-md border border-indigo-300 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 dark:border-indigo-500/60 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
                           >
                             Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void openHistory(r.id)}
+                            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-neutral-700 dark:text-neutral-100 dark:hover:bg-neutral-900"
+                          >
+                            History
                           </button>
                         </div>
                       </td>
@@ -454,6 +513,15 @@ export function CourseQuestionBankPage() {
                   className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-sm dark:border-neutral-700 dark:bg-neutral-950"
                 />
               </label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-neutral-200">
+                Change note (optional)
+                <input
+                  value={draft.changeNote}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, changeNote: e.target.value }))}
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+                  placeholder="Describe why this revision was made"
+                />
+              </label>
             </div>
             {modalError && (
               <p className="mt-3 text-sm text-rose-700 dark:text-rose-400" role="alert">
@@ -479,6 +547,58 @@ export function CourseQuestionBankPage() {
                 className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
               >
                 {busy ? 'Saving…' : editId ? 'Save changes' : 'Create question'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {historyId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !busy) setHistoryId(null)
+          }}
+        >
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl dark:border-neutral-800 dark:bg-neutral-950">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">Version history</h2>
+            {historyLoading ? (
+              <p className="mt-3 text-sm text-slate-500 dark:text-neutral-400">Loading…</p>
+            ) : historyRows.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-500 dark:text-neutral-400">No versions yet.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {historyRows.map((v) => (
+                  <div
+                    key={v.versionNumber}
+                    className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-neutral-800"
+                  >
+                    <div>
+                      <p className="font-medium text-slate-900 dark:text-neutral-100">Version {v.versionNumber}</p>
+                      <p className="text-xs text-slate-600 dark:text-neutral-300">
+                        {new Date(v.createdAt).toLocaleString()} {v.changeNote ? `- ${v.changeNote}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void restoreVersion(v.versionNumber)}
+                      className="rounded-md border border-indigo-300 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-500/60 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                    >
+                      Restore
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setHistoryId(null)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-neutral-700 dark:text-neutral-100 dark:hover:bg-neutral-900"
+              >
+                Close
               </button>
             </div>
           </div>

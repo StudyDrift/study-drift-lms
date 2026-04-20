@@ -200,6 +200,8 @@ export type BankQuestionRow = {
   source: string
   createdAt: string
   updatedAt: string
+  versionNumber: number
+  isPublished: boolean
 }
 
 export type BankQuestionDetail = BankQuestionRow & {
@@ -235,6 +237,15 @@ export type UpdateBankQuestionBody = {
   status?: 'draft' | 'active' | 'retired'
   shared?: boolean
   metadata?: unknown
+  changeNote?: string
+}
+
+export type BankQuestionVersionSummary = {
+  versionNumber: number
+  changeNote?: string | null
+  changeSummary?: unknown
+  createdBy?: string | null
+  createdAt: string
 }
 
 export async function fetchCourseQuestions(
@@ -300,6 +311,39 @@ export async function updateCourseQuestion(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as BankQuestionDetail
+}
+
+export async function fetchCourseQuestionVersions(
+  courseCode: string,
+  questionId: string,
+): Promise<BankQuestionVersionSummary[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/questions/${encodeURIComponent(questionId)}/versions`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const body = raw as { versions?: BankQuestionVersionSummary[] }
+  return Array.isArray(body.versions) ? body.versions : []
+}
+
+export async function restoreCourseQuestionVersion(
+  courseCode: string,
+  questionId: string,
+  versionNumber: number,
+  changeNote?: string,
+): Promise<number> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/questions/${encodeURIComponent(questionId)}/versions/${encodeURIComponent(String(versionNumber))}/restore`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(changeNote ? { changeNote } : {}),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const body = raw as { newVersionNumber?: number }
+  return typeof body.newVersionNumber === 'number' ? body.newVersionNumber : versionNumber
 }
 
 export async function patchCourseFeatures(
