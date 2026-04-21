@@ -13,7 +13,7 @@ Lextures is a Rust (Axum) backend + React/TypeScript frontend LMS. The codebase 
 **Overall posture:** MEDIUM. Do not ship to production until all P0/P1 items below are resolved.
 
 ### Strengths
-- `.env` is gitignored; only `server/.env.example` (placeholders) is tracked; pull requests are scanned for secrets with [Gitleaks](https://github.com/gitleaks/gitleaks) in CI (`.github/workflows/ci.yml`).
+- `.env` is gitignored; only `server/.env.example` (placeholders) is tracked.
 - Argon2id password hashing (`server/src/services/auth.rs`)
 - Parameterized SQL via `sqlx` everywhere (no string-interpolated user input in queries)
 - JWT implementation uses `jsonwebtoken` with `rust_crypto` (no OpenSSL surface)
@@ -182,7 +182,7 @@ Lextures is a Rust (Axum) backend + React/TypeScript frontend LMS. The codebase 
 - **Fix:** Emit `warn!(user_id, required_permission, route, "permission_denied")` from the `Forbidden` branch. Aids forensics.
 
 ### I2. Add `cargo audit` and `npm audit` to CI
-- **Fix:** Two-line additions to GitHub Actions. Fail the build on high-severity advisories. Enable Dependabot for both ecosystems. (Secret scanning is already covered by the `gitleaks` job in CI.)
+- **Fix:** Two-line additions to GitHub Actions. Fail the build on high-severity advisories. Enable Dependabot for both ecosystems.
 
 ### I3. Add automated security tests
 - CSRF: cross-origin POST from fake origin returns 403.
