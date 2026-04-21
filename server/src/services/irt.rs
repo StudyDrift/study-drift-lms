@@ -118,7 +118,7 @@ pub fn select_max_information_item(
         let info = fisher_information_2pl(theta, a, b);
         match best {
             None => best = Some((id, info)),
-            Some((bid, bi)) if info > bi => best = Some((id, info)),
+            Some((_bid, bi)) if info > bi => best = Some((id, info)),
             _ => {}
         }
     }
