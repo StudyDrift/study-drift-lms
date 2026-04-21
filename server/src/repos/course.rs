@@ -510,7 +510,11 @@ pub async fn patch_course_features(
     .await
 }
 
-pub async fn set_course_type(pool: &PgPool, course_code: &str, course_type: &str) -> Result<(), sqlx::Error> {
+pub async fn set_course_type(
+    pool: &PgPool,
+    course_code: &str,
+    course_type: &str,
+) -> Result<(), sqlx::Error> {
     let t = if course_type.trim() == "competency_based" {
         "competency_based"
     } else {

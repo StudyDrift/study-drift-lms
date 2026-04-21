@@ -71,12 +71,22 @@ async fn prev_outcome_gate_complete(
     student_user_id: Uuid,
     prev_outcome_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    let targets = course_outcomes::list_whole_item_links_for_outcome(pool, course_id, prev_outcome_id).await?;
+    let targets =
+        course_outcomes::list_whole_item_links_for_outcome(pool, course_id, prev_outcome_id)
+            .await?;
     if targets.is_empty() {
         return Ok(true);
     }
     for (item_id, kind) in targets {
-        if !assessment_complete_for_student(pool, course_id, student_user_id, item_id, kind.as_str()).await? {
+        if !assessment_complete_for_student(
+            pool,
+            course_id,
+            student_user_id,
+            item_id,
+            kind.as_str(),
+        )
+        .await?
+        {
             return Ok(false);
         }
     }
@@ -123,7 +133,8 @@ pub async fn student_parent_module_competency_locked(
     student_user_id: Uuid,
     parent_module_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    let locked = locked_root_module_ids_for_student(pool, course_id, course_type, student_user_id).await?;
+    let locked =
+        locked_root_module_ids_for_student(pool, course_id, course_type, student_user_id).await?;
     Ok(locked.contains(&parent_module_id))
 }
 
@@ -135,7 +146,8 @@ pub async fn filter_structure_rows_for_competency_student(
     student_user_id: Uuid,
     rows: Vec<CourseStructureItemRow>,
 ) -> Result<Vec<CourseStructureItemRow>, sqlx::Error> {
-    let locked = locked_root_module_ids_for_student(pool, course_id, course_type, student_user_id).await?;
+    let locked =
+        locked_root_module_ids_for_student(pool, course_id, course_type, student_user_id).await?;
     if locked.is_empty() {
         return Ok(rows);
     }

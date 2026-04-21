@@ -705,10 +705,7 @@ pub async fn quiz_visible_to_student(
         return Ok(false);
     }
     if competency_gating::student_structure_item_competency_blocked_under_parent(
-        pool,
-        course_id,
-        quiz_id,
-        user_id,
+        pool, course_id, quiz_id, user_id,
     )
     .await?
     {
@@ -787,10 +784,7 @@ pub async fn external_link_visible_to_student(
         return Ok(false);
     }
     if competency_gating::student_structure_item_competency_blocked_under_parent(
-        pool,
-        course_id,
-        link_id,
-        user_id,
+        pool, course_id, link_id, user_id,
     )
     .await?
     {
@@ -869,10 +863,7 @@ pub async fn lti_link_visible_to_student(
         return Ok(false);
     }
     if competency_gating::student_structure_item_competency_blocked_under_parent(
-        pool,
-        course_id,
-        link_id,
-        user_id,
+        pool, course_id, link_id, user_id,
     )
     .await?
     {
@@ -1003,10 +994,7 @@ pub async fn survey_visible_to_student(
         return Ok(false);
     }
     if competency_gating::student_structure_item_competency_blocked_under_parent(
-        pool,
-        course_id,
-        survey_id,
-        user_id,
+        pool, course_id, survey_id, user_id,
     )
     .await?
     {

@@ -4255,7 +4255,8 @@ async fn course_outcomes_patch_handler(
         match v {
             None => {}
             Some(mid) => {
-                let Some(m) = course_structure::get_item_row(&state.pool, course_id, *mid).await? else {
+                let Some(m) = course_structure::get_item_row(&state.pool, course_id, *mid).await?
+                else {
                     return Err(AppError::invalid_input("Unknown moduleStructureItemId."));
                 };
                 if m.kind != "module" || m.parent_id.is_some() {

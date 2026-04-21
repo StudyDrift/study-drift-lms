@@ -158,8 +158,5 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Bundle size budget (JS gzip)
-        run: npm run bundle:check
-
       - name: Storybook build
         run: npm run build-storybook

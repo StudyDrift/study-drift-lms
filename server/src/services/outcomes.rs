@@ -134,9 +134,10 @@ pub async fn add_outcome_link(
 
     let sub_outcome_id = req.sub_outcome_id;
     if let Some(soid) = sub_outcome_id {
-        let ok =
-            course_outcomes::sub_outcome_owned_by_outcome_in_course(pool, course_id, outcome_id, soid)
-                .await?;
+        let ok = course_outcomes::sub_outcome_owned_by_outcome_in_course(
+            pool, course_id, outcome_id, soid,
+        )
+        .await?;
         if !ok {
             return Err(AppError::invalid_input(
                 "subOutcomeId must belong to this outcome in the same course.",
@@ -166,7 +167,8 @@ pub async fn add_outcome_link(
             if let sqlx::Error::Database(ref dbe) = e {
                 if matches!(
                     dbe.constraint(),
-                    Some("ux_course_outcome_links_unique_root") | Some("ux_course_outcome_links_unique_sub")
+                    Some("ux_course_outcome_links_unique_root")
+                        | Some("ux_course_outcome_links_unique_sub")
                 ) {
                     return Err(AppError::invalid_input(
                         "This outcome already maps that item with the same measurement and intensity levels. Change the levels or remove the existing mapping first.",
