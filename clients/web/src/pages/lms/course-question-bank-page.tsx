@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { Library } from 'lucide-react'
 import { useParams } from 'react-router-dom'
+import { EmptyState } from '../../components/ui/empty-state'
 import { usePermissions } from '../../context/use-permissions'
 import {
   createCourseQuestion,
@@ -29,6 +31,8 @@ type QuestionDraft = {
   changeNote: string
   /** When true, server keeps authored option order for this item (maps to shuffleChoicesOverride: false). */
   lockAnswerOrder: boolean
+  /** Include in spaced-repetition review when the course enables SRS. */
+  srsEligible: boolean
 }
 
 const QUESTION_TYPE_OPTIONS = [
@@ -58,6 +62,7 @@ function defaultDraft(): QuestionDraft {
     correctAnswerJson: '',
     changeNote: '',
     lockAnswerOrder: false,
+    srsEligible: false,
   }
 }
 
@@ -91,6 +96,7 @@ function toCreatePayload(draft: QuestionDraft): CreateBankQuestionBody {
     options: parseOptionalJson(draft.optionsJson, 'Options'),
     correctAnswer: parseOptionalJson(draft.correctAnswerJson, 'Correct answer'),
     shuffleChoicesOverride: draft.lockAnswerOrder ? false : undefined,
+    srsEligible: draft.srsEligible || undefined,
   }
 }
 
@@ -106,6 +112,7 @@ function toUpdatePayload(draft: QuestionDraft): UpdateBankQuestionBody {
     correctAnswer: base.correctAnswer ?? null,
     changeNote: draft.changeNote.trim() || undefined,
     shuffleChoicesOverride: draft.lockAnswerOrder ? false : null,
+    srsEligible: draft.srsEligible,
   }
 }
 
@@ -123,6 +130,7 @@ function draftFromDetail(detail: BankQuestionDetail): QuestionDraft {
     correctAnswerJson: detail.correctAnswer == null ? '' : JSON.stringify(detail.correctAnswer, null, 2),
     changeNote: '',
     lockAnswerOrder: detail.shuffleChoicesOverride === false,
+    srsEligible: detail.srsEligible === true,
   }
 }
 
@@ -342,6 +350,21 @@ export function CourseQuestionBankPage() {
         )}
         {loading ? (
           <p className="text-sm text-slate-500 dark:text-neutral-400">Loading…</p>
+        ) : bankOn && rows.length === 0 ? (
+          <EmptyState
+            icon={Library}
+            title="No questions in the bank yet"
+            body="Create a question here, or save a module quiz while the bank is enabled to sync items from the editor."
+            primaryAction={{
+              label: 'New question',
+              onClick: () => {
+                setModalError(null)
+                setCreateOpen(true)
+                setEditId(null)
+                setDraft(defaultDraft())
+              },
+            }}
+          />
         ) : (
           <div
             className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950"
@@ -511,6 +534,21 @@ export function CourseQuestionBankPage() {
                   </span>
                 </label>
               )}
+              <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-800 dark:text-neutral-100">
+                <input
+                  type="checkbox"
+                  checked={draft.srsEligible}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, srsEligible: e.target.checked }))}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 dark:border-neutral-600"
+                />
+                <span>
+                  <span className="font-medium">Spaced repetition eligible</span>
+                  <span className="block text-xs font-normal text-slate-600 dark:text-neutral-400">
+                    When the course turns on review practice and the server flag is enabled, quiz exposure can queue
+                    this item for learner review.
+                  </span>
+                </span>
+              </label>
               <label className="block text-xs font-medium text-slate-700 dark:text-neutral-200">
                 Explanation (optional)
                 <textarea

@@ -33,6 +33,9 @@ pub struct CourseWithViewerResponse {
     pub course: CoursePublic,
     /// Raw enrollment roles for the authenticated user in this course (e.g. `teacher`, `student`).
     pub viewer_enrollment_roles: Vec<String>,
+    /// Present when the viewer has a `student` enrollment row in this course (adaptive path / next-item APIs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub viewer_student_enrollment_id: Option<Uuid>,
 }
 
 #[derive(Debug, sqlx::FromRow, Serialize)]
@@ -77,6 +80,10 @@ pub struct CoursePublic {
     pub lockdown_mode_enabled: bool,
     /// K-12 standards alignment UI and coverage APIs (plan 1.3).
     pub standards_alignment_enabled: bool,
+    /// When true and the platform flag is on, adaptive path rules may reroute learners between modules.
+    pub adaptive_paths_enabled: bool,
+    /// Spaced repetition / review queue for question-bank items (also requires `SRS_PRACTICE_ENABLED`).
+    pub srs_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -144,6 +151,10 @@ pub struct PatchCourseFeaturesRequest {
     /// When omitted, the previous course value is preserved (backward compatible PATCH body).
     #[serde(default)]
     pub standards_alignment_enabled: Option<bool>,
+    #[serde(default)]
+    pub adaptive_paths_enabled: Option<bool>,
+    #[serde(default)]
+    pub srs_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

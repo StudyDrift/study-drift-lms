@@ -11,9 +11,12 @@ import { markdownToSectionsForEditor, sectionsToMarkdown } from '../../component
 import { usePermissions } from '../../context/use-permissions'
 import {
   fetchCourse,
+  fetchEnrollmentNext,
   fetchModuleContentPage,
+  learnerCourseItemHref,
   patchModuleContentPage,
   postCourseContext,
+  type CoursePublic,
   type SyllabusSection,
 } from '../../lib/courses-api'
 import {
@@ -22,6 +25,7 @@ import {
   resolveMarkdownTheme,
 } from '../../lib/markdown-theme'
 import { useLmsDarkMode } from '../../hooks/use-lms-dark-mode'
+import { recordLastVisitedModuleItem } from '../../lib/last-visited-module-item'
 import { permCourseItemCreate } from '../../lib/rbac-api'
 import { LmsPage } from './lms-page'
 
@@ -57,6 +61,8 @@ export default function CourseModuleContentPage() {
 
   const contentLeaveSentRef = useRef(false)
   const contentOpenSentForRef = useRef<string | null>(null)
+  const [courseProfile, setCourseProfile] = useState<CoursePublic | null>(null)
+  const [nextNav, setNextNav] = useState<{ href: string; title: string; live: string } | null>(null)
 
   const canEdit = Boolean(
     courseCode && itemId && !permLoading && allows(permCourseItemCreate(courseCode)),
@@ -81,11 +87,17 @@ export default function CourseModuleContentPage() {
         fetchModuleContentPage(courseCode, itemId),
         fetchCourse(courseCode),
       ])
+      setCourseProfile(courseRow)
       setTitle(data.title)
       setMarkdown(data.markdown)
       setUpdatedAt(data.updatedAt)
       setMdPreset(courseRow.markdownThemePreset)
       setMdCustom(courseRow.markdownThemeCustom)
+      recordLastVisitedModuleItem(courseCode, {
+        itemId,
+        kind: 'content_page',
+        title: data.title,
+      })
       void loadMarkups()
       const openKey = `${courseCode}:${itemId}`
       if (contentOpenSentForRef.current !== openKey) {
@@ -108,6 +120,42 @@ export default function CourseModuleContentPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (
+      canEdit ||
+      !courseCode ||
+      !itemId ||
+      !courseProfile?.viewerStudentEnrollmentId ||
+      !courseProfile.adaptivePathsEnabled
+    ) {
+      setNextNav(null)
+      return
+    }
+    const enrollmentId = courseProfile.viewerStudentEnrollmentId
+    let cancelled = false
+    void (async () => {
+      try {
+        const n = await fetchEnrollmentNext(enrollmentId, {
+          fromItemId: itemId,
+        })
+        if (cancelled) return
+        const href = learnerCourseItemHref(courseCode!, n.item)
+        const title = n.item.title?.trim() || 'Next'
+        const live =
+          n.skipReason?.trim() ||
+          (n.fallback
+            ? 'Continuing in course order.'
+            : `Next: ${title}.`)
+        setNextNav({ href, title, live })
+      } catch {
+        if (!cancelled) setNextNav(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [canEdit, courseCode, courseProfile, itemId])
 
   useEffect(() => {
     if (!courseCode || !itemId) return
@@ -247,6 +295,28 @@ export default function CourseModuleContentPage() {
               markupTarget={{ variant: 'content_page', itemId }}
               contentTitle={title || 'Content page'}
             />
+            {nextNav ? (
+              <div
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900/60"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <p className="text-sm text-slate-700 dark:text-neutral-200">
+                  <span className="font-medium">Suggested next:</span> {nextNav.title}
+                  {nextNav.live && nextNav.live !== `Next: ${nextNav.title}.` ? (
+                    <span className="mt-1 block text-xs text-slate-500 dark:text-neutral-400">
+                      {nextNav.live}
+                    </span>
+                  ) : null}
+                </p>
+                <Link
+                  to={nextNav.href}
+                  className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+                >
+                  Continue
+                </Link>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

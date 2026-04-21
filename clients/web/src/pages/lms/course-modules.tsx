@@ -36,6 +36,7 @@ import {
 } from 'lucide-react'
 import { AddCourseItemMenu } from './add-course-item-menu'
 import { AddModuleItemMenu, type ModuleItemKind } from './add-module-item-menu'
+import { CourseModulesLoadingSkeleton } from '../../components/ui/lms-content-skeletons'
 import { LmsPage } from './lms-page'
 import { ModuleExternalLinkModal } from './module-external-link-modal'
 import { ModuleNameModal } from './module-name-modal'
@@ -49,11 +50,19 @@ import {
   archiveCourseStructureItem,
   createModuleExternalLink,
   createModuleQuiz,
+  createStructurePathRule,
+  deleteStructurePathRule,
+  fetchCourse,
+  fetchCourseConceptsForPath,
   fetchCourseStructure,
+  fetchStructurePathRules,
   patchCourseModule,
   patchCourseStructureItem,
   reorderCourseStructure,
+  type CoursePublic,
   type CourseStructureItem,
+  type PathConceptOption,
+  type StructurePathRule,
 } from '../../lib/courses-api'
 import { useCourseViewAs } from '../../lib/course-view-as'
 import { permCourseItemCreate } from '../../lib/rbac-api'
@@ -401,7 +410,7 @@ function SortableChildRow({
     <li ref={setNodeRef} style={style} className="group py-3 first:pt-0">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-2">
         <div className="flex min-w-0 flex-1 items-start gap-2">
-          {!disabled && (
+          {(!disabled || dragHandlesVisible || isDragging) && (
             <button
               type="button"
               className={`mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300 ${
@@ -468,6 +477,7 @@ type ModuleCardBodyProps = {
   onOpenModuleSettings: (item: CourseStructureItem) => void
   moduleDragHandle: ReactNode
   childrenList: ReactNode | null
+  footerExtra?: ReactNode | null
 }
 
 function ModuleCardBody({
@@ -484,6 +494,7 @@ function ModuleCardBody({
   onOpenModuleSettings,
   moduleDragHandle,
   childrenList,
+  footerExtra,
 }: ModuleCardBodyProps) {
   const children = moduleChildrenById.get(item.id) ?? []
   const moduleItemsRegionId = `module-items-${item.id}`
@@ -590,7 +601,180 @@ function ModuleCardBody({
           </div>
         )}
       </div>
+      {footerExtra}
       {!minified && !collapsed && children.length > 0 && childrenList}
+    </div>
+  )
+}
+
+function ModuleAdaptivePathPanel({ courseCode, moduleId }: { courseCode: string; moduleId: string }) {
+  const [open, setOpen] = useState(false)
+  const [rules, setRules] = useState<StructurePathRule[]>([])
+  const [concepts, setConcepts] = useState<PathConceptOption[]>([])
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [ruleType, setRuleType] = useState('skip_if_mastered')
+  const [conceptPick, setConceptPick] = useState('')
+  const [threshold, setThreshold] = useState('0.8')
+  const [targetId, setTargetId] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setErr(null)
+    try {
+      const [r, c] = await Promise.all([
+        fetchStructurePathRules(courseCode, moduleId),
+        fetchCourseConceptsForPath(courseCode),
+      ])
+      setRules(r)
+      setConcepts(c)
+      setConceptPick((p) => p || (c[0]?.id ?? ''))
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not load path rules.')
+    } finally {
+      setLoading(false)
+    }
+  }, [courseCode, moduleId])
+
+  useEffect(() => {
+    if (!open) return
+    void load()
+  }, [load, open])
+
+  async function onAdd() {
+    const th = Number.parseFloat(threshold)
+    if (!Number.isFinite(th) || th < 0 || th > 1) {
+      setErr('Threshold must be a number between 0 and 1.')
+      return
+    }
+    const cid = conceptPick.trim()
+    if (!cid) {
+      setErr('Pick a concept.')
+      return
+    }
+    setSaving(true)
+    setErr(null)
+    try {
+      await createStructurePathRule(courseCode, moduleId, {
+        ruleType,
+        conceptIds: [cid],
+        threshold: th,
+        targetItemId: targetId.trim() ? targetId.trim() : null,
+      })
+      setTargetId('')
+      await load()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not add rule.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function onDelete(ruleId: string) {
+    setSaving(true)
+    setErr(null)
+    try {
+      await deleteStructurePathRule(courseCode, moduleId, ruleId)
+      await load()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not delete.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/40 px-3 py-2 text-left dark:border-indigo-900/40 dark:bg-indigo-950/30">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-xs font-semibold text-indigo-800 hover:text-indigo-600 dark:text-indigo-200 dark:hover:text-indigo-100"
+      >
+        {open ? '▼' : '▶'} Adaptive path rules
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 text-xs text-slate-700 dark:text-neutral-200">
+          {err ? <p className="text-rose-700 dark:text-rose-300">{err}</p> : null}
+          {loading ? <p>Loading…</p> : null}
+          <ul className="space-y-1">
+            {rules.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <span className="font-mono">{r.ruleType}</span> · threshold {r.threshold} · concepts{' '}
+                  {r.conceptIds.join(', ')}
+                </span>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void onDelete(r.id)}
+                  className="shrink-0 rounded text-rose-700 hover:underline disabled:opacity-50 dark:text-rose-300"
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="grid gap-2 border-t border-indigo-100 pt-2 dark:border-indigo-900/50 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="font-medium text-slate-600 dark:text-neutral-300">Rule type</span>
+              <select
+                value={ruleType}
+                onChange={(e) => setRuleType(e.target.value)}
+                className="mt-1 w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs dark:border-neutral-600 dark:bg-neutral-900"
+              >
+                <option value="skip_if_mastered">skip_if_mastered</option>
+                <option value="required_if_not_mastered">required_if_not_mastered</option>
+                <option value="unlock_after">unlock_after</option>
+                <option value="remediation_insert">remediation_insert</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="font-medium text-slate-600 dark:text-neutral-300">Concept</span>
+              <select
+                value={conceptPick}
+                onChange={(e) => setConceptPick(e.target.value)}
+                className="mt-1 w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs dark:border-neutral-600 dark:bg-neutral-900"
+              >
+                {concepts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="font-medium text-slate-600 dark:text-neutral-300">Threshold</span>
+              <input
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
+                className="mt-1 w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs dark:border-neutral-600 dark:bg-neutral-900"
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="font-medium text-slate-600 dark:text-neutral-300">
+                Target item id (optional except remediation / required)
+              </span>
+              <input
+                value={targetId}
+                onChange={(e) => setTargetId(e.target.value)}
+                placeholder="UUID of structure item"
+                className="mt-1 w-full rounded border border-slate-200 bg-white px-2 py-1 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-900"
+              />
+            </label>
+            <div className="sm:col-span-2">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void onAdd()}
+                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                Add rule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -613,6 +797,7 @@ type SortableModuleCardProps = {
   onChildTogglePublished: (child: CourseStructureItem) => void
   onOpenEditChildTitle: (child: CourseStructureItem) => void
   onArchiveChild: (child: CourseStructureItem) => void
+  courseAdaptivePathsEnabled: boolean
 }
 
 function SortableModuleCard({
@@ -633,6 +818,7 @@ function SortableModuleCard({
   onChildTogglePublished,
   onOpenEditChildTitle,
   onArchiveChild,
+  courseAdaptivePathsEnabled,
 }: SortableModuleCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -647,6 +833,8 @@ function SortableModuleCard({
 
   const children = moduleChildrenById.get(item.id) ?? []
   const childIds = children.map((c) => c.id)
+  /** Keep grips visible while a modal/overlay has focus (hover/focus-within on rows no longer applies). */
+  const gripsPinned = dragHandlesVisible || anyModalBusy
 
   const childrenList =
     !minified && !collapsed && children.length > 0 ? (
@@ -668,7 +856,7 @@ function SortableModuleCard({
               disabled={!canEditModules || anyModalBusy}
               canManageItemRow={canEditModules}
               busyChildItemId={busyChildItemId}
-              dragHandlesVisible={dragHandlesVisible}
+              dragHandlesVisible={gripsPinned}
               onChildTogglePublished={onChildTogglePublished}
               onOpenEditChildTitle={onOpenEditChildTitle}
               onArchiveChild={onArchiveChild}
@@ -697,7 +885,7 @@ function SortableModuleCard({
             <button
               type="button"
               className={`mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300 ${
-                dragHandlesVisible || isDragging
+                gripsPinned || isDragging
                   ? 'opacity-100'
                   : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto'
               }`}
@@ -707,6 +895,11 @@ function SortableModuleCard({
             >
               <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
+          ) : null
+        }
+        footerExtra={
+          canEditModules && courseAdaptivePathsEnabled && !minified ? (
+            <ModuleAdaptivePathPanel courseCode={courseCode} moduleId={item.id} />
           ) : null
         }
         childrenList={childrenList}
@@ -820,6 +1013,7 @@ export default function CourseModules() {
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const [collapsedModuleIds, setCollapsedModuleIds] = useState<Set<string>>(() => new Set())
   const [dragHandlesVisible, setDragHandlesVisible] = useState(false)
+  const [courseMeta, setCourseMeta] = useState<CoursePublic | null>(null)
 
   const toggleModuleCollapsed = useCallback((moduleId: string) => {
     setCollapsedModuleIds((prev) => {
@@ -892,6 +1086,22 @@ export default function CourseModules() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!courseCode) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const c = await fetchCourse(courseCode)
+        if (!cancelled) setCourseMeta(c)
+      } catch {
+        if (!cancelled) setCourseMeta(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [courseCode])
 
   useEffect(() => {
     if (!archiveConfirmItem) return
@@ -1355,7 +1565,7 @@ export default function CourseModules() {
           {moduleActionError}
         </p>
       )}
-      {loading && <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400">Loading modules…</p>}
+      {loading && <CourseModulesLoadingSkeleton />}
       {!loading && showViewerOnlyHint && (
         <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400">
           You can view this outline, but only the course creator and assigned course teachers can add
@@ -1420,6 +1630,7 @@ export default function CourseModules() {
                     onChildTogglePublished={handleChildTogglePublished}
                     onOpenEditChildTitle={openEditChildTitle}
                     onArchiveChild={requestArchiveChild}
+                    courseAdaptivePathsEnabled={courseMeta?.adaptivePathsEnabled === true}
                   />
                 ))}
             </ul>

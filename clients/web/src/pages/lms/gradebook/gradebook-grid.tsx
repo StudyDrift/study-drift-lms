@@ -10,7 +10,8 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, LayoutGrid, Users } from 'lucide-react'
+import { EmptyState } from '../../../components/ui/empty-state'
 import {
   type GradebookActiveSort,
   type GradeColumnSortMode,
@@ -51,6 +52,8 @@ type GradebookGridProps = {
   onGradesChange?: (grades: Record<string, Record<string, string>>) => void
   /** Open rubric scoring for a student/column (assignment columns with a rubric). */
   onRubricClick?: (studentId: string, columnId: string) => void
+  /** Used for empty-state links back to modules or enrollments. */
+  courseCode?: string
 }
 
 const CELL_PAD = 'px-3 py-2 text-sm'
@@ -157,6 +160,7 @@ export function GradebookGrid({
   readOnly = false,
   onGradesChange,
   onRubricClick,
+  courseCode,
 }: GradebookGridProps) {
   const [grades, setGrades] = useState<Record<string, Record<string, string>>>(() =>
     structuredClone(initialGrades),
@@ -179,7 +183,6 @@ export function GradebookGrid({
 
   const focusStudentIdRef = useRef<string | null>(null)
   const focusRowRef = useRef(0)
-  focusRowRef.current = focusRow
 
   const editInputRef = useRef<HTMLInputElement>(null)
   /** When true, the next input `blur` must not commit (Escape cancels). */
@@ -230,11 +233,18 @@ export function GradebookGrid({
   const totalCells = rowCount * colCount
 
   const gradesRef = useRef(grades)
-  gradesRef.current = grades
   const filteredStudentsRef = useRef(filteredStudents)
-  filteredStudentsRef.current = filteredStudents
   const visibleColumnsRef = useRef(visibleColumns)
-  visibleColumnsRef.current = visibleColumns
+
+  useLayoutEffect(() => {
+    focusRowRef.current = focusRow
+  }, [focusRow])
+
+  useLayoutEffect(() => {
+    gradesRef.current = grades
+    filteredStudentsRef.current = filteredStudents
+    visibleColumnsRef.current = visibleColumns
+  }, [grades, filteredStudents, visibleColumns])
 
   const columnsForFinal = useMemo(
     () =>
@@ -257,6 +267,7 @@ export function GradebookGrid({
   const cellRefs = useRef<(HTMLTableCellElement | null)[][]>([])
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- reset local grid when server sends new initial grades */
     setGrades(structuredClone(initialGrades))
     setActiveSort(null)
     setHeaderMenu(null)
@@ -270,6 +281,7 @@ export function GradebookGrid({
     fillDragRef.current = null
     setFillDrag(null)
     focusStudentIdRef.current = students[0]?.id ?? null
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [initialGrades, students, columns])
 
   useEffect(() => {
@@ -277,6 +289,7 @@ export function GradebookGrid({
   }, [grades, onGradesChange])
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- clear grade sort when its column is removed or filtered out */
     if (activeSort?.kind !== 'grade') return
     if (!columns.some((c) => c.id === activeSort.columnId)) {
       setActiveSort(null)
@@ -285,6 +298,7 @@ export function GradebookGrid({
     if (!visibleColumns.some((c) => c.id === activeSort.columnId)) {
       setActiveSort(null)
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [activeSort, columns, visibleColumns])
 
   useEffect(() => {
@@ -293,6 +307,7 @@ export function GradebookGrid({
   }, [focusRow, filteredStudents])
 
   useLayoutEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- keep row focus aligned with filtered list */
     if (filteredStudents.length === 0) return
     let id = focusStudentIdRef.current
     if (id == null) {
@@ -308,13 +323,16 @@ export function GradebookGrid({
       return
     }
     if (idx !== focusRowRef.current) setFocusRow(idx)
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [filteredStudents])
 
   useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect -- clamp focus when row count shrinks */
     if (rowCount > 0 && focusRow >= rowCount) setFocusRow(rowCount - 1)
   }, [focusRow, rowCount])
 
   useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect -- clamp focus when column count shrinks */
     if (colCount > 0 && focusCol >= colCount) setFocusCol(colCount - 1)
   }, [focusCol, colCount])
 
@@ -690,7 +708,7 @@ export function GradebookGrid({
         moveToIndex(e.shiftKey ? idx - 1 : idx + 1)
       }
     },
-    [commitEdit, cancelEdit, moveBy, moveToIndex, colCount, editing, focusRow],
+    [commitEdit, cancelEdit, moveBy, moveToIndex, colCount, editing, focusRow, focusCol],
   )
 
   const selectionRect = useMemo(() => {
@@ -748,37 +766,64 @@ export function GradebookGrid({
     setAssignmentFilter('')
   }, [])
 
+  const modulesHref =
+    courseCode != null && courseCode !== ''
+      ? `/courses/${encodeURIComponent(courseCode)}/modules`
+      : undefined
+  const enrollHref =
+    courseCode != null && courseCode !== ''
+      ? `/courses/${encodeURIComponent(courseCode)}/enrollments`
+      : undefined
+
   if (baseRowCount === 0 && baseColCount === 0) {
     return (
-      <p className="mt-6 text-sm text-slate-600 dark:text-neutral-400">
-        No student enrollments and no assignments or quizzes in this course yet.
-      </p>
+      <div className="mt-6">
+        <EmptyState
+          icon={LayoutGrid}
+          title="Nothing in the gradebook yet"
+          body="Add module assignments or quizzes so there are columns to score, and enroll learners as students so their rows appear."
+          primaryAction={modulesHref ? { label: 'Open modules', to: modulesHref } : undefined}
+          secondaryAction={enrollHref ? { label: 'Enrollments', to: enrollHref } : undefined}
+        />
+      </div>
     )
   }
 
   if (baseRowCount === 0) {
     return (
-      <div className="mt-6 space-y-3">
-        <p className="text-sm text-slate-600 dark:text-neutral-400">
-          No learners are enrolled as students in this course, so there are no rows to show.
-        </p>
-        {baseColCount > 0 && (
-          <p className="text-xs text-slate-500 dark:text-neutral-500">
-            {columns.length} assignment or quiz column{columns.length === 1 ? '' : 's'} will appear here once
-            students are enrolled.
-          </p>
-        )}
+      <div className="mt-6">
+        <EmptyState
+          icon={Users}
+          title="No students in this course yet"
+          body={
+            baseColCount > 0 ? (
+              <>
+                <span className="block">
+                  {columns.length} assignment or quiz column{columns.length === 1 ? '' : 's'} will show scores here
+                  once learners are enrolled.
+                </span>
+                <span className="mt-2 block">Invite students from enrollments so the gradebook has rows.</span>
+              </>
+            ) : (
+              'Invite learners as students from enrollments, then add graded work in modules.'
+            )
+          }
+          primaryAction={enrollHref ? { label: 'Open enrollments', to: enrollHref } : undefined}
+          secondaryAction={modulesHref ? { label: 'Modules', to: modulesHref } : undefined}
+        />
       </div>
     )
   }
 
   if (baseColCount === 0) {
     return (
-      <div className="mt-6 space-y-3">
-        <p className="text-sm text-slate-600 dark:text-neutral-400">
-          This course has no assignments or quizzes yet, or they are archived. Add module assignments or quizzes
-          to see gradebook columns.
-        </p>
+      <div className="mt-6">
+        <EmptyState
+          icon={LayoutGrid}
+          title="No assignments to grade yet"
+          body="Published assignments and quizzes from modules appear as columns here. If everything is archived, restore or add new items in the course module list."
+          primaryAction={modulesHref ? { label: 'Open modules', to: modulesHref } : undefined}
+        />
       </div>
     )
   }

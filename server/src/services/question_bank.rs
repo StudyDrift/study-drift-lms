@@ -144,6 +144,10 @@ fn question_entity_from_snapshot(snapshot: &JsonValue) -> Result<QuestionEntity,
     let shuffle_choices_override = snapshot
         .get("shuffle_choices_override")
         .and_then(|v| v.as_bool());
+    let srs_eligible = snapshot
+        .get("srs_eligible")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     Ok(QuestionEntity {
         id,
@@ -167,6 +171,7 @@ fn question_entity_from_snapshot(snapshot: &JsonValue) -> Result<QuestionEntity,
         updated_at,
         version_number,
         is_published,
+        srs_eligible,
     })
 }
 
@@ -237,6 +242,7 @@ pub fn quiz_question_from_entity(e: &QuestionEntity) -> Result<QuizQuestion, App
         points,
         estimated_minutes: 2,
         concept_ids: vec![],
+        srs_eligible: e.srs_eligible,
     })
 }
 
@@ -253,7 +259,7 @@ pub async fn load_quiz_questions_map(
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
                points::float8, status::text, shared, source, metadata, shuffle_choices_override,
                irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
-               version_number, is_published
+               version_number, is_published, srs_eligible
         FROM {}
         WHERE course_id = $1 AND id = ANY($2)
         "#,
@@ -312,6 +318,7 @@ pub async fn sync_quiz_refs_from_editor_json(
                 "active",
                 false,
                 &meta,
+                q.srs_eligible,
             )
             .await?;
             id
@@ -331,6 +338,7 @@ pub async fn sync_quiz_refs_from_editor_json(
                 &meta,
                 created_by,
                 None,
+                q.srs_eligible,
             )
             .await?
         };

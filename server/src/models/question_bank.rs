@@ -34,6 +34,7 @@ pub struct QuestionBankRowResponse {
     pub is_published: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shuffle_choices_override: Option<bool>,
+    pub srs_eligible: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,6 +58,8 @@ pub struct CreateQuestionRequest {
     pub metadata: Option<JsonValue>,
     #[serde(default)]
     pub shuffle_choices_override: Option<bool>,
+    #[serde(default)]
+    pub srs_eligible: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +88,8 @@ pub struct UpdateQuestionRequest {
     /// `None` = leave unchanged; `Some(None)` = clear (inherit quiz); `Some(Some(false))` = lock authored order.
     #[serde(default)]
     pub shuffle_choices_override: Option<Option<bool>>,
+    #[serde(default)]
+    pub srs_eligible: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]

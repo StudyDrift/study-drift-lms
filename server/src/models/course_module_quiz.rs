@@ -285,6 +285,9 @@ pub struct QuizQuestion {
     /// Optional course concept UUIDs (`course.concepts`) for learner mastery tagging.
     #[serde(default)]
     pub concept_ids: Vec<String>,
+    /// When true and the course enables SRS, quiz exposure can seed review queue items.
+    #[serde(default)]
+    pub srs_eligible: bool,
 }
 
 fn default_required() -> bool {

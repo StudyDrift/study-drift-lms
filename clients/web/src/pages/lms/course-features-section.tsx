@@ -60,20 +60,34 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const questionBankEnabled = course.questionBankEnabled === true
   const lockdownModeEnabled = course.lockdownModeEnabled === true
   const standardsAlignmentEnabled = course.standardsAlignmentEnabled === true
+  const adaptivePathsEnabled = course.adaptivePathsEnabled === true
+  const srsEnabled = course.srsEnabled === true
 
   const persist = useCallback(
-    async (body: {
-      notebookEnabled: boolean
-      feedEnabled: boolean
-      calendarEnabled: boolean
-      questionBankEnabled: boolean
-      lockdownModeEnabled: boolean
-      standardsAlignmentEnabled: boolean
+    async (patch: {
+      notebookEnabled?: boolean
+      feedEnabled?: boolean
+      calendarEnabled?: boolean
+      questionBankEnabled?: boolean
+      lockdownModeEnabled?: boolean
+      standardsAlignmentEnabled?: boolean
+      adaptivePathsEnabled?: boolean
+      srsEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
       setError(null)
       try {
+        const body = {
+          notebookEnabled: patch.notebookEnabled ?? notebookEnabled,
+          feedEnabled: patch.feedEnabled ?? feedEnabled,
+          calendarEnabled: patch.calendarEnabled ?? calendarEnabled,
+          questionBankEnabled: patch.questionBankEnabled ?? questionBankEnabled,
+          lockdownModeEnabled: patch.lockdownModeEnabled ?? lockdownModeEnabled,
+          standardsAlignmentEnabled: patch.standardsAlignmentEnabled ?? standardsAlignmentEnabled,
+          adaptivePathsEnabled: patch.adaptivePathsEnabled ?? adaptivePathsEnabled,
+          srsEnabled: patch.srsEnabled ?? srsEnabled,
+        }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
         await refresh()
@@ -84,7 +98,19 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
         setSaving(false)
       }
     },
-    [courseCode, onCourseUpdated, refresh],
+    [
+      adaptivePathsEnabled,
+      srsEnabled,
+      calendarEnabled,
+      courseCode,
+      feedEnabled,
+      lockdownModeEnabled,
+      notebookEnabled,
+      onCourseUpdated,
+      questionBankEnabled,
+      refresh,
+      standardsAlignmentEnabled,
+    ],
   )
 
   return (
@@ -101,96 +127,56 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           description="Personal notes workspace for this course (stored in the browser for each learner)."
           enabled={notebookEnabled}
           disabled={saving}
-          onToggle={() =>
-            void persist({
-              notebookEnabled: !notebookEnabled,
-              feedEnabled,
-              calendarEnabled,
-              questionBankEnabled,
-              lockdownModeEnabled,
-              standardsAlignmentEnabled,
-            })
-          }
+          onToggle={() => void persist({ notebookEnabled: !notebookEnabled })}
         />
         <FeatureToggleRow
           label="Feed"
           description="Course-wide channels and messages, including uploads and real-time updates."
           enabled={feedEnabled}
           disabled={saving}
-          onToggle={() =>
-            void persist({
-              notebookEnabled,
-              feedEnabled: !feedEnabled,
-              calendarEnabled,
-              questionBankEnabled,
-              lockdownModeEnabled,
-              standardsAlignmentEnabled,
-            })
-          }
+          onToggle={() => void persist({ feedEnabled: !feedEnabled })}
         />
         <FeatureToggleRow
           label="Calendar"
           description="Month, week, and agenda views of assignment and content due dates for this course."
           enabled={calendarEnabled}
           disabled={saving}
-          onToggle={() =>
-            void persist({
-              notebookEnabled,
-              feedEnabled,
-              calendarEnabled: !calendarEnabled,
-              questionBankEnabled,
-              lockdownModeEnabled,
-              standardsAlignmentEnabled,
-            })
-          }
+          onToggle={() => void persist({ calendarEnabled: !calendarEnabled })}
         />
         <FeatureToggleRow
           label="Question bank"
           description="Store quiz items in a reusable bank, optional random pools per attempt, and instructor-only bank APIs."
           enabled={questionBankEnabled}
           disabled={saving}
-          onToggle={() =>
-            void persist({
-              notebookEnabled,
-              feedEnabled,
-              calendarEnabled,
-              questionBankEnabled: !questionBankEnabled,
-              lockdownModeEnabled,
-              standardsAlignmentEnabled,
-            })
-          }
+          onToggle={() => void persist({ questionBankEnabled: !questionBankEnabled })}
         />
         <FeatureToggleRow
           label="Quiz lockdown / kiosk"
           description="Lets instructors choose one-question-at-a-time or kiosk delivery on quizzes (server-enforced progression and optional focus-loss logging)."
           enabled={lockdownModeEnabled}
           disabled={saving}
-          onToggle={() =>
-            void persist({
-              notebookEnabled,
-              feedEnabled,
-              calendarEnabled,
-              questionBankEnabled,
-              lockdownModeEnabled: !lockdownModeEnabled,
-              standardsAlignmentEnabled,
-            })
-          }
+          onToggle={() => void persist({ lockdownModeEnabled: !lockdownModeEnabled })}
         />
         <FeatureToggleRow
           label="Standards alignment"
           description="Map concepts to Common Core / NGSS codes and view per-standard coverage for this course."
           enabled={standardsAlignmentEnabled}
           disabled={saving}
-          onToggle={() =>
-            void persist({
-              notebookEnabled,
-              feedEnabled,
-              calendarEnabled,
-              questionBankEnabled,
-              lockdownModeEnabled,
-              standardsAlignmentEnabled: !standardsAlignmentEnabled,
-            })
-          }
+          onToggle={() => void persist({ standardsAlignmentEnabled: !standardsAlignmentEnabled })}
+        />
+        <FeatureToggleRow
+          label="Adaptive learning paths"
+          description="Allow mastery-based branching between modules (requires learner model on the server). Instructors configure rules on each module in the course outline."
+          enabled={adaptivePathsEnabled}
+          disabled={saving}
+          onToggle={() => void persist({ adaptivePathsEnabled: !adaptivePathsEnabled })}
+        />
+        <FeatureToggleRow
+          label="Spaced repetition (review)"
+          description="Let learners use the global review queue for question-bank items you mark as SRS-eligible (requires SRS_PRACTICE_ENABLED on the server)."
+          enabled={srsEnabled}
+          disabled={saving}
+          onToggle={() => void persist({ srsEnabled: !srsEnabled })}
         />
       </div>
 

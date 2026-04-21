@@ -32,6 +32,8 @@ async fn search_index_handler(
             question_bank_enabled: c.question_bank_enabled,
             lockdown_mode_enabled: c.lockdown_mode_enabled,
             standards_alignment_enabled: c.standards_alignment_enabled,
+            adaptive_paths_enabled: c.adaptive_paths_enabled,
+            srs_enabled: c.srs_enabled,
         })
         .collect();
 

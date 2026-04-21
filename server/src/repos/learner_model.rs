@@ -323,6 +323,125 @@ where
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+pub struct LearnerSrsMasteryInput {
+    pub user_id: Uuid,
+    pub course_id: Uuid,
+    pub concept_id: Uuid,
+    pub score: f64,
+    pub review_event_id: Uuid,
+    pub ema_alpha: f64,
+}
+
+/// Mastery bump from SRS review grades (separate idempotency namespace from quiz grading).
+pub async fn apply_srs_mastery_update_in_tx<'e, E>(
+    executor: &mut E,
+    input: &LearnerSrsMasteryInput,
+) -> Result<(), sqlx::Error>
+where
+    for<'a> &'a mut E: Executor<'a, Database = Postgres>,
+{
+    let idempotency_key = format!("srs_review:{}:{}", input.review_event_id, input.concept_id);
+
+    let decay_row: Option<(f64,)> = sqlx::query_as(&format!(
+        r#"
+        SELECT (c.decay_lambda)::float8
+        FROM {} c
+        WHERE c.id = $1
+        FOR UPDATE
+        "#,
+        schema::CONCEPTS
+    ))
+    .bind(input.concept_id)
+    .fetch_optional(&mut *executor)
+    .await?;
+
+    let Some((decay_lambda,)) = decay_row else {
+        return Ok(());
+    };
+
+    let state_row: Option<(f64, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
+        r#"
+        SELECT COALESCE((mastery)::float8, 0.0), last_seen_at
+        FROM {}
+        WHERE user_id = $1 AND concept_id = $2
+        FOR UPDATE
+        "#,
+        schema::LEARNER_CONCEPT_STATES
+    ))
+    .bind(input.user_id)
+    .bind(input.concept_id)
+    .fetch_optional(&mut *executor)
+    .await?;
+
+    let (stored_mastery, last_seen_at) = state_row
+        .map(|(m, t)| (m, t))
+        .unwrap_or((0.0, None));
+
+    let m_old_eff = effective_mastery_engine(stored_mastery, last_seen_at, decay_lambda);
+    let score = input.score.clamp(0.0, 1.0);
+    let alpha = input.ema_alpha.clamp(0.01, 1.0);
+    let m_new = (m_old_eff * (1.0 - alpha) + score * alpha).clamp(0.0, 1.0);
+    let delta = m_new - m_old_eff;
+
+    let now = Utc::now();
+    let needs_review_at = if m_new < 0.5 {
+        now + chrono::Duration::days(3)
+    } else if m_new < 0.8 {
+        now + chrono::Duration::days(14)
+    } else {
+        now + chrono::Duration::days(30)
+    };
+
+    let event_id: Option<Uuid> = sqlx::query_scalar(&format!(
+        r#"
+        INSERT INTO {} (
+            user_id, concept_id, attempt_id, delta, mastery_after, source, idempotency_key
+        )
+        VALUES ($1, $2, NULL, $3::numeric, $4::numeric, 'srs_review', $5)
+        ON CONFLICT (idempotency_key) DO NOTHING
+        RETURNING id
+        "#,
+        schema::LEARNER_CONCEPT_EVENTS
+    ))
+    .bind(input.user_id)
+    .bind(input.concept_id)
+    .bind(delta)
+    .bind(m_new)
+    .bind(&idempotency_key)
+    .fetch_optional(&mut *executor)
+    .await?;
+
+    if event_id.is_none() {
+        return Ok(());
+    }
+
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (
+            user_id, concept_id, mastery, attempt_count, last_seen_at, needs_review_at, updated_at
+        )
+        VALUES ($1, $2, $3::numeric, 1, $4, $5, NOW())
+        ON CONFLICT (user_id, concept_id) DO UPDATE SET
+            mastery = EXCLUDED.mastery,
+            attempt_count = {}.attempt_count + 1,
+            last_seen_at = EXCLUDED.last_seen_at,
+            needs_review_at = EXCLUDED.needs_review_at,
+            updated_at = NOW()
+        "#,
+        schema::LEARNER_CONCEPT_STATES, schema::LEARNER_CONCEPT_STATES,
+    ))
+    .bind(input.user_id)
+    .bind(input.concept_id)
+    .bind(m_new)
+    .bind(now)
+    .bind(needs_review_at)
+    .execute(&mut *executor)
+    .await?;
+
+    Ok(())
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 struct BatchStateRow {
     user_id: Uuid,

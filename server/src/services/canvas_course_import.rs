@@ -666,6 +666,7 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
                     points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
                     estimated_minutes: 2,
                     concept_ids: vec![],
+                    srs_eligible: false,
                 });
             }
             let mut best_i: Option<usize> = None;
@@ -690,6 +691,7 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
                 points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
                 estimated_minutes: 2,
                 concept_ids: vec![],
+                srs_eligible: false,
             })
         }
         "true_false_question" => {
@@ -713,6 +715,7 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
                 points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
                 estimated_minutes: 1,
                 concept_ids: vec![],
+                srs_eligible: false,
             })
         }
         "short_answer_question" => Some(QuizQuestion {
@@ -728,6 +731,7 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
             points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
             estimated_minutes: 3,
             concept_ids: vec![],
+            srs_eligible: false,
         }),
         "essay_question" => Some(QuizQuestion {
             id: format!("canvas-{id}"),
@@ -742,6 +746,7 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
             points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
             estimated_minutes: 10,
             concept_ids: vec![],
+            srs_eligible: false,
         }),
         "fill_in_multiple_blanks_question" | "fill_in_blank_question" => Some(QuizQuestion {
             id: format!("canvas-{id}"),
@@ -756,6 +761,7 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
             points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
             estimated_minutes: 3,
             concept_ids: vec![],
+            srs_eligible: false,
         }),
         _ => Some(QuizQuestion {
             id: format!("canvas-{id}"),
@@ -770,6 +776,7 @@ fn canvas_question_to_quiz_question(q: &Value) -> Option<QuizQuestion> {
             points: json_f64_as_i32_points(q.get("points_possible")).unwrap_or(1).max(0),
             estimated_minutes: 10,
             concept_ids: vec![],
+            srs_eligible: false,
         }),
     }
 }
@@ -1825,6 +1832,8 @@ pub async fn build_export_from_canvas(
         question_bank_enabled: false,
         lockdown_mode_enabled: false,
         standards_alignment_enabled: false,
+        adaptive_paths_enabled: false,
+        srs_enabled: false,
     };
 
     Ok(CourseExportV1 {

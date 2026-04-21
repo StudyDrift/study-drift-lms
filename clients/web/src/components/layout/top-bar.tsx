@@ -1,10 +1,17 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, LogOut, Menu, Search, User } from 'lucide-react'
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { setCourseViewAs, useCourseViewAs } from '../../lib/course-view-as'
 import { authorizedFetch } from '../../lib/api'
 import { useViewerEnrollmentRoles } from '../../lib/use-viewer-enrollment-roles'
 import { useCommandPalette } from '../command-palette/use-command-palette'
+import { useKeyboardShortcutsSheet } from '../keyboard-shortcuts/keyboard-shortcuts-context'
+import {
+  dismissSearchShortcutTip,
+  isPostLoginShortcutTipPending,
+  isSearchShortcutTipDismissedPermanently,
+} from '../../lib/post-login-shortcut-tip'
 import { clearAccessToken } from '../../lib/auth'
 import { applyUiTheme } from '../../lib/ui-theme'
 import {
@@ -14,6 +21,7 @@ import {
   type TopBarAccountProfile,
 } from './top-bar-utils'
 import { useShellNav } from './shell-nav-context'
+import { TopBarBreadcrumbs } from './top-bar-breadcrumbs'
 
 function UserMenu() {
   const navigate = useNavigate()
@@ -242,7 +250,83 @@ function CourseEnrollmentViewDropdown() {
 
 export function TopBar() {
   const { open } = useCommandPalette()
+  const { openSheet } = useKeyboardShortcutsSheet()
   const { mobileNavOpen, setMobileNavOpen } = useShellNav()
+
+  const searchAnchorRef = useRef<HTMLDivElement>(null)
+  const [showShortcutTip, setShowShortcutTip] = useState(
+    () => isPostLoginShortcutTipPending() && !isSearchShortcutTipDismissedPermanently(),
+  )
+  const [shortcutTipTop, setShortcutTipTop] = useState<number | null>(null)
+
+  useLayoutEffect(() => {
+    if (!showShortcutTip) {
+      const cancelId = requestAnimationFrame(() => setShortcutTipTop(null))
+      return () => cancelAnimationFrame(cancelId)
+    }
+    const measure = () => {
+      if (!searchAnchorRef.current) {
+        setShortcutTipTop(null)
+        return
+      }
+      const r = searchAnchorRef.current.getBoundingClientRect()
+      setShortcutTipTop(r.bottom + 10)
+    }
+    const frameId = requestAnimationFrame(measure)
+    const el = searchAnchorRef.current
+    const scheduleMeasure = () => requestAnimationFrame(measure)
+    window.addEventListener('resize', scheduleMeasure)
+    const ro = el ? new ResizeObserver(scheduleMeasure) : null
+    if (el && ro) ro.observe(el)
+    return () => {
+      cancelAnimationFrame(frameId)
+      window.removeEventListener('resize', scheduleMeasure)
+      ro?.disconnect()
+    }
+  }, [showShortcutTip])
+
+  function dismissShortcutTip() {
+    dismissSearchShortcutTip()
+    setShowShortcutTip(false)
+    setShortcutTipTop(null)
+  }
+
+  const shortcutTipPortal =
+    showShortcutTip && shortcutTipTop != null
+      ? createPortal(
+          <div
+            className="fixed left-4 right-4 z-[95] mx-auto max-w-sm rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-lg shadow-slate-900/15 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:shadow-black/40"
+            style={{ top: shortcutTipTop }}
+            role="status"
+          >
+            <p className="font-medium text-slate-900 dark:text-neutral-100">Search from anywhere</p>
+            <p className="mt-2 leading-relaxed text-slate-600 dark:text-neutral-300">
+              Press <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-xs text-slate-700 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200">{shortcutHint()}</kbd>{' '}
+              or use the search field. Press <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-xs text-slate-700 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200">?</kbd> for
+              all shortcuts.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  openSheet()
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+              >
+                View shortcuts
+              </button>
+              <button
+                type="button"
+                onClick={dismissShortcutTip}
+                className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+              >
+                Got it
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-2 shadow-sm shadow-slate-900/5 sm:gap-3 sm:px-4 md:gap-4 md:px-6 dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-black/20">
@@ -256,25 +340,32 @@ export function TopBar() {
       >
         <Menu className="h-5 w-5" aria-hidden />
       </button>
-      <div className="relative min-w-0 flex-1 max-w-xl">
-        <button
-          type="button"
-          aria-label="Search courses, people, pages, and actions"
-          onClick={() => open()}
-          className="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-100 py-2 pl-3 pr-4 text-left text-sm text-slate-500 outline-none transition hover:border-slate-300 hover:bg-slate-50 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-500 dark:hover:bg-neutral-700 dark:focus:bg-neutral-800"
+      <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
+        <TopBarBreadcrumbs />
+        <div
+          ref={searchAnchorRef}
+          className="relative min-w-0 w-[min(100%,11rem)] shrink-0 sm:w-52 md:min-w-[12rem] md:max-w-xl md:flex-1"
         >
-          <Search className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" aria-hidden />
-          <span className="min-w-0 flex-1 truncate sm:hidden">Search…</span>
-          <span className="hidden min-w-0 flex-1 truncate sm:inline">Search courses, people, pages…</span>
-          <kbd className="hidden shrink-0 rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] text-slate-500 sm:inline dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
-            {shortcutHint()}
-          </kbd>
-        </button>
+          <button
+            type="button"
+            aria-label="Search courses, people, pages, and actions"
+            onClick={() => open()}
+            className="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-100 py-2 pl-3 pr-4 text-left text-sm text-slate-500 outline-none transition hover:border-slate-300 hover:bg-slate-50 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-500 dark:hover:bg-neutral-700 dark:focus:bg-neutral-800"
+          >
+            <Search className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" aria-hidden />
+            <span className="min-w-0 flex-1 truncate sm:hidden">Search…</span>
+            <span className="hidden min-w-0 flex-1 truncate sm:inline">Search courses, people, pages…</span>
+            <kbd className="pointer-events-none shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500 sm:px-2 sm:text-[11px] dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
+              {shortcutHint()}
+            </kbd>
+          </button>
+        </div>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
         <CourseEnrollmentViewDropdown />
         <UserMenu />
       </div>
+      {shortcutTipPortal}
     </header>
   )
 }

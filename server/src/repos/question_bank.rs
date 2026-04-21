@@ -32,6 +32,7 @@ pub struct QuestionEntity {
     pub updated_at: DateTime<Utc>,
     pub version_number: i32,
     pub is_published: bool,
+    pub srs_eligible: bool,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -179,17 +180,18 @@ pub async fn insert_question(
     metadata: &JsonValue,
     created_by: Option<Uuid>,
     shuffle_choices_override: Option<bool>,
+    srs_eligible: bool,
 ) -> Result<Uuid, sqlx::Error> {
     let id: Uuid = sqlx::query_scalar(&format!(
         r#"
         INSERT INTO {} (
             course_id, question_type, stem, options, correct_answer, explanation,
             points, status, shared, source, metadata, created_by, is_published,
-            shuffle_choices_override
+            shuffle_choices_override, srs_eligible
         )
         VALUES (
             $1, $2::course.question_type, $3, $4, $5, $6,
-            $7, $8::course.question_status, $9, $10, $11, $12, $13, $14
+            $7, $8::course.question_status, $9, $10, $11, $12, $13, $14, $15
         )
         RETURNING id
         "#,
@@ -209,6 +211,7 @@ pub async fn insert_question(
     .bind(created_by)
     .bind(status == "active")
     .bind(shuffle_choices_override)
+    .bind(srs_eligible)
     .fetch_one(tx.deref_mut())
     .await?;
     Ok(id)
@@ -227,6 +230,7 @@ pub async fn update_question_row<'e, E>(
     status: &str,
     shared: bool,
     metadata: &JsonValue,
+    srs_eligible: bool,
 ) -> Result<bool, sqlx::Error>
 where
     E: Executor<'e, Database = Postgres>,
@@ -243,6 +247,7 @@ where
             status = $9::course.question_status,
             shared = $10,
             metadata = $11,
+            srs_eligible = $12,
             is_published = CASE WHEN $9::course.question_status = 'active'::course.question_status THEN TRUE ELSE is_published END,
             updated_at = NOW()
         WHERE id = $2 AND course_id = $1
@@ -260,6 +265,7 @@ where
     .bind(status)
     .bind(shared)
     .bind(metadata)
+    .bind(srs_eligible)
     .execute(ex)
     .await?;
     Ok(r.rows_affected() > 0)
@@ -275,7 +281,7 @@ pub async fn get_question(
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
                points::float8, status::text, shared, source, metadata, shuffle_choices_override,
                irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
-               version_number, is_published
+               version_number, is_published, srs_eligible
         FROM {}
         WHERE id = $2 AND course_id = $1
         "#,
@@ -330,7 +336,7 @@ pub async fn list_questions_filtered(
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
                points::float8, status::text, shared, source, metadata, shuffle_choices_override,
                irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
-               version_number, is_published
+               version_number, is_published, srs_eligible
         FROM {}
         WHERE course_id = $1
           AND ($2::text = '' OR to_tsvector('english', stem) @@ plainto_tsquery('english', $2))
@@ -569,7 +575,8 @@ where
         "created_at": question.created_at,
         "updated_at": question.updated_at,
         "version_number": question.version_number,
-        "is_published": question.is_published
+        "is_published": question.is_published,
+        "srs_eligible": question.srs_eligible
     });
     sqlx::query(&format!(
         r#"
@@ -603,6 +610,7 @@ pub async fn update_question_row_with_versioning<'e, E>(
     shared: bool,
     metadata: &JsonValue,
     shuffle_choices_override: Option<bool>,
+    srs_eligible: bool,
 ) -> Result<i32, sqlx::Error>
 where
     E: Executor<'e, Database = Postgres>,
@@ -612,7 +620,8 @@ where
         || current.options.as_ref() != options
         || current.correct_answer.as_ref() != correct_answer
         || current.explanation.as_deref() != explanation
-        || (current.points - points).abs() > f64::EPSILON;
+        || (current.points - points).abs() > f64::EPSILON
+        || current.srs_eligible != srs_eligible;
     let new_version = if is_effectively_published && tracked_changed {
         current.version_number + 1
     } else {
@@ -632,6 +641,7 @@ where
             metadata = $10,
             version_number = $11,
             shuffle_choices_override = $12,
+            srs_eligible = $13,
             is_published = CASE WHEN $8::course.question_status = 'active'::course.question_status THEN TRUE ELSE is_published END,
             updated_at = NOW()
         WHERE id = $1
@@ -650,6 +660,7 @@ where
     .bind(metadata)
     .bind(new_version)
     .bind(shuffle_choices_override)
+    .bind(srs_eligible)
     .execute(ex)
     .await?;
     Ok(new_version)

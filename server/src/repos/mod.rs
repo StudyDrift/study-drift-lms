@@ -4,6 +4,7 @@
 //! reserved for merge-on-conflict and narrow column updates. Prefer `insert_*` over `create_*`
 //! for new rows to match the rest of the layer.
 
+pub mod adaptive_path;
 pub mod communication;
 pub mod content_page_markups;
 pub mod concepts;
@@ -28,6 +29,7 @@ pub mod enrollment_groups;
 pub mod password_reset;
 pub mod rbac;
 pub mod reports;
+pub mod srs;
 pub mod standards;
 pub mod syllabus_acceptance;
 pub mod syllabus_markups;

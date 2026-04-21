@@ -5,6 +5,7 @@ import { getAccessToken, setAccessToken } from '../lib/auth'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
+import { markPostLoginShortcutTip } from '../lib/post-login-shortcut-tip'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -56,6 +57,7 @@ export default function Login() {
       }
       setAccessToken(data.access_token)
       applyUiTheme(parseUiTheme(data.user?.uiTheme))
+      markPostLoginShortcutTip()
       navigate(from, { replace: true })
     } catch {
       setStatus('error')

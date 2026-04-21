@@ -511,6 +511,8 @@ async fn apply_course_snapshot(
         snap.question_bank_enabled,
         snap.lockdown_mode_enabled,
         snap.standards_alignment_enabled,
+        snap.adaptive_paths_enabled,
+        snap.srs_enabled,
     )
     .await?
     .ok_or(AppError::NotFound)?;
@@ -878,6 +880,8 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         question_bank_enabled: course.question_bank_enabled,
         lockdown_mode_enabled: course.lockdown_mode_enabled,
         standards_alignment_enabled: course.standards_alignment_enabled,
+        adaptive_paths_enabled: course.adaptive_paths_enabled,
+        srs_enabled: course.srs_enabled,
     };
 
     let grading = course_grading::get_settings_for_course_code(pool, course_code)

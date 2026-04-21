@@ -52,6 +52,7 @@ import {
   structureKindLabel,
   type QuestionType,
 } from './course-module-quiz-utils'
+import { recordLastVisitedModuleItem } from '../../lib/last-visited-module-item'
 import { LmsPage } from './lms-page'
 
 function QuestionTypeDropdown({
@@ -361,6 +362,11 @@ export default function CourseModuleQuizPage() {
       setFocusLossThreshold(typeof lossTh === 'number' ? lossTh : null)
       setDraftFocusLossThreshold(typeof lossTh === 'number' ? lossTh : null)
       setMdTheme(resolveMarkdownTheme(courseRow.markdownThemePreset, courseRow.markdownThemeCustom))
+      recordLastVisitedModuleItem(courseCode, {
+        itemId,
+        kind: 'quiz',
+        title: data.title,
+      })
       void loadMarkups()
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load this quiz.')
@@ -507,7 +513,7 @@ export default function CourseModuleQuizPage() {
       cancelAnimationFrame(rafId)
       mq.removeEventListener('change', alignSummaryAside)
       window.removeEventListener('resize', alignSummaryAside)
-      if (quizSummaryAsideRef.current) quizSummaryAsideRef.current.style.marginTop = ''
+      if (aside) aside.style.marginTop = ''
     }
   }, [
     editingContent,

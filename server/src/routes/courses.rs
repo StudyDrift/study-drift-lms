@@ -4,6 +4,10 @@ use crate::http_auth::{assert_permission, auth_user, require_permission};
 use crate::models::content_page_markups::{
     ContentPageMarkupResponse, ContentPageMarkupsListResponse, CreateContentPageMarkupRequest,
 };
+use crate::models::adaptive_path::{
+    AdaptivePathPreviewQuery, AdaptivePathPreviewResponse, CreateStructurePathRuleRequest,
+    StructurePathRuleResponse,
+};
 use crate::models::course::{
     CoursePublic, CourseWithViewerResponse, CoursesResponse, CreateCourseRequest,
     MarkdownThemeCustom, PatchCourseArchivedRequest, PatchCourseFeaturesRequest,
@@ -62,7 +66,9 @@ use crate::models::enrollment_group::{
 use crate::models::rbac::CourseScopedRolesResponse;
 use crate::models::settings_ai::{GenerateCourseImageRequest, GenerateCourseImageResponse};
 use crate::models::user_audit::PostCourseContextRequest;
+use crate::repos::adaptive_path as adaptive_path_repo;
 use crate::repos::content_page_markups;
+use crate::repos::concepts::{self, ConceptJson};
 use crate::repos::course;
 use crate::repos::course_files;
 use crate::repos::course_grades;
@@ -86,6 +92,7 @@ use crate::repos::syllabus_acceptance;
 use crate::repos::syllabus_markups;
 use crate::repos::user_ai_settings;
 use crate::repos::user_audit;
+use crate::services::adaptive_path as adaptive_path_service;
 use crate::services::adaptive_quiz_ai;
 use crate::services::learner_state::{self, LearnerStateService, DEFAULT_LEARNER_STATE_SERVICE};
 use crate::services::assignment_rubric_ai;
@@ -435,6 +442,22 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/structure/items/{item_id}",
             patch(patch_structure_item_handler).delete(archive_structure_item_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/structure/items/{item_id}/path-rules",
+            get(path_rules_list_handler).post(path_rules_post_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/structure/items/{item_id}/path-rules/{rule_id}",
+            delete(path_rules_delete_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/adaptive-path",
+            get(adaptive_path_preview_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/concepts-for-path",
+            get(course_concepts_for_path_handler),
         )
 }
 
@@ -4164,9 +4187,12 @@ async fn get_handler(
             row = relative_schedule::materialize_course_for_student(row, started);
         }
     }
+    let viewer_student_enrollment_id =
+        enrollment::get_student_enrollment_id(&state.pool, row.id, user.user_id).await?;
     Ok(Json(CourseWithViewerResponse {
         course: row,
         viewer_enrollment_roles,
+        viewer_student_enrollment_id,
     }))
 }
 
@@ -4996,6 +5022,10 @@ async fn patch_course_features_handler(
     let standards_alignment_enabled = req
         .standards_alignment_enabled
         .unwrap_or(existing.standards_alignment_enabled);
+    let adaptive_paths_enabled = req
+        .adaptive_paths_enabled
+        .unwrap_or(existing.adaptive_paths_enabled);
+    let srs_enabled = req.srs_enabled.unwrap_or(existing.srs_enabled);
 
     let row = course::patch_course_features(
         &state.pool,
@@ -5006,6 +5036,8 @@ async fn patch_course_features_handler(
         req.question_bank_enabled,
         req.lockdown_mode_enabled,
         standards_alignment_enabled,
+        adaptive_paths_enabled,
+        srs_enabled,
     )
     .await?
     .ok_or(AppError::NotFound)?;
@@ -5755,6 +5787,199 @@ async fn quiz_attempt_hint_stub_handler(
     Err(AppError::invalid_input(
         "Hints are not implemented for this quiz yet.",
     ))
+}
+
+fn structure_path_rule_row_to_api(
+    r: crate::repos::adaptive_path::StructurePathRuleRow,
+) -> StructurePathRuleResponse {
+    StructurePathRuleResponse {
+        id: r.id,
+        structure_item_id: r.structure_item_id,
+        rule_type: r.rule_type,
+        concept_ids: r.concept_ids,
+        threshold: r.threshold,
+        target_item_id: r.target_item_id,
+        priority: r.priority,
+        created_at: r.created_at,
+    }
+}
+
+async fn course_concepts_for_path_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ConceptJson>>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let rows = concepts::list_concepts_for_course(&state.pool, course_id)
+        .await
+        .map_err(AppError::Db)?;
+    Ok(Json(rows.into_iter().map(ConceptJson::from).collect()))
+}
+
+async fn path_rules_list_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<StructurePathRuleResponse>>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    if course_structure::get_item_row(&state.pool, course_id, item_id)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::NotFound);
+    }
+    let rows =
+        adaptive_path_repo::list_rules_for_structure_item(&state.pool, course_id, item_id).await?;
+    Ok(Json(
+        rows
+            .into_iter()
+            .map(structure_path_rule_row_to_api)
+            .collect(),
+    ))
+}
+
+async fn path_rules_post_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<CreateStructurePathRuleRequest>,
+) -> Result<Json<StructurePathRuleResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    if course_structure::get_item_row(&state.pool, course_id, item_id)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::NotFound);
+    }
+
+    if !(0.0..=1.0).contains(&req.threshold) {
+        return Err(AppError::invalid_input("threshold must be between 0 and 1."));
+    }
+    adaptive_path_service::validate_rule_type(&req.rule_type)?;
+    if req.concept_ids.is_empty() {
+        return Err(AppError::invalid_input("conceptIds must be non-empty."));
+    }
+    match req.rule_type.as_str() {
+        "required_if_not_mastered" | "unlock_after" | "remediation_insert" => {
+            if req.target_item_id.is_none() {
+                return Err(AppError::invalid_input(
+                    "targetItemId is required for this rule type.",
+                ));
+            }
+        }
+        _ => {}
+    }
+
+    adaptive_path_service::validate_concepts_for_course(&state.pool, course_id, &req.concept_ids)
+        .await?;
+    adaptive_path_service::validate_rule_targets_in_course(
+        &state.pool,
+        course_id,
+        item_id,
+        req.target_item_id,
+    )
+    .await?;
+
+    let row = adaptive_path_repo::insert_rule(
+        &state.pool,
+        item_id,
+        &req.rule_type,
+        &req.concept_ids,
+        req.threshold,
+        req.target_item_id,
+        req.priority.unwrap_or(0),
+    )
+    .await
+    .map_err(AppError::Db)?;
+    Ok(Json(structure_path_rule_row_to_api(row)))
+}
+
+async fn path_rules_delete_handler(
+    State(state): State<AppState>,
+    Path((course_code, _item_id, rule_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let ok = adaptive_path_repo::delete_rule_for_course(&state.pool, course_id, rule_id)
+        .await
+        .map_err(AppError::Db)?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn adaptive_path_preview_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Query(q): Query<AdaptivePathPreviewQuery>,
+) -> Result<Json<AdaptivePathPreviewResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let raw: HashMap<String, serde_json::Value> = serde_json::from_str(q.mastery.trim()).map_err(|_| {
+        AppError::invalid_input(
+            "Query parameter \"mastery\" must be a JSON object mapping concept id strings to scores.",
+        )
+    })?;
+    let mut mastery: HashMap<Uuid, f64> = HashMap::with_capacity(raw.len());
+    for (k, v) in raw {
+        let id = Uuid::parse_str(k.trim()).map_err(|_| {
+            AppError::invalid_input("mastery keys must be UUID strings (concept ids).")
+        })?;
+        let score = v
+            .as_f64()
+            .ok_or_else(|| AppError::invalid_input("mastery values must be numbers 0–1."))?
+            .clamp(0.0, 1.0);
+        mastery.insert(id, score);
+    }
+
+    let global_on = adaptive_path_service::adaptive_paths_globally_enabled();
+    let adaptive_on = adaptive_path_service::adaptive_paths_active_for_course(
+        global_on,
+        course_row.adaptive_paths_enabled,
+    );
+
+    let mut rows = course_structure::list_for_course(&state.pool, course_row.id).await?;
+    rows = course_structure::filter_archived_items_from_structure_list(rows);
+    let rules = adaptive_path_repo::list_rules_for_course(&state.pool, course_row.id).await?;
+
+    let (path, fallback) =
+        adaptive_path_service::preview_path_item_ids(&rows, &mastery, &rules, adaptive_on, 512);
+    Ok(Json(AdaptivePathPreviewResponse { path, fallback }))
 }
 
 #[cfg(test)]

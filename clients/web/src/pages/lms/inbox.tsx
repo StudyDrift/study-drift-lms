@@ -11,6 +11,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
+import { EmptyState } from '../../components/ui/empty-state'
 import { useMailboxRevision, useRefreshUnread } from '../../context/use-inbox-unread'
 import {
   fetchMailboxMessages,
@@ -67,6 +68,47 @@ const FOLDERS: { id: MailboxFolder; label: string; icon: typeof InboxIcon }[] = 
   { id: 'drafts', label: 'Drafts', icon: FileText },
   { id: 'trash', label: 'Trash', icon: Trash2 },
 ]
+
+function folderEmptyCopy(
+  folder: MailboxFolder,
+  searching: boolean,
+): { title: string; body: string } {
+  if (searching) {
+    return {
+      title: 'No matching messages',
+      body: 'Try different keywords, or clear search to see everything in this folder.',
+    }
+  }
+  switch (folder) {
+    case 'inbox':
+      return {
+        title: 'Nothing in your inbox',
+        body: 'Compose a message to reach someone on campus, or wait for new mail to arrive.',
+      }
+    case 'starred':
+      return {
+        title: 'No starred messages',
+        body: 'Star messages from your inbox to keep them at hand in this folder.',
+      }
+    case 'sent':
+      return {
+        title: 'No sent messages',
+        body: 'Messages you send will appear here so you can refer back to them.',
+      }
+    case 'drafts':
+      return {
+        title: 'No drafts',
+        body: 'Start composing and leave before sending to save a draft automatically.',
+      }
+    case 'trash':
+      return {
+        title: 'Trash is empty',
+        body: 'Messages you delete from other folders will show up here until they are purged.',
+      }
+    default:
+      return { title: 'No messages', body: 'This folder is empty.' }
+  }
+}
 
 export default function Inbox() {
   const mailboxRevision = useMailboxRevision()
@@ -287,8 +329,31 @@ export default function Inbox() {
                 {loadStatus === 'error' ? (
                   <li className="px-4 py-12 text-center text-sm text-slate-500">Could not load.</li>
                 ) : messages.length === 0 ? (
-                  <li className="px-4 py-12 text-center text-sm text-slate-500">
-                    No messages in this view.
+                  <li className="list-none p-3" role="presentation">
+                    {(() => {
+                      const searching = debouncedQuery.trim().length > 0
+                      const { title, body } = folderEmptyCopy(folder, searching)
+                      const openCompose = () => {
+                        setComposeOpen(true)
+                        setComposeError(null)
+                      }
+                      return (
+                        <EmptyState
+                          icon={Mail}
+                          title={title}
+                          body={body}
+                          primaryAction={
+                            searching
+                              ? { label: 'Clear search', onClick: () => setQuery('') }
+                              : { label: 'Compose', onClick: openCompose }
+                          }
+                          secondaryAction={
+                            searching ? { label: 'Compose', onClick: openCompose } : undefined
+                          }
+                          className="border-slate-100 bg-white py-10 dark:border-neutral-800 dark:bg-neutral-950/60"
+                        />
+                      )
+                    })()}
                   </li>
                 ) : (
                   messages.map((m) => {

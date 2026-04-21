@@ -14,6 +14,10 @@ pub struct SearchCourseItem {
     #[serde(default)]
     pub lockdown_mode_enabled: bool,
     pub standards_alignment_enabled: bool,
+    #[serde(default)]
+    pub adaptive_paths_enabled: bool,
+    #[serde(default)]
+    pub srs_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]

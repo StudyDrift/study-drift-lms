@@ -24,7 +24,7 @@ Companion docs:
 
 - Fixed **left side nav** (240px desktop; 88vw slide-in sheet on mobile with backdrop + Escape close) + **top bar** + scrollable main column ([app-shell.tsx](clients/web/src/components/layout/app-shell.tsx)).
 - The side nav is **context-switching**: root/main → per-course → course-settings → user settings, each a separate `<nav>` cross-faded in place ([side-nav.tsx:89](clients/web/src/components/layout/side-nav.tsx:89)).
-- **Top bar** holds the mobile menu toggle, a Cmd/Ctrl+K search trigger, a "view-as" role switcher, and the account menu ([top-bar.tsx](clients/web/src/components/layout/top-bar.tsx)).
+- **Top bar** holds the mobile menu toggle, a compact **breadcrumb** trail (course hierarchy, modules, and global pages), a Cmd/Ctrl+K search trigger, a "view-as" role switcher, and the account menu ([top-bar.tsx](clients/web/src/components/layout/top-bar.tsx), [top-bar-breadcrumbs.tsx](clients/web/src/components/layout/top-bar-breadcrumbs.tsx)).
 - **Command palette** (Cmd/Ctrl+K) gives keyboard-first, grouped search across actions, courses, people, and pages ([command-palette](clients/web/src/components/command-palette)).
 
 ### 1.3 Information architecture
@@ -64,50 +64,41 @@ Companion docs:
 
 Ordered by **impact on user-friendliness / intuitiveness / perceived polish**, most valuable first. Each item notes the affected surface and what "done" looks like.
 
-### P0 — Biggest UX wins
-
-1. **Make the Dashboard do its job.** Today `pages/lms/dashboard.tsx` is a near-stub. Students should see: "Due this week" with progress, unread feed/inbox chips, last-opened module with a **Continue** CTA, current grade per course, and teacher announcements. Teachers should see needs-grading counts, quiz-in-progress indicators, and recent roster activity. A dashboard is the single biggest signal that the product understands the user.
-2. **Add breadcrumbs in the top bar.** Navigation hierarchy currently lives only in the side nav state, which breaks on deep links (Course → Module → Item → Question). Render a compact crumb trail (`Course / Modules / Week 3 / Quiz`) with clickable segments. This also solves "how do I go back up one level" without the browser back button.
-3. **Replace spinners with skeletons on first paint.** `Loader2` spinners dominate loading states; swap to shaped skeletons on the dashboard, gradebook, modules, and course list. Perceived performance on a blank white page with a spinner feels much slower than a skeleton of the same layout.
-4. **Dedicated empty-state component.** Several pages render nothing (or briefly render nothing) when empty vs. loading. Build `<EmptyState icon title body primaryAction secondaryAction />` and apply to: courses list (teacher with zero courses), question bank, inbox folder, feed channel, gradebook with no assignments, notebooks.
-5. **Global "Continue where you left off."** Persist last-visited module item per course; surface it on the dashboard and on course-detail. Today the user is expected to navigate back down the module tree manually.
-6. **Discoverable keyboard shortcuts.** Command palette exists but is invisible unless users know Cmd/K. Add a `?` cheat-sheet modal, a hint in the top-bar search field (`⌘K`), and a first-time tooltip on login.
-
 ### P1 — High-value polish
 
-7. **Quiz-taking focus mode.** When a student opens a timed/locked quiz, collapse the shell (hide side nav, replace top bar with a quiz-specific header showing timer, question X of Y, save state, flag-for-review). Reduces anxiety and accidental clicks. Lockdown mode should visually reinforce that the user is "in" the assessment.
-8. **Gradebook polish.**
+5. **Quiz-taking focus mode.** When a student opens a timed/locked quiz, collapse the shell (hide side nav, replace top bar with a quiz-specific header showing timer, question X of Y, save state, flag-for-review). Reduces anxiety and accidental clicks. Lockdown mode should visually reinforce that the user is "in" the assessment.
+6. **Gradebook polish.**
    - Sticky first-row totals (`Average`, `Median`) for each column.
    - Keyboard cell navigation (arrow keys, Enter, Tab like a spreadsheet) — currently only click-to-edit.
    - Bulk paste (Excel/Sheets rows) into a column.
    - Clearer submit/save indicator — today undo/redo is implicit.
    - Color scale per column (hot-cold) as an optional toggle.
-9. **Course create → first-run wizard.** `course-create.tsx` is a bare title/description form. Replace with a 3-step wizard: basics → syllabus template → add first module. Provide 3–5 starter course templates (K-12 semester, higher-ed 15-week, self-paced, bootcamp, onboarding) so teachers don't start from a blank page.
-10. **Settings restructure.** `course-settings.tsx` mixes dates, hero image, features, grading, outcomes, export/import, archive, enrollments. Split into sub-routes (`/courses/:code/settings/{general,grading,outcomes,features,import-export,archive}`) so each section has its own URL, scroll position, and save button. The side-nav-course-settings-links.tsx scaffolding is already there — just split the page.
-11. **Modules tree density & iconography.** Distinguish item types (assignment/quiz/page/link) with a leading colored icon, due-date state (late/done/missing), and a progress indicator for students. The current list reads as a uniform stack.
-12. **Feed & inbox unification of notifications.** Today unread counts live in two separate providers. Add a **Notifications drawer** from the top bar that merges feed mentions, inbox messages, graded assignments, and announcements into one reverse-chronological list, filterable by type.
-13. **Breadcrumbed command palette results.** When a result is "Quiz: Midterm," show its parent course/module beneath. Cuts ambiguity on common names.
+7. **Course create → first-run wizard.** `course-create.tsx` is a bare title/description form. Replace with a 3-step wizard: basics → syllabus template → add first module. Provide 3–5 starter course templates (K-12 semester, higher-ed 15-week, self-paced, bootcamp, onboarding) so teachers don't start from a blank page.
+8. **Settings restructure.** `course-settings.tsx` mixes dates, hero image, features, grading, outcomes, export/import, archive, enrollments. Split into sub-routes (`/courses/:code/settings/{general,grading,outcomes,features,import-export,archive}`) so each section has its own URL, scroll position, and save button. The side-nav-course-settings-links.tsx scaffolding is already there — just split the page.
+9. **Modules tree density & iconography.** Distinguish item types (assignment/quiz/page/link) with a leading colored icon, due-date state (late/done/missing), and a progress indicator for students. The current list reads as a uniform stack.
+10. **Feed & inbox unification of notifications.** Today unread counts live in two separate providers. Add a **Notifications drawer** from the top bar that merges feed mentions, inbox messages, graded assignments, and announcements into one reverse-chronological list, filterable by type.
+11. **Breadcrumbed command palette results.** When a result is "Quiz: Midterm," show its parent course/module beneath. Cuts ambiguity on common names.
 
 ### P2 — Consistency & trust
 
-14. **Toast system.** Replace ad-hoc inline success/error alerts with a single toast queue (top-right, auto-dismiss, stacks, `role="status"`). Consistent feedback after every mutation (save, delete, publish, grade).
-15. **Destructive-action confirmation pattern.** Standardize a `<ConfirmDialog>` with typed confirmation for truly destructive ops (delete course, delete question with history, purge attempts). Today some destructive paths use native `confirm()` and some use bespoke modals.
-16. **Accessibility parity sweep.** Gradebook and inbox are strong; question bank, course-create, and some settings forms lack explicit label-to-input associations, error-message IDs via `aria-describedby`, and focus management on modal open/close. Ship a lint rule (`jsx-a11y`) at `error` level for the LMS scope and fix regressions.
-17. **Color-blind–safe status vocabulary.** Draft/Active/Retired, Published/Unpublished, Late/Missing, correct/incorrect all rely on hue today. Add a shape/icon or text suffix so hue isn't load-bearing.
-18. **Unify date/time display.** Inbox does smart dates; modules use short dates; gradebook uses absolute timestamps. Adopt one helper (`formatRelative`, `formatAbsolute`, `formatRange`) and use it everywhere, with tooltips for the alternate form.
-19. **Reduce chrome on read-heavy pages.** Syllabus, content pages, and student notebook views would benefit from a **reading width** (~72ch), larger body type, and an optional "focus" toggle that hides the side nav.
-20. **Printable / exportable views.** Gradebook, student grade report, quiz review, and syllabus should have a clean print stylesheet (no nav, no controls, breakable tables). LMS users print and PDF constantly.
+12. **Toast system.** Replace ad-hoc inline success/error alerts with a single toast queue (top-right, auto-dismiss, stacks, `role="status"`). Consistent feedback after every mutation (save, delete, publish, grade).
+13. **Destructive-action confirmation pattern.** Standardize a `<ConfirmDialog>` with typed confirmation for truly destructive ops (delete course, delete question with history, purge attempts). Today some destructive paths use native `confirm()` and some use bespoke modals.
+14. **Accessibility parity sweep.** Gradebook and inbox are strong; question bank, course-create, and some settings forms lack explicit label-to-input associations, error-message IDs via `aria-describedby`, and focus management on modal open/close. Ship a lint rule (`jsx-a11y`) at `error` level for the LMS scope and fix regressions.
+15. **Color-blind–safe status vocabulary.** Draft/Active/Retired, Published/Unpublished, Late/Missing, correct/incorrect all rely on hue today. Add a shape/icon or text suffix so hue isn't load-bearing.
+16. **Unify date/time display.** Inbox does smart dates; modules use short dates; gradebook uses absolute timestamps. Adopt one helper (`formatRelative`, `formatAbsolute`, `formatRange`) and use it everywhere, with tooltips for the alternate form.
+17. **Reduce chrome on read-heavy pages.** Syllabus, content pages, and student notebook views would benefit from a **reading width** (~72ch), larger body type, and an optional "focus" toggle that hides the side nav.
+18. **Printable / exportable views.** Gradebook, student grade report, quiz review, and syllabus should have a clean print stylesheet (no nav, no controls, breakable tables). LMS users print and PDF constantly.
 
 ### P3 — Next-level intuitive
 
-21. **Global fuzzy "go to"** in the command palette: typing a student name jumps to their gradebook row; typing a question ID opens it in the bank; typing a date opens calendar to that day.
-22. **Inline, contextual help.** A small `?` next to each major feature area opens a right-docked help panel with a 20-second GIF, not a link to external docs.
-23. **Onboarding for each role.** First login per role (student/teacher/admin) runs a 4-step coach-mark tour over real UI — not a modal wall.
-24. **"Last saved" footprint.** Authoring surfaces (quiz, page, syllabus) should always display "Saved 2s ago" with a retry-on-failure pill instead of silent state.
-25. **Undo surface at the app level.** A 10-second undo toast after destructive actions (delete module, delete question, archive course) — lowers anxiety and support volume.
-26. **Theme density setting.** "Comfortable" vs. "Compact" in user settings for power users with large gradebooks.
-27. **Presence indicators.** In feed and gradebook, show who else is viewing/editing via a small avatar stack — especially useful for co-teachers.
-28. **Prefers-reduced-data mode.** For student mobile web on metered connections: defer hero images, lazy-load TipTap, skip math rendering until tapped.
+19. **Global fuzzy "go to"** in the command palette: typing a student name jumps to their gradebook row; typing a question ID opens it in the bank; typing a date opens calendar to that day.
+20. **Inline, contextual help.** A small `?` next to each major feature area opens a right-docked help panel with a 20-second GIF, not a link to external docs.
+21. **Onboarding for each role.** First login per role (student/teacher/admin) runs a 4-step coach-mark tour over real UI — not a modal wall.
+22. **"Last saved" footprint.** Authoring surfaces (quiz, page, syllabus) should always display "Saved 2s ago" with a retry-on-failure pill instead of silent state.
+23. **Undo surface at the app level.** A 10-second undo toast after destructive actions (delete module, delete question, archive course) — lowers anxiety and support volume.
+24. **Theme density setting.** "Comfortable" vs. "Compact" in user settings for power users with large gradebooks.
+25. **Presence indicators.** In feed and gradebook, show who else is viewing/editing via a small avatar stack — especially useful for co-teachers.
+26. **Prefers-reduced-data mode.** For student mobile web on metered connections: defer hero images, lazy-load TipTap, skip math rendering until tapped.
 
 ---
 

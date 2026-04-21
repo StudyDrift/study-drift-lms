@@ -1,4 +1,5 @@
 pub mod accommodations;
+pub mod adaptive_path;
 pub mod auth;
 pub mod communication;
 pub mod content_page_markups;

@@ -55,6 +55,10 @@ pub struct CourseExportSnapshot {
     pub lockdown_mode_enabled: bool,
     #[serde(default)]
     pub standards_alignment_enabled: bool,
+    #[serde(default)]
+    pub adaptive_paths_enabled: bool,
+    #[serde(default)]
+    pub srs_enabled: bool,
 }
 
 fn default_export_schedule_mode() -> String {

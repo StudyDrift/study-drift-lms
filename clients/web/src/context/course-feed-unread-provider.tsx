@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -17,7 +18,9 @@ type NestedCounts = Record<string, Record<string, number>>
 export function CourseFeedUnreadProvider({ children }: { children: ReactNode }) {
   const location = useLocation()
   const pathnameRef = useRef(location.pathname)
-  pathnameRef.current = location.pathname
+  useLayoutEffect(() => {
+    pathnameRef.current = location.pathname
+  }, [location.pathname])
 
   const [counts, setCounts] = useState<NestedCounts>({})
 
@@ -60,6 +63,16 @@ export function CourseFeedUnreadProvider({ children }: { children: ReactNode }) 
     (code: string, channelId: string) => counts[code]?.[channelId.toLowerCase()] ?? 0,
     [counts],
   )
+
+  const totalFeedUnread = useMemo(() => {
+    let n = 0
+    for (const byCh of Object.values(counts)) {
+      for (const v of Object.values(byCh)) {
+        n += v
+      }
+    }
+    return n
+  }, [counts])
 
   useEffect(() => {
     if (!activeCourseCode) return
@@ -123,8 +136,13 @@ export function CourseFeedUnreadProvider({ children }: { children: ReactNode }) 
   }, [activeCourseCode])
 
   const value = useMemo(
-    () => ({ feedUnreadForChannel, clearFeedChannelUnread, setViewedFeedChannel }),
-    [feedUnreadForChannel, clearFeedChannelUnread, setViewedFeedChannel],
+    () => ({
+      feedUnreadForChannel,
+      clearFeedChannelUnread,
+      setViewedFeedChannel,
+      totalFeedUnread,
+    }),
+    [feedUnreadForChannel, clearFeedChannelUnread, setViewedFeedChannel, totalFeedUnread],
   )
 
   return (

@@ -49,9 +49,12 @@ export const courseSchema = z
     questionBankEnabled: z.boolean().optional(),
     lockdownModeEnabled: z.boolean().optional(),
     standardsAlignmentEnabled: z.boolean().optional(),
+    adaptivePathsEnabled: z.boolean().optional(),
+    srsEnabled: z.boolean().optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
     viewerEnrollmentRoles: z.array(z.string()).optional(),
+    viewerStudentEnrollmentId: z.string().optional(),
   })
   .passthrough()
   .transform((c) => ({
@@ -84,6 +87,7 @@ export const bankQuestionRowSchema = z.object({
   updatedAt: z.string(),
   versionNumber: z.number(),
   isPublished: z.boolean(),
+  srsEligible: z.boolean().optional(),
 })
 
 export const bankQuestionDetailSchema = bankQuestionRowSchema.extend({
@@ -96,6 +100,32 @@ export const bankQuestionDetailSchema = bankQuestionRowSchema.extend({
   irtStatus: z.string().optional(),
   createdBy: z.string().nullable().optional(),
   shuffleChoicesOverride: z.boolean().nullable().optional(),
+})
+
+export const reviewQueueItemSchema = z.object({
+  stateId: z.string(),
+  questionId: z.string(),
+  courseId: z.string(),
+  courseCode: z.string(),
+  courseTitle: z.string(),
+  nextReviewAt: z.string(),
+  stem: z.string(),
+  questionType: z.string(),
+  options: z.unknown().optional(),
+  correctAnswer: z.unknown().optional(),
+  explanation: z.string().nullable().optional(),
+})
+
+export const reviewQueueResponseSchema = z.object({
+  items: z.array(reviewQueueItemSchema),
+  totalDue: z.number(),
+})
+
+export const reviewStatsResponseSchema = z.object({
+  streak: z.number(),
+  dueToday: z.number(),
+  dueWeek: z.number(),
+  retentionEstimate: z.number(),
 })
 
 export const bankQuestionVersionSummarySchema = z.object({
@@ -163,6 +193,39 @@ export const courseStructureItemSchema = z
 
 export const courseStructureItemsResponseSchema = z.object({
   items: z.array(courseStructureItemSchema),
+})
+
+export const structurePathRuleSchema = z.object({
+  id: z.string(),
+  structureItemId: z.string(),
+  ruleType: z.string(),
+  conceptIds: z.array(z.string()),
+  threshold: z.number(),
+  targetItemId: z.string().nullable().optional(),
+  priority: z.number(),
+  createdAt: z.string(),
+})
+
+export const structurePathRulesResponseSchema = z.array(structurePathRuleSchema)
+
+export const pathConceptOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+})
+
+export const pathConceptsResponseSchema = z.array(pathConceptOptionSchema)
+
+export const enrollmentNextResponseSchema = z.object({
+  item: courseStructureItemSchema,
+  skipReason: z.string().optional(),
+  skipReasonKey: z.string().optional(),
+  fallback: z.boolean().optional(),
+})
+
+export const adaptivePathPreviewResponseSchema = z.object({
+  path: z.array(z.string()),
+  fallback: z.boolean().optional(),
 })
 
 const rubricLevelSchema = z.object({

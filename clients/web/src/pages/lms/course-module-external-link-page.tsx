@@ -7,6 +7,7 @@ import {
   patchModuleExternalLink,
   type ModuleExternalLinkPayload,
 } from '../../lib/courses-api'
+import { recordLastVisitedModuleItem } from '../../lib/last-visited-module-item'
 import { permCourseItemCreate } from '../../lib/rbac-api'
 import { LmsPage } from './lms-page'
 
@@ -34,6 +35,11 @@ export default function CourseModuleExternalLinkPage() {
       const row = await fetchModuleExternalLink(courseCode, itemId)
       setData(row)
       setDraftUrl(row.url)
+      recordLastVisitedModuleItem(courseCode, {
+        itemId,
+        kind: 'external_link',
+        title: row.title,
+      })
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load this link.')
       setData(null)

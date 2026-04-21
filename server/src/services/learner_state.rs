@@ -27,6 +27,11 @@ pub fn learner_model_enabled() -> bool {
     }
 }
 
+/// EMA smoothing factor for mastery updates (env `LEARNER_MODEL_EMA_ALPHA`, default 0.3).
+pub fn learner_ema_alpha() -> f64 {
+    ema_alpha()
+}
+
 fn ema_alpha() -> f64 {
     env::var("LEARNER_MODEL_EMA_ALPHA")
         .ok()

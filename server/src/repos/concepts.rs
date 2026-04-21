@@ -108,6 +108,35 @@ pub struct ListConceptsQuery<'a> {
     pub q: Option<&'a str>,
 }
 
+pub async fn list_concepts_for_course(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<Vec<ConceptRow>, sqlx::Error> {
+    sqlx::query_as::<_, ConceptRow>(&format!(
+        r#"
+        SELECT
+            c.id,
+            c.course_id,
+            c.slug,
+            c.name,
+            c.description,
+            c.bloom_level::text AS bloom_level,
+            c.parent_concept_id,
+            c.difficulty_tier,
+            (c.decay_lambda)::float8 AS decay_lambda,
+            c.created_at,
+            c.updated_at
+        FROM {} c
+        WHERE c.course_id = $1
+        ORDER BY c.name ASC
+        "#,
+        schema::CONCEPTS
+    ))
+    .bind(course_id)
+    .fetch_all(pool)
+    .await
+}
+
 pub async fn list_concepts(
     pool: &PgPool,
     query: ListConceptsQuery<'_>,

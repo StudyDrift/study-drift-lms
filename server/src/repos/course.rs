@@ -60,6 +60,8 @@ pub async fn list_for_enrolled_user(
             c.question_bank_enabled,
             c.lockdown_mode_enabled,
             c.standards_alignment_enabled,
+            c.adaptive_paths_enabled,
+            c.srs_enabled,
             c.created_at,
             c.updated_at
         FROM {} c
@@ -122,6 +124,8 @@ pub async fn insert_course(
                 question_bank_enabled,
                 lockdown_mode_enabled,
                 standards_alignment_enabled,
+                adaptive_paths_enabled,
+                srs_enabled,
                 created_at,
                 updated_at
             "#,
@@ -230,6 +234,8 @@ pub async fn get_by_course_code(
             question_bank_enabled,
             lockdown_mode_enabled,
             standards_alignment_enabled,
+            adaptive_paths_enabled,
+            srs_enabled,
             created_at,
             updated_at
         FROM {}
@@ -274,6 +280,8 @@ pub async fn get_by_id(
             question_bank_enabled,
             lockdown_mode_enabled,
             standards_alignment_enabled,
+            adaptive_paths_enabled,
+            srs_enabled,
             created_at,
             updated_at
         FROM {}
@@ -372,6 +380,8 @@ pub async fn update_course(
             question_bank_enabled,
             lockdown_mode_enabled,
             standards_alignment_enabled,
+            adaptive_paths_enabled,
+            srs_enabled,
             created_at,
             updated_at
         "#,
@@ -402,6 +412,8 @@ pub async fn patch_course_features(
     question_bank_enabled: bool,
     lockdown_mode_enabled: bool,
     standards_alignment_enabled: bool,
+    adaptive_paths_enabled: bool,
+    srs_enabled: bool,
 ) -> Result<Option<CoursePublic>, sqlx::Error> {
     sqlx::query_as::<_, CoursePublic>(&format!(
         r#"
@@ -413,8 +425,10 @@ pub async fn patch_course_features(
             question_bank_enabled = $4,
             lockdown_mode_enabled = $5,
             standards_alignment_enabled = $6,
+            adaptive_paths_enabled = $7,
+            srs_enabled = $8,
             updated_at = NOW()
-        WHERE course_code = $7
+        WHERE course_code = $9
         RETURNING
             id,
             course_code,
@@ -441,6 +455,8 @@ pub async fn patch_course_features(
             question_bank_enabled,
             lockdown_mode_enabled,
             standards_alignment_enabled,
+            adaptive_paths_enabled,
+            srs_enabled,
             created_at,
             updated_at
         "#,
@@ -452,6 +468,8 @@ pub async fn patch_course_features(
     .bind(question_bank_enabled)
     .bind(lockdown_mode_enabled)
     .bind(standards_alignment_enabled)
+    .bind(adaptive_paths_enabled)
+    .bind(srs_enabled)
     .bind(course_code)
     .fetch_optional(pool)
     .await
@@ -497,6 +515,8 @@ pub async fn set_hero_image_fields(
             question_bank_enabled,
             lockdown_mode_enabled,
             standards_alignment_enabled,
+            adaptive_paths_enabled,
+            srs_enabled,
             created_at,
             updated_at
         "#,
@@ -552,6 +572,8 @@ pub async fn update_markdown_theme(
             question_bank_enabled,
             lockdown_mode_enabled,
             standards_alignment_enabled,
+            adaptive_paths_enabled,
+            srs_enabled,
             created_at,
             updated_at
         "#,
@@ -683,6 +705,8 @@ pub async fn set_course_archived(
             question_bank_enabled,
             lockdown_mode_enabled,
             standards_alignment_enabled,
+            adaptive_paths_enabled,
+            srs_enabled,
             created_at,
             updated_at
         "#,
@@ -818,6 +842,8 @@ pub async fn factory_reset_course(
             question_bank_enabled = false,
             lockdown_mode_enabled = false,
             standards_alignment_enabled = false,
+            adaptive_paths_enabled = false,
+            srs_enabled = false,
             updated_at = NOW()
         WHERE course_code = $1
         RETURNING
@@ -846,6 +872,8 @@ pub async fn factory_reset_course(
             question_bank_enabled,
             lockdown_mode_enabled,
             standards_alignment_enabled,
+            adaptive_paths_enabled,
+            srs_enabled,
             created_at,
             updated_at
         "#,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { NotebookPen, Search, Sparkles, X } from 'lucide-react'
+import { EmptyState } from '../../components/ui/empty-state'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { authorizedFetch } from '../../lib/api'
@@ -92,6 +93,7 @@ export default function MyNotebooksPage() {
   }, [courses])
 
   const entries = useMemo(() => {
+    void notebookVersion
     const stored = listStudentCourseNotebooks()
     const rows = Object.entries(stored)
       .map(([courseCode, row]) => ({
@@ -103,7 +105,7 @@ export default function MyNotebooksPage() {
       .filter((r) => r.body.trim().length > 0)
     rows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     return rows
-  }, [titleByCode, courses, notebookVersion])
+  }, [titleByCode, notebookVersion])
 
   const filteredEntries = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -318,11 +320,20 @@ export default function MyNotebooksPage() {
       )}
 
       {courses !== null && entries.length === 0 && (
-        <p className="mt-8 max-w-xl text-sm text-slate-600 dark:text-neutral-300">
-          You do not have any saved notes yet. Open a course and use{' '}
-          <span className="font-medium text-slate-800 dark:text-neutral-100">Notebook</span> in the
-          course menu to write thoughts while you learn.
-        </p>
+        <div className="mt-8 max-w-xl">
+          <EmptyState
+            icon={NotebookPen}
+            title="No saved notes yet"
+            body={
+              <>
+                Open a course and choose{' '}
+                <span className="font-medium text-slate-800 dark:text-neutral-100">Notebook</span> in the course
+                menu to capture thoughts while you learn. Notes stay on this device until you sync or export.
+              </>
+            }
+            primaryAction={{ label: 'Browse courses', to: '/courses' }}
+          />
+        </div>
       )}
 
       {courses !== null && hasNotes && filteredEntries.length === 0 && (

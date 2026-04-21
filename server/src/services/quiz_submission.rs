@@ -16,6 +16,7 @@ use crate::repos::quiz_attempts;
 use crate::services::code_execution::{self, CodeTestCase, ExecuteCodeRequest};
 use crate::services::learner_state;
 use crate::services::question_bank;
+use crate::services::srs;
 use crate::services::quiz_attempt_grading;
 use crate::services::quiz_lockdown;
 
@@ -447,6 +448,13 @@ pub async fn submit_module_quiz(
     )
     .await?;
 
+    for q in &bank {
+        if let Ok(quid) = Uuid::parse_str(&q.id) {
+            srs::maybe_seed_after_quiz_exposure(&mut *tx, course_row, user_id, quid, q.srs_eligible)
+                .await?;
+        }
+    }
+
     let ok = quiz_attempts::finalize_attempt(
         &mut *tx,
         att.id,
@@ -509,6 +517,7 @@ mod tests {
             points: 1,
             estimated_minutes: 2,
             concept_ids: vec![],
+            srs_eligible: false,
         }
     }
 

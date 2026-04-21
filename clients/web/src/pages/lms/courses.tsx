@@ -25,9 +25,12 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus } from 'lucide-react'
+import { BookOpen, Plus } from 'lucide-react'
+import { EmptyState } from '../../components/ui/empty-state'
+import { CoursesCatalogSkeleton } from '../../components/ui/lms-content-skeletons'
 import { LmsPage } from './lms-page'
 import { RequirePermission } from '../../components/require-permission'
+import { usePermissions } from '../../context/use-permissions'
 import { authorizedFetch } from '../../lib/api'
 import { putCourseCatalogOrder, type CoursePublic } from '../../lib/courses-api'
 import { readApiErrorMessage } from '../../lib/errors'
@@ -170,6 +173,7 @@ function SortableCourseCard({
 }
 
 export default function Courses() {
+  const { allows, loading: permLoading } = usePermissions()
   const [courses, setCourses] = useState<CoursePublic[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** After a catalog drag, the browser may emit a click on the card link; block that navigation. */
@@ -264,12 +268,25 @@ export default function Courses() {
         </p>
       )}
 
-      {courses === null && !error && (
-        <p className="mt-8 text-sm text-slate-500">Loading courses…</p>
-      )}
+      {courses === null && !error && <CoursesCatalogSkeleton />}
 
       {courses && courses.length === 0 && !error && (
-        <p className="mt-8 text-sm text-slate-500">No published courses yet.</p>
+        <div className="mt-8">
+          {!permLoading && allows(PERM_COURSE_CREATE) ? (
+            <EmptyState
+              icon={BookOpen}
+              title="Create your first course"
+              body="You do not have any courses in your catalog yet. Add a title and description to get started, then invite learners from the course dashboard."
+              primaryAction={{ label: 'New course', to: '/courses/create' }}
+            />
+          ) : (
+            <EmptyState
+              icon={BookOpen}
+              title="No courses yet"
+              body="You are not enrolled in any published courses. When an instructor adds you, the course will appear here."
+            />
+          )}
+        </div>
       )}
 
       {courses && courses.length > 0 && (

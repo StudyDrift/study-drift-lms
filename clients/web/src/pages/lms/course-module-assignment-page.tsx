@@ -23,6 +23,7 @@ import {
   resolveMarkdownTheme,
 } from '../../lib/markdown-theme'
 import { useLmsDarkMode } from '../../hooks/use-lms-dark-mode'
+import { recordLastVisitedModuleItem } from '../../lib/last-visited-module-item'
 import { permCourseItemCreate } from '../../lib/rbac-api'
 import { AssignmentPageSettingsPanel } from '../../components/assignment/assignment-page-settings-panel'
 import { LmsPage } from './lms-page'
@@ -208,6 +209,11 @@ export default function CourseModuleAssignmentPage() {
       setUpdatedAt(data.updatedAt)
       setMdPreset(courseRow.markdownThemePreset)
       setMdCustom(courseRow.markdownThemeCustom)
+      recordLastVisitedModuleItem(courseCode, {
+        itemId,
+        kind: 'assignment',
+        title: data.title,
+      })
       void loadMarkups()
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load this assignment.')

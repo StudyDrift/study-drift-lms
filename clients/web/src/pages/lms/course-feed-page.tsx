@@ -12,6 +12,7 @@ import {
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
+import { EmptyState } from '../../components/ui/empty-state'
 import { CourseFileMarkdownImage } from '../../components/syllabus/course-file-markdown-image'
 import { FeedComposer } from '../../components/feed/feed-composer'
 import { wsUrl } from '../../lib/api'
@@ -986,7 +987,12 @@ export default function CourseFeedPage() {
                   </article>
                 ))}
                 {messages.length === 0 && (
-                  <p className="text-sm text-slate-500 dark:text-neutral-400">No messages yet.</p>
+                  <EmptyState
+                    icon={MessageCircle}
+                    title="No messages in this channel yet"
+                    body="Start the thread with the composer below — classmates and instructors can reply, react, and pin important updates."
+                    className="my-3"
+                  />
                 )}
               </div>
 

@@ -23,6 +23,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::openapi::swagger_router())
         .merge(routes::auth::router())
         .merge(routes::accommodations::router())
+        .merge(routes::adaptive_paths::router())
         .merge(routes::learners::router())
         .merge(routes::concepts::router())
         .merge(routes::standards::router())

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     routing::{get, post},
     Json, Router,
@@ -18,6 +18,9 @@ use crate::services::learner_state::{
     assert_can_batch_read_learner_states, assert_can_read_learner_state, ConceptStateResponse,
     LearnerConceptsBatchResponse, LearnerConceptsListResponse, LearnerStateService,
     DEFAULT_LEARNER_STATE_SERVICE,
+};
+use crate::services::srs::{
+    get_review_queue, get_review_stats, submit_review, SubmitSrsReviewBody,
 };
 use crate::state::AppState;
 
@@ -34,6 +37,63 @@ pub fn router() -> Router<AppState> {
             get(get_one_concept_state),
         )
         .route("/api/v1/learners/concepts/batch", post(batch_learner_concepts))
+        .route(
+            "/api/v1/learners/{user_id}/review-queue",
+            get(get_review_queue_handler),
+        )
+        .route(
+            "/api/v1/learners/{user_id}/review-stats",
+            get(get_review_stats_handler),
+        )
+        .route(
+            "/api/v1/learners/{user_id}/review",
+            post(post_review_handler),
+        )
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReviewQueueQuery {
+    #[serde(default)]
+    limit: Option<i64>,
+    #[serde(default)]
+    offset: Option<i64>,
+}
+
+async fn get_review_queue_handler(
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+    Query(q): Query<ReviewQueueQuery>,
+    headers: HeaderMap,
+) -> Result<Json<crate::services::srs::ReviewQueueResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    assert_can_read_learner_state(&state.pool, user.user_id, user_id).await?;
+    let limit = q.limit.unwrap_or(50).clamp(1, 200);
+    let offset = q.offset.unwrap_or(0).max(0);
+    let body = get_review_queue(&state.pool, user_id, limit, offset).await?;
+    Ok(Json(body))
+}
+
+async fn get_review_stats_handler(
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Json<crate::services::srs::ReviewStatsResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    assert_can_read_learner_state(&state.pool, user.user_id, user_id).await?;
+    let body = get_review_stats(&state.pool, user_id).await?;
+    Ok(Json(body))
+}
+
+async fn post_review_handler(
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(body): Json<SubmitSrsReviewBody>,
+) -> Result<Json<crate::services::srs::SubmitSrsReviewResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let res = submit_review(&state.pool, user.user_id, user_id, body).await?;
+    Ok(Json(res))
 }
 
 async fn list_learner_concepts(

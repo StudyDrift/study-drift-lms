@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { ArrowRight } from 'lucide-react'
 import { LmsPage } from './lms-page'
 import { authorizedFetch } from '../../lib/api'
 import { postCourseContext, type CoursePublic } from '../../lib/courses-api'
 import { readApiErrorMessage } from '../../lib/errors'
+import { formatTimeAgoFromIso } from '../../lib/format-time-ago'
+import { getLastVisitedForCourse, hrefForLastVisited } from '../../lib/last-visited-module-item'
 import { heroImageObjectStyle } from '../../lib/hero-image-position'
 
 function formatDate(iso: string | null): string {
@@ -75,6 +78,8 @@ export default function CourseDetail() {
     )
   }
 
+  const lastVisited = getLastVisitedForCourse(courseCode)
+
   return (
     <LmsPage
       title={course?.title ?? (loading ? 'Loading…' : 'Course')}
@@ -103,6 +108,28 @@ export default function CourseDetail() {
 
       {course && !loading && (
         <>
+          {lastVisited ? (
+            <section aria-label="Continue where you left off" className="mt-8">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                Continue where you left off
+              </h2>
+              <div className="mt-3 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/90 to-white p-5 shadow-sm dark:border-indigo-900/40 dark:from-indigo-950/40 dark:to-neutral-900">
+                <p className="text-xs text-slate-500 dark:text-neutral-400">
+                  Opened {formatTimeAgoFromIso(lastVisited.openedAt)}
+                </p>
+                <p className="mt-1 text-lg font-semibold tracking-tight text-slate-900 dark:text-neutral-50">
+                  {lastVisited.title}
+                </p>
+                <Link
+                  to={hrefForLastVisited(courseCode, lastVisited.kind, lastVisited.itemId)}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
+                >
+                  Continue
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                </Link>
+              </div>
+            </section>
+          ) : null}
           {course.heroImageUrl && (
             <img
               src={course.heroImageUrl}

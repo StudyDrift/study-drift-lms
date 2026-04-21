@@ -14,6 +14,7 @@ import {
   courseOutcomeLinkSchema,
   courseOutcomeSchema,
   courseOutcomesListResponseSchema,
+  adaptivePathPreviewResponseSchema,
   courseSchema,
   courseScopedRolesResponseSchema,
   courseStructureItemSchema,
@@ -23,10 +24,12 @@ import {
   courseGradebookGridResponseSchema,
   courseMyGradesRawSchema,
   enrollmentGroupsTreeResponseSchema,
+  enrollmentNextResponseSchema,
   generateQuizQuestionsResponseSchema,
   generatedSyllabusSectionMarkdownSchema,
   idResponseSchema,
   parseApiResponse,
+  pathConceptsResponseSchema,
   quizAdvanceResponseSchema,
   quizAttemptStartResponseSchema,
   quizAttemptsListPayloadSchema,
@@ -36,7 +39,11 @@ import {
   quizResultsPayloadSchema,
   quizSubmitResponseSchema,
   readerMarkupsListResponseSchema,
+  reviewQueueResponseSchema,
+  reviewStatsResponseSchema,
   restoreVersionResponseSchema,
+  structurePathRuleSchema,
+  structurePathRulesResponseSchema,
   studentAccommodationRecordSchema,
   studentAccommodationRecordsListSchema,
   syllabusAcceptanceStatusSchema,
@@ -89,10 +96,54 @@ export type CoursePublic = {
   lockdownModeEnabled?: boolean
   /** K-12 standards coverage UI and APIs (plan 1.3). */
   standardsAlignmentEnabled?: boolean
+  /** Adaptive path rules (plan 1.4); requires platform env on server. */
+  adaptivePathsEnabled?: boolean
+  /** Spaced repetition review queue (plan 1.5); requires `SRS_PRACTICE_ENABLED` on server. */
+  srsEnabled?: boolean
   createdAt: string
   updatedAt: string
   /** Present on single-course GET: raw enrollment roles for the viewer (`teacher`, `student`, …). */
   viewerEnrollmentRoles?: string[]
+  /** Student enrollment row id for adaptive “next” navigation when the viewer is enrolled as a student. */
+  viewerStudentEnrollmentId?: string
+}
+
+export type StructurePathRule = {
+  id: string
+  structureItemId: string
+  ruleType: string
+  conceptIds: string[]
+  threshold: number
+  targetItemId?: string | null
+  priority: number
+  createdAt: string
+}
+
+export type PathConceptOption = { id: string; name: string; slug: string }
+
+export type EnrollmentNextPayload = {
+  item: CourseStructureItem
+  skipReason?: string
+  skipReasonKey?: string
+  fallback?: boolean
+}
+
+/** LMS route for a learner-facing structure item. */
+export function learnerCourseItemHref(courseCode: string, item: { kind: string; id: string }): string {
+  const cc = encodeURIComponent(courseCode)
+  const id = encodeURIComponent(item.id)
+  switch (item.kind) {
+    case 'content_page':
+      return `/courses/${cc}/modules/content/${id}`
+    case 'assignment':
+      return `/courses/${cc}/modules/assignment/${id}`
+    case 'quiz':
+      return `/courses/${cc}/modules/quiz/${id}`
+    case 'external_link':
+      return `/courses/${cc}/modules/external-link/${id}`
+    default:
+      return `/courses/${cc}/modules`
+  }
 }
 
 /** Server `course::GRADING_SCALES` — keep in sync for labels and validation. */
@@ -255,6 +306,7 @@ export type BankQuestionRow = {
   updatedAt: string
   versionNumber: number
   isPublished: boolean
+  srsEligible?: boolean
 }
 
 export type BankQuestionDetail = BankQuestionRow & {
@@ -281,6 +333,7 @@ export type CreateBankQuestionBody = {
   shared?: boolean
   metadata?: unknown
   shuffleChoicesOverride?: boolean
+  srsEligible?: boolean
 }
 
 export type UpdateBankQuestionBody = {
@@ -296,6 +349,33 @@ export type UpdateBankQuestionBody = {
   changeNote?: string
   /** Omit to leave unchanged; `null` clears override (inherit quiz setting). */
   shuffleChoicesOverride?: boolean | null
+  srsEligible?: boolean
+}
+
+export type ReviewQueueItem = {
+  stateId: string
+  questionId: string
+  courseId: string
+  courseCode: string
+  courseTitle: string
+  nextReviewAt: string
+  stem: string
+  questionType: string
+  options?: unknown
+  correctAnswer?: unknown
+  explanation?: string | null
+}
+
+export type ReviewQueuePayload = {
+  items: ReviewQueueItem[]
+  totalDue: number
+}
+
+export type ReviewStatsPayload = {
+  streak: number
+  dueToday: number
+  dueWeek: number
+  retentionEstimate: number
 }
 
 export type BankQuestionVersionSummary = {
@@ -414,6 +494,8 @@ export async function patchCourseFeatures(
     questionBankEnabled: boolean
     lockdownModeEnabled?: boolean
     standardsAlignmentEnabled: boolean
+    adaptivePathsEnabled?: boolean
+    srsEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -428,12 +510,149 @@ export async function patchCourseFeatures(
         questionBankEnabled: body.questionBankEnabled,
         lockdownModeEnabled: body.lockdownModeEnabled ?? false,
         standardsAlignmentEnabled: body.standardsAlignmentEnabled,
+        adaptivePathsEnabled: body.adaptivePathsEnabled,
+        srsEnabled: body.srsEnabled,
       }),
     },
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseApiResponse('patchCourseFeatures', courseSchema, raw)
+}
+
+export async function fetchLearnerReviewQueue(
+  userId: string,
+  opts?: { limit?: number; offset?: number },
+): Promise<ReviewQueuePayload> {
+  const params = new URLSearchParams()
+  if (opts?.limit != null) params.set('limit', String(opts.limit))
+  if (opts?.offset != null) params.set('offset', String(opts.offset))
+  const qs = params.toString()
+  const res = await authorizedFetch(
+    `/api/v1/learners/${encodeURIComponent(userId)}/review-queue${qs ? `?${qs}` : ''}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('fetchLearnerReviewQueue', reviewQueueResponseSchema, raw)
+}
+
+export async function fetchLearnerReviewStats(userId: string): Promise<ReviewStatsPayload> {
+  const res = await authorizedFetch(
+    `/api/v1/learners/${encodeURIComponent(userId)}/review-stats`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('fetchLearnerReviewStats', reviewStatsResponseSchema, raw)
+}
+
+export async function postLearnerSrsReview(
+  userId: string,
+  body: { questionId: string; grade: 'again' | 'hard' | 'good' | 'easy'; responseMs?: number },
+): Promise<{ nextReviewAt: string; intervalDays: number }> {
+  const res = await authorizedFetch(`/api/v1/learners/${encodeURIComponent(userId)}/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { nextReviewAt: string; intervalDays: number }
+}
+
+export async function fetchStructurePathRules(
+  courseCode: string,
+  structureItemId: string,
+): Promise<StructurePathRule[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/items/${encodeURIComponent(structureItemId)}/path-rules`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('fetchStructurePathRules', structurePathRulesResponseSchema, raw)
+}
+
+export async function createStructurePathRule(
+  courseCode: string,
+  structureItemId: string,
+  body: {
+    ruleType: string
+    conceptIds: string[]
+    threshold: number
+    targetItemId?: string | null
+    priority?: number
+  },
+): Promise<StructurePathRule> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/items/${encodeURIComponent(structureItemId)}/path-rules`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ruleType: body.ruleType,
+        conceptIds: body.conceptIds,
+        threshold: body.threshold,
+        targetItemId: body.targetItemId ?? null,
+        priority: body.priority ?? 0,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('createStructurePathRule', structurePathRuleSchema, raw)
+}
+
+export async function deleteStructurePathRule(
+  courseCode: string,
+  structureItemId: string,
+  ruleId: string,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/items/${encodeURIComponent(structureItemId)}/path-rules/${encodeURIComponent(ruleId)}`,
+    { method: 'DELETE' },
+  )
+  if (res.ok || res.status === 204) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+export async function fetchCourseConceptsForPath(courseCode: string): Promise<PathConceptOption[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/concepts-for-path`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('fetchCourseConceptsForPath', pathConceptsResponseSchema, raw)
+}
+
+export async function fetchAdaptivePathPreview(
+  courseCode: string,
+  mastery: Record<string, number>,
+): Promise<{ path: string[]; fallback: boolean }> {
+  const qs = new URLSearchParams({
+    mastery: JSON.stringify(mastery),
+  })
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/adaptive-path?${qs.toString()}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const parsed = parseApiResponse('fetchAdaptivePathPreview', adaptivePathPreviewResponseSchema, raw)
+  return { path: parsed.path, fallback: parsed.fallback ?? false }
+}
+
+export async function fetchEnrollmentNext(
+  enrollmentId: string,
+  params?: { fromItemId?: string },
+): Promise<EnrollmentNextPayload> {
+  const qs = new URLSearchParams()
+  if (params?.fromItemId) qs.set('fromItemId', params.fromItemId)
+  const q = qs.toString()
+  const res = await authorizedFetch(
+    `/api/v1/enrollments/${encodeURIComponent(enrollmentId)}/next${q ? `?${q}` : ''}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('fetchEnrollmentNext', enrollmentNextResponseSchema, raw)
 }
 
 export async function fetchCourseStandardsCoverage(

@@ -17,6 +17,7 @@ import {
   type GradebookStudent,
 } from './gradebook/gradebook-grid'
 import type { AssignmentGroupWeight } from './gradebook/compute-course-final-percent'
+import { GradebookLoadingSkeleton } from '../../components/ui/lms-content-skeletons'
 import { LmsPage } from './lms-page'
 
 function buildEmptyGrades(students: GradebookStudent[], columns: GradebookColumn[]): Record<string, Record<string, string>> {
@@ -159,28 +160,18 @@ type RubricModalState = {
   rubric: RubricDefinition
 }
 
-function RubricGradeModal({
-  open,
+function RubricGradeForm({
   state,
   initialScores,
   onClose,
   onSave,
 }: {
-  open: boolean
-  state: RubricModalState | null
+  state: RubricModalState
   initialScores: Record<string, number>
   onClose: () => void
   onSave: (scores: Record<string, number>) => void
 }) {
-  const [local, setLocal] = useState<Record<string, number>>({})
-
-  useEffect(() => {
-    if (open && state) {
-      setLocal({ ...initialScores })
-    }
-  }, [open, state, initialScores])
-
-  if (!open || !state) return null
+  const [local, setLocal] = useState<Record<string, number>>(() => ({ ...initialScores }))
 
   const total = state.rubric.criteria.reduce((sum, c) => sum + (local[c.id] ?? 0), 0)
 
@@ -258,6 +249,31 @@ function RubricGradeModal({
   )
 }
 
+function RubricGradeModal({
+  open,
+  state,
+  initialScores,
+  onClose,
+  onSave,
+}: {
+  open: boolean
+  state: RubricModalState | null
+  initialScores: Record<string, number>
+  onClose: () => void
+  onSave: (scores: Record<string, number>) => void
+}) {
+  if (!open || !state) return null
+  return (
+    <RubricGradeForm
+      key={`${state.studentId}-${state.columnId}-${JSON.stringify(initialScores)}`}
+      state={state}
+      initialScores={initialScores}
+      onClose={onClose}
+      onSave={onSave}
+    />
+  )
+}
+
 export default function CourseGradebook() {
   const { courseCode } = useParams<{ courseCode: string }>()
   const { allows, loading } = usePermissions()
@@ -265,7 +281,7 @@ export default function CourseGradebook() {
   const [columns, setColumns] = useState<CourseGradebookGridColumn[]>([])
   const [assignmentGroups, setAssignmentGroups] = useState<AssignmentGroupWeight[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ok' | 'error'>('loading')
   const [savedGrades, setSavedGrades] = useState<Record<string, Record<string, string>> | null>(null)
   const [savedRubricScores, setSavedRubricScores] = useState<
     Record<string, Record<string, Record<string, number>>>
@@ -455,7 +471,14 @@ export default function CourseGradebook() {
   }
 
   if (loading) {
-    return null
+    return (
+      <LmsPage
+        title="Gradebook"
+        description="Spreadsheet-style grades for enrolled students and each course assignment or quiz. Use the arrows, Tab, Enter, and double-click to edit cells; assignment rubrics open from the Rubric link. Save writes your changes to the server."
+      >
+        <GradebookLoadingSkeleton />
+      </LmsPage>
+    )
   }
 
   if (!allows(courseGradebookViewPermission(courseCode))) {
@@ -467,9 +490,7 @@ export default function CourseGradebook() {
       title="Gradebook"
       description="Spreadsheet-style grades for enrolled students and each course assignment or quiz. Use the arrows, Tab, Enter, and double-click to edit cells; assignment rubrics open from the Rubric link. Save writes your changes to the server."
     >
-      {loadState === 'loading' && (
-        <p className="mt-6 text-sm text-slate-600 dark:text-neutral-400">Loading gradebook…</p>
-      )}
+      {loadState === 'loading' && <GradebookLoadingSkeleton />}
       {loadState === 'error' && loadError && (
         <p className="mt-6 text-sm text-red-600 dark:text-red-400" role="alert">
           {loadError}
@@ -513,6 +534,7 @@ export default function CourseGradebook() {
           )}
           <GradebookGrid
             key={`${courseCode}:${gridNonce}:${gridStudents.map((s) => s.id).join(',')}:${gridColumns.map((c) => c.id).join(',')}:${assignmentGroups.map((g) => g.id).join(',')}`}
+            courseCode={courseCode}
             columns={gridColumns}
             students={gridStudents}
             initialGrades={initialGrades}

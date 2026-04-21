@@ -150,7 +150,7 @@ pub async fn row_to_response_with_quiz_adaptive(
 }
 
 /// Top-level items by `sort_order`, then each module's child headings in order.
-fn order_structure_rows(rows: Vec<CourseStructureItemRow>) -> Vec<CourseStructureItemRow> {
+pub fn order_structure_rows(rows: Vec<CourseStructureItemRow>) -> Vec<CourseStructureItemRow> {
     let mut top: Vec<_> = rows
         .iter()
         .filter(|r| r.parent_id.is_none())
@@ -174,6 +174,52 @@ fn order_structure_rows(rows: Vec<CourseStructureItemRow>) -> Vec<CourseStructur
         }
     }
     out
+}
+
+/// Leaf items a learner can open in outline order (modules and headings omitted).
+pub fn navigable_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "content_page" | "assignment" | "quiz" | "external_link" | "survey"
+    )
+}
+
+pub fn navigable_ids_in_outline_order(rows: Vec<CourseStructureItemRow>) -> Vec<Uuid> {
+    order_structure_rows(rows)
+        .into_iter()
+        .filter(|r| navigable_kind(&r.kind))
+        .map(|r| r.id)
+        .collect()
+}
+
+/// First navigable child under a module, if any.
+pub fn first_navigable_child_id(module_id: Uuid, rows: &[CourseStructureItemRow]) -> Option<Uuid> {
+    let mut children: Vec<_> = rows
+        .iter()
+        .filter(|r| r.parent_id == Some(module_id))
+        .cloned()
+        .collect();
+    children.sort_by_key(|r| r.sort_order);
+    children
+        .into_iter()
+        .find(|r| navigable_kind(&r.kind))
+        .map(|r| r.id)
+}
+
+/// First navigable item strictly after a module and all of its direct children in outline order.
+pub fn first_navigable_after_module(rows: &[CourseStructureItemRow], module_id: Uuid) -> Option<Uuid> {
+    let ordered = order_structure_rows(rows.to_vec());
+    let si = ordered.iter().position(|r| r.id == module_id)?;
+    let mut j = si + 1;
+    while j < ordered.len() && ordered[j].parent_id == Some(module_id) {
+        j += 1;
+    }
+    for k in j..ordered.len() {
+        if navigable_kind(&ordered[k].kind) {
+            return Some(ordered[k].id);
+        }
+    }
+    None
 }
 
 fn module_visible_to_student_now(m: &CourseStructureItemRow, now: DateTime<Utc>) -> bool {
