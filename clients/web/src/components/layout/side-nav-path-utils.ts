@@ -6,13 +6,15 @@ export type SettingsNavView =
   | 'account'
   | 'notifications'
   | 'roles'
+  | 'lti-tools'
 
 export function settingsViewFromPathname(pathname: string): SettingsNavView {
   if (pathname.startsWith('/settings/ai/system-prompts')) return 'ai-prompts'
   if (pathname.startsWith('/settings/ai/models')) return 'ai-models'
   const m = matchPath({ path: '/settings/:tab', end: true }, pathname)
   const raw = m?.params.tab
-  if (raw === 'account' || raw === 'notifications' || raw === 'roles') return raw
+  if (raw === 'account' || raw === 'notifications' || raw === 'roles' || raw === 'lti-tools')
+    return raw
   return 'account'
 }
 

@@ -155,6 +155,8 @@ export function learnerCourseItemHref(courseCode: string, item: { kind: string; 
       return `/courses/${cc}/modules/quiz/${id}`
     case 'external_link':
       return `/courses/${cc}/modules/external-link/${id}`
+    case 'lti_link':
+      return `/courses/${cc}/modules/lti/${id}`
     default:
       return `/courses/${cc}/modules`
   }
@@ -1157,7 +1159,15 @@ export function viewerShouldShowMyGradesNav(
 export type CourseStructureItem = {
   id: string
   sortOrder: number
-  kind: 'module' | 'heading' | 'content_page' | 'assignment' | 'quiz' | 'external_link'
+  kind:
+    | 'module'
+    | 'heading'
+    | 'content_page'
+    | 'assignment'
+    | 'quiz'
+    | 'external_link'
+    | 'survey'
+    | 'lti_link'
   title: string
   /** Set when this row is nested under a module. */
   parentId: string | null
@@ -1594,6 +1604,96 @@ export async function createModuleExternalLink(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
+}
+
+export type LtiExternalToolSummary = { id: string; name: string }
+
+export async function fetchCourseLtiExternalTools(courseCode: string): Promise<LtiExternalToolSummary[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/lti-external-tools`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => {
+    const r = row as Record<string, unknown>
+    return { id: String(r.id ?? ''), name: String(r.name ?? '') }
+  })
+}
+
+export async function createModuleLtiLink(
+  courseCode: string,
+  moduleId: string,
+  body: {
+    title: string
+    externalToolId: string
+    resourceLinkId?: string
+    lineItemUrl?: string
+  },
+): Promise<CourseStructureItem> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/modules/${encodeURIComponent(moduleId)}/lti-links`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: body.title,
+        externalToolId: body.externalToolId,
+        resourceLinkId: body.resourceLinkId ?? '',
+        lineItemUrl: body.lineItemUrl,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
+}
+
+export type ModuleLtiLinkPayload = {
+  itemId: string
+  title: string
+  externalToolId: string
+  externalToolName: string
+  resourceLinkId: string
+  lineItemUrl: string | null
+}
+
+function normalizeModuleLtiLinkPayload(raw: unknown): ModuleLtiLinkPayload {
+  const r = raw as Record<string, unknown>
+  return {
+    itemId: String(r.itemId ?? ''),
+    title: String(r.title ?? ''),
+    externalToolId: String(r.externalToolId ?? ''),
+    externalToolName: String(r.externalToolName ?? ''),
+    resourceLinkId: String(r.resourceLinkId ?? ''),
+    lineItemUrl: r.lineItemUrl == null ? null : String(r.lineItemUrl),
+  }
+}
+
+export async function fetchModuleLtiLink(
+  courseCode: string,
+  itemId: string,
+): Promise<ModuleLtiLinkPayload> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/lti-links/${encodeURIComponent(itemId)}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return normalizeModuleLtiLinkPayload(raw)
+}
+
+export async function postModuleLtiEmbedTicket(
+  courseCode: string,
+  itemId: string,
+): Promise<{ ticket: string }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/lti-links/${encodeURIComponent(itemId)}/embed-ticket`,
+    { method: 'POST' },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const r = raw as Record<string, unknown>
+  return { ticket: String(r.ticket ?? '') }
 }
 
 export type ModuleExternalLinkPayload = {

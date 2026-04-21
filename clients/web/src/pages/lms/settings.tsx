@@ -1,8 +1,10 @@
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from 'react'
-import { matchPath, Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { ImageIcon, Save, Upload, X } from 'lucide-react'
+import { settingsViewFromPathname } from '../../components/layout/side-nav-path-utils'
 import { ImageModelPicker } from '../../components/image-model-picker'
 import { RequirePermission } from '../../components/require-permission'
+import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-settings-panel'
 import { RolesPermissionsPanel } from '../../components/settings/roles-permissions-panel'
 import { usePermissions } from '../../context/use-permissions'
 import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
@@ -14,20 +16,9 @@ import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { applyUiTheme, parseUiTheme, type UiTheme } from '../../lib/ui-theme'
 import { useUiDensityControls } from '../../context/ui-density-context'
 
-type SettingsViewId = 'ai-models' | 'ai-prompts' | 'account' | 'notifications' | 'roles'
-
-function settingsViewFromPathname(pathname: string): SettingsViewId {
-  if (pathname.startsWith('/settings/ai/system-prompts')) return 'ai-prompts'
-  if (pathname.startsWith('/settings/ai/models')) return 'ai-models'
-  const m = matchPath({ path: '/settings/:tab', end: true }, pathname)
-  const raw = m?.params.tab
-  if (raw === 'account' || raw === 'notifications' || raw === 'roles') return raw
-  return 'account'
-}
-
 function isSystemSettingsPath(pathname: string): boolean {
   if (pathname.startsWith('/settings/ai/')) return true
-  return pathname === '/settings/roles'
+  return pathname === '/settings/roles' || pathname === '/settings/lti-tools'
 }
 
 type SystemPromptItem = {
@@ -527,7 +518,7 @@ export default function Settings() {
     <LmsPage title="Settings" description="Account and learning preferences.">
       <div
         className={`mt-8 ${
-          activeView === 'roles'
+          activeView === 'roles' || activeView === 'lti-tools'
             ? 'max-w-4xl'
             : activeView === 'ai-prompts'
               ? 'max-w-3xl'
@@ -930,6 +921,23 @@ export default function Settings() {
               <RolesPermissionsPanel />
             </RequirePermission>
           </div>
+        )}
+
+        {activeView === 'lti-tools' && (
+          <RequirePermission
+            permission={PERM_RBAC_MANAGE}
+            fallback={
+              <div>
+                <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">LTI tools</h2>
+                <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                  You do not have permission to manage LTI registrations (
+                  <code className="font-mono text-xs">{PERM_RBAC_MANAGE}</code>).
+                </p>
+              </div>
+            }
+          >
+            <LtiToolsSettingsPanel />
+          </RequirePermission>
         )}
       </div>
 

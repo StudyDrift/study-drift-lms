@@ -177,16 +177,14 @@ export function RoleOnboardingTour() {
 
   useLayoutEffect(() => {
     if (!open) return
-    let raf = 0
-    const schedule = () => {
-      raf = requestAnimationFrame(() => measure())
+    const raf1 = requestAnimationFrame(() => measure())
+    const ro = () => {
+      requestAnimationFrame(() => measure())
     }
-    schedule()
-    const ro = () => schedule()
     window.addEventListener('resize', ro)
     window.addEventListener('scroll', ro, true)
     return () => {
-      cancelAnimationFrame(raf)
+      cancelAnimationFrame(raf1)
       window.removeEventListener('resize', ro)
       window.removeEventListener('scroll', ro, true)
     }

@@ -199,7 +199,16 @@ export const courseStructureItemSchema = z
   .object({
     id: z.string(),
     sortOrder: z.number(),
-    kind: z.enum(['module', 'heading', 'content_page', 'assignment', 'quiz', 'external_link']),
+    kind: z.enum([
+      'module',
+      'heading',
+      'content_page',
+      'assignment',
+      'quiz',
+      'external_link',
+      'survey',
+      'lti_link',
+    ]),
     title: z.string(),
     parentId: z.string().nullable(),
     published: z.boolean(),

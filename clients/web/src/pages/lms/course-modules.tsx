@@ -27,6 +27,7 @@ import {
   CircleHelp,
   ClipboardList,
   ExternalLink,
+  Plug,
   Eye,
   EyeOff,
   FileText,
@@ -43,6 +44,7 @@ import { FeatureHelpTrigger } from '../../components/feature-help/feature-help-t
 import { toastWithUndo } from '../../lib/lms-toast'
 import { LmsPage } from './lms-page'
 import { ModuleExternalLinkModal } from './module-external-link-modal'
+import { ModuleLtiLinkModal } from './module-lti-link-modal'
 import { ModuleNameModal } from './module-name-modal'
 import { ModuleSettingsModal } from './module-settings-modal'
 import { usePermissions } from '../../context/use-permissions'
@@ -54,6 +56,8 @@ import {
   archiveCourseStructureItem,
   unarchiveCourseStructureItem,
   createModuleExternalLink,
+  createModuleLtiLink,
+  fetchCourseLtiExternalTools,
   createModuleQuiz,
   createStructurePathRule,
   deleteStructurePathRule,
@@ -115,7 +119,9 @@ function buildReorderPayloadFromItems(items: CourseStructureItem[]): {
             i.kind === 'content_page' ||
             i.kind === 'assignment' ||
             i.kind === 'quiz' ||
-            i.kind === 'external_link'),
+            i.kind === 'external_link' ||
+            i.kind === 'survey' ||
+            i.kind === 'lti_link'),
       )
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((c) => c.id)
@@ -403,6 +409,25 @@ function ChildRowContent({
                 {child.title}
               </Link>
             )}
+            {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
+            {studentFooter}
+          </div>
+        </div>
+      ) : child.kind === 'lti_link' ? (
+        <div className="flex items-start gap-3">
+          <span
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/90 bg-violet-50 text-violet-800 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200"
+            aria-hidden
+          >
+            <Plug className="h-4 w-4" strokeWidth={2} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <Link
+              to={`/courses/${encodeURIComponent(courseCode)}/modules/lti/${encodeURIComponent(child.id)}`}
+              className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+            >
+              {child.title}
+            </Link>
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
             {studentFooter}
           </div>
@@ -1181,6 +1206,14 @@ export default function CourseModules() {
   const [externalLinkModuleId, setExternalLinkModuleId] = useState<string | null>(null)
   const [externalLinkSaving, setExternalLinkSaving] = useState(false)
   const [externalLinkSaveError, setExternalLinkSaveError] = useState<string | null>(null)
+
+  const [ltiLinkModalOpen, setLtiLinkModalOpen] = useState(false)
+  const [ltiLinkModalKey, setLtiLinkModalKey] = useState(0)
+  const [ltiLinkModuleId, setLtiLinkModuleId] = useState<string | null>(null)
+  const [ltiLinkSaving, setLtiLinkSaving] = useState(false)
+  const [ltiLinkSaveError, setLtiLinkSaveError] = useState<string | null>(null)
+  const [ltiLinkTools, setLtiLinkTools] = useState<{ id: string; name: string }[]>([])
+  const [ltiLinkToolsLoading, setLtiLinkToolsLoading] = useState(false)
   const [busyModuleId, setBusyModuleId] = useState<string | null>(null)
   const [busyChildItemId, setBusyChildItemId] = useState<string | null>(null)
   const [moduleActionError, setModuleActionError] = useState<string | null>(null)
@@ -1248,6 +1281,8 @@ export default function CourseModules() {
     quizModalOpen ||
     externalLinkSaving ||
     externalLinkModalOpen ||
+    ltiLinkSaving ||
+    ltiLinkModalOpen ||
     moduleSettingsSaving ||
     moduleSettingsOpen ||
     editItemSaving ||
@@ -1435,6 +1470,35 @@ export default function CourseModules() {
     [courseCode, externalLinkModuleId, load],
   )
 
+  const saveLtiLink = useCallback(
+    async (input: {
+      title: string
+      externalToolId: string
+      resourceLinkId: string
+      lineItemUrl: string
+    }) => {
+      if (!courseCode || !ltiLinkModuleId) return
+      setLtiLinkSaveError(null)
+      setLtiLinkSaving(true)
+      try {
+        await createModuleLtiLink(courseCode, ltiLinkModuleId, {
+          title: input.title,
+          externalToolId: input.externalToolId,
+          resourceLinkId: input.resourceLinkId || undefined,
+          lineItemUrl: input.lineItemUrl || undefined,
+        })
+        await load({ silent: true })
+        setLtiLinkModalOpen(false)
+        setLtiLinkModuleId(null)
+      } catch (e) {
+        setLtiLinkSaveError(e instanceof Error ? e.message : 'Could not save LTI link.')
+      } finally {
+        setLtiLinkSaving(false)
+      }
+    },
+    [courseCode, ltiLinkModuleId, load],
+  )
+
   const openAddModule = useCallback(() => {
     if (!courseCode) return
     setModuleSaveError(null)
@@ -1477,7 +1541,20 @@ export default function CourseModules() {
       setExternalLinkModalKey((k) => k + 1)
       setExternalLinkModalOpen(true)
     }
-  }, [])
+    if (kind === 'lti_link') {
+      if (!courseCode) return
+      setLtiLinkSaveError(null)
+      setLtiLinkModuleId(moduleId)
+      setLtiLinkModalKey((k) => k + 1)
+      setLtiLinkTools([])
+      setLtiLinkToolsLoading(true)
+      setLtiLinkModalOpen(true)
+      void fetchCourseLtiExternalTools(courseCode)
+        .then((tools) => setLtiLinkTools(tools))
+        .catch(() => setLtiLinkTools([]))
+        .finally(() => setLtiLinkToolsLoading(false))
+    }
+  }, [courseCode])
 
   const handleTogglePublished = useCallback(
     async (item: CourseStructureItem) => {
@@ -1640,7 +1717,9 @@ export default function CourseModules() {
           i.kind === 'content_page' ||
           i.kind === 'assignment' ||
           i.kind === 'quiz' ||
-          i.kind === 'external_link') &&
+          i.kind === 'external_link' ||
+          i.kind === 'survey' ||
+          i.kind === 'lti_link') &&
         i.parentId
       ) {
         const list = m.get(i.parentId) ?? []
@@ -1872,6 +1951,8 @@ export default function CourseModules() {
                           : 'Quiz'
                         : activeItem.kind === 'external_link'
                           ? 'External link'
+                          : activeItem.kind === 'lti_link'
+                            ? 'LTI tool'
                           : 'Heading'}
                 </p>
               </div>
@@ -1996,6 +2077,22 @@ export default function CourseModules() {
         errorMessage={externalLinkSaveError}
       />
 
+      <ModuleLtiLinkModal
+        key={`lti-link-${ltiLinkModalKey}`}
+        open={ltiLinkModalOpen}
+        onClose={() => {
+          if (!ltiLinkSaving) {
+            setLtiLinkModalOpen(false)
+            setLtiLinkModuleId(null)
+          }
+        }}
+        onSave={(input) => void saveLtiLink(input)}
+        tools={ltiLinkTools}
+        toolsLoading={ltiLinkToolsLoading}
+        saving={ltiLinkSaving}
+        errorMessage={ltiLinkSaveError}
+      />
+
       <ModuleNameModal
         key={`edit-structure-item-${editItemModalKey}`}
         open={editItemModalOpen && editTargetItem !== null}
@@ -2019,6 +2116,8 @@ export default function CourseModules() {
                   ? 'quiz'
                   : editTargetItem?.kind === 'external_link'
                     ? 'external_link'
+                    : editTargetItem?.kind === 'lti_link'
+                      ? 'lti_link'
                   : 'content_page'
         }
         initialTitle={editTargetItem?.title ?? ''}

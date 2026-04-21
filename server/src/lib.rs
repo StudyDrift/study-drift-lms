@@ -124,8 +124,6 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         course_files_root,
         canvas_allowed_host_suffixes: config.canvas_allowed_host_suffixes.clone(),
         public_web_origin: config.public_web_origin.clone(),
-        lti,
-        annotation_enabled: config.annotation_enabled,
         mail: crate::state::MailSettings {
             smtp_host: config.smtp_host.clone(),
             smtp_port: config.smtp_port,
@@ -133,6 +131,8 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
             smtp_password: config.smtp_password.clone(),
             smtp_from: config.smtp_from.clone(),
         },
+        lti,
+        annotation_enabled: config.annotation_enabled,
     })
 }
 

@@ -1,20 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 type PingMessage = { type: 'ping'; tabId: string; ts: number }
-
-let fallbackTabSeq = 0
-function newTabId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  fallbackTabSeq += 1
-  return `tab-${fallbackTabSeq}`
-}
 
 /**
  * Shows when the same course is open in another browser tab (same machine, same origin).
  * Complements future server-driven co-presence.
  */
 export function TabPresenceHint({ channelKey }: { channelKey: string }) {
-  const [tabId] = useState(() => newTabId())
+  const reactId = useId()
+  const tabId = reactId.replace(/:/g, '')
   const [others, setOthers] = useState(0)
   const lastSeenRef = useRef<Map<string, number>>(new Map())
 

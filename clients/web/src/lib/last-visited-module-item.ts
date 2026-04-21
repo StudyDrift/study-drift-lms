@@ -1,6 +1,11 @@
 const STORAGE_KEY = 'lextures:last-module-item:v1'
 
-export type LastVisitedModuleKind = 'content_page' | 'assignment' | 'quiz' | 'external_link'
+export type LastVisitedModuleKind =
+  | 'content_page'
+  | 'assignment'
+  | 'quiz'
+  | 'external_link'
+  | 'lti_link'
 
 export type LastVisitedModuleEntry = {
   itemId: string
@@ -89,5 +94,7 @@ export function hrefForLastVisited(courseCode: string, kind: LastVisitedModuleKi
       return `/courses/${cc}/modules/quiz/${id}`
     case 'external_link':
       return `/courses/${cc}/modules/external-link/${id}`
+    case 'lti_link':
+      return `/courses/${cc}/modules/lti/${id}`
   }
 }

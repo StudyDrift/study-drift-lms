@@ -1,4 +1,4 @@
-/* eslint-disable react-refresh/only-export-components -- provider + hook share one module */
+/* eslint-disable react-refresh/only-export-components -- provider + hook live together by convention */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 const ReducedDataContext = createContext(false)
