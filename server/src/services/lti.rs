@@ -95,7 +95,9 @@ pub async fn nrps_memberships_for_course_code(
 
 fn map_nrps_role(role: &str) -> String {
     match role {
-        "Teacher" | "Instructor" => "http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor".into(),
+        "Teacher" | "Instructor" => {
+            "http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor".into()
+        }
         "TA" | "Ta" => "http://purl.imsglobal.org/vocab/lis/v2/membership#TeachingAssistant".into(),
         _ => "http://purl.imsglobal.org/vocab/lis/v2/membership#Learner".into(),
     }
@@ -142,8 +144,7 @@ pub async fn resolve_or_provision_platform_user(
         Err(e) => return Err(e.into()),
     };
 
-    lti_repo::upsert_lti_platform_account(pool, platform_iss, &claims.sub, row.id)
-        .await?;
+    lti_repo::upsert_lti_platform_account(pool, platform_iss, &claims.sub, row.id).await?;
     Ok(row.id)
 }
 
@@ -202,5 +203,6 @@ pub fn build_platform_launch_hint_jwt(
     };
     let enc = lti.keys.encoding_key()?;
     let header = lti.keys.rsa_header();
-    encode(&header, &claims, &enc).map_err(|_| AppError::invalid_input("Could not sign LTI hint JWT."))
+    encode(&header, &claims, &enc)
+        .map_err(|_| AppError::invalid_input("Could not sign LTI hint JWT."))
 }

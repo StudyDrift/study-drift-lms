@@ -49,7 +49,11 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-async fn require_course_access(state: &AppState, course_code: &str, user_id: Uuid) -> Result<(), AppError> {
+async fn require_course_access(
+    state: &AppState,
+    course_code: &str,
+    user_id: Uuid,
+) -> Result<(), AppError> {
     let ok = enrollment::user_has_access(&state.pool, course_code, user_id).await?;
     if !ok {
         return Err(AppError::NotFound);
@@ -127,7 +131,8 @@ async fn enrollment_diagnostic_get(
         }));
     };
 
-    let latest = diagnostic_repo::latest_attempt_for_enrollment(&state.pool, d.id, enrollment_id).await?;
+    let latest =
+        diagnostic_repo::latest_attempt_for_enrollment(&state.pool, d.id, enrollment_id).await?;
     let attempt = latest.map(|a| DiagnosticAttemptPublic {
         id: a.id,
         started_at: a.started_at,
@@ -186,11 +191,17 @@ async fn enrollment_diagnostic_start_post(
         diag.is_some(),
     );
     if !active {
-        return Err(AppError::invalid_input("Diagnostic assessments are not available for this course."));
+        return Err(AppError::invalid_input(
+            "Diagnostic assessments are not available for this course.",
+        ));
     }
-    let (attempt_id, q) =
-        diagnostic_service::start_or_resume_diagnostic(&state.pool, en.course_id, enrollment_id, user.user_id)
-            .await?;
+    let (attempt_id, q) = diagnostic_service::start_or_resume_diagnostic(
+        &state.pool,
+        en.course_id,
+        enrollment_id,
+        user.user_id,
+    )
+    .await?;
     Ok(Json(DiagnosticStartResponse {
         attempt_id,
         first_question: q,
@@ -209,8 +220,13 @@ async fn enrollment_diagnostic_bypass_post(
     if en.user_id != user.user_id {
         return Err(AppError::Forbidden);
     }
-    diagnostic_service::bypass_diagnostic_for_enrollment(&state.pool, en.course_id, enrollment_id, user.user_id)
-        .await?;
+    diagnostic_service::bypass_diagnostic_for_enrollment(
+        &state.pool,
+        en.course_id,
+        enrollment_id,
+        user.user_id,
+    )
+    .await?;
     Ok(axum::http::StatusCode::OK)
 }
 
@@ -288,10 +304,13 @@ async fn course_diagnostic_results_get(
     let course_row = course::get_by_course_code(&state.pool, &course_code)
         .await?
         .ok_or(AppError::NotFound)?;
-    let Some(d) = diagnostic_repo::get_diagnostic_for_course(&state.pool, course_row.id).await? else {
+    let Some(d) = diagnostic_repo::get_diagnostic_for_course(&state.pool, course_row.id).await?
+    else {
         return Err(AppError::NotFound);
     };
-    let rows = diagnostic_repo::list_diagnostic_results_for_course(&state.pool, d.id, course_row.id).await?;
+    let rows =
+        diagnostic_repo::list_diagnostic_results_for_course(&state.pool, d.id, course_row.id)
+            .await?;
     let students = rows
         .into_iter()
         .map(|r| DiagnosticStudentResult {
@@ -381,7 +400,12 @@ async fn course_diagnostic_config_put(
             "Enable the question bank for this course before configuring a diagnostic.",
         ));
     }
-    adaptive_path_service::validate_concepts_for_course(&state.pool, course_row.id, &req.concept_ids).await?;
+    adaptive_path_service::validate_concepts_for_course(
+        &state.pool,
+        course_row.id,
+        &req.concept_ids,
+    )
+    .await?;
 
     let stopping = match req.stopping_rule.as_str() {
         "max_items" | "se_threshold" | "both" => req.stopping_rule.as_str(),
@@ -392,7 +416,9 @@ async fn course_diagnostic_config_put(
         }
     };
     if !matches!(req.retake_policy.as_str(), "once" | "per_term" | "always") {
-        return Err(AppError::invalid_input("retakePolicy must be once, per_term, or always."));
+        return Err(AppError::invalid_input(
+            "retakePolicy must be once, per_term, or always.",
+        ));
     }
     let max_items = req.max_items.clamp(3, 60);
     let se = req.se_threshold.clamp(0.05, 1.0);

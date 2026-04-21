@@ -86,7 +86,10 @@ pub async fn misconception_name_exists_ci(
     Ok(n > 0)
 }
 
-pub async fn delete_seed_misconceptions_for_course(pool: &PgPool, course_id: Uuid) -> Result<u64, sqlx::Error> {
+pub async fn delete_seed_misconceptions_for_course(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<u64, sqlx::Error> {
     let r = sqlx::query(&format!(
         r#"DELETE FROM {} WHERE course_id = $1 AND is_seed = TRUE"#,
         schema::MISCONCEPTIONS
@@ -267,7 +270,11 @@ pub async fn update(
     Ok(r.rows_affected() > 0)
 }
 
-pub async fn delete_for_course(pool: &PgPool, course_id: Uuid, id: Uuid) -> Result<bool, sqlx::Error> {
+pub async fn delete_for_course(
+    pool: &PgPool,
+    course_id: Uuid,
+    id: Uuid,
+) -> Result<bool, sqlx::Error> {
     let r = sqlx::query(&format!(
         r#"DELETE FROM {} WHERE id = $1 AND course_id = $2"#,
         schema::MISCONCEPTIONS

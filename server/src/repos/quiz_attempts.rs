@@ -450,7 +450,10 @@ pub async fn list_focus_loss_events(
     .await
 }
 
-pub async fn delete_responses_for_attempt<'e, E>(executor: E, attempt_id: Uuid) -> Result<(), sqlx::Error>
+pub async fn delete_responses_for_attempt<'e, E>(
+    executor: E,
+    attempt_id: Uuid,
+) -> Result<(), sqlx::Error>
 where
     E: Executor<'e, Database = Postgres>,
 {

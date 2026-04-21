@@ -11,8 +11,8 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::jwt::JwtSigner;
 use crate::models::auth::{
-    AuthResponse, ForgotPasswordRequest, ForgotPasswordResponse, LoginRequest, ResetPasswordRequest,
-    ResetPasswordResponse, SignupRequest, UserPublic,
+    AuthResponse, ForgotPasswordRequest, ForgotPasswordResponse, LoginRequest,
+    ResetPasswordRequest, ResetPasswordResponse, SignupRequest, UserPublic,
 };
 use crate::repos::{communication, password_reset, rbac, user};
 use crate::services::mail;
@@ -48,9 +48,7 @@ pub fn normalize_email(s: &str) -> String {
 fn validate_signup(req: &SignupRequest) -> Result<(), AppError> {
     let email = normalize_email(&req.email);
     if email.is_empty() || !email.contains('@') || email.len() > 254 {
-        return Err(AppError::invalid_input(
-            "Enter a valid email address.",
-        ));
+        return Err(AppError::invalid_input("Enter a valid email address."));
     }
     if req.password.len() < 8 {
         return Err(AppError::invalid_input(
@@ -62,9 +60,7 @@ fn validate_signup(req: &SignupRequest) -> Result<(), AppError> {
 
 fn validate_login(req: &LoginRequest) -> Result<(), AppError> {
     if req.email.trim().is_empty() || req.password.is_empty() {
-        return Err(AppError::invalid_input(
-            "Email and password are required.",
-        ));
+        return Err(AppError::invalid_input("Email and password are required."));
     }
     Ok(())
 }
@@ -167,9 +163,7 @@ pub async fn request_password_reset(
 ) -> Result<ForgotPasswordResponse, AppError> {
     let email = normalize_email(&req.email);
     if email.is_empty() || !email.contains('@') || email.len() > 254 {
-        return Err(AppError::invalid_input(
-            "Enter a valid email address.",
-        ));
+        return Err(AppError::invalid_input("Enter a valid email address."));
     }
 
     if let Some(row) = user::find_by_email(pool, &email).await? {
@@ -224,9 +218,8 @@ pub async fn reset_password(
     }
 
     let password_hash = hash_password(&req.password)?;
-    let ok =
-        password_reset::mark_used_and_set_password(pool, row.id, row.user_id, &password_hash)
-            .await?;
+    let ok = password_reset::mark_used_and_set_password(pool, row.id, row.user_id, &password_hash)
+        .await?;
     if !ok {
         return Err(AppError::InvalidResetToken);
     }

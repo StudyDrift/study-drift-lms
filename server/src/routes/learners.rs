@@ -14,7 +14,10 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::http_auth::auth_user;
+use crate::repos::course;
+use crate::repos::enrollment;
 use crate::repos::learner_model;
+use crate::repos::misconceptions as misconception_repo;
 use crate::services::learner_state::{
     assert_can_batch_read_learner_states, assert_can_read_learner_state, ConceptStateResponse,
     LearnerConceptsBatchResponse, LearnerConceptsListResponse, LearnerStateService,
@@ -24,9 +27,6 @@ use crate::services::recommendations::{self as rec_service, RecommendationsRespo
 use crate::services::srs::{
     get_review_queue, get_review_stats, submit_review, SubmitSrsReviewBody,
 };
-use crate::repos::course;
-use crate::repos::enrollment;
-use crate::repos::misconceptions as misconception_repo;
 use crate::state::AppState;
 
 const MAX_BATCH_USER_IDS: usize = 200;
@@ -45,7 +45,10 @@ pub fn router() -> Router<AppState> {
             "/api/v1/learners/{user_id}/concepts/{concept_id}/theta",
             get(get_learner_concept_theta_handler),
         )
-        .route("/api/v1/learners/concepts/batch", post(batch_learner_concepts))
+        .route(
+            "/api/v1/learners/concepts/batch",
+            post(batch_learner_concepts),
+        )
         .route(
             "/api/v1/learners/{user_id}/review-queue",
             get(get_review_queue_handler),
@@ -232,12 +235,14 @@ async fn get_misconception_summary_handler(
     let Some(course_id) = course::get_id_by_course_code(&state.pool, course_code).await? else {
         return Err(AppError::NotFound);
     };
-    let recurring = misconception_repo::list_recurring_for_user_course(&state.pool, user_id, course_id, 3)
-        .await
-        .map_err(AppError::Db)?;
-    let all_time_count = misconception_repo::count_all_events_for_user_course(&state.pool, user_id, course_id)
-        .await
-        .map_err(AppError::Db)?;
+    let recurring =
+        misconception_repo::list_recurring_for_user_course(&state.pool, user_id, course_id, 3)
+            .await
+            .map_err(AppError::Db)?;
+    let all_time_count =
+        misconception_repo::count_all_events_for_user_course(&state.pool, user_id, course_id)
+            .await
+            .map_err(AppError::Db)?;
     Ok(Json(LearnerMisconceptionSummaryResponse {
         recurring,
         all_time_count,
@@ -254,10 +259,7 @@ async fn get_learner_recommendations(
     assert_can_read_learner_state(&state.pool, user.user_id, user_id).await?;
 
     let surface = q.surface.trim();
-    if !matches!(
-        surface,
-        "continue" | "strengthen" | "challenge" | "review"
-    ) {
+    if !matches!(surface, "continue" | "strengthen" | "challenge" | "review") {
         return Err(AppError::invalid_input(
             "surface must be continue, strengthen, challenge, or review.",
         ));

@@ -331,6 +331,7 @@ function SyllabusBlockEditorInner({
   const toolbarImageInputRef = useRef<HTMLInputElement>(null)
   const pendingToolbarImageSectionRef = useRef<string | null>(null)
   const [mathPopoverSectionId, setMathPopoverSectionId] = useState<string | null>(null)
+  const mathToolbarAnchorRef = useRef<HTMLButtonElement | null>(null)
 
   const handleEditorChange = useCallback((sectionId: string, editor: Editor | null) => {
     editorRefs.current[sectionId] = editor
@@ -519,6 +520,9 @@ function SyllabusBlockEditorInner({
                   setActiveField({ blockId: section.id, field: 'markdown' })
                   editorRefs.current[section.id]?.chain().focus().run()
                   setMathPopoverSectionId(section.id)
+                },
+                registerMathAnchor: (node) => {
+                  mathToolbarAnchorRef.current = node
                 },
               }}
               courseImage={
@@ -718,6 +722,7 @@ function SyllabusBlockEditorInner({
           open={mathPopoverSectionId != null}
           editor={mathPopoverSectionId ? editorRefs.current[mathPopoverSectionId] : null}
           onClose={() => setMathPopoverSectionId(null)}
+          anchorRef={mathToolbarAnchorRef}
         />
       </BlockCanvas>
     </BlockEditorShell>

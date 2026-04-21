@@ -137,10 +137,13 @@ pub async fn update_platform_registration_active(
 }
 
 pub async fn delete_platform_registration(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
-    let r = sqlx::query(&format!(r#"DELETE FROM {} WHERE id = $1"#, schema::LTI_REGISTRATIONS))
-        .bind(id)
-        .execute(pool)
-        .await?;
+    let r = sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE id = $1"#,
+        schema::LTI_REGISTRATIONS
+    ))
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(r.rows_affected() > 0)
 }
 
@@ -157,7 +160,10 @@ pub async fn list_external_tools(pool: &PgPool) -> Result<Vec<LtiExternalToolRow
     .await
 }
 
-pub async fn get_external_tool(pool: &PgPool, id: Uuid) -> Result<Option<LtiExternalToolRow>, sqlx::Error> {
+pub async fn get_external_tool(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<Option<LtiExternalToolRow>, sqlx::Error> {
     sqlx::query_as::<_, LtiExternalToolRow>(&format!(
         r#"
         SELECT id, name, client_id, tool_issuer, tool_jwks_url, tool_oidc_auth_url, tool_token_url, active
@@ -216,10 +222,13 @@ pub async fn update_external_tool_active(
 }
 
 pub async fn delete_external_tool(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
-    let r = sqlx::query(&format!(r#"DELETE FROM {} WHERE id = $1"#, schema::LTI_EXTERNAL_TOOLS))
-        .bind(id)
-        .execute(pool)
-        .await?;
+    let r = sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE id = $1"#,
+        schema::LTI_EXTERNAL_TOOLS
+    ))
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(r.rows_affected() > 0)
 }
 
@@ -325,10 +334,13 @@ pub async fn try_insert_consumed_nonce(
         if exp > Utc::now() {
             return Ok(false);
         }
-        sqlx::query(&format!(r#"DELETE FROM {} WHERE nonce = $1"#, schema::LTI_NONCES))
-            .bind(nonce)
-            .execute(pool)
-            .await?;
+        sqlx::query(&format!(
+            r#"DELETE FROM {} WHERE nonce = $1"#,
+            schema::LTI_NONCES
+        ))
+        .bind(nonce)
+        .execute(pool)
+        .await?;
         sqlx::query(&format!(
             r#"INSERT INTO {} (nonce, expires_at) VALUES ($1, $2)"#,
             schema::LTI_NONCES

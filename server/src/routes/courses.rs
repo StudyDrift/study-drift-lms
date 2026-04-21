@@ -1,20 +1,22 @@
 use crate::error::AppError;
-use crate::models::assignment_rubric::{self, RubricDefinition};
 use crate::http_auth::{assert_permission, auth_user, require_permission};
-use crate::models::content_page_markups::{
-    ContentPageMarkupResponse, ContentPageMarkupsListResponse, CreateContentPageMarkupRequest,
-};
 use crate::models::adaptive_path::{
     AdaptivePathPreviewQuery, AdaptivePathPreviewResponse, CreateStructurePathRuleRequest,
     StructurePathRuleResponse,
 };
+use crate::models::assignment_rubric::{self, RubricDefinition};
+use crate::models::content_page_markups::{
+    ContentPageMarkupResponse, ContentPageMarkupsListResponse, CreateContentPageMarkupRequest,
+};
 use crate::models::course::{
     CoursePublic, CourseWithViewerResponse, CoursesResponse, CreateCourseRequest,
     MarkdownThemeCustom, PatchCourseArchivedRequest, PatchCourseFeaturesRequest,
-    PutCourseCatalogOrderRequest, SetHeroImageRequest, UpdateCourseRequest, UpdateMarkdownThemeRequest,
-    GRADING_SCALES, MARKDOWN_THEME_PRESETS,
+    PutCourseCatalogOrderRequest, SetHeroImageRequest, UpdateCourseRequest,
+    UpdateMarkdownThemeRequest, GRADING_SCALES, MARKDOWN_THEME_PRESETS,
 };
-use crate::models::course_export::{CourseCanvasImportRequest, CourseExportV1, CourseImportRequest};
+use crate::models::course_export::{
+    CourseCanvasImportRequest, CourseExportV1, CourseImportRequest,
+};
 use crate::models::course_gradebook::{
     CourseGradebookGridColumn, CourseGradebookGridResponse, CourseGradebookGridStudent,
     CourseMyGradesResponse, PutCourseGradebookGradesRequest,
@@ -26,21 +28,25 @@ use crate::models::course_module_assignment::{
     validate_assignment_delivery_settings, validate_assignment_late_settings,
 };
 use crate::models::course_module_content::{
-    CreateCourseContentPageRequest, GenerateAssignmentRubricRequest, GenerateAssignmentRubricResponse,
-    ModuleContentPageResponse, UpdateModuleContentPageRequest,
+    CreateCourseContentPageRequest, GenerateAssignmentRubricRequest,
+    GenerateAssignmentRubricResponse, ModuleContentPageResponse, UpdateModuleContentPageRequest,
 };
 use crate::models::course_module_quiz::{
-    sanitize_quiz_questions_for_learner, validate_adaptive_quiz_settings, validate_item_points_worth,
-    validate_quiz_comprehensive_settings, validate_quiz_questions, AdaptiveQuizNextRequest,
-    AdaptiveQuizNextResponse, CreateCourseQuizRequest, GenerateModuleQuizQuestionsRequest,
-    GenerateModuleQuizQuestionsResponse, ModuleQuizGetQuery, ModuleQuizResponse, QuizQuestion,
-    QuizQuestionResponseItem, QuizAdvanceResponse, QuizAttemptHintRequest, QuizCurrentQuestionResponse,
-    QuizFocusLossEventApi, QuizHintRevealResponse, QuizWorkedExampleResponse,
-    EnrollmentQuizOverrideUpsertRequest, QuizAttemptSummary, QuizAttemptsListResponse,
-    QuizFocusLossEventsResponse, QuizFocusLossRequest, QuizMisconceptionResultPayload,
-    QuizResultsQuestionResult, QuizResultsResponse, QuizResultsScoreSummary, QuizStartRequest, QuizStartResponse,
-    QuizSubmitRequest,
-    QuizSubmitResponse, UpdateModuleQuizRequest, ADAPTIVE_SOURCE_KINDS,
+    sanitize_quiz_questions_for_learner, validate_adaptive_quiz_settings,
+    validate_item_points_worth, validate_quiz_comprehensive_settings, validate_quiz_questions,
+    AdaptiveQuizNextRequest, AdaptiveQuizNextResponse, CreateCourseQuizRequest,
+    EnrollmentQuizOverrideUpsertRequest, GenerateModuleQuizQuestionsRequest,
+    GenerateModuleQuizQuestionsResponse, ModuleQuizGetQuery, ModuleQuizResponse,
+    QuizAdvanceResponse, QuizAttemptHintRequest, QuizAttemptSummary, QuizAttemptsListResponse,
+    QuizCurrentQuestionResponse, QuizFocusLossEventApi, QuizFocusLossEventsResponse,
+    QuizFocusLossRequest, QuizHintRevealResponse, QuizMisconceptionResultPayload, QuizQuestion,
+    QuizQuestionResponseItem, QuizResultsQuestionResult, QuizResultsResponse,
+    QuizResultsScoreSummary, QuizStartRequest, QuizStartResponse, QuizSubmitRequest,
+    QuizSubmitResponse, QuizWorkedExampleResponse, UpdateModuleQuizRequest, ADAPTIVE_SOURCE_KINDS,
+};
+use crate::models::course_outcomes_api::{
+    CourseOutcomeApi, CourseOutcomeLinkApi, CourseOutcomesListResponse, PatchCourseOutcomeRequest,
+    PostCourseOutcomeLinkRequest, PostCourseOutcomeRequest,
 };
 use crate::models::course_structure::{
     CourseStructureItemResponse, CourseStructureResponse, CreateCourseAssignmentRequest,
@@ -50,34 +56,29 @@ use crate::models::course_structure::{
     PatchModuleLtiLinkRequest, PatchStructureItemDueAtRequest, PatchStructureItemRequest,
     ReorderCourseStructureRequest,
 };
-use crate::models::course_outcomes_api::{
-    CourseOutcomeApi, CourseOutcomeLinkApi, CourseOutcomesListResponse, PatchCourseOutcomeRequest,
-    PostCourseOutcomeLinkRequest, PostCourseOutcomeRequest,
-};
 use crate::models::course_syllabus::{
     CourseSyllabusResponse, GenerateSyllabusSectionRequest, GenerateSyllabusSectionResponse,
     SyllabusAcceptanceStatusResponse, SyllabusSection, UpdateCourseSyllabusRequest,
 };
-use crate::models::standards::CourseStandardsCoverageResponse;
 use crate::models::enrollment::{
     AddEnrollmentsRequest, AddEnrollmentsResponse, CourseEnrollmentsResponse,
     EnrollSelfAsStudentResponse, PatchEnrollmentRequest,
 };
 use crate::models::enrollment_group::{
     CreateEnrollmentGroupRequest, CreateEnrollmentGroupSetRequest, EnrollmentGroupsTreeResponse,
-    PatchEnrollmentGroupRequest, PatchEnrollmentGroupSetRequest, PutEnrollmentGroupMembershipRequest,
+    PatchEnrollmentGroupRequest, PatchEnrollmentGroupSetRequest,
+    PutEnrollmentGroupMembershipRequest,
 };
 use crate::models::rbac::CourseScopedRolesResponse;
 use crate::models::settings_ai::{GenerateCourseImageRequest, GenerateCourseImageResponse};
+use crate::models::standards::CourseStandardsCoverageResponse;
 use crate::models::user_audit::PostCourseContextRequest;
 use crate::repos::adaptive_path as adaptive_path_repo;
-use crate::repos::content_page_markups;
 use crate::repos::concepts::{self, ConceptJson};
+use crate::repos::content_page_markups;
 use crate::repos::course;
-use crate::repos::misconceptions as misconception_repo;
 use crate::repos::course_files;
 use crate::repos::course_grades;
-use crate::repos::lti as lti_repo;
 use crate::repos::course_grading;
 use crate::repos::course_grading::PutError;
 use crate::repos::course_grants;
@@ -91,6 +92,8 @@ use crate::repos::course_syllabus;
 use crate::repos::enrollment;
 use crate::repos::enrollment_groups;
 use crate::repos::enrollment_quiz_overrides;
+use crate::repos::lti as lti_repo;
+use crate::repos::misconceptions as misconception_repo;
 use crate::repos::question_bank as qb_repo;
 use crate::repos::quiz_attempts;
 use crate::repos::rbac;
@@ -98,24 +101,24 @@ use crate::repos::syllabus_acceptance;
 use crate::repos::syllabus_markups;
 use crate::repos::user_ai_settings;
 use crate::repos::user_audit;
+use crate::services::accommodations;
 use crate::services::adaptive_path as adaptive_path_service;
 use crate::services::adaptive_quiz_ai;
 use crate::services::adaptive_quiz_cat;
-use crate::services::learner_state::{self, LearnerStateService, DEFAULT_LEARNER_STATE_SERVICE};
-use crate::services::assignment_rubric_ai;
-use crate::services::question_bank;
-use crate::services::accommodations;
-use crate::services::code_execution::{self, CodeExecutionResult, ExecuteCodeRequest};
-use crate::services::quiz_attempt_grading;
-use crate::services::quiz_lockdown;
-use crate::services::enrollments as enrollments_service;
-use crate::services::outcomes as outcomes_service;
-use crate::services::hint_service;
-use crate::services::quiz_submission;
 use crate::services::ai::OpenRouterError;
+use crate::services::assignment_rubric_ai;
 use crate::services::canvas_course_import;
+use crate::services::code_execution::{self, CodeExecutionResult, ExecuteCodeRequest};
 use crate::services::course_export_import;
+use crate::services::enrollments as enrollments_service;
+use crate::services::hint_service;
+use crate::services::learner_state::{self, LearnerStateService, DEFAULT_LEARNER_STATE_SERVICE};
+use crate::services::outcomes as outcomes_service;
+use crate::services::question_bank;
+use crate::services::quiz_attempt_grading;
 use crate::services::quiz_generation_ai;
+use crate::services::quiz_lockdown;
+use crate::services::quiz_submission;
 use crate::services::relative_schedule;
 use crate::services::standards as standards_service;
 use crate::services::syllabus_section_ai;
@@ -130,10 +133,10 @@ use axum::{
     routing::{delete, get, patch, post, put},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 use chrono::{DateTime, Utc};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
@@ -673,9 +676,9 @@ fn merge_assignment_body_write(
     let rubric_json = match &req.rubric {
         None => cur.rubric_json.clone(),
         Some(None) => None,
-        Some(Some(r)) => Some(
-            serde_json::to_value(r).map_err(|e| AppError::invalid_input(e.to_string()))?,
-        ),
+        Some(Some(r)) => {
+            Some(serde_json::to_value(r).map_err(|e| AppError::invalid_input(e.to_string()))?)
+        }
     };
     Ok(course_module_assignments::AssignmentBodyWrite {
         markdown,
@@ -817,10 +820,10 @@ fn merge_quiz_settings_write(
 ) -> QuizSettingsWrite {
     let mut s = QuizSettingsWrite::from(cur);
     if let Some(v) = &req.available_from {
-        s.available_from = v.clone();
+        s.available_from = *v;
     }
     if let Some(v) = &req.available_until {
-        s.available_until = v.clone();
+        s.available_until = *v;
     }
     if let Some(v) = req.unlimited_attempts {
         s.unlimited_attempts = v;
@@ -914,14 +917,10 @@ fn validate_syllabus_sections(sections: &[SyllabusSection]) -> Result<(), AppErr
             return Err(AppError::invalid_input("Each section needs an id."));
         }
         if s.heading.len() > MAX_SYLLABUS_HEADING_LEN {
-            return Err(AppError::invalid_input(
-                "Section heading is too long.",
-            ));
+            return Err(AppError::invalid_input("Section heading is too long."));
         }
         if s.markdown.len() > MAX_SYLLABUS_MARKDOWN_LEN {
-            return Err(AppError::invalid_input(
-                "Section content is too long.",
-            ));
+            return Err(AppError::invalid_input("Section content is too long."));
         }
     }
     Ok(())
@@ -1419,9 +1418,7 @@ async fn create_module_assignment_handler(
 
     let title = req.title.trim();
     if title.is_empty() {
-        return Err(AppError::invalid_input(
-            "Assignment name is required.",
-        ));
+        return Err(AppError::invalid_input("Assignment name is required."));
     }
 
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
@@ -1781,22 +1778,43 @@ async fn module_lti_link_patch_handler(
         return Err(AppError::NotFound);
     }
 
-    if let Some(t) = req.title.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        course_structure::patch_child_structure_item(&state.pool, course_id, item_id, Some(t), None, None)
-            .await
-            .map_err(|e| match e {
-                sqlx::Error::RowNotFound => AppError::NotFound,
-                _ => e.into(),
-            })?;
+    if let Some(t) = req
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        course_structure::patch_child_structure_item(
+            &state.pool,
+            course_id,
+            item_id,
+            Some(t),
+            None,
+            None,
+        )
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => AppError::NotFound,
+            _ => e.into(),
+        })?;
     }
 
     lti_repo::update_resource_link_fields(
         &state.pool,
         course_id,
         item_id,
-        req.resource_link_id.as_deref().map(str::trim).filter(|s| !s.is_empty()),
-        req.line_item_url.as_deref().map(str::trim).filter(|s| !s.is_empty()),
-        req.title.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        req.resource_link_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
+        req.line_item_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
+        req.title
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
     )
     .await?;
 
@@ -2416,7 +2434,8 @@ async fn module_assignment_get_handler(
         }
     }
 
-    let Some(row) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(row) =
+        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
@@ -2449,7 +2468,8 @@ async fn module_assignment_patch_handler(
         return Err(AppError::NotFound);
     };
 
-    let Some(cur) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(cur) =
+        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
@@ -2497,12 +2517,15 @@ async fn module_assignment_patch_handler(
             })?;
     }
 
-    let Some(row) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(row) =
+        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
 
-    Ok(Json(module_assignment_response_for_api(item_id, &row, true, None)))
+    Ok(Json(module_assignment_response_for_api(
+        item_id, &row, true, None,
+    )))
 }
 
 async fn module_assignment_generate_rubric_handler(
@@ -2539,7 +2562,8 @@ async fn module_assignment_generate_rubric_handler(
         return Err(AppError::NotFound);
     };
 
-    let Some(row) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    let Some(row) =
+        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
     else {
         return Err(AppError::NotFound);
     };
@@ -2611,11 +2635,7 @@ async fn module_quiz_get_handler(
         course_row.hint_scaffolding_enabled,
         course_row.misconception_detection_enabled,
     );
-    let attempt_for_q = if !can_edit {
-        q.attempt_id
-    } else {
-        None
-    };
+    let attempt_for_q = if !can_edit { q.attempt_id } else { None };
     let resolved = question_bank::resolve_delivery_questions(
         &state.pool,
         course_id,
@@ -3044,11 +3064,7 @@ fn effective_quiz_attempt_cap(
     if row.unlimited_attempts {
         None
     } else {
-        Some(
-            row.max_attempts as i64
-                + acc_extra.max(0) as i64
-                + enrollment_extra.max(0) as i64,
-        )
+        Some(row.max_attempts as i64 + acc_extra.max(0) as i64 + enrollment_extra.max(0) as i64)
     }
 }
 
@@ -3161,18 +3177,15 @@ async fn module_quiz_start_handler(
         ));
     }
 
-    let acc = accommodations::resolve_effective_or_default(&state.pool, user.user_id, course_id).await;
+    let acc =
+        accommodations::resolve_effective_or_default(&state.pool, user.user_id, course_id).await;
     let hints_disabled = quiz_lockdown::hints_disabled(mode) && !acc.hints_always_enabled;
 
-    let enrollment_id = enrollment::get_student_enrollment_id(&state.pool, course_id, user.user_id)
-        .await?;
+    let enrollment_id =
+        enrollment::get_student_enrollment_id(&state.pool, course_id, user.user_id).await?;
     let enrollment_extra = if let Some(eid) = enrollment_id {
-        enrollment_quiz_overrides::get_extra_attempts_for_enrollment_quiz(
-            &state.pool,
-            eid,
-            item_id,
-        )
-        .await?
+        enrollment_quiz_overrides::get_extra_attempts_for_enrollment_quiz(&state.pool, eid, item_id)
+            .await?
     } else {
         0
     };
@@ -3233,11 +3246,8 @@ async fn module_quiz_start_handler(
 
     let attempt_number =
         quiz_attempts::next_attempt_number(&state.pool, course_id, item_id, user.user_id).await?;
-    let (deadline_at, extended_time_applied) = accommodations::compute_attempt_deadline(
-        now,
-        row.time_limit_minutes,
-        acc.time_multiplier,
-    );
+    let (deadline_at, extended_time_applied) =
+        accommodations::compute_attempt_deadline(now, row.time_limit_minutes, acc.time_multiplier);
     let created = quiz_attempts::insert_attempt(
         &state.pool,
         course_id,
@@ -3386,7 +3396,8 @@ async fn module_quiz_results_handler(
     };
 
     let shift_ctx = if !can_edit {
-        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id).await?
+        relative_schedule::load_shift_context_for_user(&state.pool, &course_row, user.user_id)
+            .await?
     } else {
         None
     };
@@ -3414,7 +3425,8 @@ async fn module_quiz_results_handler(
     let attempt = if let Some(aid) = q.attempt_id {
         quiz_attempts::get_attempt(&state.pool, aid).await?
     } else {
-        quiz_attempts::latest_submitted_attempt(&state.pool, course_id, item_id, target_user).await?
+        quiz_attempts::latest_submitted_attempt(&state.pool, course_id, item_id, target_user)
+            .await?
     }
     .ok_or(AppError::NotFound)?;
 
@@ -3445,9 +3457,7 @@ async fn module_quiz_results_handler(
     }
 
     let vis = quiz_row.review_visibility.as_str();
-    let show_score = can_edit
-        || (quiz_row.show_score_timing != "manual"
-            && vis != "none");
+    let show_score = can_edit || (quiz_row.show_score_timing != "manual" && vis != "none");
     let show_questions = can_edit || !matches!(vis, "none" | "score_only");
 
     let score = if show_score {
@@ -3462,8 +3472,10 @@ async fn module_quiz_results_handler(
 
     let questions = if show_questions {
         let include_correct = can_edit || matches!(vis, "correct_answers" | "full");
-        let mut misconception_by_question: std::collections::HashMap<Uuid, misconception_repo::MisconceptionRow> =
-            std::collections::HashMap::new();
+        let mut misconception_by_question: std::collections::HashMap<
+            Uuid,
+            misconception_repo::MisconceptionRow,
+        > = std::collections::HashMap::new();
         if course_row.misconception_detection_enabled {
             let evs = misconception_repo::list_events_for_attempt(&state.pool, attempt.id)
                 .await
@@ -3486,13 +3498,14 @@ async fn module_quiz_results_handler(
                 if let Some(qid_str) = r.question_id.as_deref() {
                     if let Ok(qu) = Uuid::parse_str(qid_str) {
                         if let Some(m) = misconception_by_question.get(&qu) {
-                            let recurrence_count = misconception_repo::count_user_misconception_triggers(
-                                &state.pool,
-                                target_user,
-                                m.id,
-                            )
-                            .await
-                            .map_err(AppError::Db)?;
+                            let recurrence_count =
+                                misconception_repo::count_user_misconception_triggers(
+                                    &state.pool,
+                                    target_user,
+                                    m.id,
+                                )
+                                .await
+                                .map_err(AppError::Db)?;
                             Some(QuizMisconceptionResultPayload {
                                 id: m.id,
                                 name: m.name.clone(),
@@ -3579,11 +3592,9 @@ async fn module_quiz_attempts_list_handler(
         target_user,
     )
     .await?;
-    let policy_score_percent = quiz_attempt_grading::pick_policy_points(
-        &attempts,
-        &quiz_row.grade_attempt_policy,
-    )
-    .and_then(|(e, p)| quiz_attempt_grading::policy_score_percent(e, p));
+    let policy_score_percent =
+        quiz_attempt_grading::pick_policy_points(&attempts, &quiz_row.grade_attempt_policy)
+            .and_then(|(e, p)| quiz_attempt_grading::policy_score_percent(e, p));
 
     let mut out: Vec<QuizAttemptSummary> = Vec::with_capacity(attempts.len());
     for a in attempts {
@@ -3833,7 +3844,10 @@ fn parse_gradebook_points_str(raw: &str) -> Result<Option<f64>, AppError> {
     if t.is_empty() {
         return Ok(None);
     }
-    let cleaned: String = t.chars().filter(|c| *c != ',' && !c.is_whitespace()).collect();
+    let cleaned: String = t
+        .chars()
+        .filter(|c| *c != ',' && !c.is_whitespace())
+        .collect();
     let n: f64 = cleaned
         .parse()
         .map_err(|_| AppError::invalid_input("Each score must be a valid number."))?;
@@ -3897,10 +3911,7 @@ async fn my_grades_get_handler(
     }
 
     let (all_grades, _) = course_grades::list_for_course(&state.pool, course_id).await?;
-    let grades = all_grades
-        .get(&user.user_id)
-        .cloned()
-        .unwrap_or_default();
+    let grades = all_grades.get(&user.user_id).cloned().unwrap_or_default();
 
     let assignment_groups = course_grading::get_settings_for_course_code(&state.pool, &course_code)
         .await?
@@ -3960,7 +3971,8 @@ async fn gradebook_grades_put_handler(
             if let Some(rubric) = rubric_by_item.get(&item_id) {
                 if let Some(scores) = rubric_scores_cell {
                     if !scores.is_empty() {
-                        let total = assignment_rubric::validate_rubric_scores_for_grade(rubric, scores)?;
+                        let total =
+                            assignment_rubric::validate_rubric_scores_for_grade(rubric, scores)?;
                         ensure_points_within_max(total, max_p)?;
                         if let Some(p) = parsed {
                             if (p - total).abs() > 1e-3 {
@@ -3993,7 +4005,7 @@ async fn grading_get_handler(
     State(state): State<AppState>,
     Path(course_code): Path<String>,
     headers: HeaderMap,
-    ) -> Result<Json<CourseGradingSettingsResponse>, AppError> {
+) -> Result<Json<CourseGradingSettingsResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
@@ -4070,7 +4082,8 @@ async fn course_outcomes_list_handler(
     let user = auth_user(&state, &headers)?;
     let course_id = require_course_outcomes_edit(&state, &course_code, user.user_id).await?;
 
-    let students = enrollment::list_student_users_for_course_code(&state.pool, &course_code).await?;
+    let students =
+        enrollment::list_student_users_for_course_code(&state.pool, &course_code).await?;
     let enrolled = students.len() as i32;
 
     let rows = course_outcomes::list_outcomes(&state.pool, course_id).await?;
@@ -4168,13 +4181,9 @@ async fn course_outcomes_create_handler(
         return Err(AppError::invalid_input("Description is too long."));
     }
 
-    let row = course_outcomes::insert_outcome(
-        &state.pool,
-        course_id,
-        title,
-        req.description.trim(),
-    )
-    .await?;
+    let row =
+        course_outcomes::insert_outcome(&state.pool, course_id, title, req.description.trim())
+            .await?;
 
     Ok(Json(CourseOutcomeApi {
         id: row.id,
@@ -4222,8 +4231,9 @@ async fn course_outcomes_patch_handler(
         return Err(AppError::NotFound);
     };
 
-    let enrolled =
-        enrollment::list_student_users_for_course_code(&state.pool, &course_code).await?.len() as i32;
+    let enrolled = enrollment::list_student_users_for_course_code(&state.pool, &course_code)
+        .await?
+        .len() as i32;
     let link_rows =
         course_outcomes::list_links_for_outcome(&state.pool, course_id, outcome_id).await?;
 
@@ -4305,14 +4315,9 @@ async fn course_outcomes_add_link_handler(
     let user = auth_user(&state, &headers)?;
     let course_id = require_course_outcomes_edit(&state, &course_code, user.user_id).await?;
 
-    let body = outcomes_service::add_outcome_link(
-        &state.pool,
-        course_id,
-        &course_code,
-        outcome_id,
-        &req,
-    )
-    .await?;
+    let body =
+        outcomes_service::add_outcome_link(&state.pool, course_id, &course_code, outcome_id, &req)
+            .await?;
     Ok(Json(body))
 }
 
@@ -4554,6 +4559,7 @@ async fn get_handler(
         course: row,
         viewer_enrollment_roles,
         viewer_student_enrollment_id,
+        annotations_enabled: state.annotation_enabled,
     }))
 }
 
@@ -4627,11 +4633,7 @@ async fn ws_send_json(socket: &mut WebSocket, value: serde_json::Value) -> bool 
     }
 }
 
-async fn handle_canvas_import_ws(
-    mut socket: WebSocket,
-    state: AppState,
-    course_code: String,
-) {
+async fn handle_canvas_import_ws(mut socket: WebSocket, state: AppState, course_code: String) {
     let first_text = loop {
         match socket.recv().await {
             Some(Ok(Message::Text(t))) => break t,
@@ -5347,9 +5349,7 @@ async fn update_markdown_theme_handler(
 
     let preset = req.preset.trim();
     if preset.is_empty() || !MARKDOWN_THEME_PRESETS.contains(&preset) {
-        return Err(AppError::invalid_input(
-            "Unknown markdown theme preset.",
-        ));
+        return Err(AppError::invalid_input("Unknown markdown theme preset."));
     }
 
     let custom_store: Option<MarkdownThemeCustom> = if preset == "custom" {
@@ -5630,7 +5630,7 @@ fn normalize_relative_duration_iso(input: Option<&str>) -> Result<Option<String>
     if t.is_empty() {
         return Ok(None);
     }
-    relative_schedule::parse_iso8601_duration(t).map_err(|m| AppError::invalid_input(m))?;
+    relative_schedule::parse_iso8601_duration(t).map_err(AppError::invalid_input)?;
     Ok(Some(t.to_ascii_uppercase()))
 }
 
@@ -5648,9 +5648,7 @@ async fn generate_image_handler(
 
     let prompt = req.prompt.trim();
     if prompt.is_empty() {
-        return Err(AppError::invalid_input(
-            "Describe the image you want.",
-        ));
+        return Err(AppError::invalid_input("Describe the image you want."));
     }
 
     let client = state
@@ -5859,7 +5857,12 @@ async fn quiz_attempt_question_run_handler(
     code_execution::validate_code_submission_size(&source_code)?;
     let language_id = body
         .language_id
-        .or_else(|| q.type_config.get("languageId").and_then(|v| v.as_i64()).map(|v| v as i32))
+        .or_else(|| {
+            q.type_config
+                .get("languageId")
+                .and_then(|v| v.as_i64())
+                .map(|v| v as i32)
+        })
         .or_else(|| {
             q.type_config
                 .get("language")
@@ -6161,7 +6164,8 @@ async fn quiz_attempt_question_hint_handler(
     accommodations::require_attempt_within_deadline(&att, Utc::now())?;
 
     let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
-    let acc = accommodations::resolve_effective_or_default(&state.pool, user.user_id, course_id).await;
+    let acc =
+        accommodations::resolve_effective_or_default(&state.pool, user.user_id, course_id).await;
     if quiz_lockdown::hints_disabled(mode) && !acc.hints_always_enabled {
         return Err(AppError::HintsDisabled);
     }
@@ -6179,7 +6183,9 @@ async fn quiz_attempt_question_hint_handler(
     .await?;
     let bank = &resolved.questions;
     let Some(q) = bank.iter().find(|x| x.id == question_id) else {
-        return Err(AppError::invalid_input("That question is not part of this attempt."));
+        return Err(AppError::invalid_input(
+            "That question is not part of this attempt.",
+        ));
     };
 
     let out = hint_service::reveal_next_hint(
@@ -6311,8 +6317,7 @@ async fn path_rules_list_handler(
     let rows =
         adaptive_path_repo::list_rules_for_structure_item(&state.pool, course_id, item_id).await?;
     Ok(Json(
-        rows
-            .into_iter()
+        rows.into_iter()
             .map(structure_path_rule_row_to_api)
             .collect(),
     ))
@@ -6340,7 +6345,9 @@ async fn path_rules_post_handler(
     }
 
     if !(0.0..=1.0).contains(&req.threshold) {
-        return Err(AppError::invalid_input("threshold must be between 0 and 1."));
+        return Err(AppError::invalid_input(
+            "threshold must be between 0 and 1.",
+        ));
     }
     adaptive_path_service::validate_rule_type(&req.rule_type)?;
     if req.concept_ids.is_empty() {

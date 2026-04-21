@@ -20,7 +20,11 @@ pub async fn sync_edge_count(pool: &PgPool) {
 
 pub fn approximate_edge_count() -> Option<i64> {
     let v = EDGE_COUNT.load(Ordering::Relaxed);
-    if v >= 0 { Some(v) } else { None }
+    if v >= 0 {
+        Some(v)
+    } else {
+        None
+    }
 }
 
 pub fn slugify_name(name: &str) -> String {
@@ -30,11 +34,9 @@ pub fn slugify_name(name: &str) -> String {
         if ch.is_ascii_alphanumeric() {
             out.push(ch);
             prev_sep = false;
-        } else if ch.is_whitespace() || ch == '-' || ch == '_' {
-            if !out.is_empty() && !prev_sep {
-                out.push('-');
-                prev_sep = true;
-            }
+        } else if (ch.is_whitespace() || ch == '-' || ch == '_') && !out.is_empty() && !prev_sep {
+            out.push('-');
+            prev_sep = true;
         }
     }
     let t = out.trim_matches('-').to_string();
@@ -102,7 +104,9 @@ pub async fn create_concept(
     parent_concept_id: Option<Uuid>,
 ) -> Result<ConceptJson, AppError> {
     let base = slugify_name(name);
-    let slug = ensure_unique_slug(pool, &base).await.map_err(AppError::Db)?;
+    let slug = ensure_unique_slug(pool, &base)
+        .await
+        .map_err(AppError::Db)?;
     let row = concepts::insert_concept(
         pool,
         &InsertConceptInput {
@@ -171,7 +175,10 @@ mod tests {
 
     #[test]
     fn slugify_ascii_and_unicode() {
-        assert_eq!(slugify_name("  Solving Linear Equations  "), "solving-linear-equations");
+        assert_eq!(
+            slugify_name("  Solving Linear Equations  "),
+            "solving-linear-equations"
+        );
         assert_eq!(slugify_name("café"), "caf");
     }
 }

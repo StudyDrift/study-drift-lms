@@ -3,9 +3,11 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
-use crate::models::course_module_quiz::{AdaptiveQuizHistoryTurn, QuizQuestion, QuizQuestionResponseItem};
+use crate::models::course_module_quiz::{
+    AdaptiveQuizHistoryTurn, QuizQuestion, QuizQuestionResponseItem,
+};
 use crate::repos::quiz_attempts::QuizAttemptRow;
-use crate::services::relative_schedule::{RelativeShiftContext, shift_opt};
+use crate::services::relative_schedule::{shift_opt, RelativeShiftContext};
 
 pub fn adaptive_turn_is_correct(turn: &AdaptiveQuizHistoryTurn) -> bool {
     let weights = &turn.choice_weights;
@@ -39,11 +41,7 @@ pub fn grade_static_question(
     q: &QuizQuestion,
     resp: &QuizQuestionResponseItem,
 ) -> (f64, f64, Option<bool>) {
-    let max = if q.points < 0 {
-        0.0
-    } else {
-        q.points as f64
-    };
+    let max = if q.points < 0 { 0.0 } else { q.points as f64 };
     match q.question_type.as_str() {
         "multiple_choice" | "true_false" => {
             let Some(sel) = resp.selected_choice_index else {
@@ -101,9 +99,16 @@ pub fn grade_static_question(
                     .type_config
                     .get("equivalences")
                     .and_then(Value::as_array)
-                    .or_else(|| q.type_config.get("equivalenceList").and_then(Value::as_array))
+                    .or_else(|| {
+                        q.type_config
+                            .get("equivalenceList")
+                            .and_then(Value::as_array)
+                    })
                 {
-                    ok = eq.iter().filter_map(Value::as_str).any(|s| normalize_formula(s) == guess_norm);
+                    ok = eq
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .any(|s| normalize_formula(s) == guess_norm);
                 }
             }
             (if ok { max } else { 0.0 }, max, Some(ok))
@@ -119,8 +124,14 @@ pub fn grade_static_question(
             let selected = resp.matching_pairs.clone().unwrap_or_default();
             let mut correct = 0usize;
             for pair in authored_pairs {
-                let left = pair.get("left_id").or_else(|| pair.get("leftId")).and_then(Value::as_str);
-                let right = pair.get("right_id").or_else(|| pair.get("rightId")).and_then(Value::as_str);
+                let left = pair
+                    .get("left_id")
+                    .or_else(|| pair.get("leftId"))
+                    .and_then(Value::as_str);
+                let right = pair
+                    .get("right_id")
+                    .or_else(|| pair.get("rightId"))
+                    .and_then(Value::as_str);
                 if let (Some(l), Some(r)) = (left, right) {
                     if selected.iter().any(|p| p.left_id == l && p.right_id == r) {
                         correct += 1;
@@ -179,13 +190,29 @@ fn normalize_formula(s: &str) -> String {
 }
 
 fn point_in_region(x: f64, y: f64, region: &Value) -> bool {
-    let shape = region.get("shape").and_then(Value::as_str).unwrap_or("rect");
+    let shape = region
+        .get("shape")
+        .and_then(Value::as_str)
+        .unwrap_or("rect");
     if shape == "rect" {
         let x0 = region.get("x").and_then(Value::as_f64).unwrap_or(f64::NAN);
         let y0 = region.get("y").and_then(Value::as_f64).unwrap_or(f64::NAN);
-        let w = region.get("width").and_then(Value::as_f64).unwrap_or(f64::NAN);
-        let h = region.get("height").and_then(Value::as_f64).unwrap_or(f64::NAN);
-        return x0.is_finite() && y0.is_finite() && w.is_finite() && h.is_finite() && x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + h;
+        let w = region
+            .get("width")
+            .and_then(Value::as_f64)
+            .unwrap_or(f64::NAN);
+        let h = region
+            .get("height")
+            .and_then(Value::as_f64)
+            .unwrap_or(f64::NAN);
+        return x0.is_finite()
+            && y0.is_finite()
+            && w.is_finite()
+            && h.is_finite()
+            && x >= x0
+            && x <= x0 + w
+            && y >= y0
+            && y <= y0 + h;
     }
     false
 }
@@ -202,10 +229,7 @@ pub fn quiz_effective_due_at(
 }
 
 /// True when a due date is set and submission occurs strictly after it.
-pub fn quiz_submission_is_late(
-    due_at: Option<DateTime<Utc>>,
-    submitted_at: DateTime<Utc>,
-) -> bool {
+pub fn quiz_submission_is_late(due_at: Option<DateTime<Utc>>, submitted_at: DateTime<Utc>) -> bool {
     due_at.is_some_and(|d| submitted_at > d)
 }
 
@@ -266,8 +290,14 @@ pub fn pick_policy_points(attempts: &[QuizAttemptRow], policy: &str) -> Option<(
         Some(RetakePolicy::Latest) => attempts.last(),
         Some(RetakePolicy::Average) => {
             let n = attempts.len() as f64;
-            let sum_e: f64 = attempts.iter().map(|a| a.points_earned.unwrap_or(0.0)).sum();
-            let sum_p: f64 = attempts.iter().map(|a| a.points_possible.unwrap_or(0.0)).sum();
+            let sum_e: f64 = attempts
+                .iter()
+                .map(|a| a.points_earned.unwrap_or(0.0))
+                .sum();
+            let sum_p: f64 = attempts
+                .iter()
+                .map(|a| a.points_possible.unwrap_or(0.0))
+                .sum();
             return Some((sum_e / n, sum_p / n));
         }
         None => attempts.last(),
@@ -344,14 +374,20 @@ mod tests {
 
     #[test]
     fn retake_policy_highest_picks_max() {
-        let attempts = vec![sample_attempt_row(60.0, 100.0), sample_attempt_row(80.0, 100.0)];
+        let attempts = vec![
+            sample_attempt_row(60.0, 100.0),
+            sample_attempt_row(80.0, 100.0),
+        ];
         let (e, p) = pick_policy_points(&attempts, "highest").unwrap();
         assert!((e - 80.0).abs() < 1e-9 && (p - 100.0).abs() < 1e-9);
     }
 
     #[test]
     fn retake_policy_average_mean_score() {
-        let attempts = vec![sample_attempt_row(60.0, 100.0), sample_attempt_row(80.0, 100.0)];
+        let attempts = vec![
+            sample_attempt_row(60.0, 100.0),
+            sample_attempt_row(80.0, 100.0),
+        ];
         let (e, p) = pick_policy_points(&attempts, "average").unwrap();
         assert!((e - 70.0).abs() < 1e-9 && (p - 100.0).abs() < 1e-9);
         assert!((policy_score_percent(e, p).unwrap() - 70.0).abs() < 1e-9);

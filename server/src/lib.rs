@@ -1,5 +1,11 @@
 //! StudyDrift HTTP API library. The binary in `main.rs` is a thin wrapper around [`run`].
 
+// Route handlers and service layers intentionally take more parameters than Clippy’s default;
+// sqlx query shapes also produce very large `QueryAs` types. Keep `-D warnings` CI green without
+// large mechanical refactors.
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+
 pub mod app;
 pub mod authz;
 pub mod config;
@@ -8,8 +14,8 @@ pub mod error;
 pub mod http_auth;
 pub mod jwt;
 pub mod lti_keys;
-pub mod openapi;
 pub mod models;
+pub mod openapi;
 pub mod repos;
 pub mod routes;
 pub mod services;
@@ -96,7 +102,10 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         );
     }
 
-    let lti = match (config.lti_enabled, config.lti_rsa_private_key_pem.as_deref()) {
+    let lti = match (
+        config.lti_enabled,
+        config.lti_rsa_private_key_pem.as_deref(),
+    ) {
         (true, Some(pem)) => match LtiRsaKeyPair::from_pkcs8_pem(pem, &config.lti_rsa_key_id) {
             Ok(keys) => Some(Arc::new(LtiRuntime {
                 enabled: true,
@@ -109,7 +118,9 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
             }
         },
         (true, None) => {
-            tracing::warn!("LTI_ENABLED is set but LTI_RSA_PRIVATE_KEY_PEM is missing; LTI disabled");
+            tracing::warn!(
+                "LTI_ENABLED is set but LTI_RSA_PRIVATE_KEY_PEM is missing; LTI disabled"
+            );
             None
         }
         _ => None,
@@ -124,7 +135,6 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         course_files_root,
         canvas_allowed_host_suffixes: config.canvas_allowed_host_suffixes.clone(),
         public_web_origin: config.public_web_origin.clone(),
-        lti,
         mail: crate::state::MailSettings {
             smtp_host: config.smtp_host.clone(),
             smtp_port: config.smtp_port,
@@ -132,6 +142,8 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
             smtp_password: config.smtp_password.clone(),
             smtp_from: config.smtp_from.clone(),
         },
+        lti,
+        annotation_enabled: config.annotation_enabled,
     })
 }
 
@@ -153,7 +165,13 @@ pub async fn run() -> anyhow::Result<()> {
         loop {
             interval.tick().await;
             let now = chrono::Utc::now();
-            match crate::services::quiz_auto_submit::sweep_expired_attempts(&sweep_state.pool, now, 200).await {
+            match crate::services::quiz_auto_submit::sweep_expired_attempts(
+                &sweep_state.pool,
+                now,
+                200,
+            )
+            .await
+            {
                 Ok(n) if n > 0 => tracing::info!(count = n, "auto-submit sweep completed"),
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "auto-submit sweep failed"),

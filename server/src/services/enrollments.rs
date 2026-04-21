@@ -81,8 +81,14 @@ pub async fn add_enrollments(
                 .is_empty();
 
             enrollment::upsert_instructor_enrollment(pool, course_code, course_id, row.id).await?;
-            course_grants::apply_app_role_course_grants(pool, row.id, course_id, course_code, role_id)
-                .await?;
+            course_grants::apply_app_role_course_grants(
+                pool,
+                row.id,
+                course_id,
+                course_code,
+                role_id,
+            )
+            .await?;
 
             if existed_before {
                 already_enrolled.push(row.email);

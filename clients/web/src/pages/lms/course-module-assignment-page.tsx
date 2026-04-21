@@ -26,6 +26,7 @@ import { useLmsDarkMode } from '../../hooks/use-lms-dark-mode'
 import { recordLastVisitedModuleItem } from '../../lib/last-visited-module-item'
 import { permCourseItemCreate } from '../../lib/rbac-api'
 import { AssignmentPageSettingsPanel } from '../../components/assignment/assignment-page-settings-panel'
+import { AssignmentAnnotationWorkbench } from '../../components/annotation/assignment-annotation-workbench'
 import { LmsPage } from './lms-page'
 
 function isoToDatetimeLocalValue(iso: string | null): string {
@@ -140,6 +141,8 @@ export default function CourseModuleAssignmentPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [markups, setMarkups] = useState<ContentPageMarkup[]>([])
+  const [viewerEnrollmentRoles, setViewerEnrollmentRoles] = useState<string[]>([])
+  const [annotationsEnabled, setAnnotationsEnabled] = useState(false)
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<SyllabusSection[]>([])
@@ -209,6 +212,8 @@ export default function CourseModuleAssignmentPage() {
       setUpdatedAt(data.updatedAt)
       setMdPreset(courseRow.markdownThemePreset)
       setMdCustom(courseRow.markdownThemeCustom)
+      setViewerEnrollmentRoles(courseRow.viewerEnrollmentRoles ?? [])
+      setAnnotationsEnabled(Boolean(courseRow.annotationsEnabled))
       recordLastVisitedModuleItem(courseCode, {
         itemId,
         kind: 'assignment',
@@ -229,6 +234,8 @@ export default function CourseModuleAssignmentPage() {
       setDraftRubric(null)
       setUpdatedAt(null)
       setMarkups([])
+      setViewerEnrollmentRoles([])
+      setAnnotationsEnabled(false)
     } finally {
       setLoading(false)
     }
@@ -347,6 +354,10 @@ export default function CourseModuleAssignmentPage() {
         })}`
 
   const backTo = `/courses/${encodeURIComponent(courseCode)}/modules`
+
+  const viewerIsCourseStaff = viewerEnrollmentRoles.some(
+    (r) => r === 'teacher' || r === 'instructor',
+  )
 
   return (
     <LmsPage
@@ -483,6 +494,14 @@ export default function CourseModuleAssignmentPage() {
               contentTitle={title || 'Assignment'}
               emptyMessage="No instructions yet. Select Edit to add Markdown."
             />
+            {annotationsEnabled && submissionAllowFileUpload && itemId ? (
+              <AssignmentAnnotationWorkbench
+                courseCode={courseCode}
+                itemId={itemId}
+                mode={viewerIsCourseStaff ? 'staff' : 'student'}
+                submissionAllowsFile={submissionAllowFileUpload}
+              />
+            ) : null}
           </div>
         )}
       </div>

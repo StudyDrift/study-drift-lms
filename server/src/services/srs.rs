@@ -19,7 +19,10 @@ use crate::services::srs_scheduler::{grade_to_quality, sm2_step, Sm2State};
 /// Platform kill-switch for SRS (default off). Course-level `srs_enabled` must also be true.
 pub fn srs_practice_globally_enabled() -> bool {
     match env::var("SRS_PRACTICE_ENABLED") {
-        Ok(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"),
+        Ok(v) => matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
         Err(_) => false,
     }
 }
@@ -117,7 +120,10 @@ pub async fn get_review_queue(
             explanation: r.explanation,
         })
         .collect();
-    Ok(ReviewQueueResponse { items, total_due: total })
+    Ok(ReviewQueueResponse {
+        items,
+        total_due: total,
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -131,13 +137,13 @@ pub struct ReviewStatsResponse {
 
 fn end_of_utc_day(now: chrono::DateTime<Utc>) -> chrono::DateTime<Utc> {
     let d = now.date_naive();
-    d.and_hms_opt(23, 59, 59)
-        .unwrap()
-        .and_utc()
-        + Duration::milliseconds(999)
+    d.and_hms_opt(23, 59, 59).unwrap().and_utc() + Duration::milliseconds(999)
 }
 
-pub async fn get_review_stats(pool: &PgPool, user_id: Uuid) -> Result<ReviewStatsResponse, AppError> {
+pub async fn get_review_stats(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<ReviewStatsResponse, AppError> {
     let today_end = end_of_utc_day(Utc::now());
     let due_today = srs_repo::count_due_until(pool, user_id, today_end)
         .await
@@ -232,7 +238,8 @@ pub async fn submit_review(
         return Err(AppError::Forbidden);
     }
 
-    let q = grade_to_quality(&body.grade).ok_or_else(|| AppError::invalid_input("Invalid grade."))?;
+    let q =
+        grade_to_quality(&body.grade).ok_or_else(|| AppError::invalid_input("Invalid grade."))?;
     let grade_db = body.grade.trim().to_ascii_lowercase();
     let concept_tag_map = concepts::concept_ids_for_question_ids(pool, &[body.question_id])
         .await

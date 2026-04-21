@@ -54,9 +54,7 @@ pub fn validate_rubric_definition(r: &RubricDefinition) -> Result<(), AppError> 
             ));
         }
         if tt.len() > MAX_TITLE_LEN {
-            return Err(AppError::invalid_input(
-                "Rubric title is too long.",
-            ));
+            return Err(AppError::invalid_input("Rubric title is too long."));
         }
     }
     if r.criteria.is_empty() {
@@ -109,14 +107,10 @@ pub fn validate_rubric_definition(r: &RubricDefinition) -> Result<(), AppError> 
         for lvl in &c.levels {
             let lab = lvl.label.trim();
             if lab.is_empty() {
-                return Err(AppError::invalid_input(
-                    "Each rubric level needs a label.",
-                ));
+                return Err(AppError::invalid_input("Each rubric level needs a label."));
             }
             if lab.len() > MAX_LEVEL_LABEL_LEN {
-                return Err(AppError::invalid_input(
-                    "Rubric level label is too long.",
-                ));
+                return Err(AppError::invalid_input("Rubric level label is too long."));
             }
             if let Some(d) = &lvl.description {
                 if d.len() > MAX_LEVEL_DESC_LEN {
@@ -146,12 +140,7 @@ pub fn validate_rubric_against_points_worth(
     let sum_max: f64 = r
         .criteria
         .iter()
-        .map(|c| {
-            c.levels
-                .iter()
-                .map(|l| l.points)
-                .fold(0.0_f64, f64::max)
-        })
+        .map(|c| c.levels.iter().map(|l| l.points).fold(0.0_f64, f64::max))
         .sum();
     let expected = pw as f64;
     if (sum_max - expected).abs() > 1e-3 {

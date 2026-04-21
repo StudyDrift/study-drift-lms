@@ -12,12 +12,13 @@ use crate::repos::question_bank::QuestionEntity;
 use crate::services::irt::{cat_mode_enabled, eap_theta_2pl, select_max_information_item};
 
 fn parse_uuid_option(s: &Option<String>) -> Option<Uuid> {
-    s.as_ref()
-        .and_then(|t| Uuid::parse_str(t.trim()).ok())
+    s.as_ref().and_then(|t| Uuid::parse_str(t.trim()).ok())
 }
 
 /// Convert a bank `QuestionEntity` into the adaptive quiz wire shape (MC / TF only for CAT v1).
-pub fn bank_entity_to_adaptive_question(e: &QuestionEntity) -> Result<AdaptiveQuizGeneratedQuestion, AppError> {
+pub fn bank_entity_to_adaptive_question(
+    e: &QuestionEntity,
+) -> Result<AdaptiveQuizGeneratedQuestion, AppError> {
     let qt = e.question_type.as_str();
     let (qtype, choices, weights) = match qt {
         "true_false" => {
@@ -183,10 +184,8 @@ pub async fn generate_cat_next_questions(
         );
     }
 
-    let candidates: Vec<(Uuid, Option<f64>, Option<f64>)> = entities
-        .iter()
-        .map(|e| (e.id, e.irt_a, e.irt_b))
-        .collect();
+    let candidates: Vec<(Uuid, Option<f64>, Option<f64>)> =
+        entities.iter().map(|e| (e.id, e.irt_a, e.irt_b)).collect();
     let exclude: Vec<Uuid> = used.iter().copied().collect();
 
     let mut chosen: Vec<Uuid> = Vec::new();

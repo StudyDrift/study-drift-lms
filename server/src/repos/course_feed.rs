@@ -5,9 +5,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::schema;
-use crate::models::course_feed::{
-    FeedChannelPublic, FeedMessagePublic, FeedRosterPerson,
-};
+use crate::models::course_feed::{FeedChannelPublic, FeedMessagePublic, FeedRosterPerson};
 
 const DEFAULT_CHANNEL_NAME: &str = "general";
 
@@ -128,7 +126,10 @@ pub async fn create_channel(
     Ok(row)
 }
 
-pub async fn list_roster(pool: &PgPool, course_id: Uuid) -> Result<Vec<FeedRosterPerson>, sqlx::Error> {
+pub async fn list_roster(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<Vec<FeedRosterPerson>, sqlx::Error> {
     sqlx::query_as::<_, FeedRosterPerson>(&format!(
         r#"
         SELECT u.id AS user_id, u.email, u.display_name
@@ -145,7 +146,10 @@ pub async fn list_roster(pool: &PgPool, course_id: Uuid) -> Result<Vec<FeedRoste
     .await
 }
 
-pub async fn enrolled_user_ids(pool: &PgPool, course_id: Uuid) -> Result<HashSet<Uuid>, sqlx::Error> {
+pub async fn enrolled_user_ids(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<HashSet<Uuid>, sqlx::Error> {
     let ids: Vec<Uuid> = sqlx::query_scalar(&format!(
         r#"SELECT user_id FROM {} WHERE course_id = $1"#,
         schema::COURSE_ENROLLMENTS
@@ -333,7 +337,11 @@ pub async fn list_messages_threaded(
     .fetch_all(pool)
     .await?;
 
-    let mut all_ids: Vec<Uuid> = roots.iter().map(|r| r.id).chain(replies.iter().map(|r| r.id)).collect();
+    let mut all_ids: Vec<Uuid> = roots
+        .iter()
+        .map(|r| r.id)
+        .chain(replies.iter().map(|r| r.id))
+        .collect();
     all_ids.sort_unstable();
     all_ids.dedup();
 
@@ -508,7 +516,11 @@ pub async fn add_like(pool: &PgPool, message_id: Uuid, user_id: Uuid) -> Result<
     Ok(())
 }
 
-pub async fn remove_like(pool: &PgPool, message_id: Uuid, user_id: Uuid) -> Result<(), sqlx::Error> {
+pub async fn remove_like(
+    pool: &PgPool,
+    message_id: Uuid,
+    user_id: Uuid,
+) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"DELETE FROM {} WHERE message_id = $1 AND user_id = $2"#,
         schema::FEED_MESSAGE_LIKES
@@ -519,4 +531,3 @@ pub async fn remove_like(pool: &PgPool, message_id: Uuid, user_id: Uuid) -> Resu
     .await?;
     Ok(())
 }
-

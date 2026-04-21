@@ -58,8 +58,5 @@ async fn post_irt_calibrate_handler(
         }
     });
 
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(json!({ "jobId": job_id })),
-    ))
+    Ok((StatusCode::ACCEPTED, Json(json!({ "jobId": job_id }))))
 }

@@ -298,7 +298,11 @@ pub async fn get_question(
     .await
 }
 
-pub async fn delete_question(pool: &PgPool, course_id: Uuid, question_id: Uuid) -> Result<bool, sqlx::Error> {
+pub async fn delete_question(
+    pool: &PgPool,
+    course_id: Uuid,
+    question_id: Uuid,
+) -> Result<bool, sqlx::Error> {
     let r = sqlx::query(&format!(
         r#"DELETE FROM {} WHERE id = $2 AND course_id = $1"#,
         schema::QUESTIONS
@@ -331,10 +335,7 @@ pub async fn list_questions_filtered(
     let type_raw = f.type_.map(|s| s.trim()).filter(|s| !s.is_empty());
     let status_raw = f.status.map(|s| s.trim()).filter(|s| !s.is_empty());
     let diff_raw = f.difficulty.map(|s| s.trim()).filter(|s| !s.is_empty());
-    let concept_str = f
-        .concept_id
-        .map(|cid| cid.to_string())
-        .unwrap_or_default();
+    let concept_str = f.concept_id.map(|cid| cid.to_string()).unwrap_or_default();
 
     let rows: Vec<QuestionEntity> = sqlx::query_as(&format!(
         r#"
@@ -796,7 +797,10 @@ pub async fn insert_pool(
     .await
 }
 
-pub async fn list_pools(pool: &PgPool, course_id: Uuid) -> Result<Vec<QuestionPoolEntity>, sqlx::Error> {
+pub async fn list_pools(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<Vec<QuestionPoolEntity>, sqlx::Error> {
     sqlx::query_as::<_, QuestionPoolEntity>(&format!(
         r#"
         SELECT id, course_id, name, description, created_at
@@ -950,7 +954,10 @@ pub async fn list_binary_responses_for_question(
     .bind(qid)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(|(ok,)| if ok { 1_u8 } else { 0_u8 }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|(ok,)| if ok { 1_u8 } else { 0_u8 })
+        .collect())
 }
 
 pub async fn update_question_irt_fitted(

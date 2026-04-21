@@ -80,9 +80,11 @@ pub async fn sweep_expired_attempts(
         } else {
             0.0
         };
-        let ok = quiz_attempts::finalize_attempt_auto_submitted(&mut *tx, id, now, earned, possible, score)
-            .await
-            .context("finalize attempt")?;
+        let ok = quiz_attempts::finalize_attempt_auto_submitted(
+            &mut *tx, id, now, earned, possible, score,
+        )
+        .await
+        .context("finalize attempt")?;
         tx.commit().await.context("commit")?;
         if ok {
             auto_submitted += 1;

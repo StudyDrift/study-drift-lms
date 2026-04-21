@@ -207,16 +207,19 @@ pub fn first_navigable_child_id(module_id: Uuid, rows: &[CourseStructureItemRow]
 }
 
 /// First navigable item strictly after a module and all of its direct children in outline order.
-pub fn first_navigable_after_module(rows: &[CourseStructureItemRow], module_id: Uuid) -> Option<Uuid> {
+pub fn first_navigable_after_module(
+    rows: &[CourseStructureItemRow],
+    module_id: Uuid,
+) -> Option<Uuid> {
     let ordered = order_structure_rows(rows.to_vec());
     let si = ordered.iter().position(|r| r.id == module_id)?;
     let mut j = si + 1;
     while j < ordered.len() && ordered[j].parent_id == Some(module_id) {
         j += 1;
     }
-    for k in j..ordered.len() {
-        if navigable_kind(&ordered[k].kind) {
-            return Some(ordered[k].id);
+    for row in ordered.iter().skip(j) {
+        if navigable_kind(&row.kind) {
+            return Some(row.id);
         }
     }
     None
@@ -564,8 +567,8 @@ pub async fn assignment_visible_to_student(
                 } else {
                     available_until
                 };
-                let within_availability = eff_af.map_or(true, |t| now >= t)
-                    && eff_au.map_or(true, |t| now <= t);
+                let within_availability =
+                    eff_af.is_none_or(|t| now >= t) && eff_au.is_none_or(|t| now <= t);
                 c_pub
                     && !c_arch
                     && m_pub
@@ -860,7 +863,18 @@ pub async fn survey_visible_to_student(
 
     Ok(row
         .map(
-            |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at, opens_at, closes_at)| {
+            |(
+                c_pub,
+                c_arch,
+                m_pub,
+                m_arch,
+                vf,
+                schedule_mode,
+                anchor,
+                enrolled_at,
+                opens_at,
+                closes_at,
+            )| {
                 let effective_vf = if schedule_mode == "relative" {
                     match (anchor, enrolled_at) {
                         (Some(anchor), Some(enrollment_start)) => {
@@ -903,8 +917,14 @@ pub async fn survey_visible_to_student(
                 } else {
                     closes_at
                 };
-                let within_window = eff_open.map_or(true, |t| now >= t) && eff_close.map_or(true, |t| now <= t);
-                c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now) && within_window
+                let within_window =
+                    eff_open.is_none_or(|t| now >= t) && eff_close.is_none_or(|t| now <= t);
+                c_pub
+                    && !c_arch
+                    && m_pub
+                    && !m_arch
+                    && effective_vf.is_none_or(|t| t <= now)
+                    && within_window
             },
         )
         .unwrap_or(false))

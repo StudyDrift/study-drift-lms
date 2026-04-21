@@ -36,6 +36,8 @@ pub struct CourseWithViewerResponse {
     /// Present when the viewer has a `student` enrollment row in this course (adaptive path / next-item APIs).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewer_student_enrollment_id: Option<Uuid>,
+    /// Server feature flag `ANNOTATION_ENABLED` — SpeedGrader-style inline annotations (plan 3.1).
+    pub annotations_enabled: bool,
 }
 
 #[derive(Debug, sqlx::FromRow, Serialize)]

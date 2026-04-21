@@ -15,7 +15,10 @@ use crate::repos::course_structure::{
 /// `ADAPTIVE_PATHS_ENABLED` — platform kill-switch (default off).
 pub fn adaptive_paths_globally_enabled() -> bool {
     match env::var("ADAPTIVE_PATHS_ENABLED") {
-        Ok(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"),
+        Ok(v) => matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
         Err(_) => false,
     }
 }
@@ -112,9 +115,7 @@ fn apply_remediation_insert(
     linear_next: Option<Uuid>,
     mastery: &HashMap<Uuid, f64>,
 ) -> Option<Uuid> {
-    let Some(from) = from_id else {
-        return None;
-    };
+    let from = from_id?;
     if rule.structure_item_id != from {
         return None;
     }
@@ -138,14 +139,18 @@ fn collect_applicable_gate_rules<'a>(
                 && gate_applies(r.structure_item_id, candidate, rows_by_id, rows)
         })
         .collect();
-    out.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.created_at.cmp(&b.created_at)));
+    out.sort_by(|a, b| {
+        b.priority
+            .cmp(&a.priority)
+            .then_with(|| a.created_at.cmp(&b.created_at))
+    });
     out
 }
 
-fn collect_remediation_rules<'a>(
+fn collect_remediation_rules(
     from_id: Option<Uuid>,
-    rules: &'a [StructurePathRuleRow],
-) -> Vec<&'a StructurePathRuleRow> {
+    rules: &[StructurePathRuleRow],
+) -> Vec<&StructurePathRuleRow> {
     let Some(fid) = from_id else {
         return vec![];
     };
@@ -153,14 +158,15 @@ fn collect_remediation_rules<'a>(
         .iter()
         .filter(|r| r.rule_type == "remediation_insert" && r.structure_item_id == fid)
         .collect();
-    out.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.created_at.cmp(&b.created_at)));
+    out.sort_by(|a, b| {
+        b.priority
+            .cmp(&a.priority)
+            .then_with(|| a.created_at.cmp(&b.created_at))
+    });
     out
 }
 
-fn linear_next_nav(
-    rows: &[CourseStructureItemRow],
-    from_id: Option<Uuid>,
-) -> Option<Uuid> {
+fn linear_next_nav(rows: &[CourseStructureItemRow], from_id: Option<Uuid>) -> Option<Uuid> {
     let nav = navigable_ids_in_outline_order(rows.to_vec());
     if nav.is_empty() {
         return None;
@@ -325,15 +331,9 @@ pub fn preview_path_item_ids(
     let mut from: Option<Uuid> = None;
     let mut fallback = false;
     for _ in 0..max_steps {
-        let Some(res) = resolve_next_item(
-            rows,
-            from,
-            mastery,
-            rules,
-            None,
-            adaptive_enabled,
-            false,
-        ) else {
+        let Some(res) =
+            resolve_next_item(rows, from, mastery, rules, None, adaptive_enabled, false)
+        else {
             break;
         };
         if res.fallback {
@@ -523,7 +523,8 @@ mod tests {
         let q1 = rows[1].id;
         let concept = Uuid::new_v4();
         let rules = vec![rule_skip(q1, concept, 0.8, None)];
-        let res = resolve_next_item(&rows, None, &HashMap::new(), &rules, None, true, true).unwrap();
+        let res =
+            resolve_next_item(&rows, None, &HashMap::new(), &rules, None, true, true).unwrap();
         assert_eq!(res.to_item_id, q1);
         assert!(res.fallback);
     }
@@ -538,16 +539,8 @@ mod tests {
         mastery.insert(concept, 0.99);
         let rules = vec![rule_skip(q1, concept, 0.5, None)];
         let seq = vec![q2, q1];
-        let res = resolve_next_item(
-            &rows,
-            None,
-            &mastery,
-            &rules,
-            Some(&seq),
-            true,
-            false,
-        )
-        .unwrap();
+        let res =
+            resolve_next_item(&rows, None, &mastery, &rules, Some(&seq), true, false).unwrap();
         assert_eq!(res.to_item_id, q2);
     }
 }

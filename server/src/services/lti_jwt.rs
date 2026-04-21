@@ -9,9 +9,9 @@ use base64::Engine as _;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use rsa::pkcs8::EncodePublicKey;
 use rsa::BigUint;
-use std::sync::OnceLock;
 use serde::Deserialize;
 use serde_json::Value;
+use std::sync::OnceLock;
 
 use crate::error::AppError;
 
@@ -65,13 +65,18 @@ fn b64url_decode(s: &str) -> Result<Vec<u8>, AppError> {
 }
 
 fn jwk_rsa_to_spki_der(jwk: &Jwk) -> Result<Vec<u8>, AppError> {
-    let n_b64 = jwk.n.as_deref().ok_or_else(|| AppError::invalid_input("JWKS missing n."))?;
-    let e_b64 = jwk.e.as_deref().ok_or_else(|| AppError::invalid_input("JWKS missing e."))?;
+    let n_b64 = jwk
+        .n
+        .as_deref()
+        .ok_or_else(|| AppError::invalid_input("JWKS missing n."))?;
+    let e_b64 = jwk
+        .e
+        .as_deref()
+        .ok_or_else(|| AppError::invalid_input("JWKS missing e."))?;
     let n = BigUint::from_bytes_be(&b64url_decode(n_b64)?);
     let e = BigUint::from_bytes_be(&b64url_decode(e_b64)?);
-    let pub_key = rsa::RsaPublicKey::new(n, e).map_err(|e| {
-        AppError::invalid_input(format!("Invalid RSA public key from JWKS: {e}"))
-    })?;
+    let pub_key = rsa::RsaPublicKey::new(n, e)
+        .map_err(|e| AppError::invalid_input(format!("Invalid RSA public key from JWKS: {e}")))?;
     let der = pub_key
         .to_public_key_der()
         .map_err(|e| AppError::invalid_input(format!("Could not encode JWKS public key: {e}")))?;
@@ -79,14 +84,10 @@ fn jwk_rsa_to_spki_der(jwk: &Jwk) -> Result<Vec<u8>, AppError> {
 }
 
 async fn fetch_jwks_uncached(jwks_url: &str) -> Result<HashMap<String, Vec<u8>>, AppError> {
-    let res = jwks_http()
-        .get(jwks_url)
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!(target: "lti", %jwks_url, error = %e, "lti_jwks_fetch_failed");
-            AppError::LtiToolConfiguration
-        })?;
+    let res = jwks_http().get(jwks_url).send().await.map_err(|e| {
+        tracing::error!(target: "lti", %jwks_url, error = %e, "lti_jwks_fetch_failed");
+        AppError::LtiToolConfiguration
+    })?;
     if !res.status().is_success() {
         tracing::error!(
             target: "lti",
@@ -111,10 +112,7 @@ async fn fetch_jwks_uncached(jwks_url: &str) -> Result<HashMap<String, Vec<u8>>,
             }
         }
         let der = jwk_rsa_to_spki_der(&jwk)?;
-        let kid = jwk
-            .kid
-            .clone()
-            .unwrap_or_else(|| "default".to_string());
+        let kid = jwk.kid.clone().unwrap_or_else(|| "default".to_string());
         keys_by_kid.insert(kid, der);
     }
     if keys_by_kid.is_empty() {
@@ -221,7 +219,9 @@ pub fn verify_lti_id_token(
 
     let now = chrono::Utc::now().timestamp();
     if (now - claims.iat).abs() > 600 {
-        return Err(AppError::invalid_input("LTI token iat is too old or in the future."));
+        return Err(AppError::invalid_input(
+            "LTI token iat is too old or in the future.",
+        ));
     }
 
     Ok(claims)
