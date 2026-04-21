@@ -4251,20 +4251,14 @@ async fn course_outcomes_patch_handler(
         }
     }
 
-    if let Some(v) = &req.module_structure_item_id {
-        match v {
-            None => {}
-            Some(mid) => {
-                let Some(m) = course_structure::get_item_row(&state.pool, course_id, *mid).await?
-                else {
-                    return Err(AppError::invalid_input("Unknown moduleStructureItemId."));
-                };
-                if m.kind != "module" || m.parent_id.is_some() {
-                    return Err(AppError::invalid_input(
-                        "moduleStructureItemId must reference a top-level module.",
-                    ));
-                }
-            }
+    if let Some(Some(mid)) = &req.module_structure_item_id {
+        let Some(m) = course_structure::get_item_row(&state.pool, course_id, *mid).await? else {
+            return Err(AppError::invalid_input("Unknown moduleStructureItemId."));
+        };
+        if m.kind != "module" || m.parent_id.is_some() {
+            return Err(AppError::invalid_input(
+                "moduleStructureItemId must reference a top-level module.",
+            ));
         }
     }
 
@@ -6446,12 +6440,12 @@ async fn path_rules_post_handler(
         return Err(AppError::invalid_input("conceptIds must be non-empty."));
     }
     match req.rule_type.as_str() {
-        "required_if_not_mastered" | "unlock_after" | "remediation_insert" => {
-            if req.target_item_id.is_none() {
-                return Err(AppError::invalid_input(
-                    "targetItemId is required for this rule type.",
-                ));
-            }
+        "required_if_not_mastered" | "unlock_after" | "remediation_insert"
+            if req.target_item_id.is_none() =>
+        {
+            return Err(AppError::invalid_input(
+                "targetItemId is required for this rule type.",
+            ));
         }
         _ => {}
     }

@@ -262,17 +262,14 @@ pub async fn compute_surface(
     let mut pinned_continue: Vec<Uuid> = Vec::new();
     for o in &overrides {
         match o.override_type.as_str() {
-            "suppress" => {
-                if o.surface.as_deref().unwrap_or(surface) == surface {
-                    suppressed.insert(o.structure_item_id);
-                }
+            "suppress" if o.surface.as_deref().unwrap_or(surface) == surface => {
+                suppressed.insert(o.structure_item_id);
             }
-            "pin" => {
+            "pin"
                 if surface == "continue"
-                    && (o.surface.is_none() || o.surface.as_deref() == Some("continue"))
-                {
-                    pinned_continue.push(o.structure_item_id);
-                }
+                    && (o.surface.is_none() || o.surface.as_deref() == Some("continue")) =>
+            {
+                pinned_continue.push(o.structure_item_id);
             }
             _ => {}
         }
