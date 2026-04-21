@@ -6,7 +6,6 @@ Related:
 
 - [docs/plan/07-mobile-offline-cross-platform/7.1-native-mobile-apps.md](plan/07-mobile-offline-cross-platform/7.1-native-mobile-apps.md) — engineering plan for the native apps.
 - [docs/plan/07-mobile-offline-cross-platform/7.2-mobile-responsive-review.md](plan/07-mobile-offline-cross-platform/7.2-mobile-responsive-review.md) — responsive-web prerequisite work.
-- [docs/WEB_DESIGN.md](WEB_DESIGN.md) — web design review; many tokens carry over.
 - [docs/design.md](design.md) — visual system source of truth.
 
 ---

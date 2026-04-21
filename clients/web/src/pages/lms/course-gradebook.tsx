@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate, useParams } from 'react-router-dom'
+import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { usePermissions } from '../../context/use-permissions'
 import {
   courseGradebookViewPermission,
@@ -20,6 +20,8 @@ import type { AssignmentGroupWeight } from './gradebook/compute-course-final-per
 import { GradebookLoadingSkeleton } from '../../components/ui/lms-content-skeletons'
 import { formatAbsolute, formatAbsoluteShort } from '../../lib/format-datetime'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
+import { TabPresenceHint } from '../../components/presence/tab-presence-hint'
+import { FeatureHelpTrigger } from '../../components/feature-help/feature-help-trigger'
 import { LmsPage } from './lms-page'
 
 function buildEmptyGrades(students: GradebookStudent[], columns: GradebookColumn[]): Record<string, Record<string, string>> {
@@ -278,6 +280,8 @@ function RubricGradeModal({
 
 export default function CourseGradebook() {
   const { courseCode } = useParams<{ courseCode: string }>()
+  const [searchParams] = useSearchParams()
+  const highlightStudentId = searchParams.get('student')?.trim() || null
   const { allows, loading } = usePermissions()
   const [students, setStudents] = useState<CourseGradebookGridStudent[]>([])
   const [columns, setColumns] = useState<CourseGradebookGridColumn[]>([])
@@ -496,6 +500,11 @@ export default function CourseGradebook() {
     <LmsPage
       title="Gradebook"
       description="Spreadsheet-style grades for enrolled students and each course assignment or quiz. Use the arrows, Tab, Enter, and double-click to edit cells; assignment rubrics open from the Rubric link. Save writes your changes to the server."
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <FeatureHelpTrigger topic="gradebook" />
+        </div>
+      }
     >
       {loadState === 'loading' && <GradebookLoadingSkeleton />}
       {loadState === 'error' && loadError && (
@@ -561,6 +570,11 @@ export default function CourseGradebook() {
               {saveError}
             </p>
           )}
+          {courseCode ? (
+            <div className="mt-2">
+              <TabPresenceHint channelKey={courseCode} />
+            </div>
+          ) : null}
           <GradebookGrid
             key={`${courseCode}:${gridNonce}:${gridStudents.map((s) => s.id).join(',')}:${gridColumns.map((c) => c.id).join(',')}:${assignmentGroups.map((g) => g.id).join(',')}`}
             courseCode={courseCode}
@@ -571,6 +585,7 @@ export default function CourseGradebook() {
             readOnly={!canEditGrades}
             onGradesChange={handleGradesChange}
             onRubricClick={canEditGrades ? openRubricModal : undefined}
+            highlightStudentId={highlightStudentId}
             footerNote={
               gridStudents.length > 0 && gridColumns.length > 0
                 ? canEditGrades

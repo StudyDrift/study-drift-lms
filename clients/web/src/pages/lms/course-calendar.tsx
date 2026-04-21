@@ -203,6 +203,7 @@ type CalendarMonthDayCellProps = {
   itemPath: (a: CourseCalendarAssignment) => string
   onShowAssignmentHover: (a: CourseCalendarAssignment, el: HTMLElement) => void
   onHideAssignmentHover: () => void
+  focusDateKey?: string | null
 }
 
 function CalendarMonthDayCell({
@@ -214,10 +215,12 @@ function CalendarMonthDayCell({
   itemPath,
   onShowAssignmentHover,
   onHideAssignmentHover,
+  focusDateKey = null,
 }: CalendarMonthDayCellProps) {
   const inMonth = cell.getMonth() === monthAnchor.getMonth()
   const key = dateKeyLocal(cell)
   const isToday = key === dateKeyLocal(now)
+  const isFocusDay = Boolean(focusDateKey && focusDateKey === key)
   const { setNodeRef, isOver } = useDroppable({
     id: `${CAL_DAY_ID}${key}`,
     disabled: !canDragReschedule,
@@ -227,16 +230,20 @@ function CalendarMonthDayCell({
       ref={setNodeRef}
       className={`flex min-h-[5rem] flex-col bg-white p-1.5 text-left dark:bg-neutral-900/95 ${
         inMonth ? '' : 'bg-slate-50/90 text-slate-400 dark:bg-neutral-950/80 dark:text-neutral-500'
-      } ${canDragReschedule && isOver ? 'ring-2 ring-inset ring-indigo-400/70 dark:ring-indigo-400/50' : ''}`}
+      } ${canDragReschedule && isOver ? 'ring-2 ring-inset ring-indigo-400/70 dark:ring-indigo-400/50' : ''} ${
+        isFocusDay && !isOver ? 'ring-2 ring-inset ring-amber-400/80 dark:ring-amber-500/50' : ''
+      }`}
     >
       <div className="flex shrink-0 items-start">
         <span
           className={`inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded-lg text-sm font-medium ${
             isToday
               ? 'bg-indigo-600 text-white shadow-sm dark:bg-indigo-500 dark:text-white'
-              : inMonth
-                ? 'text-slate-800 dark:text-neutral-200'
-                : 'text-slate-400 dark:text-neutral-500'
+              : isFocusDay
+                ? 'bg-amber-100 text-amber-950 ring-1 ring-amber-300/80 dark:bg-amber-950/60 dark:text-amber-50 dark:ring-amber-600/60'
+                : inMonth
+                  ? 'text-slate-800 dark:text-neutral-200'
+                  : 'text-slate-400 dark:text-neutral-500'
           }`}
         >
           {cell.getDate()}
@@ -266,6 +273,8 @@ type CourseCalendarProps = {
   /** Drag due items between days; requires `course:<courseCode>:items:create` (server-enforced). */
   canRescheduleDueByDrag?: boolean
   onDueDatesChanged?: () => void | Promise<void>
+  /** `YYYY-MM-DD` — opens month view containing this day (from URL `?date=`). */
+  initialDateKey?: string | null
 }
 
 export function CourseCalendar({
@@ -273,6 +282,7 @@ export function CourseCalendar({
   assignments,
   canRescheduleDueByDrag = false,
   onDueDatesChanged,
+  initialDateKey = null,
 }: CourseCalendarProps) {
   const [view, setView] = useState<ViewId>('month')
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(new Date()))
@@ -281,6 +291,15 @@ export function CourseCalendar({
   const [activeDragAssignment, setActiveDragAssignment] = useState<CourseCalendarAssignment | null>(null)
   const [rescheduleError, setRescheduleError] = useState<string | null>(null)
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
+
+  useEffect(() => {
+    if (!initialDateKey || !/^\d{4}-\d{2}-\d{2}$/.test(initialDateKey)) return
+    const [y, m, d] = initialDateKey.split('-').map((x) => Number.parseInt(x, 10))
+    const parsed = new Date(y, m - 1, d)
+    if (Number.isNaN(parsed.getTime())) return
+    setMonthAnchor(startOfMonth(parsed))
+    setWeekCursor(parsed)
+  }, [initialDateKey])
 
   const dragSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
@@ -520,6 +539,7 @@ export function CourseCalendar({
                     itemPath={itemPath}
                     onShowAssignmentHover={showAssignmentHover}
                     onHideAssignmentHover={hideAssignmentHover}
+                    focusDateKey={initialDateKey}
                   />
                 )
               })}

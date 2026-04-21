@@ -27,6 +27,8 @@ import {
 import { useLmsDarkMode } from '../../hooks/use-lms-dark-mode'
 import { recordLastVisitedModuleItem } from '../../lib/last-visited-module-item'
 import { ReadingFocusToggle } from '../../components/layout/reading-focus-toggle'
+import { AuthoringSaveFootprint } from '../../components/authoring-save-footprint'
+import { FeatureHelpTrigger } from '../../components/feature-help/feature-help-trigger'
 import { formatAbsolute } from '../../lib/format-datetime'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { permCourseItemCreate } from '../../lib/rbac-api'
@@ -54,6 +56,7 @@ export default function CourseModuleContentPage() {
   const [draft, setDraft] = useState<SyllabusSection[]>([])
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [lastLocalAuthoringSave, setLastLocalAuthoringSave] = useState<string | null>(null)
   const [mdPreset, setMdPreset] = useState<string>('classic')
   const [mdCustom, setMdCustom] = useState<MarkdownThemeCustom | null>(null)
   const lmsUiDark = useLmsDarkMode()
@@ -208,6 +211,7 @@ export default function CourseModuleContentPage() {
       })
       setMarkdown(data.markdown)
       setUpdatedAt(data.updatedAt)
+      setLastLocalAuthoringSave(new Date().toISOString())
       setEditing(false)
       setDraft([])
       void loadMarkups()
@@ -240,6 +244,7 @@ export default function CourseModuleContentPage() {
       actions={
         editing ? (
           <div className="flex flex-wrap items-center gap-2">
+            {canEdit ? <FeatureHelpTrigger topic="content-page" /> : null}
             <ReadingFocusToggle />
             <button
               type="button"
@@ -260,6 +265,7 @@ export default function CourseModuleContentPage() {
           </div>
         ) : canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
+            <FeatureHelpTrigger topic="content-page" />
             <ReadingFocusToggle />
             <button
               type="button"
@@ -281,6 +287,17 @@ export default function CourseModuleContentPage() {
           ← Back to modules
         </Link>
       </p>
+
+      {canEdit && !loading && !loadError ? (
+        <div className="mt-6">
+          <AuthoringSaveFootprint
+            lastSavedIso={lastLocalAuthoringSave ?? updatedAt}
+            saving={editing && saving}
+            error={editing ? saveError : null}
+            onRetry={editing ? () => void save() : undefined}
+          />
+        </div>
+      ) : null}
 
       <div className="mx-auto w-full max-w-[72ch] min-w-0">
         {loadError && (

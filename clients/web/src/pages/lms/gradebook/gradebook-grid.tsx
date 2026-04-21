@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, LayoutGrid, Thermometer, Users } from 'lucide-react'
+import { useUiDensity } from '../../../context/ui-density-context'
 import { EmptyState } from '../../../components/ui/empty-state'
 import {
   type GradebookActiveSort,
@@ -54,6 +55,8 @@ type GradebookGridProps = {
   onRubricClick?: (studentId: string, columnId: string) => void
   /** Used for empty-state links back to modules or enrollments. */
   courseCode?: string
+  /** Highlights and scrolls a learner row (e.g. from command palette `?student=`). */
+  highlightStudentId?: string | null
 }
 
 const CELL_PAD = 'px-3 py-2 text-sm'
@@ -202,7 +205,10 @@ export function GradebookGrid({
   onGradesChange,
   onRubricClick,
   courseCode,
+  highlightStudentId = null,
 }: GradebookGridProps) {
+  const density = useUiDensity()
+  const pad = density === 'compact' ? 'px-2 py-1.5 text-xs' : CELL_PAD
   const [grades, setGrades] = useState<Record<string, Record<string, string>>>(() =>
     structuredClone(initialGrades),
   )
@@ -270,8 +276,26 @@ export function GradebookGrid({
 
   const filteredStudents = useMemo(() => {
     if (!studentFilterNorm) return sortedStudents
-    return sortedStudents.filter((s) => s.name.toLowerCase().includes(studentFilterNorm))
-  }, [sortedStudents, studentFilterNorm])
+    const base = sortedStudents.filter((s) => s.name.toLowerCase().includes(studentFilterNorm))
+    if (highlightStudentId) {
+      const hi = sortedStudents.find((s) => s.id === highlightStudentId)
+      if (hi && !base.some((s) => s.id === hi.id)) {
+        return [hi, ...base]
+      }
+    }
+    return base
+  }, [sortedStudents, studentFilterNorm, highlightStudentId])
+
+  useEffect(() => {
+    if (!highlightStudentId) return
+    const id = window.setTimeout(() => {
+      document.getElementById(`gradebook-row-${highlightStudentId}`)?.scrollIntoView({
+        block: 'center',
+        behavior: 'smooth',
+      })
+    }, 100)
+    return () => window.clearTimeout(id)
+  }, [highlightStudentId, filteredStudents])
 
   const rowCount = filteredStudents.length
   const colCount = visibleColumns.length
@@ -1069,7 +1093,7 @@ export function GradebookGrid({
             >
               <th
                 scope="col"
-                className={`sticky top-0 left-0 z-30 ${STICKY_NAME_WIDTH_CLASS} ${CELL_PAD} border-b border-r border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
+                className={`sticky top-0 left-0 z-30 ${STICKY_NAME_WIDTH_CLASS} ${pad} border-b border-r border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
               >
                 <button
                   type="button"
@@ -1093,7 +1117,7 @@ export function GradebookGrid({
               </th>
               <th
                 scope="col"
-                className={`sticky top-0 left-[12rem] z-25 min-w-[5.5rem] ${CELL_PAD} border-b border-r border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
+                className={`sticky top-0 left-[12rem] z-25 min-w-[5.5rem] ${pad} border-b border-r border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
               >
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
                   Final
@@ -1105,7 +1129,7 @@ export function GradebookGrid({
                   <th
                     key={col.id}
                     scope="col"
-                    className={`sticky top-0 z-20 ${CELL_PAD} min-w-[9rem] border-b border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
+                    className={`sticky top-0 z-20 ${pad} min-w-[9rem] border-b border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
                   >
                     <button
                       type="button"
@@ -1136,7 +1160,7 @@ export function GradebookGrid({
             <tr className="border-b border-slate-200 bg-slate-100 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
               <th
                 scope="row"
-                className={`sticky left-0 z-[28] ${STICKY_NAME_WIDTH_CLASS} ${CELL_PAD} border-b border-r border-slate-200 bg-slate-100 align-top text-left font-medium shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
+                className={`sticky left-0 z-[28] ${STICKY_NAME_WIDTH_CLASS} ${pad} border-b border-r border-slate-200 bg-slate-100 align-top text-left font-medium shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
                 style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
               >
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
@@ -1145,7 +1169,7 @@ export function GradebookGrid({
               </th>
               <th
                 scope="col"
-                className={`sticky left-[12rem] z-[27] min-w-[5.5rem] ${CELL_PAD} border-b border-r border-slate-200 bg-slate-100 text-right align-top font-normal shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
+                className={`sticky left-[12rem] z-[27] min-w-[5.5rem] ${pad} border-b border-r border-slate-200 bg-slate-100 text-right align-top font-normal shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
                 style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
               >
                 <div className="flex flex-col items-end gap-0.5 text-[11px] tabular-nums leading-snug">
@@ -1165,7 +1189,7 @@ export function GradebookGrid({
                   <th
                     key={`stats-${col.id}`}
                     scope="col"
-                    className={`sticky z-[26] ${CELL_PAD} min-w-[9rem] border-b border-slate-200 bg-slate-100 text-right align-top font-normal shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
+                    className={`sticky z-[26] ${pad} min-w-[9rem] border-b border-slate-200 bg-slate-100 text-right align-top font-normal shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
                     style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
                   >
                     <div className="flex flex-col items-end gap-0.5 text-[11px] tabular-nums leading-snug">
@@ -1187,12 +1211,17 @@ export function GradebookGrid({
             {filteredStudents.map((student, row) => (
               <tr
                 key={student.id}
-                className="border-b border-slate-100 last:border-b-0 dark:border-neutral-700/80"
+                id={`gradebook-row-${student.id}`}
+                className={`border-b border-slate-100 last:border-b-0 dark:border-neutral-700/80 ${
+                  highlightStudentId && highlightStudentId === student.id
+                    ? 'bg-amber-50/90 ring-2 ring-inset ring-amber-300/90 dark:bg-amber-950/25 dark:ring-amber-500/50'
+                    : ''
+                }`}
               >
                 <th
                   scope="row"
                   title={student.name}
-                  className={`sticky left-0 z-10 ${STICKY_NAME_WIDTH_CLASS} ${CELL_PAD} truncate border-r border-slate-200 bg-slate-100 text-left font-medium text-slate-950 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100`}
+                  className={`sticky left-0 z-10 ${STICKY_NAME_WIDTH_CLASS} ${pad} truncate border-r border-slate-200 bg-slate-100 text-left font-medium text-slate-950 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100`}
                 >
                   {student.name}
                 </th>
@@ -1200,7 +1229,7 @@ export function GradebookGrid({
                   role="gridcell"
                   tabIndex={-1}
                   aria-label={`Final course percentage for ${student.name}`}
-                  className={`sticky left-[12rem] z-[9] ${CELL_PAD} min-w-[5.5rem] border-r border-slate-200 bg-slate-50 text-right tabular-nums text-slate-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200`}
+                  className={`sticky left-[12rem] z-[9] ${pad} min-w-[5.5rem] border-r border-slate-200 bg-slate-50 text-right tabular-nums text-slate-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200`}
                 >
                   {formatFinalPercent(finalPercentByStudentId[student.id] ?? null)}
                 </td>
@@ -1276,7 +1305,7 @@ export function GradebookGrid({
                       aria-selected={
                         inRect || showEditor || (isFocusCell && !editing && selectionRect == null)
                       }
-                      className={`relative ${CELL_PAD} min-w-[5.5rem] border-l border-slate-100 text-right tabular-nums outline-none transition dark:border-neutral-700/80 ${cellSurface} ${fillExtSurface}`}
+                      className={`relative ${pad} min-w-[5.5rem] border-l border-slate-100 text-right tabular-nums outline-none transition dark:border-neutral-700/80 ${cellSurface} ${fillExtSurface}`}
                       onKeyDown={(e) => handleGradeCellKeyDown(e, row, colIndex)}
                       onPaste={(e) => {
                         if (readOnly) return

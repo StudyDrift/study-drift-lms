@@ -27,6 +27,12 @@ pub enum ErrorCode {
     MaxAttemptsReached,
     /// Quiz delivery disables hints (lockdown); see accommodations override.
     HintsDisabled,
+    /// LTI ID token `nonce` was already used (replay).
+    NonceAlreadyUsed,
+    /// LTI feature is disabled or not configured.
+    LtiDisabled,
+    /// External tool JWKS or LTI registration is misconfigured.
+    LtiToolConfiguration,
     Internal,
 }
 
@@ -65,6 +71,10 @@ pub enum AppError {
     MaxAttemptsReached,
     #[error("hints disabled for this quiz")]
     HintsDisabled,
+    #[error("LTI is not available")]
+    LtiDisabled,
+    #[error("LTI tool configuration error")]
+    LtiToolConfiguration,
     #[error(transparent)]
     Db(#[from] sqlx::Error),
     #[error(transparent)]
@@ -233,6 +243,25 @@ impl IntoResponse for AppError {
                 });
                 (StatusCode::FORBIDDEN, body).into_response()
             }
+            AppError::LtiDisabled => {
+                let body = Json(ErrorBody {
+                    error: ErrorDetail {
+                        code: ErrorCode::LtiDisabled,
+                        message: "LTI is not enabled on this server.".into(),
+                    },
+                });
+                (StatusCode::NOT_FOUND, body).into_response()
+            }
+            AppError::LtiToolConfiguration => {
+                tracing::error!(target: "lti", "lti_tool_configuration_error");
+                let body = Json(ErrorBody {
+                    error: ErrorDetail {
+                        code: ErrorCode::LtiToolConfiguration,
+                        message: "Tool configuration error — please contact your administrator.".into(),
+                    },
+                });
+                (StatusCode::SERVICE_UNAVAILABLE, body).into_response()
+            }
             AppError::Db(ref e) => {
                 tracing::error!(error = %e, "database error");
                 let body = Json(ErrorBody {
@@ -363,6 +392,12 @@ mod tests {
             (AppError::QuestionAlreadyLocked, StatusCode::FORBIDDEN),
             (AppError::AttemptTimeExpired, StatusCode::FORBIDDEN),
             (AppError::MaxAttemptsReached, StatusCode::FORBIDDEN),
+            (AppError::HintsDisabled, StatusCode::FORBIDDEN),
+            (AppError::LtiDisabled, StatusCode::NOT_FOUND),
+            (
+                AppError::LtiToolConfiguration,
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
             (
                 AppError::Db(sqlx::Error::RowNotFound),
                 StatusCode::INTERNAL_SERVER_ERROR,

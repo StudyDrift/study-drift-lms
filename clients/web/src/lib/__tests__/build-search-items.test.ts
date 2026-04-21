@@ -56,6 +56,12 @@ describe('buildSearchItems', () => {
       title: 'Alice',
     })
 
+    const allowsGrade = (p: string) =>
+      p === courseEnrollmentsReadPermission('CS-101') || p === courseGradebookViewPermission('CS-101')
+    const itemsG = buildSearchItems(courses, people, allowsGrade)
+    const personG = itemsG.find((i) => i.id === 'person:u1:CS-101')
+    expect(personG?.path).toBe('/courses/CS-101/gradebook?student=u1')
+
     const emailOnly = items.find((i) => i.id === 'person:u2:CS-101')
     expect(emailOnly?.title).toBe('b@x.com')
     expect(person?.subtitle).toBe('Intro · CS-101 · student')

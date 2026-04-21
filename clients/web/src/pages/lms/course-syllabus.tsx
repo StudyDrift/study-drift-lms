@@ -20,6 +20,8 @@ import {
 } from '../../lib/markdown-theme'
 import { useLmsDarkMode } from '../../hooks/use-lms-dark-mode'
 import { ReadingFocusToggle } from '../../components/layout/reading-focus-toggle'
+import { AuthoringSaveFootprint } from '../../components/authoring-save-footprint'
+import { FeatureHelpTrigger } from '../../components/feature-help/feature-help-trigger'
 import { formatAbsolute } from '../../lib/format-datetime'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { permCourseItemCreate } from '../../lib/rbac-api'
@@ -49,6 +51,7 @@ export default function CourseSyllabus() {
   const [editing, setEditing] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [lastLocalAuthoringSave, setLastLocalAuthoringSave] = useState<string | null>(null)
   const [markups, setMarkups] = useState<ContentPageMarkup[]>([])
   const [mdPreset, setMdPreset] = useState<string>('classic')
   const [mdCustom, setMdCustom] = useState<MarkdownThemeCustom | null>(null)
@@ -134,6 +137,7 @@ export default function CourseSyllabus() {
       setSections(data.sections)
       setRequireSyllabusAcceptance(Boolean(data.requireSyllabusAcceptance))
       setUpdatedAt(data.updatedAt)
+      setLastLocalAuthoringSave(new Date().toISOString())
       setEditing(false)
       setDraft([])
       void loadMarkups()
@@ -164,6 +168,7 @@ export default function CourseSyllabus() {
       actions={
         editing ? (
           <div className="flex flex-wrap items-center gap-2">
+            {canEdit ? <FeatureHelpTrigger topic="syllabus" /> : null}
             <ReadingFocusToggle />
             <button
               type="button"
@@ -184,6 +189,7 @@ export default function CourseSyllabus() {
           </div>
         ) : canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
+            <FeatureHelpTrigger topic="syllabus" />
             <ReadingFocusToggle />
             <button
               type="button"
@@ -206,6 +212,12 @@ export default function CourseSyllabus() {
         </p>
       )}
       {loading && <p className="mt-8 text-sm text-slate-500">Loading syllabus…</p>}
+
+      {!loading && !loadError && !editing && canEdit && (
+        <div className="mt-6">
+          <AuthoringSaveFootprint lastSavedIso={lastLocalAuthoringSave ?? updatedAt} saving={false} error={null} />
+        </div>
+      )}
 
       {!loading && !loadError && !editing && (
         <div className="mx-auto mt-8 w-full max-w-[72ch] min-w-0 space-y-6 text-[1.0625rem] leading-relaxed">
@@ -237,11 +249,14 @@ export default function CourseSyllabus() {
 
       {!loading && !loadError && editing && (
         <div className="mt-6 -mx-6 md:-mx-8">
-          {saveError && (
-            <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200 md:px-8">
-              {saveError}
-            </p>
-          )}
+          <div className="mb-4 px-4 md:px-8">
+            <AuthoringSaveFootprint
+              lastSavedIso={lastLocalAuthoringSave ?? updatedAt}
+              saving={saving}
+              error={saveError}
+              onRetry={() => void save()}
+            />
+          </div>
           <div className="px-4 md:px-8">
             <SyllabusBlockEditor
               courseCode={courseCode}

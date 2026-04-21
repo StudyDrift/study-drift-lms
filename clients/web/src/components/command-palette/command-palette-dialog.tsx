@@ -1,19 +1,22 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDown, ArrowUp, BookOpen, FileText, Search, Users, Zap } from 'lucide-react'
+import { ArrowDown, ArrowUp, BookOpen, FileText, Navigation, Search, Users, Zap } from 'lucide-react'
 import { usePermissions } from '../../context/use-permissions'
 import {
   buildSearchItems,
   filterSearchItems,
   SEARCH_GROUP_LABEL,
+  sortSearchItems,
   type SearchGroup,
   type SearchListItem,
 } from '../../lib/build-search-items'
+import { buildCommandPaletteGoToItems } from '../../lib/command-palette-go-to'
 import { fetchSearchIndex, type SearchCourseItem, type SearchPersonItem } from '../../lib/search-api'
 import { useCommandPalette } from './use-command-palette'
 
 const GROUP_ICONS: Record<SearchGroup, typeof BookOpen> = {
+  goto: Navigation,
   action: Zap,
   course: BookOpen,
   person: Users,
@@ -76,7 +79,19 @@ export function CommandPaletteDialog() {
     [courses, people, allows],
   )
 
-  const filtered = useMemo(() => filterSearchItems(allItems, query), [allItems, query])
+  const filtered = useMemo(() => {
+    const base = filterSearchItems(allItems, query)
+    const go = buildCommandPaletteGoToItems(query, courses, allows)
+    if (go.length === 0) return base
+    const seen = new Set<string>()
+    const merged: SearchListItem[] = []
+    for (const it of [...go, ...base]) {
+      if (seen.has(it.id)) continue
+      seen.add(it.id)
+      merged.push(it)
+    }
+    return sortSearchItems(merged)
+  }, [allItems, query, courses, allows])
 
   const safeIndex =
     filtered.length === 0 ? 0 : Math.min(cursor, Math.max(0, filtered.length - 1))

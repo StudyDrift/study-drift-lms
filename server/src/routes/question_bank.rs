@@ -14,15 +14,16 @@ use crate::http_auth::{assert_permission, auth_user};
 use crate::models::question_bank::{
     AddPoolMembersRequest, BulkImportQuestionsResponse, CreateQuestionHintRequest, CreateQuestionPoolRequest,
     CreateQuestionRequest, HintAnalyticsLevel, HintAnalyticsResponse, IccPoint, QuestionBankRowResponse,
-    QuestionHintAuthorResponse, QuestionIrtStatsResponse, QuestionPoolResponse, QuestionVersionSummaryResponse,
-    RestoreQuestionVersionRequest, SetQuizDeliveryRefsRequest, UpdateQuestionHintRequest, UpdateQuestionRequest,
-    UpsertWorkedExampleRequest,
+    QuestionHintAuthorResponse, QuestionIrtStatsResponse, QuestionOptionMisconceptionTagApi,
+    QuestionPoolResponse, QuestionVersionSummaryResponse, RestoreQuestionVersionRequest, SetQuizDeliveryRefsRequest,
+    UpdateQuestionHintRequest, UpdateQuestionRequest, UpsertWorkedExampleRequest,
 };
 use crate::repos::course;
 use crate::repos::course_grants;
 use crate::repos::course_module_quizzes;
 use crate::repos::enrollment;
 use crate::repos::hints as hints_repo;
+use crate::repos::misconceptions as mc_repo;
 use crate::repos::question_bank as qb_repo;
 use crate::services::irt;
 use crate::services::question_bank;
@@ -126,6 +127,7 @@ fn entity_to_api(e: qb_repo::QuestionEntity) -> QuestionBankRowResponse {
         is_published: e.is_published,
         shuffle_choices_override: e.shuffle_choices_override,
         srs_eligible: e.srs_eligible,
+        option_misconception_tags: None,
     }
 }
 
@@ -224,6 +226,7 @@ async fn create_question_handler(
     let points = req.points.unwrap_or(1.0).max(0.0);
     let meta = req.metadata.unwrap_or_else(|| json!({}));
     let shared = req.shared.unwrap_or(false);
+    let options_norm = question_bank::normalize_question_options_json(req.options.as_ref());
 
     let mut tx = state.pool.begin().await?;
     let id = qb_repo::insert_question(
@@ -231,7 +234,7 @@ async fn create_question_handler(
         course_id,
         qt,
         stem,
-        req.options.as_ref(),
+        options_norm.as_ref(),
         req.correct_answer.as_ref(),
         req.explanation.as_deref(),
         points,
@@ -250,7 +253,7 @@ async fn create_question_handler(
         course_id,
         question_type: qt.to_string(),
         stem: stem.to_string(),
-        options: req.options.clone(),
+        options: options_norm.clone(),
         correct_answer: req.correct_answer.clone(),
         explanation: req.explanation.clone(),
         points,
@@ -305,7 +308,20 @@ async fn get_question_handler(
     let row = qb_repo::get_question(&state.pool, course_id, question_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    Ok(Json(entity_to_api(row)))
+    let tags = mc_repo::list_option_tags_for_question(&state.pool, question_id)
+        .await
+        .map_err(AppError::Db)?;
+    let mut resp = entity_to_api(row);
+    resp.option_misconception_tags = Some(
+        tags
+            .into_iter()
+            .map(|t| QuestionOptionMisconceptionTagApi {
+                option_id: t.option_id,
+                misconception_id: t.misconception_id,
+            })
+            .collect(),
+    );
+    Ok(Json(resp))
 }
 
 async fn get_question_irt_stats_handler(
@@ -380,7 +396,10 @@ async fn update_question_handler(
     let options = match req.options {
         None => cur.options.clone(),
         Some(None) => None,
-        Some(Some(v)) => Some(v),
+        Some(Some(v)) => Some(question_bank::merge_question_options_on_write(
+            &v,
+            cur.options.as_ref(),
+        )),
     };
     let correct_answer = match req.correct_answer {
         None => cur.correct_answer.clone(),

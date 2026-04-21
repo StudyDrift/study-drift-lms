@@ -10,6 +10,7 @@ import {
   unarchiveCourseStructureItem,
   type CourseStructureItem,
 } from '../../lib/courses-api'
+import { toastWithUndo } from '../../lib/lms-toast'
 
 function kindLabel(kind: CourseStructureItem['kind']): string {
   switch (kind) {
@@ -114,6 +115,11 @@ export function CourseArchivedContentSection({ courseCode }: { courseCode: strin
     try {
       await patchCourseArchived(courseCode, true)
       setDeleteCourseConfirmOpen(false)
+      toastWithUndo('Course archived.', {
+        onUndo: async () => {
+          await patchCourseArchived(courseCode, false)
+        },
+      })
       navigate('/courses', { replace: true })
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Could not archive course.')

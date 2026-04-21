@@ -39,6 +39,8 @@ import {
 import { AddCourseItemMenu } from './add-course-item-menu'
 import { AddModuleItemMenu, type ModuleItemKind } from './add-module-item-menu'
 import { CourseModulesLoadingSkeleton } from '../../components/ui/lms-content-skeletons'
+import { FeatureHelpTrigger } from '../../components/feature-help/feature-help-trigger'
+import { toastWithUndo } from '../../lib/lms-toast'
 import { LmsPage } from './lms-page'
 import { ModuleExternalLinkModal } from './module-external-link-modal'
 import { ModuleNameModal } from './module-name-modal'
@@ -50,6 +52,7 @@ import {
   createModuleContentPage,
   createModuleHeading,
   archiveCourseStructureItem,
+  unarchiveCourseStructureItem,
   createModuleExternalLink,
   createModuleQuiz,
   createStructurePathRule,
@@ -1554,6 +1557,18 @@ export default function CourseModules() {
       await archiveCourseStructureItem(courseCode, child.id)
       await load({ silent: true })
       setArchiveConfirmItem(null)
+      const archivedId = child.id
+      const label = child.title?.trim() || 'Item'
+      toastWithUndo(`Archived “${label}”.`, {
+        onUndo: async () => {
+          try {
+            await unarchiveCourseStructureItem(courseCode, archivedId)
+            await load({ silent: true })
+          } catch {
+            /* toast optional */
+          }
+        },
+      })
     } catch (e) {
       setModuleActionError(e instanceof Error ? e.message : 'Could not archive item.')
     } finally {
@@ -1737,7 +1752,8 @@ export default function CourseModules() {
       description=""
       actions={
         courseCode && canEditModules ? (
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+            <FeatureHelpTrigger topic="modules" />
             <AddCourseItemMenu
               onAdd={openAddModule}
               disabled={anyModalBusy}

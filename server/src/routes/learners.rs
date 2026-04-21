@@ -24,7 +24,9 @@ use crate::services::recommendations::{self as rec_service, RecommendationsRespo
 use crate::services::srs::{
     get_review_queue, get_review_stats, submit_review, SubmitSrsReviewBody,
 };
+use crate::repos::course;
 use crate::repos::enrollment;
+use crate::repos::misconceptions as misconception_repo;
 use crate::state::AppState;
 
 const MAX_BATCH_USER_IDS: usize = 200;
@@ -59,6 +61,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/learners/{user_id}/recommendations",
             get(get_learner_recommendations),
+        )
+        .route(
+            "/api/v1/learners/{user_id}/misconception-summary",
+            get(get_misconception_summary_handler),
         )
 }
 
@@ -191,6 +197,51 @@ struct RecommendationsQuery {
 
 fn default_surface() -> String {
     "continue".into()
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MisconceptionSummaryQuery {
+    course_code: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LearnerMisconceptionSummaryResponse {
+    recurring: Vec<misconception_repo::MisconceptionSummaryRow>,
+    all_time_count: i64,
+}
+
+async fn get_misconception_summary_handler(
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+    Query(q): Query<MisconceptionSummaryQuery>,
+    headers: HeaderMap,
+) -> Result<Json<LearnerMisconceptionSummaryResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    assert_can_read_learner_state(&state.pool, user.user_id, user_id).await?;
+
+    let course_code = q.course_code.trim();
+    if course_code.is_empty() {
+        return Err(AppError::invalid_input("courseCode is required."));
+    }
+    let ok = enrollment::user_has_access(&state.pool, course_code, user_id).await?;
+    if !ok {
+        return Err(AppError::Forbidden);
+    }
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let recurring = misconception_repo::list_recurring_for_user_course(&state.pool, user_id, course_id, 3)
+        .await
+        .map_err(AppError::Db)?;
+    let all_time_count = misconception_repo::count_all_events_for_user_course(&state.pool, user_id, course_id)
+        .await
+        .map_err(AppError::Db)?;
+    Ok(Json(LearnerMisconceptionSummaryResponse {
+        recurring,
+        all_time_count,
+    }))
 }
 
 async fn get_learner_recommendations(

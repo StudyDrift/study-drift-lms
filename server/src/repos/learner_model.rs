@@ -193,6 +193,8 @@ pub struct LearnerModelUpdateInput {
     pub score: f64,
     pub question_index: i32,
     pub ema_alpha: f64,
+    /// Multiplier on `ema_alpha` when a known misconception was triggered (default 1.0).
+    pub ema_alpha_multiplier: f64,
 }
 
 pub fn effective_mastery_engine(
@@ -260,7 +262,7 @@ where
 
     let m_old_eff = effective_mastery_engine(stored_mastery, last_seen_at, decay_lambda);
     let score = input.score.clamp(0.0, 1.0);
-    let alpha = input.ema_alpha.clamp(0.01, 1.0);
+    let alpha = (input.ema_alpha * input.ema_alpha_multiplier.clamp(0.01, 2.0)).clamp(0.01, 1.0);
     let m_new = (m_old_eff * (1.0 - alpha) + score * alpha).clamp(0.0, 1.0);
     let delta = m_new - m_old_eff;
 

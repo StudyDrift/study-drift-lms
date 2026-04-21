@@ -71,6 +71,7 @@ export function SideNavMainLinks() {
       )}
       <NavLink
         to="/inbox"
+        data-onboarding="nav-inbox"
         className={({ isActive }) =>
           `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''} justify-between gap-2`
         }
@@ -90,6 +91,7 @@ export function SideNavMainLinks() {
       </NavLink>
       <NavLink
         to="/settings"
+        data-onboarding="nav-settings"
         className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
       >
         <Settings className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />

@@ -27,13 +27,21 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::adaptive_paths::router())
         .merge(routes::diagnostic::router())
         .merge(routes::learners::router())
+        .merge(routes::lti::router())
+        .merge(routes::lti::admin_router())
+        .route(
+            "/.well-known/jwks.json",
+            get(routes::lti::platform_well_known_jwks),
+        )
         .merge(routes::recommendations::router())
         .merge(routes::concepts::router())
         .merge(routes::standards::router())
         .merge(routes::me::router())
         .merge(routes::search::router())
         .merge(routes::courses::router())
+        .merge(routes::assignment_grading::router())
         .merge(routes::question_bank::router())
+        .merge(routes::misconceptions::router())
         .merge(routes::surveys::router())
         .merge(routes::course_feed::router())
         .merge(routes::course_files::router())
@@ -65,6 +73,8 @@ mod tests {
             course_files_root: std::path::PathBuf::from("data/course-files"),
             canvas_allowed_host_suffixes: vec!["instructure.com".into()],
             public_web_origin: "http://localhost:5173".into(),
+            lti: None,
+            annotation_enabled: false,
             mail: crate::state::MailSettings {
                 smtp_host: None,
                 smtp_port: 587,

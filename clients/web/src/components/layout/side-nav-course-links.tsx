@@ -8,6 +8,7 @@ import {
   FileText,
   Layers,
   LayoutDashboard,
+  Lightbulb,
   ListChecks,
   MessageSquare,
   NotebookPen,
@@ -111,6 +112,15 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
         >
           <ListChecks className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
           Question bank
+        </NavLink>
+      )}
+      {canManageQuestionBank && questionBankEnabled && (
+        <NavLink
+          to={`${base}/misconception-report`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <Lightbulb className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Misconceptions
         </NavLink>
       )}
       {notebookEnabled && (

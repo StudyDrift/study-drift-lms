@@ -105,9 +105,12 @@ function CourseCard({
         }}
       >
         <img
+          data-lex-hero
           src={course.heroImageUrl ?? '/course-card-hero.png'}
           alt=""
           draggable={false}
+          loading="lazy"
+          decoding="async"
           className="h-40 w-full object-cover"
           style={heroImageObjectStyle(course.heroImageObjectPosition)}
         />

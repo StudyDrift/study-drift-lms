@@ -36,6 +36,8 @@ pub struct CourseWithViewerResponse {
     /// Present when the viewer has a `student` enrollment row in this course (adaptive path / next-item APIs).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewer_student_enrollment_id: Option<Uuid>,
+    /// Server feature flag `ANNOTATION_ENABLED` — SpeedGrader-style inline annotations (plan 3.1).
+    pub annotations_enabled: bool,
 }
 
 #[derive(Debug, sqlx::FromRow, Serialize)]
@@ -88,6 +90,8 @@ pub struct CoursePublic {
     pub diagnostic_assessments_enabled: bool,
     /// Progressive quiz hints + worked examples (plan 1.9).
     pub hint_scaffolding_enabled: bool,
+    /// Tagged distractor remediation + misconception reporting (plan 1.10).
+    pub misconception_detection_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -163,6 +167,8 @@ pub struct PatchCourseFeaturesRequest {
     pub diagnostic_assessments_enabled: Option<bool>,
     #[serde(default)]
     pub hint_scaffolding_enabled: Option<bool>,
+    #[serde(default)]
+    pub misconception_detection_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

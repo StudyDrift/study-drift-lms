@@ -67,6 +67,7 @@ pub async fn sweep_expired_attempts(
                         &resolved.questions,
                         &responses,
                         course_row.hint_scaffolding_enabled,
+                        course_row.misconception_detection_enabled,
                     )
                     .await
                     .map_err(|e| anyhow::anyhow!(e))?;

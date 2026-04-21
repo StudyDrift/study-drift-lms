@@ -131,8 +131,26 @@ pub struct CreateCourseExternalLinkRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateCourseLtiLinkRequest {
+    pub title: String,
+    pub external_tool_id: Uuid,
+    #[serde(default)]
+    pub resource_link_id: String,
+    pub line_item_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PatchModuleExternalLinkRequest {
     pub url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchModuleLtiLinkRequest {
+    pub title: Option<String>,
+    pub resource_link_id: Option<String>,
+    pub line_item_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -142,6 +160,23 @@ pub struct ModuleExternalLinkResponse {
     pub title: String,
     pub url: String,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModuleLtiLinkResponse {
+    pub item_id: Uuid,
+    pub title: String,
+    pub external_tool_id: Uuid,
+    pub external_tool_name: String,
+    pub resource_link_id: String,
+    pub line_item_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModuleLtiEmbedTicketResponse {
+    pub ticket: String,
 }
 
 #[derive(Debug, Deserialize)]

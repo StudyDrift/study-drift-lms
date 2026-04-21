@@ -186,7 +186,7 @@ pub async fn apply_quiz_grades_mastery<'e, E>(
     course_id: Uuid,
     user_id: Uuid,
     attempt_id: Uuid,
-    touches: &[(Uuid, f64, i32)],
+    touches: &[(Uuid, f64, i32, f64)],
 ) -> Result<(), AppError>
 where
     for<'a> &'a mut E: sqlx::Executor<'a, Database = Postgres>,
@@ -195,7 +195,7 @@ where
         return Ok(());
     }
     let alpha = ema_alpha();
-    for &(concept_id, score, q_index) in touches {
+    for &(concept_id, score, q_index, ema_alpha_mult) in touches {
         let input = LearnerModelUpdateInput {
             user_id,
             attempt_id,
@@ -204,6 +204,7 @@ where
             score,
             question_index: q_index,
             ema_alpha: alpha,
+            ema_alpha_multiplier: ema_alpha_mult,
         };
         apply_mastery_update_in_tx(executor, &input)
             .await
@@ -229,11 +230,13 @@ pub fn collect_concept_touches_from_question(
     max_pts: f64,
     extra_concept_ids: &[Uuid],
     mastery_scale: f64,
-    out: &mut Vec<(Uuid, f64, i32)>,
+    ema_alpha_multiplier: f64,
+    out: &mut Vec<(Uuid, f64, i32, f64)>,
 ) {
     use std::collections::HashSet;
     let denom = if max_pts > 0.0 { max_pts } else { 1.0 };
     let score = (pts / denom).clamp(0.0, 1.0) * mastery_scale.clamp(0.0, 1.0);
+    let mult = ema_alpha_multiplier.clamp(0.01, 2.0);
     let mut seen: HashSet<(Uuid, i32)> = HashSet::new();
     for sid in &q.concept_ids {
         let Ok(cid) = Uuid::parse_str(sid.trim()) else {
@@ -241,13 +244,13 @@ pub fn collect_concept_touches_from_question(
         };
         let key = (cid, q_index);
         if seen.insert(key) {
-            out.push((cid, score, q_index));
+            out.push((cid, score, q_index, mult));
         }
     }
     for &cid in extra_concept_ids {
         let key = (cid, q_index);
         if seen.insert(key) {
-            out.push((cid, score, q_index));
+            out.push((cid, score, q_index, mult));
         }
     }
 }
@@ -262,6 +265,7 @@ pub async fn apply_mastery_from_saved_responses<'e, E>(
     bank: &[QuizQuestion],
     responses: &[QuizResponseRow],
     hint_scaffolding_enabled: bool,
+    misconception_detection_enabled: bool,
 ) -> Result<(), AppError>
 where
     for<'a> &'a mut E: sqlx::Executor<'a, Database = Postgres>,
@@ -303,6 +307,34 @@ where
             .unwrap_or(&[]);
         let hint_n = *hint_counts.get(qid).unwrap_or(&0);
         let ms = crate::services::hint_service::mastery_scale_for_hint_uses(hint_n);
+        let mut ema_mult = 1.0_f64;
+        if misconception_detection_enabled && r.is_correct == Some(false) {
+            if let Ok(resp_item) =
+                serde_json::from_value::<crate::models::course_module_quiz::QuizQuestionResponseItem>(
+                    r.response_json.clone(),
+                )
+            {
+                if let Some(sel) = resp_item.selected_choice_index {
+                    if let Ok(quuid) = Uuid::parse_str(qid) {
+                        let hit = crate::services::misconception::record_wrong_multiple_choice(
+                            executor,
+                            pool,
+                            course_id,
+                            user_id,
+                            attempt_id,
+                            quuid,
+                            q,
+                            sel,
+                            misconception_detection_enabled,
+                        )
+                        .await;
+                        if hit.is_some() {
+                            ema_mult = crate::services::misconception::mastery_alpha_multiplier_for_misconception_hit();
+                        }
+                    }
+                }
+            }
+        }
         collect_concept_touches_from_question(
             q,
             r.question_index,
@@ -310,6 +342,7 @@ where
             max,
             extra,
             ms,
+            ema_mult,
             &mut touches,
         );
     }

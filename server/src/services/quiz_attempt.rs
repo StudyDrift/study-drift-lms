@@ -30,6 +30,11 @@ pub fn apply_choice_display_order(mut q: QuizQuestion, perm: &[usize]) -> QuizQu
     let old_choices = std::mem::take(&mut q.choices);
     q.choices = perm.iter().map(|&i| old_choices[i].clone()).collect();
 
+    if !q.choice_ids.is_empty() && q.choice_ids.len() == old_choices.len() {
+        let old_ids = std::mem::take(&mut q.choice_ids);
+        q.choice_ids = perm.iter().map(|&i| old_ids[i].clone()).collect();
+    }
+
     if let Some(ci) = q.correct_choice_index {
         if let Some(new_idx) = perm.iter().position(|&authored| authored == ci) {
             q.correct_choice_index = Some(new_idx);
@@ -58,6 +63,7 @@ mod tests {
             prompt: "p".into(),
             question_type: "multiple_choice".into(),
             choices: vec!["A".into(), "B".into(), "C".into()],
+            choice_ids: vec![],
             type_config: serde_json::json!({}),
             correct_choice_index: Some(1),
             multiple_answer: false,

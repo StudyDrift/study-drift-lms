@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod assignment_grading;
 pub mod accommodations;
 pub mod adaptive_paths;
 pub mod auth;
@@ -10,7 +11,9 @@ pub mod course_files;
 pub mod courses;
 pub mod health;
 pub mod learners;
+pub mod lti;
 pub mod me;
+pub mod misconceptions;
 pub mod question_bank;
 pub mod recommendations;
 pub mod rbac;

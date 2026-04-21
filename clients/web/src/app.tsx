@@ -19,6 +19,7 @@ import CourseModuleExternalLinkPage from './pages/lms/course-module-external-lin
 import CourseModuleQuizPage from './pages/lms/course-module-quiz-page'
 import CourseDiagnosticPage from './pages/lms/course-diagnostic-page'
 import { CourseQuestionBankPage } from './pages/lms/course-question-bank-page'
+import CourseMisconceptionReportPage from './pages/lms/course-misconception-report-page'
 import CourseModules from './pages/lms/course-modules'
 import CourseNotebookPage from './pages/lms/course-notebook-page'
 import CourseSettings from './pages/lms/course-settings'
@@ -90,6 +91,7 @@ export default function App() {
             <Route path="diagnostic" element={<CourseDiagnosticPage />} />
             <Route path="modules/external-link/:itemId" element={<CourseModuleExternalLinkPage />} />
             <Route path="questions" element={<CourseQuestionBankPage />} />
+            <Route path="misconception-report" element={<CourseMisconceptionReportPage />} />
             <Route path="modules" element={<CourseModules />} />
             <Route path="notebook" element={<CourseNotebookPage />} />
             <Route path="calendar" element={<CourseCalendarPage />} />
