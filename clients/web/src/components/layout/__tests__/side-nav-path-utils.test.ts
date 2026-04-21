@@ -22,24 +22,30 @@ describe('settingsViewFromPathname', () => {
 })
 
 describe('courseSettingsSectionFromPathname', () => {
-  it('returns basic when nested under settings', () => {
+  it('returns general when nested too deeply under settings', () => {
     expect(
       courseSettingsSectionFromPathname('/courses/C-1/settings/dates/extra'),
-    ).toBe('basic')
+    ).toBe('general')
   })
 
   it('maps single segment paths', () => {
-    expect(courseSettingsSectionFromPathname('/courses/C-1/settings')).toBe('basic')
-    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/dates')).toBe('dates')
-    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/branding')).toBe('branding')
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings')).toBe('general')
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/general')).toBe('general')
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/dates')).toBe('general')
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/branding')).toBe('general')
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/grading')).toBe('grading')
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/outcomes')).toBe('outcomes')
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/features')).toBe('features')
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/features-tools')).toBe(
-      'features-tools',
+      'features',
+    )
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/import-export')).toBe(
+      'import-export',
     )
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/export-import')).toBe(
-      'export-import',
+      'import-export',
     )
-    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/archived')).toBe('archived')
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/archive')).toBe('archive')
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/archived')).toBe('archive')
   })
 })

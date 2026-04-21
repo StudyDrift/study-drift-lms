@@ -9,6 +9,7 @@ pub mod communication;
 pub mod content_page_markups;
 pub mod concepts;
 pub mod course;
+pub mod diagnostic;
 pub mod course_feed;
 pub mod course_files;
 pub mod course_grades;

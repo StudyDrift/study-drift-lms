@@ -62,6 +62,7 @@ pub async fn list_for_enrolled_user(
             c.standards_alignment_enabled,
             c.adaptive_paths_enabled,
             c.srs_enabled,
+            c.diagnostic_assessments_enabled,
             c.created_at,
             c.updated_at
         FROM {} c
@@ -126,6 +127,7 @@ pub async fn insert_course(
                 standards_alignment_enabled,
                 adaptive_paths_enabled,
                 srs_enabled,
+                diagnostic_assessments_enabled,
                 created_at,
                 updated_at
             "#,
@@ -236,6 +238,7 @@ pub async fn get_by_course_code(
             standards_alignment_enabled,
             adaptive_paths_enabled,
             srs_enabled,
+            diagnostic_assessments_enabled,
             created_at,
             updated_at
         FROM {}
@@ -282,6 +285,7 @@ pub async fn get_by_id(
             standards_alignment_enabled,
             adaptive_paths_enabled,
             srs_enabled,
+            diagnostic_assessments_enabled,
             created_at,
             updated_at
         FROM {}
@@ -382,6 +386,7 @@ pub async fn update_course(
             standards_alignment_enabled,
             adaptive_paths_enabled,
             srs_enabled,
+            diagnostic_assessments_enabled,
             created_at,
             updated_at
         "#,
@@ -414,6 +419,7 @@ pub async fn patch_course_features(
     standards_alignment_enabled: bool,
     adaptive_paths_enabled: bool,
     srs_enabled: bool,
+    diagnostic_assessments_enabled: bool,
 ) -> Result<Option<CoursePublic>, sqlx::Error> {
     sqlx::query_as::<_, CoursePublic>(&format!(
         r#"
@@ -427,8 +433,9 @@ pub async fn patch_course_features(
             standards_alignment_enabled = $6,
             adaptive_paths_enabled = $7,
             srs_enabled = $8,
+            diagnostic_assessments_enabled = $9,
             updated_at = NOW()
-        WHERE course_code = $9
+        WHERE course_code = $10
         RETURNING
             id,
             course_code,
@@ -457,6 +464,7 @@ pub async fn patch_course_features(
             standards_alignment_enabled,
             adaptive_paths_enabled,
             srs_enabled,
+            diagnostic_assessments_enabled,
             created_at,
             updated_at
         "#,
@@ -470,6 +478,7 @@ pub async fn patch_course_features(
     .bind(standards_alignment_enabled)
     .bind(adaptive_paths_enabled)
     .bind(srs_enabled)
+    .bind(diagnostic_assessments_enabled)
     .bind(course_code)
     .fetch_optional(pool)
     .await
@@ -517,6 +526,7 @@ pub async fn set_hero_image_fields(
             standards_alignment_enabled,
             adaptive_paths_enabled,
             srs_enabled,
+            diagnostic_assessments_enabled,
             created_at,
             updated_at
         "#,
@@ -574,6 +584,7 @@ pub async fn update_markdown_theme(
             standards_alignment_enabled,
             adaptive_paths_enabled,
             srs_enabled,
+            diagnostic_assessments_enabled,
             created_at,
             updated_at
         "#,
@@ -707,6 +718,7 @@ pub async fn set_course_archived(
             standards_alignment_enabled,
             adaptive_paths_enabled,
             srs_enabled,
+            diagnostic_assessments_enabled,
             created_at,
             updated_at
         "#,
@@ -844,6 +856,7 @@ pub async fn factory_reset_course(
             standards_alignment_enabled = false,
             adaptive_paths_enabled = false,
             srs_enabled = false,
+            diagnostic_assessments_enabled = false,
             updated_at = NOW()
         WHERE course_code = $1
         RETURNING
@@ -874,6 +887,7 @@ pub async fn factory_reset_course(
             standards_alignment_enabled,
             adaptive_paths_enabled,
             srs_enabled,
+            diagnostic_assessments_enabled,
             created_at,
             updated_at
         "#,

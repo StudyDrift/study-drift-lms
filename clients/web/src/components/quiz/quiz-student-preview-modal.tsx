@@ -76,6 +76,10 @@ function orderingItemsForPreview(q: QuizQuestion): string[] {
   return visibleChoices(q)
 }
 
+function previewQuestionResetKey(q: QuizQuestion): string {
+  return `${q.id}\0${q.questionType}\0${JSON.stringify(q.typeConfig)}\0${JSON.stringify(q.choices)}`
+}
+
 type MatchingPairDraft = {
   leftId?: string
   rightId?: string
@@ -108,12 +112,6 @@ function StudentQuestionBlock({ q, index }: { q: QuizQuestion; index: number }) 
   const baseOrdering = orderingItemsForPreview(q)
   const [matchingAnswers, setMatchingAnswers] = useState<Record<string, string>>({})
   const [hotspotClick, setHotspotClick] = useState<{ x: number; y: number } | null>(null)
-
-  useEffect(() => {
-    setOrdering(orderingItemsForPreview(q))
-    setMatchingAnswers({})
-    setHotspotClick(null)
-  }, [q.id, q.questionType, q.typeConfig, q.choices])
 
   return (
     <section
@@ -496,6 +494,89 @@ function StudentQuestionBlock({ q, index }: { q: QuizQuestion; index: number }) 
   )
 }
 
+function StaticQuizPreviewBody({
+  prepared,
+  advanced,
+  oneQuestionAtATime,
+  reviewNote,
+}: {
+  prepared: QuizQuestion[]
+  advanced: QuizAdvancedSettings
+  oneQuestionAtATime: boolean
+  reviewNote: string
+}) {
+  const [step, setStep] = useState(0)
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(() =>
+    advanced.timeLimitMinutes != null ? advanced.timeLimitMinutes * 60 : null,
+  )
+  const [paused, setPaused] = useState(false)
+
+  useEffect(() => {
+    if (secondsLeft == null || secondsLeft <= 0 || paused) return
+    const t = window.setInterval(() => {
+      setSecondsLeft((s) => (s == null || s <= 1 ? 0 : s - 1))
+    }, 1000)
+    return () => window.clearInterval(t)
+  }, [secondsLeft, paused])
+
+  useEffect(() => {
+    if (!advanced.timerPauseWhenTabHidden) return
+    function onVis() {
+      setPaused(document.visibilityState === 'hidden')
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [advanced.timerPauseWhenTabHidden])
+
+  const atEnd = step >= prepared.length
+  const current = prepared[step]
+
+  return (
+    <div className="space-y-4">
+      {secondsLeft != null && (
+        <p className="text-sm font-medium text-slate-800">
+          Time remaining: {Math.floor(secondsLeft / 60)}:
+          {(secondsLeft % 60).toString().padStart(2, '0')}
+          {paused ? ' (paused)' : ''}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">{reviewNote}</p>
+      {!oneQuestionAtATime ? (
+        prepared.map((q, index) => (
+          <StudentQuestionBlock key={`${index}-${previewQuestionResetKey(q)}`} q={q} index={index} />
+        ))
+      ) : !atEnd && current ? (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Question {step + 1} of {prepared.length}
+          </p>
+          <StudentQuestionBlock key={previewQuestionResetKey(current)} q={current} index={step} />
+          <div className="flex flex-wrap justify-end gap-2">
+            {advanced.allowBackNavigation && step > 0 ? (
+              <button
+                type="button"
+                onClick={() => setStep((s) => Math.max(0, s - 1))}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Back
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setStep((s) => s + 1)}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+            >
+              {step + 1 >= prepared.length ? 'Finish' : 'Next'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-600">End of preview for one-question-at-a-time flow.</p>
+      )}
+    </div>
+  )
+}
+
 function StaticQuizPreview({
   questions,
   advanced,
@@ -520,36 +601,10 @@ function StaticQuizPreview({
     return qs
   }, [questions, advanced.shuffleQuestions, advanced.shuffleChoices, advanced.randomQuestionPoolCount])
 
-  const [step, setStep] = useState(0)
-  useEffect(() => {
-    setStep(0)
-  }, [prepared])
-
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(() =>
-    advanced.timeLimitMinutes != null ? advanced.timeLimitMinutes * 60 : null,
+  const preparedSessionKey = useMemo(
+    () => `${prepared.map((q) => q.id).join('|')}#${advanced.timeLimitMinutes ?? ''}`,
+    [prepared, advanced.timeLimitMinutes],
   )
-  const [paused, setPaused] = useState(false)
-
-  useEffect(() => {
-    setSecondsLeft(advanced.timeLimitMinutes != null ? advanced.timeLimitMinutes * 60 : null)
-  }, [advanced.timeLimitMinutes, prepared])
-
-  useEffect(() => {
-    if (secondsLeft == null || secondsLeft <= 0 || paused) return
-    const t = window.setInterval(() => {
-      setSecondsLeft((s) => (s == null || s <= 1 ? 0 : s - 1))
-    }, 1000)
-    return () => window.clearInterval(t)
-  }, [secondsLeft, paused])
-
-  useEffect(() => {
-    if (!advanced.timerPauseWhenTabHidden) return
-    function onVis() {
-      setPaused(document.visibilityState === 'hidden')
-    }
-    document.addEventListener('visibilitychange', onVis)
-    return () => document.removeEventListener('visibilitychange', onVis)
-  }, [advanced.timerPauseWhenTabHidden])
 
   const reviewNote = useMemo(() => {
     const v = advanced.reviewVisibility
@@ -566,50 +621,14 @@ function StaticQuizPreview({
     )
   }
 
-  const atEnd = step >= prepared.length
-  const current = prepared[step]
-
   return (
-    <div className="space-y-4">
-      {secondsLeft != null && (
-        <p className="text-sm font-medium text-slate-800">
-          Time remaining: {Math.floor(secondsLeft / 60)}:
-          {(secondsLeft % 60).toString().padStart(2, '0')}
-          {paused ? ' (paused)' : ''}
-        </p>
-      )}
-      <p className="text-xs text-slate-500">{reviewNote}</p>
-      {!oneQuestionAtATime ? (
-        prepared.map((q, index) => <StudentQuestionBlock key={`${q.id}-${index}`} q={q} index={index} />)
-      ) : !atEnd && current ? (
-        <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Question {step + 1} of {prepared.length}
-          </p>
-          <StudentQuestionBlock q={current} index={step} />
-          <div className="flex flex-wrap justify-end gap-2">
-            {advanced.allowBackNavigation && step > 0 ? (
-              <button
-                type="button"
-                onClick={() => setStep((s) => Math.max(0, s - 1))}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Back
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setStep((s) => s + 1)}
-              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
-            >
-              {step + 1 >= prepared.length ? 'Finish' : 'Next'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm text-slate-600">End of preview for one-question-at-a-time flow.</p>
-      )}
-    </div>
+    <StaticQuizPreviewBody
+      key={preparedSessionKey}
+      prepared={prepared}
+      advanced={advanced}
+      oneQuestionAtATime={oneQuestionAtATime}
+      reviewNote={reviewNote}
+    />
   )
 }
 
@@ -768,6 +787,7 @@ function AdaptivePreviewPanel({
       }
     }
     const turn: AdaptiveQuizHistoryTurn = {
+      ...(current.questionId ? { questionId: current.questionId } : {}),
       prompt: current.prompt,
       questionType: current.questionType,
       choices: current.choices,
@@ -855,8 +875,9 @@ function AdaptivePreviewPanel({
   )
 }
 
-export function QuizStudentPreviewModal({
-  open,
+type QuizStudentPreviewModalContentProps = Omit<QuizStudentPreviewModalProps, 'open'>
+
+function QuizStudentPreviewModalContent({
   onClose,
   quizTitle,
   markdown,
@@ -869,28 +890,9 @@ export function QuizStudentPreviewModal({
   adaptiveQuestionCount = 5,
   advanced,
   oneQuestionAtATime,
-}: QuizStudentPreviewModalProps) {
-  const [accessOk, setAccessOk] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      setAccessOk(!advanced.requiresQuizAccessCode)
-    }
-  }, [open, advanced.requiresQuizAccessCode])
-
-  useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-
-  if (!open) return null
-
+}: QuizStudentPreviewModalContentProps) {
+  const [accessUnlocked, setAccessUnlocked] = useState(false)
+  const accessOk = !advanced.requiresQuizAccessCode || accessUnlocked
   const adaptiveOn = Boolean(isAdaptive && courseCode && itemId)
 
   return (
@@ -942,7 +944,7 @@ export function QuizStudentPreviewModal({
               />
             </div>
             {advanced.requiresQuizAccessCode ? (
-              <AccessCodeGate advanced={advanced} onUnlocked={() => setAccessOk(true)} />
+              <AccessCodeGate advanced={advanced} onUnlocked={() => setAccessUnlocked(true)} />
             ) : null}
             {accessOk ? (
               adaptiveOn ? (
@@ -967,4 +969,21 @@ export function QuizStudentPreviewModal({
       </div>
     </div>
   )
+}
+
+export function QuizStudentPreviewModal({ open, onClose, ...rest }: QuizStudentPreviewModalProps) {
+  useEffect(() => {
+    if (!open) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return <QuizStudentPreviewModalContent onClose={onClose} {...rest} />
 }

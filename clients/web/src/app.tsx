@@ -17,6 +17,7 @@ import CourseModuleAssignmentPage from './pages/lms/course-module-assignment-pag
 import CourseModuleContentPage from './pages/lms/course-module-content-page'
 import CourseModuleExternalLinkPage from './pages/lms/course-module-external-link-page'
 import CourseModuleQuizPage from './pages/lms/course-module-quiz-page'
+import CourseDiagnosticPage from './pages/lms/course-diagnostic-page'
 import { CourseQuestionBankPage } from './pages/lms/course-question-bank-page'
 import CourseModules from './pages/lms/course-modules'
 import CourseNotebookPage from './pages/lms/course-notebook-page'
@@ -86,6 +87,7 @@ export default function App() {
             <Route path="modules/content/:itemId" element={<CourseModuleContentPage />} />
             <Route path="modules/assignment/:itemId" element={<CourseModuleAssignmentPage />} />
             <Route path="modules/quiz/:itemId" element={<CourseModuleQuizPage />} />
+            <Route path="diagnostic" element={<CourseDiagnosticPage />} />
             <Route path="modules/external-link/:itemId" element={<CourseModuleExternalLinkPage />} />
             <Route path="questions" element={<CourseQuestionBankPage />} />
             <Route path="modules" element={<CourseModules />} />

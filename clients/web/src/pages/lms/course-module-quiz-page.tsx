@@ -293,6 +293,9 @@ export default function CourseModuleQuizPage() {
   const [adaptiveSystemPrompt, setAdaptiveSystemPrompt] = useState('')
   const [adaptiveSourceItemIds, setAdaptiveSourceItemIds] = useState<string[]>([])
   const [adaptiveQuestionCount, setAdaptiveQuestionCount] = useState(5)
+  const [adaptiveDeliveryMode, setAdaptiveDeliveryMode] = useState<'ai' | 'cat'>('ai')
+  const [qeAdaptiveDeliveryMode, setQeAdaptiveDeliveryMode] = useState<'ai' | 'cat'>('ai')
+  const [courseQuestionBankEnabled, setCourseQuestionBankEnabled] = useState(false)
   const [generateModalOpen, setGenerateModalOpen] = useState(false)
   const [generatePrompt, setGeneratePrompt] = useState('')
   const [generateCount, setGenerateCount] = useState(5)
@@ -354,7 +357,9 @@ export default function CourseModuleQuizPage() {
       setAdaptiveQuestionCount(
         typeof data.adaptiveQuestionCount === 'number' ? data.adaptiveQuestionCount : 5,
       )
+      setAdaptiveDeliveryMode(data.adaptiveDeliveryMode === 'cat' ? 'cat' : 'ai')
       setStudentQuizPayload(data)
+      setCourseQuestionBankEnabled(courseRow.questionBankEnabled === true)
       setCourseLockdownEnabled(courseRow.lockdownModeEnabled === true)
       setLockdownMode(data.lockdownMode)
       setDraftLockdownMode(data.lockdownMode)
@@ -693,6 +698,7 @@ export default function CourseModuleQuizPage() {
     setQeAdaptivePrompt(adaptiveSystemPrompt)
     setQeAdaptiveSources([...adaptiveSourceItemIds])
     setQeAdaptiveQuestionCount(adaptiveQuestionCount)
+    setQeAdaptiveDeliveryMode(adaptiveDeliveryMode)
     setImportQuestionsOpen(false)
     setImportQuestionsError(null)
     setImportQuestionsQuery('')
@@ -750,8 +756,12 @@ export default function CourseModuleQuizPage() {
 
   async function saveQuestions() {
     if (!courseCode || !itemId || !canEditQuizItems) return
-    if (qeAdaptiveOn && qeAdaptiveSources.length === 0) {
+    if (qeAdaptiveOn && qeAdaptiveDeliveryMode === 'ai' && qeAdaptiveSources.length === 0) {
       setQuestionsError('Choose at least one course item to use as reference material.')
+      return
+    }
+    if (qeAdaptiveOn && qeAdaptiveDeliveryMode === 'cat' && !courseQuestionBankEnabled) {
+      setQuestionsError('Enable the course question bank (course features) before using adaptive CAT.')
       return
     }
     const adaptiveCount = Math.min(30, Math.max(1, Math.floor(Number(qeAdaptiveQuestionCount)) || 1))
@@ -765,6 +775,7 @@ export default function CourseModuleQuizPage() {
           adaptiveSystemPrompt: qeAdaptivePrompt.trim(),
           adaptiveSourceItemIds: qeAdaptiveSources,
           adaptiveQuestionCount: adaptiveCount,
+          adaptiveDeliveryMode: qeAdaptiveDeliveryMode,
         })
         setQuestions(data.questions)
         setIsAdaptive(Boolean(data.isAdaptive))
@@ -773,6 +784,7 @@ export default function CourseModuleQuizPage() {
         setAdaptiveQuestionCount(
           typeof data.adaptiveQuestionCount === 'number' ? data.adaptiveQuestionCount : adaptiveCount,
         )
+        setAdaptiveDeliveryMode(data.adaptiveDeliveryMode === 'cat' ? 'cat' : 'ai')
         setQuizAdvanced(quizAdvancedSettingsFromPayload(data))
         setLockdownMode(data.lockdownMode)
         setDraftLockdownMode(data.lockdownMode)
@@ -796,12 +808,14 @@ export default function CourseModuleQuizPage() {
           adaptiveSystemPrompt: '',
           adaptiveSourceItemIds: [],
           adaptiveQuestionCount: 5,
+          adaptiveDeliveryMode: 'ai',
         })
         setQuestions(data.questions)
         setIsAdaptive(Boolean(data.isAdaptive))
         setAdaptiveSystemPrompt(data.adaptiveSystemPrompt ?? '')
         setAdaptiveSourceItemIds(data.adaptiveSourceItemIds ?? [])
         setAdaptiveQuestionCount(5)
+        setAdaptiveDeliveryMode('ai')
         setQuizAdvanced(quizAdvancedSettingsFromPayload(data))
         setLockdownMode(data.lockdownMode)
         setDraftLockdownMode(data.lockdownMode)
@@ -1495,79 +1509,137 @@ export default function CourseModuleQuizPage() {
                 {qeAdaptiveOn ? (
                   <div className="space-y-4">
                     <div>
-                      <p className="mb-2 text-xs font-medium text-slate-600">Reference course items</p>
-                      <p className="mb-2 text-xs text-slate-500">
-                        Select pages, assignments, or other quizzes whose text the AI should use when generating
-                        questions.
-                      </p>
-                      <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
-                        {structureItems.filter(
-                          (it) =>
-                            (it.kind === 'content_page' || it.kind === 'assignment' || it.kind === 'quiz') &&
-                            it.id !== itemId,
-                        ).length === 0 ? (
-                          <p className="px-2 py-3 text-xs text-slate-500">No linkable items found in this course.</p>
-                        ) : (
-                          structureItems
-                            .filter(
-                              (it) =>
-                                (it.kind === 'content_page' || it.kind === 'assignment' || it.kind === 'quiz') &&
-                                it.id !== itemId,
-                            )
-                            .map((it) => (
-                              <label
-                                key={it.id}
-                                className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-sm text-slate-800 hover:bg-slate-50"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={qeAdaptiveSources.includes(it.id)}
-                                  onChange={() => {
-                                    setQeAdaptiveSources((prev) =>
-                                      prev.includes(it.id) ? prev.filter((x) => x !== it.id) : [...prev, it.id],
-                                    )
-                                  }}
-                                  className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30"
-                                />
-                                <span className="min-w-0">
-                                  <span className="font-medium">{it.title || 'Untitled'}</span>
-                                  <span className="ml-2 text-xs text-slate-500">({structureKindLabel(it.kind)})</span>
-                                </span>
-                              </label>
-                            ))
-                        )}
+                      <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="adaptive-delivery-mode">
+                        Adaptive delivery
+                      </label>
+                      <select
+                        id="adaptive-delivery-mode"
+                        value={qeAdaptiveDeliveryMode}
+                        disabled={questionsSaving}
+                        onChange={(e) => setQeAdaptiveDeliveryMode(e.target.value === 'cat' ? 'cat' : 'ai')}
+                        className="w-full max-w-md rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 disabled:opacity-60"
+                      >
+                        <option value="ai">AI-generated (OpenRouter)</option>
+                        <option value="cat" disabled={!courseQuestionBankEnabled}>
+                          IRT pool — computerized adaptive (CAT)
+                        </option>
+                      </select>
+                      {!courseQuestionBankEnabled ? (
+                        <p className="mt-1 text-xs text-amber-800">
+                          Turn on the question bank in course features to enable CAT. CAT also needs a single pool
+                          configured for this quiz via question bank delivery.
+                        </p>
+                      ) : null}
+                    </div>
+                    {qeAdaptiveDeliveryMode === 'ai' ? (
+                      <div>
+                        <p className="mb-2 text-xs font-medium text-slate-600">Reference course items</p>
+                        <p className="mb-2 text-xs text-slate-500">
+                          Select pages, assignments, or other quizzes whose text the AI should use when generating
+                          questions.
+                        </p>
+                        <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
+                          {structureItems.filter(
+                            (it) =>
+                              (it.kind === 'content_page' || it.kind === 'assignment' || it.kind === 'quiz') &&
+                              it.id !== itemId,
+                          ).length === 0 ? (
+                            <p className="px-2 py-3 text-xs text-slate-500">No linkable items found in this course.</p>
+                          ) : (
+                            structureItems
+                              .filter(
+                                (it) =>
+                                  (it.kind === 'content_page' || it.kind === 'assignment' || it.kind === 'quiz') &&
+                                  it.id !== itemId,
+                              )
+                              .map((it) => (
+                                <label
+                                  key={it.id}
+                                  className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-sm text-slate-800 hover:bg-slate-50"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={qeAdaptiveSources.includes(it.id)}
+                                    onChange={() => {
+                                      setQeAdaptiveSources((prev) =>
+                                        prev.includes(it.id) ? prev.filter((x) => x !== it.id) : [...prev, it.id],
+                                      )
+                                    }}
+                                    className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30"
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="font-medium">{it.title || 'Untitled'}</span>
+                                    <span className="ml-2 text-xs text-slate-500">({structureKindLabel(it.kind)})</span>
+                                  </span>
+                                </label>
+                              ))
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="adaptive-system-prompt">
-                        System prompt
-                      </label>
-                      <textarea
-                        id="adaptive-system-prompt"
-                        value={qeAdaptivePrompt}
-                        onChange={(e) => setQeAdaptivePrompt(e.target.value)}
-                        disabled={questionsSaving}
-                        rows={5}
-                        placeholder="Instructions for the AI (tone, difficulty, topics to emphasize or avoid)…"
-                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 disabled:opacity-60"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="adaptive-q-count">
-                        Number of questions
-                      </label>
-                      <input
-                        id="adaptive-q-count"
-                        type="number"
-                        min={1}
-                        max={30}
-                        value={qeAdaptiveQuestionCount}
-                        onChange={(e) => setQeAdaptiveQuestionCount(Number(e.target.value))}
-                        disabled={questionsSaving}
-                        className="w-full max-w-[8rem] rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 disabled:opacity-60"
-                      />
-                      <p className="mt-1 text-xs text-slate-500">Between 1 and 30 per attempt.</p>
-                    </div>
+                    ) : (
+                      <p className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
+                        CAT mode serves calibrated multiple-choice or true/false items from your pool (exactly one pool
+                        row on this quiz). Set <span className="font-medium">IRT_CAT_MODE_ENABLED=1</span> on the server
+                        before learners can take a CAT attempt.
+                      </p>
+                    )}
+                    {qeAdaptiveDeliveryMode === 'ai' ? (
+                      <>
+                        <div>
+                          <label
+                            className="mb-1 block text-xs font-medium text-slate-600"
+                            htmlFor="adaptive-system-prompt"
+                          >
+                            System prompt
+                          </label>
+                          <textarea
+                            id="adaptive-system-prompt"
+                            value={qeAdaptivePrompt}
+                            onChange={(e) => setQeAdaptivePrompt(e.target.value)}
+                            disabled={questionsSaving}
+                            rows={5}
+                            placeholder="Instructions for the AI (tone, difficulty, topics to emphasize or avoid)…"
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 disabled:opacity-60"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="adaptive-q-count">
+                            Number of questions
+                          </label>
+                          <input
+                            id="adaptive-q-count"
+                            type="number"
+                            min={1}
+                            max={30}
+                            value={qeAdaptiveQuestionCount}
+                            onChange={(e) => setQeAdaptiveQuestionCount(Number(e.target.value))}
+                            disabled={questionsSaving}
+                            className="w-full max-w-[8rem] rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 disabled:opacity-60"
+                          />
+                          <p className="mt-1 text-xs text-slate-500">Between 1 and 30 per attempt.</p>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <label
+                          className="mb-1 block text-xs font-medium text-slate-600"
+                          htmlFor="adaptive-q-count-cat"
+                        >
+                          Number of questions
+                        </label>
+                        <input
+                          id="adaptive-q-count-cat"
+                          type="number"
+                          min={1}
+                          max={30}
+                          value={qeAdaptiveQuestionCount}
+                          onChange={(e) => setQeAdaptiveQuestionCount(Number(e.target.value))}
+                          disabled={questionsSaving}
+                          className="w-full max-w-[8rem] rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 disabled:opacity-60"
+                        />
+                        <p className="mt-1 text-xs text-slate-500">How many pool items to administer per attempt.</p>
+                      </div>
+                    )}
                   </div>
                 ) : null}
 

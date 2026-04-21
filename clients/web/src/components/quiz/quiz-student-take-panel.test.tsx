@@ -62,6 +62,7 @@ function minimalQuiz(overrides: Partial<ModuleQuizPayload> = {}): ModuleQuizPayl
     adaptiveSystemPrompt: null,
     adaptiveSourceItemIds: null,
     adaptiveQuestionCount: 5,
+    adaptiveDeliveryMode: 'ai',
     assignmentGroupId: null,
   }
   return { ...base, ...overrides }
@@ -162,6 +163,7 @@ describe('QuizStudentTakePanel', () => {
           adaptiveSystemPrompt: null,
           adaptiveSourceItemIds: null,
           adaptiveQuestionCount: 5,
+          adaptiveDeliveryMode: 'ai',
           assignmentGroupId: null,
         })
       }),

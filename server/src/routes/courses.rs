@@ -94,6 +94,7 @@ use crate::repos::user_ai_settings;
 use crate::repos::user_audit;
 use crate::services::adaptive_path as adaptive_path_service;
 use crate::services::adaptive_quiz_ai;
+use crate::services::adaptive_quiz_cat;
 use crate::services::learner_state::{self, LearnerStateService, DEFAULT_LEARNER_STATE_SERVICE};
 use crate::services::assignment_rubric_ai;
 use crate::services::question_bank;
@@ -744,6 +745,7 @@ fn module_quiz_response_for_api(
         adaptive_source_item_ids: (show_adaptive_details && row.is_adaptive)
             .then(|| row.adaptive_source_item_ids.0.clone()),
         adaptive_question_count: row.adaptive_question_count,
+        adaptive_delivery_mode: row.adaptive_delivery_mode.clone(),
         assignment_group_id: row.assignment_group_id,
     }
 }
@@ -775,6 +777,7 @@ fn quiz_settings_patch_requested(req: &UpdateModuleQuizRequest) -> bool {
         || req.points_worth.is_some()
         || req.lockdown_mode.is_some()
         || req.focus_loss_threshold.is_some()
+        || req.adaptive_delivery_mode.is_some()
 }
 
 fn merge_quiz_settings_write(
@@ -853,6 +856,9 @@ fn merge_quiz_settings_write(
     }
     if let Some(v) = &req.random_question_pool_count {
         s.random_question_pool_count = *v;
+    }
+    if let Some(v) = &req.adaptive_delivery_mode {
+        s.adaptive_delivery_mode = v.trim().to_string();
     }
     if let Some(v) = &req.points_worth {
         s.points_worth = *v;
@@ -2490,7 +2496,8 @@ async fn module_quiz_patch_handler(
     let adaptive_keys = req.is_adaptive.is_some()
         || req.adaptive_system_prompt.is_some()
         || req.adaptive_source_item_ids.is_some()
-        || req.adaptive_question_count.is_some();
+        || req.adaptive_question_count.is_some()
+        || req.adaptive_delivery_mode.is_some();
 
     if adaptive_keys {
         let Some(cur) =
@@ -2510,20 +2517,47 @@ async fn module_quiz_patch_handler(
         let next_count = req
             .adaptive_question_count
             .unwrap_or(cur.adaptive_question_count);
+        let next_delivery = req
+            .adaptive_delivery_mode
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| cur.adaptive_delivery_mode.clone());
 
         if next_is {
-            validate_adaptive_quiz_settings(true, &next_prompt, &next_ids, next_count)?;
-            let n = course_structure::count_structure_items_with_kinds(
-                &state.pool,
-                course_id,
+            validate_adaptive_quiz_settings(
+                true,
+                &next_delivery,
+                &next_prompt,
                 &next_ids,
-                ADAPTIVE_SOURCE_KINDS,
-            )
-            .await?;
-            if n != next_ids.len() as i64 {
-                return Err(AppError::invalid_input(
-                    "One or more adaptive source items are invalid for this course.",
-                ));
+                next_count,
+            )?;
+            if next_delivery == "ai" {
+                let n = course_structure::count_structure_items_with_kinds(
+                    &state.pool,
+                    course_id,
+                    &next_ids,
+                    ADAPTIVE_SOURCE_KINDS,
+                )
+                .await?;
+                if n != next_ids.len() as i64 {
+                    return Err(AppError::invalid_input(
+                        "One or more adaptive source items are invalid for this course.",
+                    ));
+                }
+            } else if next_delivery == "cat" {
+                if !course_row.question_bank_enabled {
+                    return Err(AppError::invalid_input(
+                        "Adaptive CAT requires the course question bank to be enabled.",
+                    ));
+                }
+                let refs = qb_repo::list_quiz_question_refs(&state.pool, item_id).await?;
+                let pool_rows = refs.iter().filter(|r| r.pool_id.is_some()).count();
+                if refs.len() != 1 || pool_rows != 1 {
+                    return Err(AppError::invalid_input(
+                        "Adaptive CAT requires the quiz to use exactly one question pool (no mixed fixed rows).",
+                    ));
+                }
             }
             let updated = course_module_quizzes::update_adaptive_config(
                 &state.pool,
@@ -2533,6 +2567,7 @@ async fn module_quiz_patch_handler(
                 next_prompt.trim(),
                 &next_ids,
                 next_count,
+                next_delivery.as_str(),
             )
             .await?;
             if updated.is_none() {
@@ -2547,6 +2582,7 @@ async fn module_quiz_patch_handler(
                 "",
                 &[],
                 5,
+                "ai",
             )
             .await?;
             if updated.is_none() {
@@ -2655,49 +2691,61 @@ async fn module_quiz_adaptive_next_handler(
         }
     }
 
-    let bundle = course_module_quizzes::reference_markdown_for_items(
-        &state.pool,
-        course_id,
-        &row.adaptive_source_item_ids.0,
-    )
-    .await?;
-
-    let client = state
-        .open_router
-        .as_ref()
-        .ok_or(AppError::AiNotConfigured)?;
-
-    let model = user_ai_settings::get_course_setup_model_id(&state.pool, user.user_id).await?;
-
     let answered = req.history.len() as i32;
     let remaining = total - answered;
     let batch_size = remaining.clamp(1, 2);
 
-    let mastery_summary = if can_edit {
-        None
-    } else if learner_state::learner_model_enabled() {
-        DEFAULT_LEARNER_STATE_SERVICE
-            .course_mastery_summary_for_prompt(&state.pool, course_id, user.user_id)
-            .await?
+    let questions = if row.adaptive_delivery_mode == "cat" {
+        adaptive_quiz_cat::generate_cat_next_questions(
+            &state.pool,
+            course_id,
+            item_id,
+            total,
+            &req.history,
+            batch_size,
+        )
+        .await?
     } else {
-        None
-    };
+        let bundle = course_module_quizzes::reference_markdown_for_items(
+            &state.pool,
+            course_id,
+            &row.adaptive_source_item_ids.0,
+        )
+        .await?;
 
-    let questions = adaptive_quiz_ai::generate_adaptive_next_questions(
-        &state.pool,
-        client.as_ref(),
-        &model,
-        &bundle,
-        &row.adaptive_system_prompt,
-        &row.adaptive_difficulty,
-        row.adaptive_topic_balance,
-        &row.adaptive_stop_rule,
-        total,
-        &req.history,
-        batch_size,
-        mastery_summary.as_deref(),
-    )
-    .await?;
+        let client = state
+            .open_router
+            .as_ref()
+            .ok_or(AppError::AiNotConfigured)?;
+
+        let model = user_ai_settings::get_course_setup_model_id(&state.pool, user.user_id).await?;
+
+        let mastery_summary = if can_edit {
+            None
+        } else if learner_state::learner_model_enabled() {
+            DEFAULT_LEARNER_STATE_SERVICE
+                .course_mastery_summary_for_prompt(&state.pool, course_id, user.user_id)
+                .await?
+        } else {
+            None
+        };
+
+        adaptive_quiz_ai::generate_adaptive_next_questions(
+            &state.pool,
+            client.as_ref(),
+            &model,
+            &bundle,
+            &row.adaptive_system_prompt,
+            &row.adaptive_difficulty,
+            row.adaptive_topic_balance,
+            &row.adaptive_stop_rule,
+            total,
+            &req.history,
+            batch_size,
+            mastery_summary.as_deref(),
+        )
+        .await?
+    };
 
     Ok(Json(AdaptiveQuizNextResponse {
         finished: false,
@@ -5026,6 +5074,9 @@ async fn patch_course_features_handler(
         .adaptive_paths_enabled
         .unwrap_or(existing.adaptive_paths_enabled);
     let srs_enabled = req.srs_enabled.unwrap_or(existing.srs_enabled);
+    let diagnostic_assessments_enabled = req
+        .diagnostic_assessments_enabled
+        .unwrap_or(existing.diagnostic_assessments_enabled);
 
     let row = course::patch_course_features(
         &state.pool,
@@ -5038,6 +5089,7 @@ async fn patch_course_features_handler(
         standards_alignment_enabled,
         adaptive_paths_enabled,
         srs_enabled,
+        diagnostic_assessments_enabled,
     )
     .await?
     .ok_or(AppError::NotFound)?;

@@ -122,14 +122,12 @@ describe('buildSearchItems', () => {
     expect(items.some((i) => i.id === 'action:/courses/X/enrollments:add')).toBe(false)
   })
 
-  it('adds searchable course settings sections for dates and branding when staff may edit course', () => {
+  it('adds course settings general page when staff may edit course', () => {
     const allowsItemsX = (p: string) => p === courseItemCreatePermission('X')
     const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsItemsX)
-    expect(items.some((i) => i.path === '/courses/X/settings/dates')).toBe(true)
-    expect(items.some((i) => i.path === '/courses/X/settings/branding')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/X/settings/general')).toBe(true)
     const noItems = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsNone)
-    expect(noItems.some((i) => i.path === '/courses/X/settings/dates')).toBe(false)
-    expect(noItems.some((i) => i.path === '/courses/X/settings/branding')).toBe(false)
+    expect(noItems.some((i) => i.path === '/courses/X/settings/general')).toBe(false)
   })
 
   it('includes grading settings page only when gradebook view is granted', () => {
@@ -140,21 +138,21 @@ describe('buildSearchItems', () => {
     expect(noGrade.some((i) => i.path === '/courses/G/settings/grading')).toBe(false)
   })
 
-  it('includes export-import, outcomes, features-tools, and archived settings when item:create is granted', () => {
+  it('includes import-export, outcomes, features, and archive settings when item:create is granted', () => {
     const allowsItems = (p: string) => p === courseItemCreatePermission('Z')
     const items = buildSearchItems([{ courseCode: 'Z', title: 'W' }], [], allowsItems)
     expect(items.some((i) => i.path === '/courses/Z/settings/outcomes')).toBe(true)
-    expect(items.some((i) => i.path === '/courses/Z/settings/features-tools')).toBe(true)
-    expect(items.some((i) => i.path === '/courses/Z/settings/export-import')).toBe(true)
-    expect(items.some((i) => i.path === '/courses/Z/settings/archived')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/Z/settings/features')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/Z/settings/import-export')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/Z/settings/archive')).toBe(true)
   })
 
-  it('omits export-import, outcomes, features-tools, and archived settings without item:create', () => {
+  it('omits import-export, outcomes, features, and archive settings without item:create', () => {
     const items = buildSearchItems([{ courseCode: 'Z', title: 'W' }], [], allowsNone)
     expect(items.some((i) => i.path === '/courses/Z/settings/outcomes')).toBe(false)
-    expect(items.some((i) => i.path === '/courses/Z/settings/features-tools')).toBe(false)
-    expect(items.some((i) => i.path === '/courses/Z/settings/export-import')).toBe(false)
-    expect(items.some((i) => i.path === '/courses/Z/settings/archived')).toBe(false)
+    expect(items.some((i) => i.path === '/courses/Z/settings/features')).toBe(false)
+    expect(items.some((i) => i.path === '/courses/Z/settings/import-export')).toBe(false)
+    expect(items.some((i) => i.path === '/courses/Z/settings/archive')).toBe(false)
   })
 
   it('omits feed, notebook, and calendar search targets when disabled on the course', () => {

@@ -9,6 +9,10 @@
 pub mod accommodations;
 pub mod adaptive_path;
 pub mod adaptive_quiz_ai;
+pub mod adaptive_quiz_cat;
+pub mod irt;
+pub mod irt_calibration_job;
+pub mod irt_theta;
 pub mod assignment_rubric_ai;
 pub mod ai;
 pub mod auth;
@@ -19,6 +23,7 @@ pub mod canvas_course_import;
 pub mod enrollments;
 pub mod learner_state;
 pub mod outcomes;
+pub mod diagnostic;
 pub mod course_export_import;
 pub mod course_image_upload;
 pub mod quiz_generation_ai;

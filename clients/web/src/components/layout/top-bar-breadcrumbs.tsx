@@ -19,14 +19,12 @@ const structureCache = new Map<string, CourseStructureItem[]>()
 type Crumb = { key: string; label: string; to?: string }
 
 const COURSE_SETTINGS_LABEL: Record<CourseSettingsSection, string> = {
-  basic: 'Basic Information',
-  dates: 'Dates',
-  branding: 'Branding',
+  general: 'General',
   grading: 'Grading',
   outcomes: 'Outcomes',
-  'features-tools': 'Features and Tools',
-  'export-import': 'Export/Import',
-  archived: 'Archived',
+  features: 'Features',
+  'import-export': 'Import / export',
+  archive: 'Archive',
 }
 
 function findItemModuleTitles(
@@ -118,7 +116,7 @@ function staticCrumbsFromPathname(pathname: string, courseCode: string | null): 
     const sectionLabel = COURSE_SETTINGS_LABEL[section]
     return [
       courseCrumb(courseCode, true),
-      { key: 'settings', label: 'Settings', to: `${base}/settings` },
+      { key: 'settings', label: 'Settings', to: `${base}/settings/general` },
       { key: 'sec', label: sectionLabel },
     ]
   }

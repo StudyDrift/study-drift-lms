@@ -554,3 +554,157 @@ pub async fn batch_list_states_for_users(
         })
         .collect())
 }
+
+/// Append-only θ log plus upsert of `learner_concept_states.theta` / `theta_se`.
+pub async fn record_learner_theta_snapshot(
+    pool: &PgPool,
+    user_id: Uuid,
+    concept_id: Uuid,
+    attempt_id: Uuid,
+    theta: f64,
+    theta_se: Option<f64>,
+    items_n: i32,
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (user_id, concept_id, attempt_id, theta, theta_se, items_n)
+        VALUES ($1, $2, $3, $4::numeric, $5::numeric, $6)
+        "#,
+        schema::LEARNER_THETA_EVENTS
+    ))
+    .bind(user_id)
+    .bind(concept_id)
+    .bind(attempt_id)
+    .bind(theta)
+    .bind(theta_se)
+    .bind(items_n)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (
+            user_id, concept_id, mastery, attempt_count, theta, theta_se, updated_at
+        )
+        VALUES ($1, $2, 0::numeric, 0, $3::numeric, $4::numeric, NOW())
+        ON CONFLICT (user_id, concept_id) DO UPDATE SET
+            theta = EXCLUDED.theta,
+            theta_se = EXCLUDED.theta_se,
+            updated_at = NOW()
+        "#,
+        schema::LEARNER_CONCEPT_STATES
+    ))
+    .bind(user_id)
+    .bind(concept_id)
+    .bind(theta)
+    .bind(theta_se)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct LearnerThetaMetaRow {
+    pub theta: Option<f64>,
+    pub theta_se: Option<f64>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+pub async fn get_learner_theta_meta(
+    pool: &PgPool,
+    user_id: Uuid,
+    concept_id: Uuid,
+) -> Result<Option<LearnerThetaMetaRow>, sqlx::Error> {
+    sqlx::query_as::<_, LearnerThetaMetaRow>(&format!(
+        r#"
+        SELECT (theta)::float8 AS theta, (theta_se)::float8 AS theta_se, updated_at
+        FROM {}
+        WHERE user_id = $1 AND concept_id = $2
+        "#,
+        schema::LEARNER_CONCEPT_STATES
+    ))
+    .bind(user_id)
+    .bind(concept_id)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Seeds mastery + θ from a completed diagnostic (no quiz attempt id — `attempt_id` is NULL in logs).
+pub async fn apply_diagnostic_seed_batch(
+    pool: &PgPool,
+    user_id: Uuid,
+    diagnostic_attempt_id: Uuid,
+    seeds: &[(Uuid, f64, Option<f64>, f64, i32)], // concept_id, theta, theta_se, mastery, items_n
+) -> Result<(), sqlx::Error> {
+    if seeds.is_empty() {
+        return Ok(());
+    }
+    let mut tx = pool.begin().await?;
+    for &(concept_id, theta, theta_se, mastery, items_n) in seeds {
+        let idempotency_key = format!("diagnostic:{diagnostic_attempt_id}:{concept_id}");
+        let event_id: Option<Uuid> = sqlx::query_scalar(&format!(
+            r#"
+            INSERT INTO {} (
+                user_id, concept_id, attempt_id, delta, mastery_after, source, idempotency_key
+            )
+            VALUES ($1, $2, NULL, 0::numeric, $3::numeric, 'diagnostic_seed', $4)
+            ON CONFLICT (idempotency_key) DO NOTHING
+            RETURNING id
+            "#,
+            schema::LEARNER_CONCEPT_EVENTS
+        ))
+        .bind(user_id)
+        .bind(concept_id)
+        .bind(mastery)
+        .bind(&idempotency_key)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        if event_id.is_none() {
+            continue;
+        }
+
+        sqlx::query(&format!(
+            r#"
+            INSERT INTO {} (user_id, concept_id, attempt_id, theta, theta_se, items_n)
+            VALUES ($1, $2, NULL, $3::numeric, $4::numeric, $5)
+            "#,
+            schema::LEARNER_THETA_EVENTS
+        ))
+        .bind(user_id)
+        .bind(concept_id)
+        .bind(theta)
+        .bind(theta_se)
+        .bind(items_n)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(&format!(
+            r#"
+            INSERT INTO {} (
+                user_id, concept_id, mastery, attempt_count, theta, theta_se, last_seen_at, updated_at
+            )
+            VALUES ($1, $2, $3::numeric, 1, $4::numeric, $5::numeric, NOW(), NOW())
+            ON CONFLICT (user_id, concept_id) DO UPDATE SET
+                mastery = EXCLUDED.mastery,
+                theta = EXCLUDED.theta,
+                theta_se = EXCLUDED.theta_se,
+                attempt_count = {}.attempt_count + 1,
+                last_seen_at = NOW(),
+                updated_at = NOW()
+            "#,
+            schema::LEARNER_CONCEPT_STATES, schema::LEARNER_CONCEPT_STATES,
+        ))
+        .bind(user_id)
+        .bind(concept_id)
+        .bind(mastery)
+        .bind(theta)
+        .bind(theta_se)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}

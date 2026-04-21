@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { X } from 'lucide-react'
+import { useOptionalQuizShellFocus } from '../layout/quiz-shell-focus-context'
+import type { QuizShellFocusMode, QuizShellLockdownAccent } from '../layout/quiz-shell-focus-context'
 import { MathPlainText } from '../math/math-plain-text'
 import { BookLoader } from './book-loader'
 import { MathKeyboard } from './math-keyboard'
@@ -99,6 +101,13 @@ export function QuizStudentTakePanel({
   const [timerNotice, setTimerNotice] = useState<string | null>(null)
   const [timerNoticeAssertive, setTimerNoticeAssertive] = useState(false)
   const [highContrastQuiz, setHighContrastQuiz] = useState(false)
+  const [advanceBusy, setAdvanceBusy] = useState(false)
+  const [staticTakeProgress, setStaticTakeProgress] = useState<{
+    stepIndex: number
+    totalSteps: number
+    currentQuestionId: string
+  } | null>(null)
+  const [flaggedQuestionIds, setFlaggedQuestionIds] = useState(() => new Set<string>())
   const panelRef = useRef<HTMLDivElement | null>(null)
 
   const [staticQuestions, setStaticQuestions] = useState<QuizQuestion[]>([])
@@ -120,6 +129,7 @@ export function QuizStudentTakePanel({
   const tenMinuteWarningRef = useRef(false)
   const oneMinuteWarningRef = useRef(false)
   const kioskVisSkipRef = useRef(true)
+  const submitStaticRef = useRef<() => Promise<void>>(async () => {})
 
   const maxAdaptive = useMemo(
     () => Math.min(30, Math.max(1, quiz.adaptiveQuestionCount || 1)),
@@ -161,6 +171,9 @@ export function QuizStudentTakePanel({
     setTimerNotice(null)
     setTimerNoticeAssertive(false)
     setHighContrastQuiz(false)
+    setAdvanceBusy(false)
+    setStaticTakeProgress(null)
+    setFlaggedQuestionIds(new Set())
     timeoutSubmitStartedRef.current = false
     tenMinuteWarningRef.current = false
     oneMinuteWarningRef.current = false
@@ -198,52 +211,6 @@ export function QuizStudentTakePanel({
     const id = window.setInterval(tick, 1000)
     return () => window.clearInterval(id)
   }, [open, startMeta?.deadlineAt, uiPhase.kind])
-
-  useEffect(() => {
-    if (uiPhase.kind !== 'static' || timeLeftSec == null) return
-    if (!tenMinuteWarningRef.current && timeLeftSec <= 600 && timeLeftSec > 60) {
-      tenMinuteWarningRef.current = true
-      setTimerNotice('10 minutes remaining.')
-      setTimerNoticeAssertive(false)
-    }
-    if (!oneMinuteWarningRef.current && timeLeftSec <= 60 && timeLeftSec > 0) {
-      oneMinuteWarningRef.current = true
-      setTimerNotice('1 minute remaining.')
-      setTimerNoticeAssertive(true)
-    }
-    if (timeLeftSec === 0 && !timeoutSubmitStartedRef.current) {
-      timeoutSubmitStartedRef.current = true
-      setTimerNotice('Time is up. Submitting your attempt now.')
-      setTimerNoticeAssertive(true)
-      if (quiz.isAdaptive) {
-        if (!attemptId) return
-        setAdPhase('submitting')
-        void (async () => {
-          try {
-            const sub = await postQuizSubmit(courseCode, itemId, {
-              attemptId,
-              adaptiveHistory: adHistory,
-            })
-            setUiPhase({ kind: 'done', summary: `Submitted successfully (attempt ${sub.attemptId.slice(0, 8)}…).` })
-            setAdPhase('done')
-          } catch (e) {
-            setError(e instanceof Error ? e.message : 'Time expired and auto-submit failed.')
-          }
-        })()
-      } else {
-        void submitStatic()
-      }
-    }
-  }, [
-    uiPhase.kind,
-    timeLeftSec,
-    quiz.isAdaptive,
-    attemptId,
-    adHistory,
-    courseCode,
-    itemId,
-    submitStatic,
-  ])
 
   useEffect(() => {
     if (!open || !serverLockdown || startMeta?.lockdownMode !== 'kiosk' || !attemptId) return
@@ -426,9 +393,49 @@ export function QuizStudentTakePanel({
     }
   }
 
+  submitStaticRef.current = submitStatic
+
+  useEffect(() => {
+    if (uiPhase.kind !== 'static' || timeLeftSec == null) return
+    if (!tenMinuteWarningRef.current && timeLeftSec <= 600 && timeLeftSec > 60) {
+      tenMinuteWarningRef.current = true
+      setTimerNotice('10 minutes remaining.')
+      setTimerNoticeAssertive(false)
+    }
+    if (!oneMinuteWarningRef.current && timeLeftSec <= 60 && timeLeftSec > 0) {
+      oneMinuteWarningRef.current = true
+      setTimerNotice('1 minute remaining.')
+      setTimerNoticeAssertive(true)
+    }
+    if (timeLeftSec === 0 && !timeoutSubmitStartedRef.current) {
+      timeoutSubmitStartedRef.current = true
+      setTimerNotice('Time is up. Submitting your attempt now.')
+      setTimerNoticeAssertive(true)
+      if (quiz.isAdaptive) {
+        if (!attemptId) return
+        setAdPhase('submitting')
+        void (async () => {
+          try {
+            const sub = await postQuizSubmit(courseCode, itemId, {
+              attemptId,
+              adaptiveHistory: adHistory,
+            })
+            setUiPhase({ kind: 'done', summary: `Submitted successfully (attempt ${sub.attemptId.slice(0, 8)}…).` })
+            setAdPhase('done')
+          } catch (e) {
+            setError(e instanceof Error ? e.message : 'Time expired and auto-submit failed.')
+          }
+        })()
+      } else {
+        void submitStaticRef.current()
+      }
+    }
+  }, [uiPhase.kind, timeLeftSec, quiz.isAdaptive, attemptId, adHistory, courseCode, itemId])
+
   async function advanceServerQuestion() {
     if (!attemptId || !srvQuestion) return
     setError(null)
+    setAdvanceBusy(true)
     const q = srvQuestion
     const a = answers[q.id]
     let body:
@@ -485,6 +492,8 @@ export function QuizStudentTakePanel({
       setSrvQuestion(cur.completed ? null : cur.question)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save your answer.')
+    } finally {
+      setAdvanceBusy(false)
     }
   }
 
@@ -589,6 +598,7 @@ export function QuizStudentTakePanel({
     }
     setError(null)
     const turn: AdaptiveQuizHistoryTurn = {
+      ...(current.questionId ? { questionId: current.questionId } : {}),
       prompt: current.prompt,
       questionType: current.questionType,
       choices: current.choices,
@@ -603,10 +613,141 @@ export function QuizStudentTakePanel({
     setAdSelected(null)
   }
 
+  const optionalShell = useOptionalQuizShellFocus()
+  const timedConfigured = (advanced.timeLimitMinutes ?? 0) > 0
+  const shellFocusSession =
+    open && (timedConfigured || needsLockdownWarning) && uiPhase.kind !== 'done'
+
+  const currentAdaptiveHeadless = open ? (adPending[0] ?? null) : null
+
+  const timeLabelForShell = useMemo(() => {
+    if (!open || uiPhase.kind !== 'static' || timeLeftSec == null) return null
+    return `${String(Math.floor(timeLeftSec / 3600)).padStart(2, '0')}:${String(
+      Math.floor((timeLeftSec % 3600) / 60),
+    ).padStart(2, '0')}:${String(timeLeftSec % 60).padStart(2, '0')}`
+  }, [open, uiPhase.kind, timeLeftSec])
+
+  const timeUrgentForShell = timeLeftSec != null && timeLeftSec <= 300
+
+  const questionProgressForShell = useMemo(() => {
+    if (!open || uiPhase.kind !== 'static') return null
+    if (quiz.isAdaptive) return `Question ${Math.min(adHistory.length + 1, maxAdaptive)} of ${maxAdaptive}`
+    if (serverLockdown) {
+      if (srvTotal <= 0) return null
+      return srvCompleted ? `All ${srvTotal} questions answered` : `Question ${srvIdx + 1} of ${srvTotal}`
+    }
+    if (!oneQuestionAtATime) return null
+    if (!staticTakeProgress || staticTakeProgress.totalSteps <= 0) return null
+    return `Question ${staticTakeProgress.stepIndex + 1} of ${staticTakeProgress.totalSteps}`
+  }, [
+    open,
+    uiPhase.kind,
+    quiz.isAdaptive,
+    adHistory.length,
+    maxAdaptive,
+    serverLockdown,
+    srvTotal,
+    srvCompleted,
+    srvIdx,
+    oneQuestionAtATime,
+    staticTakeProgress,
+  ])
+
+  const lockdownAccentForShell = useMemo((): QuizShellLockdownAccent => {
+    const mode = startMeta?.lockdownMode ?? quiz.lockdownMode
+    if (mode === 'kiosk') return 'kiosk'
+    if (mode === 'one_at_a_time') return 'one_at_a_time'
+    return 'none'
+  }, [startMeta?.lockdownMode, quiz.lockdownMode])
+
+  const currentFlagQuestionId = useMemo(() => {
+    if (!shellFocusSession || uiPhase.kind !== 'static') return null
+    if (quiz.isAdaptive) {
+      if (adPhase !== 'question' || !currentAdaptiveHeadless) return null
+      return `adaptive:${adHistory.length}`
+    }
+    if (serverLockdown) return srvQuestion?.id ?? null
+    if (!oneQuestionAtATime) return null
+    return staticTakeProgress?.currentQuestionId ?? null
+  }, [
+    shellFocusSession,
+    uiPhase.kind,
+    quiz.isAdaptive,
+    adPhase,
+    currentAdaptiveHeadless,
+    adHistory.length,
+    serverLockdown,
+    srvQuestion?.id,
+    oneQuestionAtATime,
+    staticTakeProgress?.currentQuestionId,
+  ])
+
+  const flaggedForCurrent = Boolean(currentFlagQuestionId && flaggedQuestionIds.has(currentFlagQuestionId))
+
+  const toggleFlagForReview = useCallback(() => {
+    const id = currentFlagQuestionId
+    if (!id) return
+    setFlaggedQuestionIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [currentFlagQuestionId])
+
+  const saveStatusTextForShell = useMemo(() => {
+    if (lockdownModalOpen) return 'Read the instructions, then confirm to begin.'
+    if (uiPhase.kind === 'idle') return 'Press Begin when you are ready to start.'
+    if (uiPhase.kind === 'starting') return 'Starting your attempt…'
+    if (uiPhase.kind !== 'static') return ''
+    if (quiz.isAdaptive) return 'Submit each answer to continue. The attempt is saved when you finish.'
+    if (serverLockdown) {
+      if (advanceBusy) return 'Saving your answer…'
+      if (srvCompleted) return 'All answers recorded — submit to finish.'
+      return 'Your answer is saved when you go to the next question.'
+    }
+    return 'Submit the quiz when you are finished — answers stay in this window until then.'
+  }, [lockdownModalOpen, uiPhase.kind, quiz.isAdaptive, serverLockdown, advanceBusy, srvCompleted])
+
+  useEffect(() => {
+    if (!optionalShell) return
+    if (!shellFocusSession) {
+      optionalShell.setQuizShellFocus(null)
+      return
+    }
+    const model: QuizShellFocusMode = {
+      quizTitle: quiz.title || 'Quiz',
+      timeRemainingLabel: timeLabelForShell,
+      timeUrgent: timeUrgentForShell,
+      questionProgress: questionProgressForShell,
+      saveStatusText: saveStatusTextForShell,
+      lockdownAccent: lockdownAccentForShell,
+      flaggedForCurrent,
+      onToggleFlagForReview: currentFlagQuestionId ? toggleFlagForReview : null,
+    }
+    optionalShell.setQuizShellFocus(model)
+    return () => {
+      optionalShell.setQuizShellFocus(null)
+    }
+  }, [
+    optionalShell,
+    shellFocusSession,
+    quiz.title,
+    timeLabelForShell,
+    timeUrgentForShell,
+    questionProgressForShell,
+    saveStatusTextForShell,
+    lockdownAccentForShell,
+    flaggedForCurrent,
+    currentFlagQuestionId,
+    toggleFlagForReview,
+  ])
+
   if (!open) return null
 
   const currentAdaptive = adPending[0] ?? null
   const reducedTake = Boolean(startMeta?.reducedDistractionMode)
+  const immersiveChrome = shellFocusSession
 
   const timeLabel =
     timeLeftSec != null
@@ -618,7 +759,9 @@ export function QuizStudentTakePanel({
   return (
     <div
       ref={panelRef}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
+      className={`fixed inset-0 z-[70] flex justify-center bg-slate-900/40 p-4 sm:items-center ${
+        immersiveChrome ? 'items-stretch bg-slate-950 p-0 sm:items-stretch' : 'items-end'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="quiz-take-title"
@@ -627,20 +770,36 @@ export function QuizStudentTakePanel({
       }}
     >
       <div
-        className={`flex h-[90vh] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-neutral-600 dark:bg-neutral-900 ${
-          reducedTake ? 'lex-quiz-reduced-distract max-w-2xl' : 'max-w-3xl'
+        className={`flex w-full flex-col overflow-hidden border border-slate-200 bg-white shadow-xl dark:border-neutral-600 dark:bg-neutral-900 ${
+          immersiveChrome
+            ? `h-dvh max-h-dvh max-w-none rounded-none border-0 shadow-none sm:max-h-dvh ${
+                reducedTake ? 'lex-quiz-reduced-distract' : ''
+              }`
+            : `h-[90vh] rounded-2xl ${reducedTake ? 'lex-quiz-reduced-distract max-w-2xl' : 'max-w-3xl'}`
         } ${highContrastQuiz && reducedTake ? 'ring-2 ring-slate-900 dark:ring-neutral-100' : ''}`}
       >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-neutral-600">
+        <div
+          className={`flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-neutral-600 ${
+            immersiveChrome ? 'py-2' : ''
+          }`}
+        >
           <div className="min-w-0">
-            <h2 id="quiz-take-title" className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
-              {reducedTake ? 'Quiz' : 'Take quiz'}
-            </h2>
-            {!reducedTake ? (
-              <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-neutral-400" title={quiz.title}>
-                {quiz.title || 'Quiz'}
-              </p>
-            ) : null}
+            {immersiveChrome ? (
+              <h2 id="quiz-take-title" className="sr-only">
+                {reducedTake ? 'Quiz' : 'Take quiz'} — {quiz.title || 'Quiz'}
+              </h2>
+            ) : (
+              <>
+                <h2 id="quiz-take-title" className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
+                  {reducedTake ? 'Quiz' : 'Take quiz'}
+                </h2>
+                {!reducedTake ? (
+                  <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-neutral-400" title={quiz.title}>
+                    {quiz.title || 'Quiz'}
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {reducedTake ? (
@@ -759,7 +918,7 @@ export function QuizStudentTakePanel({
             </div>
           ) : null}
 
-          {timeLabel != null && uiPhase.kind === 'static' && (
+          {timeLabel != null && uiPhase.kind === 'static' && !immersiveChrome && (
             <div
               className={`mb-4 rounded-lg border px-3 py-2 text-sm font-medium tabular-nums ${
                 timeLeftSec !== null && timeLeftSec <= 300
@@ -830,17 +989,19 @@ export function QuizStudentTakePanel({
 
           {uiPhase.kind === 'static' && !quiz.isAdaptive && serverLockdown && (
             <div className="space-y-4">
-              <p
-                className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400"
-                aria-live="polite"
-                aria-label={
-                  srvCompleted
-                    ? 'All questions answered'
-                    : `Question ${srvIdx + 1} of ${srvTotal || '…'}`
-                }
-              >
-                {srvCompleted ? 'All questions answered' : `Question ${srvIdx + 1} of ${srvTotal || '…'}`}
-              </p>
+              {!immersiveChrome ? (
+                <p
+                  className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400"
+                  aria-live="polite"
+                  aria-label={
+                    srvCompleted
+                      ? 'All questions answered'
+                      : `Question ${srvIdx + 1} of ${srvTotal || '…'}`
+                  }
+                >
+                  {srvCompleted ? 'All questions answered' : `Question ${srvIdx + 1} of ${srvTotal || '…'}`}
+                </p>
+              ) : null}
               {srvQuestion ? (
                 <StaticTakeBody
                   questions={[srvQuestion]}
@@ -891,6 +1052,8 @@ export function QuizStudentTakePanel({
               runningCodeQuestionId={runningCodeQuestionId}
               setRunningCodeQuestionId={setRunningCodeQuestionId}
               onSubmit={() => void submitStatic()}
+              onTakeProgress={shellFocusSession ? setStaticTakeProgress : undefined}
+              suppressInlineQuestionProgress={immersiveChrome}
             />
           )}
 
@@ -906,9 +1069,11 @@ export function QuizStudentTakePanel({
               )}
               {adPhase === 'question' && currentAdaptive && (
                 <div className="space-y-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
-                    Question {Math.min(adHistory.length + 1, maxAdaptive)} of {maxAdaptive}
-                  </p>
+                  {!immersiveChrome ? (
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                      Question {Math.min(adHistory.length + 1, maxAdaptive)} of {maxAdaptive}
+                    </p>
+                  ) : null}
                   <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">
                     <MathPlainText text={currentAdaptive.prompt} />
                   </p>
@@ -983,6 +1148,8 @@ function StaticTakeBody({
   onSubmit,
   advanceOnly,
   nextLabel,
+  onTakeProgress,
+  suppressInlineQuestionProgress,
 }: {
   questions: QuizQuestion[]
   oneQuestionAtATime: boolean
@@ -1000,6 +1167,10 @@ function StaticTakeBody({
   /** When true, one-question view always uses `nextLabel` and `onSubmit` advances (lockdown server flow). */
   advanceOnly?: boolean
   nextLabel?: string
+  onTakeProgress?: (
+    info: { stepIndex: number; totalSteps: number; currentQuestionId: string } | null,
+  ) => void
+  suppressInlineQuestionProgress?: boolean
 }) {
   const [step, setStep] = useState(0)
   const textInputRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({})
@@ -1007,6 +1178,20 @@ function StaticTakeBody({
   useEffect(() => {
     setStep(0)
   }, [questions])
+
+  useEffect(() => {
+    if (!onTakeProgress) return
+    if (!oneQuestionAtATime) {
+      onTakeProgress(null)
+      return
+    }
+    const cur = questions[step]
+    onTakeProgress({
+      stepIndex: step,
+      totalSteps: questions.length,
+      currentQuestionId: cur?.id ?? '',
+    })
+  }, [onTakeProgress, oneQuestionAtATime, questions, step])
 
   async function runCodeQuestion(q: QuizQuestion) {
     if (!attemptId) return
@@ -1486,7 +1671,7 @@ function StaticTakeBody({
 
   return (
     <div className="space-y-4">
-      {!advanceOnly ? (
+      {!advanceOnly && !suppressInlineQuestionProgress ? (
         <p className="text-xs font-semibold text-slate-500 dark:text-neutral-400">
           Question {step + 1} of {questions.length}
         </p>

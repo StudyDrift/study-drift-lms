@@ -25,7 +25,13 @@ pub struct QuestionBankRowResponse {
     pub irt_a: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub irt_b: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub irt_c: Option<f64>,
     pub irt_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub irt_sample_n: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub irt_calibrated_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
@@ -141,6 +147,26 @@ pub struct AddPoolMembersRequest {
 #[serde(rename_all = "camelCase")]
 pub struct BulkImportQuestionsResponse {
     pub imported_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IccPoint {
+    pub theta: f64,
+    pub p_correct: f64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionIrtStatsResponse {
+    pub a: Option<f64>,
+    pub b: Option<f64>,
+    pub c: Option<f64>,
+    pub status: String,
+    pub sample_n: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calibrated_at: Option<DateTime<Utc>>,
+    pub icc: Vec<IccPoint>,
 }
 
 #[derive(Debug, Deserialize)]

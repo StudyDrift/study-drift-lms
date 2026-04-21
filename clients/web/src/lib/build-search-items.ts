@@ -191,9 +191,9 @@ export function buildSearchItems(
       requiredPermission: courseEnrollmentsReadPermission,
     },
     {
-      suffix: '/settings',
+      suffix: '/settings/general',
       title: 'Course settings',
-      hint: 'settings configuration',
+      hint: 'settings configuration title description dates schedule hero branding',
       requiredPermission: courseItemCreatePermission,
     },
   ]
@@ -226,18 +226,6 @@ export function buildSearchItems(
     requiredPermission?: (courseCode: string) => string
   }[] = [
     {
-      suffix: '/settings/dates',
-      title: 'Course dates',
-      hint: 'dates schedule calendar visibility enrollment window relative fixed',
-      requiredPermission: courseItemCreatePermission,
-    },
-    {
-      suffix: '/settings/branding',
-      title: 'Course branding',
-      hint: 'branding banner hero image appearance markdown theme',
-      requiredPermission: courseItemCreatePermission,
-    },
-    {
       suffix: '/settings/grading',
       title: 'Grading settings',
       hint: 'grading scale assignment groups weights categories',
@@ -250,19 +238,19 @@ export function buildSearchItems(
       requiredPermission: courseItemCreatePermission,
     },
     {
-      suffix: '/settings/features-tools',
-      title: 'Course features and tools',
+      suffix: '/settings/features',
+      title: 'Course features',
       hint: 'features tools notebook feed calendar enable disable toggles',
       requiredPermission: courseItemCreatePermission,
     },
     {
-      suffix: '/settings/export-import',
-      title: 'Export / import',
+      suffix: '/settings/import-export',
+      title: 'Import / export',
       hint: 'export import backup canvas migrate course package',
       requiredPermission: courseItemCreatePermission,
     },
     {
-      suffix: '/settings/archived',
+      suffix: '/settings/archive',
       title: 'Archived modules',
       hint: 'archived deleted restore trash unarchive structure',
       requiredPermission: courseItemCreatePermission,

@@ -62,6 +62,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const standardsAlignmentEnabled = course.standardsAlignmentEnabled === true
   const adaptivePathsEnabled = course.adaptivePathsEnabled === true
   const srsEnabled = course.srsEnabled === true
+  const diagnosticAssessmentsEnabled = course.diagnosticAssessmentsEnabled === true
 
   const persist = useCallback(
     async (patch: {
@@ -73,6 +74,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       standardsAlignmentEnabled?: boolean
       adaptivePathsEnabled?: boolean
       srsEnabled?: boolean
+      diagnosticAssessmentsEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -87,6 +89,8 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           standardsAlignmentEnabled: patch.standardsAlignmentEnabled ?? standardsAlignmentEnabled,
           adaptivePathsEnabled: patch.adaptivePathsEnabled ?? adaptivePathsEnabled,
           srsEnabled: patch.srsEnabled ?? srsEnabled,
+          diagnosticAssessmentsEnabled:
+            patch.diagnosticAssessmentsEnabled ?? diagnosticAssessmentsEnabled,
         }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
@@ -101,6 +105,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
     [
       adaptivePathsEnabled,
       srsEnabled,
+      diagnosticAssessmentsEnabled,
       calendarEnabled,
       courseCode,
       feedEnabled,
@@ -177,6 +182,15 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           enabled={srsEnabled}
           disabled={saving}
           onToggle={() => void persist({ srsEnabled: !srsEnabled })}
+        />
+        <FeatureToggleRow
+          label="Placement diagnostic"
+          description="Offer a short adaptive placement assessment after enrollment (requires DIAGNOSTIC_ASSESSMENTS_ENABLED on the server and a diagnostic configuration)."
+          enabled={diagnosticAssessmentsEnabled}
+          disabled={saving}
+          onToggle={() =>
+            void persist({ diagnosticAssessmentsEnabled: !diagnosticAssessmentsEnabled })
+          }
         />
       </div>
 

@@ -148,6 +148,7 @@ fn normalize_question(mut raw: AiQuestionRaw) -> Result<AdaptiveQuizGeneratedQue
     let choice_weights = normalize_weights(weights_src, choices.len());
 
     Ok(AdaptiveQuizGeneratedQuestion {
+        question_id: None,
         prompt,
         question_type: qt,
         choices,

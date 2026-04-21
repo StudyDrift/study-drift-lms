@@ -162,6 +162,7 @@ pub fn validate_quiz_comprehensive_settings(
 
 pub fn validate_adaptive_quiz_settings(
     is_adaptive: bool,
+    adaptive_delivery_mode: &str,
     adaptive_system_prompt: &str,
     adaptive_source_item_ids: &[Uuid],
     adaptive_question_count: i32,
@@ -169,14 +170,21 @@ pub fn validate_adaptive_quiz_settings(
     if !is_adaptive {
         return Ok(());
     }
+    let mode = adaptive_delivery_mode.trim();
+    if mode != "ai" && mode != "cat" {
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
+            "adaptiveDeliveryMode must be ai or cat.",
+        ));
+    }
     if adaptive_system_prompt.len() > MAX_ADAPTIVE_SYSTEM_PROMPT_LEN {
         return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
             "Adaptive system prompt is too long.",
         ));
     }
-    if adaptive_source_item_ids.is_empty() {
+    if mode == "ai" && adaptive_source_item_ids.is_empty() {
         return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
-            "Adaptive mode requires at least one course item with source content.",
+            "Adaptive AI mode requires at least one course item with source content.",
         ));
     }
     if adaptive_source_item_ids.len() > MAX_ADAPTIVE_SOURCE_ITEMS {
@@ -359,6 +367,9 @@ pub struct ModuleQuizResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub adaptive_source_item_ids: Option<Vec<Uuid>>,
     pub adaptive_question_count: i32,
+    /// `ai` (default) or `cat` (IRT pool CAT). Meaningful when `isAdaptive` is true.
+    #[serde(default)]
+    pub adaptive_delivery_mode: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assignment_group_id: Option<Uuid>,
 }
@@ -456,6 +467,8 @@ pub struct UpdateModuleQuizRequest {
     pub adaptive_source_item_ids: Option<Vec<Uuid>>,
     #[serde(default)]
     pub adaptive_question_count: Option<i32>,
+    #[serde(default)]
+    pub adaptive_delivery_mode: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -483,6 +496,9 @@ pub struct AdaptiveQuizNextRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdaptiveQuizHistoryTurn {
+    /// Bank question id when the item comes from IRT CAT (`adaptiveDeliveryMode = cat`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question_id: Option<String>,
     pub prompt: String,
     pub question_type: String,
     pub choices: Vec<String>,
@@ -496,6 +512,8 @@ pub struct AdaptiveQuizHistoryTurn {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdaptiveQuizGeneratedQuestion {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question_id: Option<Uuid>,
     pub prompt: String,
     pub question_type: String,
     pub choices: Vec<String>,

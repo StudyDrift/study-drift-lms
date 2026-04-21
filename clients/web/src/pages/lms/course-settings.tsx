@@ -80,30 +80,47 @@ type SavePayload = {
 }
 
 type SettingsSection =
-  | 'basic'
-  | 'dates'
-  | 'branding'
+  | 'general'
   | 'grading'
   | 'outcomes'
-  | 'features-tools'
-  | 'export-import'
-  | 'archived'
+  | 'features'
+  | 'import-export'
+  | 'archive'
+
+/** Canonical URLs: `/settings/general`, …; legacy slugs redirect here. */
+function courseSettingsLegacyRedirect(courseCode: string, pathname: string): string | null {
+  const base = `/courses/${encodeURIComponent(courseCode)}/settings`
+  if (pathname === base || pathname === `${base}/`) {
+    return `${base}/general`
+  }
+  if (!pathname.startsWith(`${base}/`)) return null
+  const rest = pathname.slice(base.length + 1).replace(/\/+$/, '')
+  const parts = rest.split('/').filter(Boolean)
+  if (parts.length !== 1) {
+    return `${base}/general`
+  }
+  const seg = parts[0]
+  if (seg === 'dates' || seg === 'branding' || seg === 'basic') return `${base}/general`
+  if (seg === 'features-tools') return `${base}/features`
+  if (seg === 'export-import') return `${base}/import-export`
+  if (seg === 'archived') return `${base}/archive`
+  return null
+}
 
 function parseSettingsSection(courseCode: string, pathname: string): SettingsSection | 'invalid' {
   const base = `/courses/${encodeURIComponent(courseCode)}/settings`
-  if (pathname === base || pathname === `${base}/`) return 'basic'
+  if (pathname === base || pathname === `${base}/`) return 'invalid'
   if (!pathname.startsWith(`${base}/`)) return 'invalid'
   const rest = pathname.slice(base.length + 1).replace(/\/+$/, '')
   const parts = rest.split('/').filter(Boolean)
-  if (parts.length === 0) return 'basic'
-  if (parts.length > 1) return 'invalid'
-  if (parts[0] === 'dates') return 'dates'
-  if (parts[0] === 'branding') return 'branding'
-  if (parts[0] === 'grading') return 'grading'
-  if (parts[0] === 'outcomes') return 'outcomes'
-  if (parts[0] === 'features-tools') return 'features-tools'
-  if (parts[0] === 'export-import') return 'export-import'
-  if (parts[0] === 'archived') return 'archived'
+  if (parts.length !== 1) return 'invalid'
+  const seg = parts[0]
+  if (seg === 'general') return 'general'
+  if (seg === 'grading') return 'grading'
+  if (seg === 'outcomes') return 'outcomes'
+  if (seg === 'features') return 'features'
+  if (seg === 'import-export') return 'import-export'
+  if (seg === 'archive') return 'archive'
   return 'invalid'
 }
 
@@ -489,63 +506,60 @@ export default function CourseSettings() {
     return <Navigate to={`/courses/${encodeURIComponent(courseCode)}`} replace />
   }
 
-  const section = parseSettingsSection(courseCode, location.pathname)
   const settingsBase = `/courses/${encodeURIComponent(courseCode)}/settings`
+  const legacyTo = courseSettingsLegacyRedirect(courseCode, location.pathname)
+  if (legacyTo) {
+    return <Navigate to={legacyTo} replace />
+  }
+
+  const section = parseSettingsSection(courseCode, location.pathname)
   if (section === 'invalid') {
-    return <Navigate to={settingsBase} replace />
+    return <Navigate to={`${settingsBase}/general`} replace />
   }
 
   const pageTitle =
-    section === 'dates'
+    section === 'general'
       ? course?.title
-        ? `${course.title} — dates`
-        : 'Dates'
-      : section === 'branding'
+        ? `${course.title} — general`
+        : 'General'
+      : section === 'grading'
         ? course?.title
-          ? `${course.title} — branding`
-          : 'Branding'
-        : section === 'grading'
+          ? `${course.title} — grading`
+          : 'Grading'
+        : section === 'outcomes'
           ? course?.title
-            ? `${course.title} — grading`
-            : 'Grading'
-          : section === 'outcomes'
+            ? `${course.title} — outcomes`
+            : 'Outcomes'
+          : section === 'features'
             ? course?.title
-              ? `${course.title} — outcomes`
-              : 'Outcomes'
-            : section === 'features-tools'
+              ? `${course.title} — features`
+              : 'Features'
+            : section === 'import-export'
               ? course?.title
-                ? `${course.title} — features and tools`
-                : 'Features and tools'
-              : section === 'export-import'
+                ? `${course.title} — import / export`
+                : 'Import / export'
+              : section === 'archive'
                 ? course?.title
-                  ? `${course.title} — export/import`
-                  : 'Export / import'
-                : section === 'archived'
-                  ? course?.title
-                    ? `${course.title} — archived`
-                    : 'Archived'
-                  : course?.title
-                    ? `${course.title} — settings`
-                    : 'Course settings'
+                  ? `${course.title} — archive`
+                  : 'Archive'
+                : course?.title
+                  ? `${course.title} — settings`
+                  : 'Course settings'
 
   const pageDescription =
-    section === 'basic'
-      ? 'Title, description, and publishing for this course.'
-      : section === 'dates'
-        ? 'Calendar dates or a schedule measured from each learner’s enrollment.'
-        : section === 'branding'
-          ? 'Hero image, banner, and reading appearance for syllabus and module pages.'
-          : section === 'grading'
-            ? 'Grading scale, weighted assignment groups, and how items map to each group.'
-            : section === 'outcomes'
-              ? 'Define learning outcomes, map assignments and quizzes (including individual questions) with measurement and intensity levels, and review class progress from grades and attempts.'
-              : section === 'features-tools'
-                ? 'Choose which course tools appear in the menu and are available to instructors and learners.'
-                : section === 'export-import'
-                  ? 'Download the full course as JSON or restore from a backup file.'
-                  : section === 'archived'
-                    ? 'Module items you archived from the outline. Restore them when you want them visible again.'
-                    : ''
+    section === 'general'
+      ? 'Basics, schedule, visibility, hero image, and reading theme for this course.'
+      : section === 'grading'
+        ? 'Grading scale, weighted assignment groups, and how items map to each group.'
+        : section === 'outcomes'
+          ? 'Define learning outcomes, map assignments and quizzes (including individual questions) with measurement and intensity levels, and review class progress from grades and attempts.'
+          : section === 'features'
+            ? 'Choose which course tools appear in the menu and are available to instructors and learners.'
+            : section === 'import-export'
+              ? 'Download the full course as JSON or restore from a backup file.'
+              : section === 'archive'
+                ? 'Module items you archived from the outline. Restore them when you want them visible again.'
+                : ''
 
   return (
     <LmsPage title={pageTitle} description={pageDescription}>
@@ -567,9 +581,9 @@ export default function CourseSettings() {
 
       {course && !loading && (
         <div
-          className={`mt-8 space-y-6 ${section === 'branding' || section === 'grading' || section === 'outcomes' || section === 'features-tools' || section === 'export-import' || section === 'archived' ? 'max-w-4xl' : 'max-w-2xl'}`}
+          className="mt-8 max-w-4xl space-y-6"
         >
-          {section === 'basic' && (
+          {section === 'general' && (
             <>
               <form onSubmit={onSaveForm} className="space-y-6">
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
@@ -649,10 +663,7 @@ export default function CourseSettings() {
                   </button>
                 </div>
               </form>
-            </>
-          )}
 
-          {section === 'dates' && (
             <form onSubmit={onSaveForm} className="space-y-6">
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
                 <h2 className="text-sm font-semibold text-slate-900">Fixed Schedule & Visibility</h2>
@@ -768,10 +779,7 @@ export default function CourseSettings() {
                 </button>
               </div>
             </form>
-          )}
 
-          {section === 'branding' && (
-            <>
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
                 <h2 className="text-sm font-semibold text-slate-900">Hero image</h2>
                 <p className="mt-1 text-sm text-slate-500">
@@ -984,15 +992,15 @@ export default function CourseSettings() {
 
           {section === 'grading' && <CourseGradingSettingsSection courseCode={courseCode} />}
           {section === 'outcomes' && <CourseOutcomesSection courseCode={courseCode} />}
-          {section === 'features-tools' && (
+          {section === 'features' && (
             <CourseFeaturesSection
               courseCode={courseCode}
               course={course}
               onCourseUpdated={setCourse}
             />
           )}
-          {section === 'export-import' && <CourseExportImportSection courseCode={courseCode} />}
-          {section === 'archived' && <CourseArchivedContentSection courseCode={courseCode} />}
+          {section === 'import-export' && <CourseExportImportSection courseCode={courseCode} />}
+          {section === 'archive' && <CourseArchivedContentSection courseCode={courseCode} />}
         </div>
       )}
 

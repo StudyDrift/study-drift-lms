@@ -111,11 +111,21 @@ fn question_entity_from_snapshot(snapshot: &JsonValue) -> Result<QuestionEntity,
     let metadata = snapshot.get("metadata").cloned().unwrap_or_else(|| json!({}));
     let irt_a = snapshot.get("irt_a").and_then(|v| v.as_f64());
     let irt_b = snapshot.get("irt_b").and_then(|v| v.as_f64());
+    let irt_c = snapshot.get("irt_c").and_then(|v| v.as_f64());
     let irt_status = snapshot
         .get("irt_status")
         .and_then(|v| v.as_str())
         .unwrap_or("uncalibrated")
         .to_string();
+    let irt_sample_n = snapshot
+        .get("irt_sample_n")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0) as i32;
+    let irt_calibrated_at = snapshot
+        .get("irt_calibrated_at")
+        .and_then(|v| v.as_str())
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|v| v.with_timezone(&chrono::Utc));
     let created_by = snapshot
         .get("created_by")
         .and_then(|v| v.as_str())
@@ -165,7 +175,10 @@ fn question_entity_from_snapshot(snapshot: &JsonValue) -> Result<QuestionEntity,
         shuffle_choices_override,
         irt_a,
         irt_b,
+        irt_c,
         irt_status,
+        irt_sample_n,
+        irt_calibrated_at,
         created_by,
         created_at,
         updated_at,
@@ -258,7 +271,9 @@ pub async fn load_quiz_questions_map(
         r#"
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
                points::float8, status::text, shared, source, metadata, shuffle_choices_override,
-               irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
+               irt_a::float8, irt_b::float8, irt_c::float8,
+               irt_status::text AS irt_status, irt_sample_n, irt_calibrated_at,
+               created_by, created_at, updated_at,
                version_number, is_published, srs_eligible
         FROM {}
         WHERE course_id = $1 AND id = ANY($2)

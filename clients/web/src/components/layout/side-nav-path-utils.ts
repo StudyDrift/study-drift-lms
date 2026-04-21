@@ -17,26 +17,32 @@ export function settingsViewFromPathname(pathname: string): SettingsNavView {
 }
 
 export type CourseSettingsSection =
-  | 'basic'
-  | 'dates'
-  | 'branding'
+  | 'general'
   | 'grading'
   | 'outcomes'
-  | 'features-tools'
-  | 'export-import'
-  | 'archived'
+  | 'features'
+  | 'import-export'
+  | 'archive'
 
 export function courseSettingsSectionFromPathname(pathname: string): CourseSettingsSection {
   const m = matchPath({ path: '/courses/:courseCode/settings/*', end: true }, pathname)
   const raw = m?.params['*']?.replace(/^\/+/, '') ?? ''
   const parts = raw.split('/').filter(Boolean)
-  if (parts.length > 1) return 'basic'
-  if (parts[0] === 'dates') return 'dates'
-  if (parts[0] === 'branding') return 'branding'
-  if (parts[0] === 'grading') return 'grading'
-  if (parts[0] === 'outcomes') return 'outcomes'
-  if (parts[0] === 'features-tools') return 'features-tools'
-  if (parts[0] === 'export-import') return 'export-import'
-  if (parts[0] === 'archived') return 'archived'
-  return 'basic'
+  if (parts.length > 1) return 'general'
+  const seg = parts[0] ?? ''
+  if (
+    seg === '' ||
+    seg === 'general' ||
+    seg === 'dates' ||
+    seg === 'branding' ||
+    seg === 'basic'
+  ) {
+    return 'general'
+  }
+  if (seg === 'grading') return 'grading'
+  if (seg === 'outcomes') return 'outcomes'
+  if (seg === 'features' || seg === 'features-tools') return 'features'
+  if (seg === 'import-export' || seg === 'export-import') return 'import-export'
+  if (seg === 'archive' || seg === 'archived') return 'archive'
+  return 'general'
 }

@@ -47,6 +47,7 @@ pub struct CourseItemQuizRow {
     pub adaptive_system_prompt: String,
     pub adaptive_source_item_ids: Json<Vec<Uuid>>,
     pub adaptive_question_count: i32,
+    pub adaptive_delivery_mode: String,
     pub assignment_group_id: Option<Uuid>,
     pub lockdown_mode: String,
     pub focus_loss_threshold: Option<i32>,
@@ -79,6 +80,7 @@ pub struct QuizSettingsWrite {
     pub adaptive_topic_balance: bool,
     pub adaptive_stop_rule: String,
     pub random_question_pool_count: Option<i32>,
+    pub adaptive_delivery_mode: String,
     pub lockdown_mode: String,
     pub focus_loss_threshold: Option<i32>,
 }
@@ -110,6 +112,7 @@ impl From<&CourseItemQuizRow> for QuizSettingsWrite {
             adaptive_topic_balance: row.adaptive_topic_balance,
             adaptive_stop_rule: row.adaptive_stop_rule.clone(),
             random_question_pool_count: row.random_question_pool_count,
+            adaptive_delivery_mode: row.adaptive_delivery_mode.clone(),
             lockdown_mode: row.lockdown_mode.clone(),
             focus_loss_threshold: row.focus_loss_threshold,
         }
@@ -211,6 +214,7 @@ pub async fn get_for_course_item(
                m.quiz_access_code, m.adaptive_difficulty, m.adaptive_topic_balance, m.adaptive_stop_rule,
                m.random_question_pool_count,
                m.is_adaptive, m.adaptive_system_prompt, m.adaptive_source_item_ids, m.adaptive_question_count,
+               m.adaptive_delivery_mode,
                c.assignment_group_id,
                m.lockdown_mode::text AS lockdown_mode,
                m.focus_loss_threshold
@@ -319,8 +323,9 @@ pub async fn write_quiz_settings(
             adaptive_topic_balance = $24,
             adaptive_stop_rule = $25,
             random_question_pool_count = $26,
-            lockdown_mode = $27::course.lockdown_mode,
-            focus_loss_threshold = $28,
+            adaptive_delivery_mode = $27,
+            lockdown_mode = $28::course.lockdown_mode,
+            focus_loss_threshold = $29,
             updated_at = NOW()
         FROM {} c
         WHERE m.structure_item_id = c.id
@@ -358,6 +363,7 @@ pub async fn write_quiz_settings(
     .bind(s.adaptive_topic_balance)
     .bind(&s.adaptive_stop_rule)
     .bind(s.random_question_pool_count)
+    .bind(&s.adaptive_delivery_mode)
     .bind(&s.lockdown_mode)
     .bind(s.focus_loss_threshold)
     .fetch_optional(pool)
@@ -429,6 +435,7 @@ pub async fn update_adaptive_config(
     adaptive_system_prompt: &str,
     adaptive_source_item_ids: &[Uuid],
     adaptive_question_count: i32,
+    adaptive_delivery_mode: &str,
 ) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
     sqlx::query_scalar(&format!(
         r#"
@@ -437,6 +444,7 @@ pub async fn update_adaptive_config(
             adaptive_system_prompt = $4,
             adaptive_source_item_ids = $5::jsonb,
             adaptive_question_count = $6,
+            adaptive_delivery_mode = $7,
             settings_version = m.settings_version + 1,
             updated_at = NOW()
         FROM {} c
@@ -455,6 +463,7 @@ pub async fn update_adaptive_config(
     .bind(adaptive_system_prompt)
     .bind(Json(adaptive_source_item_ids.to_vec()))
     .bind(adaptive_question_count)
+    .bind(adaptive_delivery_mode)
     .fetch_optional(pool)
     .await
 }
@@ -512,12 +521,13 @@ pub async fn upsert_import_body(
             quiz_access_code, adaptive_difficulty, adaptive_topic_balance, adaptive_stop_rule,
             random_question_pool_count,
             lockdown_mode, focus_loss_threshold,
-            is_adaptive, adaptive_system_prompt, adaptive_source_item_ids, adaptive_question_count
+            is_adaptive, adaptive_system_prompt, adaptive_source_item_ids, adaptive_question_count,
+            adaptive_delivery_mode
         )
         SELECT c.id, $3, $4::jsonb, NOW(),
             $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
             $29::course.lockdown_mode, $30,
-            $31, $32, $33::jsonb, $34
+            $31, $32, $33::jsonb, $34, $35
         FROM {} c
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'quiz'
         ON CONFLICT (structure_item_id) DO UPDATE SET
@@ -554,7 +564,8 @@ pub async fn upsert_import_body(
             is_adaptive = EXCLUDED.is_adaptive,
             adaptive_system_prompt = EXCLUDED.adaptive_system_prompt,
             adaptive_source_item_ids = EXCLUDED.adaptive_source_item_ids,
-            adaptive_question_count = EXCLUDED.adaptive_question_count
+            adaptive_question_count = EXCLUDED.adaptive_question_count,
+            adaptive_delivery_mode = EXCLUDED.adaptive_delivery_mode
         "#,
         schema::MODULE_QUIZZES,
         schema::COURSE_STRUCTURE_ITEMS
@@ -593,6 +604,7 @@ pub async fn upsert_import_body(
     .bind(adaptive_system_prompt)
     .bind(Json(adaptive_source_item_ids.to_vec()))
     .bind(adaptive_question_count)
+    .bind(&settings.adaptive_delivery_mode)
     .execute(pool)
     .await?;
     Ok(())

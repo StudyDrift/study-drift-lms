@@ -18,6 +18,8 @@ pub struct SearchCourseItem {
     pub adaptive_paths_enabled: bool,
     #[serde(default)]
     pub srs_enabled: bool,
+    #[serde(default)]
+    pub diagnostic_assessments_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]

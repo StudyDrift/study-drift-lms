@@ -51,6 +51,7 @@ export const courseSchema = z
     standardsAlignmentEnabled: z.boolean().optional(),
     adaptivePathsEnabled: z.boolean().optional(),
     srsEnabled: z.boolean().optional(),
+    diagnosticAssessmentsEnabled: z.boolean().optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
     viewerEnrollmentRoles: z.array(z.string()).optional(),
@@ -310,6 +311,7 @@ export const generateQuizQuestionsResponseSchema = z.object({
 })
 
 const adaptiveQuizGeneratedQuestionSchema = z.object({
+  questionId: z.string().uuid().optional(),
   prompt: z.string(),
   questionType: z.string(),
   choices: z.array(z.string()),

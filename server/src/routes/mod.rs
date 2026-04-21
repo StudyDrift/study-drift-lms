@@ -1,8 +1,10 @@
+pub mod admin;
 pub mod accommodations;
 pub mod adaptive_paths;
 pub mod auth;
 pub mod concepts;
 pub mod communication;
+pub mod diagnostic;
 pub mod course_feed;
 pub mod course_files;
 pub mod courses;

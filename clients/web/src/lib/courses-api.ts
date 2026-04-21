@@ -100,6 +100,8 @@ export type CoursePublic = {
   adaptivePathsEnabled?: boolean
   /** Spaced repetition review queue (plan 1.5); requires `SRS_PRACTICE_ENABLED` on server. */
   srsEnabled?: boolean
+  /** Placement diagnostic (plan 1.7); requires `DIAGNOSTIC_ASSESSMENTS_ENABLED` on server. */
+  diagnosticAssessmentsEnabled?: boolean
   createdAt: string
   updatedAt: string
   /** Present on single-course GET: raw enrollment roles for the viewer (`teacher`, `student`, …). */
@@ -496,6 +498,7 @@ export async function patchCourseFeatures(
     standardsAlignmentEnabled: boolean
     adaptivePathsEnabled?: boolean
     srsEnabled?: boolean
+    diagnosticAssessmentsEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -512,12 +515,108 @@ export async function patchCourseFeatures(
         standardsAlignmentEnabled: body.standardsAlignmentEnabled,
         adaptivePathsEnabled: body.adaptivePathsEnabled,
         srsEnabled: body.srsEnabled,
+        diagnosticAssessmentsEnabled: body.diagnosticAssessmentsEnabled,
       }),
     },
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseApiResponse('patchCourseFeatures', courseSchema, raw)
+}
+
+export type EnrollmentDiagnosticGate = {
+  status: 'off' | 'not_configured' | 'pending' | 'in_progress' | 'completed' | 'bypassed'
+  diagnosticId?: string
+  attempt?: {
+    id: string
+    startedAt: string
+    completedAt?: string | null
+    bypassed: boolean
+    placementSummary?: unknown
+  }
+}
+
+export async function fetchEnrollmentDiagnostic(enrollmentId: string): Promise<EnrollmentDiagnosticGate> {
+  const res = await authorizedFetch(
+    `/api/v1/enrollments/${encodeURIComponent(enrollmentId)}/diagnostic`,
+  )
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as EnrollmentDiagnosticGate
+}
+
+export async function postDiagnosticStart(
+  enrollmentId: string,
+): Promise<{ attemptId: string; firstQuestion: AdaptiveQuizGeneratedQuestion }> {
+  const res = await authorizedFetch(
+    `/api/v1/enrollments/${encodeURIComponent(enrollmentId)}/diagnostic/start`,
+    { method: 'POST' },
+  )
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { attemptId: string; firstQuestion: AdaptiveQuizGeneratedQuestion }
+}
+
+export async function postDiagnosticRespond(
+  attemptId: string,
+  body: { questionId: string; choiceIndex: number; responseMs?: number },
+): Promise<{
+  completed: boolean
+  nextQuestion?: AdaptiveQuizGeneratedQuestion | null
+  summary?: {
+    concepts: {
+      conceptId: string
+      name: string
+      theta: number
+      mastery: number
+      proficiencyKey: string
+      proficiencyLabel: string
+    }[]
+    placementItemId: string
+    placementTitle: string
+  }
+}> {
+  const res = await authorizedFetch(
+    `/api/v1/diagnostic-attempts/${encodeURIComponent(attemptId)}/respond`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        questionId: body.questionId,
+        choiceIndex: body.choiceIndex,
+        responseMs: body.responseMs,
+      }),
+    },
+  )
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as {
+    completed: boolean
+    nextQuestion?: AdaptiveQuizGeneratedQuestion | null
+    summary?: {
+      concepts: {
+        conceptId: string
+        name: string
+        theta: number
+        mastery: number
+        proficiencyKey: string
+        proficiencyLabel: string
+      }[]
+      placementItemId: string
+      placementTitle: string
+    }
+  }
+}
+
+export async function postDiagnosticBypass(enrollmentId: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/enrollments/${encodeURIComponent(enrollmentId)}/diagnostic/bypass`,
+    { method: 'POST' },
+  )
+  if (!res.ok) {
+    const raw: unknown = await res.json().catch(() => ({}))
+    throw new Error(readApiErrorMessage(raw))
+  }
 }
 
 export async function fetchLearnerReviewQueue(
@@ -706,6 +805,43 @@ export async function createCourse(body: {
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseApiResponse('createCourse', courseSchema, raw)
+}
+
+/** `PUT /api/v1/courses/:courseCode` — general course fields (matches course settings save). */
+export async function putCourse(
+  courseCode: string,
+  body: {
+    title: string
+    description: string
+    published: boolean
+    startsAt: string | null
+    endsAt: string | null
+    visibleFrom: string | null
+    hiddenAt: string | null
+    scheduleMode: 'fixed' | 'relative'
+    relativeEndAfter: string | null
+    relativeHiddenAfter: string | null
+  },
+): Promise<CoursePublic> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: body.title,
+      description: body.description,
+      published: body.published,
+      startsAt: body.startsAt,
+      endsAt: body.endsAt,
+      visibleFrom: body.visibleFrom,
+      hiddenAt: body.hiddenAt,
+      scheduleMode: body.scheduleMode,
+      relativeEndAfter: body.relativeEndAfter,
+      relativeHiddenAfter: body.relativeHiddenAfter,
+    }),
+  })
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('putCourse', courseSchema, raw)
 }
 
 /**
@@ -1474,6 +1610,7 @@ export type ReviewVisibility = 'none' | 'score_only' | 'responses' | 'correct_an
 export type ReviewWhen = 'after_submit' | 'after_due' | 'always' | 'never'
 export type AdaptiveDifficulty = 'introductory' | 'standard' | 'challenging'
 export type AdaptiveStopRule = 'fixed_count' | 'mastery_estimate'
+export type AdaptiveDeliveryMode = 'ai' | 'cat'
 
 export type LockdownMode = 'standard' | 'one_at_a_time' | 'kiosk'
 
@@ -1522,6 +1659,7 @@ export type ModuleQuizPayload = {
   adaptiveSystemPrompt: string | null
   adaptiveSourceItemIds: string[] | null
   adaptiveQuestionCount: number
+  adaptiveDeliveryMode: AdaptiveDeliveryMode
   /** Course grading category; null when unset. */
   assignmentGroupId: string | null
 }
@@ -1651,6 +1789,7 @@ export function normalizeModuleQuizPayload(raw: unknown): ModuleQuizPayload {
       ? (r.adaptiveSourceItemIds as string[])
       : null,
     adaptiveQuestionCount: typeof r.adaptiveQuestionCount === 'number' ? r.adaptiveQuestionCount : 5,
+    adaptiveDeliveryMode: r.adaptiveDeliveryMode === 'cat' ? 'cat' : 'ai',
     assignmentGroupId: typeof r.assignmentGroupId === 'string' ? r.assignmentGroupId : null,
   }
 }
@@ -1709,6 +1848,7 @@ export async function patchModuleQuiz(
     adaptiveSystemPrompt?: string
     adaptiveSourceItemIds?: string[]
     adaptiveQuestionCount?: number
+    adaptiveDeliveryMode?: AdaptiveDeliveryMode
   },
 ): Promise<ModuleQuizPayload> {
   const res = await authorizedFetch(
@@ -1746,6 +1886,7 @@ export async function generateModuleQuizQuestions(
 }
 
 export type AdaptiveQuizHistoryTurn = {
+  questionId?: string
   prompt: string
   questionType: string
   choices: string[]
@@ -1756,6 +1897,7 @@ export type AdaptiveQuizHistoryTurn = {
 }
 
 export type AdaptiveQuizGeneratedQuestion = {
+  questionId?: string
   prompt: string
   questionType: string
   choices: string[]
@@ -1846,6 +1988,7 @@ export async function runAdaptiveQuizToCompletion(
       throw new Error('A question had no answer choices to submit.')
     }
     history.push({
+      ...(q.questionId ? { questionId: q.questionId } : {}),
       prompt: q.prompt,
       questionType: q.questionType,
       choices: q.choices,

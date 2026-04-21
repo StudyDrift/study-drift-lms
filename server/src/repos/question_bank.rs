@@ -26,7 +26,10 @@ pub struct QuestionEntity {
     pub shuffle_choices_override: Option<bool>,
     pub irt_a: Option<f64>,
     pub irt_b: Option<f64>,
+    pub irt_c: Option<f64>,
     pub irt_status: String,
+    pub irt_sample_n: i32,
+    pub irt_calibrated_at: Option<DateTime<Utc>>,
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -280,7 +283,9 @@ pub async fn get_question(
         r#"
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
                points::float8, status::text, shared, source, metadata, shuffle_choices_override,
-               irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
+               irt_a::float8, irt_b::float8, irt_c::float8,
+               irt_status::text AS irt_status, irt_sample_n, irt_calibrated_at,
+               created_by, created_at, updated_at,
                version_number, is_published, srs_eligible
         FROM {}
         WHERE id = $2 AND course_id = $1
@@ -335,7 +340,9 @@ pub async fn list_questions_filtered(
         r#"
         SELECT id, course_id, question_type::text, stem, options, correct_answer, explanation,
                points::float8, status::text, shared, source, metadata, shuffle_choices_override,
-               irt_a::float8, irt_b::float8, irt_status, created_by, created_at, updated_at,
+               irt_a::float8, irt_b::float8, irt_c::float8,
+               irt_status::text AS irt_status, irt_sample_n, irt_calibrated_at,
+               created_by, created_at, updated_at,
                version_number, is_published, srs_eligible
         FROM {}
         WHERE course_id = $1
@@ -396,6 +403,94 @@ where
     .bind(pool_id)
     .bind(course_id)
     .fetch_all(ex)
+    .await
+}
+
+/// Active bank items tagged to any of `concept_ids` (question tags or `metadata.conceptIds`), MC/TF only.
+pub async fn list_active_diagnostic_question_ids(
+    pool: &PgPool,
+    course_id: Uuid,
+    concept_ids: &[Uuid],
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    if concept_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    sqlx::query_scalar(&format!(
+        r#"
+        SELECT DISTINCT q.id
+        FROM {} q
+        WHERE q.course_id = $1
+          AND q.status = 'active'::course.question_status
+          AND q.question_type::text IN ('mc_single', 'mc_multiple', 'true_false')
+          AND (
+            EXISTS (
+                SELECT 1 FROM {} t
+                WHERE t.question_id = q.id AND t.concept_id = ANY($2)
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM unnest($2::uuid[]) AS c(concept_id)
+                WHERE COALESCE(q.metadata->'conceptIds', '[]'::jsonb)
+                    @> jsonb_build_array(to_jsonb(c.concept_id::text))
+            )
+          )
+        "#,
+        schema::QUESTIONS,
+        schema::CONCEPT_QUESTION_TAGS
+    ))
+    .bind(course_id)
+    .bind(concept_ids)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn list_question_concepts_in_set(
+    pool: &PgPool,
+    question_id: Uuid,
+    concept_ids: &[Uuid],
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    if concept_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    sqlx::query_scalar(&format!(
+        r#"
+        SELECT t.concept_id
+        FROM {} t
+        WHERE t.question_id = $1 AND t.concept_id = ANY($2)
+        "#,
+        schema::CONCEPT_QUESTION_TAGS
+    ))
+    .bind(question_id)
+    .bind(concept_ids)
+    .fetch_all(pool)
+    .await
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct QuestionConceptTagRow {
+    pub question_id: Uuid,
+    pub concept_id: Uuid,
+}
+
+pub async fn list_concept_tags_for_questions(
+    pool: &PgPool,
+    question_ids: &[Uuid],
+    concept_ids: &[Uuid],
+) -> Result<Vec<QuestionConceptTagRow>, sqlx::Error> {
+    if question_ids.is_empty() || concept_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    sqlx::query_as::<_, QuestionConceptTagRow>(&format!(
+        r#"
+        SELECT question_id, concept_id
+        FROM {}
+        WHERE question_id = ANY($1) AND concept_id = ANY($2)
+        "#,
+        schema::CONCEPT_QUESTION_TAGS
+    ))
+    .bind(question_ids)
+    .bind(concept_ids)
+    .fetch_all(pool)
     .await
 }
 
@@ -570,7 +665,10 @@ where
         "shuffle_choices_override": question.shuffle_choices_override,
         "irt_a": question.irt_a,
         "irt_b": question.irt_b,
+        "irt_c": question.irt_c,
         "irt_status": question.irt_status,
+        "irt_sample_n": question.irt_sample_n,
+        "irt_calibrated_at": question.irt_calibrated_at,
         "created_by": question.created_by,
         "created_at": question.created_at,
         "updated_at": question.updated_at,
@@ -801,4 +899,87 @@ pub async fn delete_question_bank_for_course(
     .execute(tx.deref_mut())
     .await?;
     Ok(())
+}
+
+pub async fn count_scored_responses_for_question(
+    pool: &PgPool,
+    course_id: Uuid,
+    question_id: Uuid,
+) -> Result<i64, sqlx::Error> {
+    let qid = question_id.to_string();
+    let (n,): (i64,) = sqlx::query_as(&format!(
+        r#"
+        SELECT COUNT(*)::bigint
+        FROM {} r
+        INNER JOIN {} a ON a.id = r.attempt_id
+        WHERE a.course_id = $1
+          AND r.question_id = $2
+          AND r.is_correct IS NOT NULL
+        "#,
+        schema::QUIZ_RESPONSES,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(course_id)
+    .bind(qid)
+    .fetch_one(pool)
+    .await?;
+    Ok(n)
+}
+
+pub async fn list_binary_responses_for_question(
+    pool: &PgPool,
+    course_id: Uuid,
+    question_id: Uuid,
+) -> Result<Vec<u8>, sqlx::Error> {
+    let qid = question_id.to_string();
+    let rows: Vec<(bool,)> = sqlx::query_as(&format!(
+        r#"
+        SELECT r.is_correct
+        FROM {} r
+        INNER JOIN {} a ON a.id = r.attempt_id
+        WHERE a.course_id = $1
+          AND r.question_id = $2
+          AND r.is_correct IS NOT NULL
+        ORDER BY r.id ASC
+        LIMIT 100000
+        "#,
+        schema::QUIZ_RESPONSES,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(course_id)
+    .bind(qid)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(ok,)| if ok { 1_u8 } else { 0_u8 }).collect())
+}
+
+pub async fn update_question_irt_fitted(
+    pool: &PgPool,
+    course_id: Uuid,
+    question_id: Uuid,
+    irt_a: f64,
+    irt_b: f64,
+    sample_n: i32,
+) -> Result<bool, sqlx::Error> {
+    let r = sqlx::query(&format!(
+        r#"
+        UPDATE {}
+        SET irt_a = $3,
+            irt_b = $4,
+            irt_sample_n = $5,
+            irt_status = 'calibrated'::course.irt_calibration_status,
+            irt_calibrated_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $2 AND course_id = $1
+        "#,
+        schema::QUESTIONS
+    ))
+    .bind(course_id)
+    .bind(question_id)
+    .bind(irt_a)
+    .bind(irt_b)
+    .bind(sample_n)
+    .execute(pool)
+    .await?;
+    Ok(r.rows_affected() > 0)
 }

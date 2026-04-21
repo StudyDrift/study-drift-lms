@@ -155,6 +155,20 @@ pub async fn submit_module_quiz(
                 "Adaptive history length does not match this quiz configuration.",
             ));
         }
+        if quiz_row.adaptive_delivery_mode == "cat" {
+            for (i, turn) in hist.iter().enumerate() {
+                let Some(qs) = turn.question_id.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) else {
+                    return Err(AppError::invalid_input(format!(
+                        "adaptiveHistory[{i}] must include questionId for CAT delivery."
+                    )));
+                };
+                if uuid::Uuid::parse_str(qs).is_err() {
+                    return Err(AppError::invalid_input(format!(
+                        "adaptiveHistory[{i}] questionId must be a UUID."
+                    )));
+                }
+            }
+        }
         quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
         let hist_json = serde_json::to_value(&hist).map_err(|e| AppError::invalid_input(e.to_string()))?;
         let mut earned = 0.0_f64;
@@ -171,12 +185,13 @@ pub async fn submit_module_quiz(
                 "choices": turn.choices,
                 "choiceWeights": turn.choice_weights,
                 "selectedChoiceIndex": turn.selected_choice_index,
+                "questionId": turn.question_id,
             });
             quiz_attempts::insert_response(
                 &mut *tx,
                 att.id,
                 i as i32,
-                None,
+                turn.question_id.as_deref(),
                 &turn.question_type,
                 Some(turn.prompt.as_str()),
                 &rj,
@@ -225,6 +240,17 @@ pub async fn submit_module_quiz(
                 let gb = quiz_gradebook_points_with_late_policy(gb, quiz_row, due_effective, now);
                 course_grades::upsert_points(pool, course_id, user_id, item_id, gb).await?;
             }
+        }
+
+        if quiz_row.adaptive_delivery_mode == "cat" {
+            crate::services::irt_theta::apply_cat_quiz_theta_updates(
+                pool,
+                course_id,
+                user_id,
+                att.id,
+                &hist,
+            )
+            .await?;
         }
 
         return Ok(QuizSubmitResponse {

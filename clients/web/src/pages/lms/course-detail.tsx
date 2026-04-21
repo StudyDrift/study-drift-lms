@@ -3,7 +3,11 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { LmsPage } from './lms-page'
 import { authorizedFetch } from '../../lib/api'
-import { postCourseContext, type CoursePublic } from '../../lib/courses-api'
+import {
+  fetchEnrollmentDiagnostic,
+  postCourseContext,
+  type CoursePublic,
+} from '../../lib/courses-api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { formatTimeAgoFromIso } from '../../lib/format-time-ago'
 import { getLastVisitedForCourse, hrefForLastVisited } from '../../lib/last-visited-module-item'
@@ -37,6 +41,7 @@ export default function CourseDetail() {
   const [course, setCourse] = useState<CoursePublic | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [diagnosticPending, setDiagnosticPending] = useState(false)
 
   useEffect(() => {
     if (!courseCode) return
@@ -53,8 +58,22 @@ export default function CourseDetail() {
           return
         }
         if (!cancelled) {
-          setCourse(raw as CoursePublic)
+          const c = raw as CoursePublic
+          setCourse(c)
           void postCourseContext(courseCode, { kind: 'course_visit' }).catch(() => {})
+          const eid = c.viewerStudentEnrollmentId
+          if (eid && c.diagnosticAssessmentsEnabled === true) {
+            fetchEnrollmentDiagnostic(eid)
+              .then((g) => {
+                if (!cancelled && g.status === 'pending') setDiagnosticPending(true)
+                else if (!cancelled) setDiagnosticPending(false)
+              })
+              .catch(() => {
+                if (!cancelled) setDiagnosticPending(false)
+              })
+          } else if (!cancelled) {
+            setDiagnosticPending(false)
+          }
         }
       } catch {
         if (!cancelled) {
@@ -91,7 +110,7 @@ export default function CourseDetail() {
         </Link>
         {courseCode && (
           <Link
-            to={`/courses/${encodeURIComponent(courseCode)}/settings`}
+            to={`/courses/${encodeURIComponent(courseCode)}/settings/general`}
             className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
           >
             Course settings
@@ -108,6 +127,23 @@ export default function CourseDetail() {
 
       {course && !loading && (
         <>
+          {diagnosticPending && courseCode ? (
+            <section
+              aria-label="Placement diagnostic"
+              className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-50"
+            >
+              <p className="font-medium">Take your placement check</p>
+              <p className="mt-1 text-amber-900/90 dark:text-amber-100/90">
+                A short adaptive assessment helps us suggest where to start in this course.
+              </p>
+              <Link
+                to={`/courses/${encodeURIComponent(courseCode)}/diagnostic`}
+                className="mt-3 inline-flex rounded-lg bg-amber-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-500"
+              >
+                Open placement
+              </Link>
+            </section>
+          ) : null}
           {lastVisited ? (
             <section aria-label="Continue where you left off" className="mt-8">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">

@@ -2,10 +2,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   Archive,
   ArrowLeft,
-  Calendar,
   FolderInput,
   Info,
-  Palette,
   Scale,
   SlidersHorizontal,
   Target,
@@ -35,26 +33,11 @@ export function SideNavCourseSettingsLinks({ courseCode }: SideNavCourseSettings
         Course Settings
       </p>
       <NavLink
-        to={base}
-        end
-        className={() => `${sideNavLinkClass} ${section === 'basic' ? sideNavActiveClass : ''}`}
+        to={`${base}/general`}
+        className={() => `${sideNavLinkClass} ${section === 'general' ? sideNavActiveClass : ''}`}
       >
         <Info className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Basic Information
-      </NavLink>
-      <NavLink
-        to={`${base}/dates`}
-        className={() => `${sideNavLinkClass} ${section === 'dates' ? sideNavActiveClass : ''}`}
-      >
-        <Calendar className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Dates
-      </NavLink>
-      <NavLink
-        to={`${base}/branding`}
-        className={() => `${sideNavLinkClass} ${section === 'branding' ? sideNavActiveClass : ''}`}
-      >
-        <Palette className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Branding
+        General
       </NavLink>
       <NavLink
         to={`${base}/grading`}
@@ -71,26 +54,26 @@ export function SideNavCourseSettingsLinks({ courseCode }: SideNavCourseSettings
         Outcomes
       </NavLink>
       <NavLink
-        to={`${base}/features-tools`}
+        to={`${base}/features`}
         className={() =>
-          `${sideNavLinkClass} ${section === 'features-tools' ? sideNavActiveClass : ''}`
+          `${sideNavLinkClass} ${section === 'features' ? sideNavActiveClass : ''}`
         }
       >
         <SlidersHorizontal className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Features and Tools
+        Features
       </NavLink>
       <NavLink
-        to={`${base}/export-import`}
+        to={`${base}/import-export`}
         className={() =>
-          `${sideNavLinkClass} ${section === 'export-import' ? sideNavActiveClass : ''}`
+          `${sideNavLinkClass} ${section === 'import-export' ? sideNavActiveClass : ''}`
         }
       >
         <FolderInput className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-        Export/Import
+        Import / export
       </NavLink>
       <NavLink
-        to={`${base}/archived`}
-        className={() => `${sideNavLinkClass} ${section === 'archived' ? sideNavActiveClass : ''}`}
+        to={`${base}/archive`}
+        className={() => `${sideNavLinkClass} ${section === 'archive' ? sideNavActiveClass : ''}`}
       >
         <Archive className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Archived

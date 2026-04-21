@@ -8,7 +8,8 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::Deserialize;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -35,6 +36,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/learners/{user_id}/concepts/{concept_id}",
             get(get_one_concept_state),
+        )
+        .route(
+            "/api/v1/learners/{user_id}/concepts/{concept_id}/theta",
+            get(get_learner_concept_theta_handler),
         )
         .route("/api/v1/learners/concepts/batch", post(batch_learner_concepts))
         .route(
@@ -108,6 +113,39 @@ async fn list_learner_concepts(
         .list_concept_states(&state.pool, user_id, None)
         .await?;
     Ok(Json(LearnerConceptsListResponse { concepts }))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LearnerConceptThetaResponse {
+    pub theta: Option<f64>,
+    pub theta_se: Option<f64>,
+    pub last_updated_at: Option<DateTime<Utc>>,
+}
+
+async fn get_learner_concept_theta_handler(
+    State(state): State<AppState>,
+    Path((user_id, concept_id)): Path<(Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<LearnerConceptThetaResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    assert_can_read_learner_state(&state.pool, user.user_id, user_id).await?;
+
+    let row = learner_model::get_learner_theta_meta(&state.pool, user_id, concept_id)
+        .await
+        .map_err(AppError::Db)?;
+    let Some(row) = row else {
+        return Ok(Json(LearnerConceptThetaResponse {
+            theta: None,
+            theta_se: None,
+            last_updated_at: None,
+        }));
+    };
+    Ok(Json(LearnerConceptThetaResponse {
+        theta: row.theta,
+        theta_se: row.theta_se,
+        last_updated_at: row.updated_at,
+    }))
 }
 
 async fn get_one_concept_state(

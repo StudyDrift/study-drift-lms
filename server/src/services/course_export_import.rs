@@ -271,6 +271,7 @@ fn quiz_settings_from_export(body: &ExportedQuizBody) -> QuizSettingsWrite {
         adaptive_topic_balance: body.adaptive_topic_balance,
         adaptive_stop_rule: body.adaptive_stop_rule.clone(),
         random_question_pool_count: body.random_question_pool_count,
+        adaptive_delivery_mode: body.adaptive_delivery_mode.clone(),
         points_worth: body.points_worth,
         lockdown_mode: crate::services::quiz_lockdown::parse_lockdown_mode_setting(&body.lockdown_mode)
             .unwrap_or(crate::services::quiz_lockdown::LOCKDOWN_STANDARD)
@@ -396,6 +397,7 @@ fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
         if body.is_adaptive {
             validate_adaptive_quiz_settings(
                 true,
+                &body.adaptive_delivery_mode,
                 &body.adaptive_system_prompt,
                 &body.adaptive_source_item_ids,
                 body.adaptive_question_count,
@@ -513,6 +515,7 @@ async fn apply_course_snapshot(
         snap.standards_alignment_enabled,
         snap.adaptive_paths_enabled,
         snap.srs_enabled,
+        snap.diagnostic_assessments_enabled,
     )
     .await?
     .ok_or(AppError::NotFound)?;
@@ -882,6 +885,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         standards_alignment_enabled: course.standards_alignment_enabled,
         adaptive_paths_enabled: course.adaptive_paths_enabled,
         srs_enabled: course.srs_enabled,
+        diagnostic_assessments_enabled: course.diagnostic_assessments_enabled,
     };
 
     let grading = course_grading::get_settings_for_course_code(pool, course_code)
@@ -977,6 +981,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                             adaptive_system_prompt: row.adaptive_system_prompt,
                             adaptive_source_item_ids: row.adaptive_source_item_ids.0,
                             adaptive_question_count: row.adaptive_question_count,
+                            adaptive_delivery_mode: row.adaptive_delivery_mode.clone(),
                         },
                     );
                 }

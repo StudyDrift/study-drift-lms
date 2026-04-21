@@ -12,8 +12,8 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::http_auth::{assert_permission, auth_user};
 use crate::models::question_bank::{
-    AddPoolMembersRequest, BulkImportQuestionsResponse, CreateQuestionPoolRequest, CreateQuestionRequest,
-    QuestionBankRowResponse, QuestionPoolResponse, QuestionVersionSummaryResponse,
+    AddPoolMembersRequest, BulkImportQuestionsResponse,     CreateQuestionPoolRequest, CreateQuestionRequest, IccPoint,
+    QuestionBankRowResponse, QuestionIrtStatsResponse, QuestionPoolResponse, QuestionVersionSummaryResponse,
     RestoreQuestionVersionRequest, SetQuizDeliveryRefsRequest, UpdateQuestionRequest,
 };
 use crate::repos::course;
@@ -21,6 +21,7 @@ use crate::repos::course_grants;
 use crate::repos::course_module_quizzes;
 use crate::repos::enrollment;
 use crate::repos::question_bank as qb_repo;
+use crate::services::irt;
 use crate::services::question_bank;
 use crate::state::AppState;
 
@@ -39,6 +40,10 @@ pub fn router() -> Router<AppState> {
             get(get_question_handler)
                 .put(update_question_handler)
                 .delete(delete_question_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/questions/{question_id}/irt-stats",
+            get(get_question_irt_stats_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/questions/{question_id}/versions",
@@ -91,7 +96,10 @@ fn entity_to_api(e: qb_repo::QuestionEntity) -> QuestionBankRowResponse {
         metadata: e.metadata,
         irt_a: e.irt_a,
         irt_b: e.irt_b,
+        irt_c: e.irt_c,
         irt_status: e.irt_status,
+        irt_sample_n: Some(e.irt_sample_n),
+        irt_calibrated_at: e.irt_calibrated_at,
         created_by: e.created_by,
         created_at: e.created_at,
         updated_at: e.updated_at,
@@ -233,7 +241,10 @@ async fn create_question_handler(
         metadata: meta.clone(),
         irt_a: None,
         irt_b: None,
+        irt_c: None,
         irt_status: "uncalibrated".to_string(),
+        irt_sample_n: 0,
+        irt_calibrated_at: None,
         created_by: Some(user.user_id),
         created_at: now,
         updated_at: now,
@@ -276,6 +287,45 @@ async fn get_question_handler(
         .await?
         .ok_or(AppError::NotFound)?;
     Ok(Json(entity_to_api(row)))
+}
+
+async fn get_question_irt_stats_handler(
+    State(state): State<AppState>,
+    Path((course_code, question_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<QuestionIrtStatsResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let ok = enrollment::user_has_access(&state.pool, &course_code, user.user_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    require_instructor(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    let e = qb_repo::get_question(&state.pool, course_id, question_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let observed = qb_repo::count_scored_responses_for_question(&state.pool, course_id, question_id)
+        .await? as i32;
+    let sample_n = observed.max(e.irt_sample_n);
+    let a = e.irt_a.unwrap_or(1.0);
+    let b = e.irt_b.unwrap_or(0.0);
+    let c = e.irt_c.unwrap_or(0.0);
+    let icc: Vec<IccPoint> = irt::icc_curve_points(a, b, c)
+        .into_iter()
+        .map(|(theta, p_correct)| IccPoint { theta, p_correct })
+        .collect();
+    Ok(Json(QuestionIrtStatsResponse {
+        a: e.irt_a,
+        b: e.irt_b,
+        c: e.irt_c,
+        status: e.irt_status,
+        sample_n,
+        calibrated_at: e.irt_calibrated_at,
+        icc,
+    }))
 }
 
 async fn update_question_handler(
@@ -743,7 +793,10 @@ async fn bulk_import_questions_handler(
             metadata: meta.clone(),
             irt_a: None,
             irt_b: None,
+            irt_c: None,
             irt_status: "uncalibrated".to_string(),
+            irt_sample_n: 0,
+            irt_calibrated_at: None,
             created_by: Some(user.user_id),
             created_at: now,
             updated_at: now,

@@ -59,6 +59,8 @@ pub struct CourseExportSnapshot {
     pub adaptive_paths_enabled: bool,
     #[serde(default)]
     pub srs_enabled: bool,
+    #[serde(default)]
+    pub diagnostic_assessments_enabled: bool,
 }
 
 fn default_export_schedule_mode() -> String {
@@ -172,6 +174,12 @@ pub struct ExportedQuizBody {
     pub adaptive_source_item_ids: Vec<Uuid>,
     #[serde(default = "default_export_adaptive_question_count")]
     pub adaptive_question_count: i32,
+    #[serde(default = "default_export_adaptive_delivery_mode")]
+    pub adaptive_delivery_mode: String,
+}
+
+fn default_export_adaptive_delivery_mode() -> String {
+    "ai".to_string()
 }
 
 fn default_export_adaptive_question_count() -> i32 {

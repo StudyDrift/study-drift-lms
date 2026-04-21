@@ -142,6 +142,15 @@ function buildFullRubricScoresPayload(
   return out
 }
 
+function formatSavedTimestamp(d: Date): string {
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 function formatPointsCell(n: number): string {
   if (!Number.isFinite(n) || n < 0) return ''
   if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n))
@@ -291,6 +300,7 @@ export default function CourseGradebook() {
   const [gridNonce, setGridNonce] = useState(0)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
   const gradesRef = useRef<Record<string, Record<string, string>>>({})
   const rubricScoresRef = useRef<Record<string, Record<string, Record<string, number>>>>({})
   const [rubricModal, setRubricModal] = useState<RubricModalState | null>(null)
@@ -370,6 +380,7 @@ export default function CourseGradebook() {
         setAssignmentGroups([])
       }
       setLoadState('ok')
+      setLastSavedAt(new Date())
     } catch (e: unknown) {
       setStudents([])
       setColumns([])
@@ -499,12 +510,30 @@ export default function CourseGradebook() {
       {loadState === 'ok' && savedGrades != null && (
         <>
           {canEditGrades && gridStudents.length > 0 && gridColumns.length > 0 && (
-            <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+            <div
+              className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"
+              aria-live="polite"
+            >
               <div className="min-w-0 flex-1 text-sm text-slate-600 dark:text-neutral-400">
                 {gradesDirty ? (
-                  <span>You have unsaved grade changes.</span>
+                  <span>
+                    Unsaved grade changes — <span className="font-medium text-amber-800 dark:text-amber-200">Save</span>{' '}
+                    writes them to the server. <span className="font-medium text-slate-800 dark:text-neutral-200">Discard</span>{' '}
+                    restores the last saved copy (same as reloading the page).
+                  </span>
                 ) : (
-                  <span>All changes saved.</span>
+                  <span>
+                    <span className="inline-flex items-center gap-1.5 font-medium text-emerald-800 dark:text-emerald-200">
+                      <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+                      All changes saved
+                    </span>
+                    {lastSavedAt ? (
+                      <span className="text-slate-500 dark:text-neutral-500">
+                        {' '}
+                        ({formatSavedTimestamp(lastSavedAt)})
+                      </span>
+                    ) : null}
+                  </span>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">

@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, LayoutGrid, Users } from 'lucide-react'
+import { ChevronDown, LayoutGrid, Thermometer, Users } from 'lucide-react'
 import { EmptyState } from '../../../components/ui/empty-state'
 import {
   type GradebookActiveSort,
@@ -135,6 +135,47 @@ function normalizeFilter(s: string): string {
   return s.trim().toLowerCase()
 }
 
+function parseGradeNumber(raw: string): number | null {
+  const s = raw.trim().replace(/,/g, '')
+  if (s === '') return null
+  const n = Number.parseFloat(s)
+  return Number.isFinite(n) ? n : null
+}
+
+function mean(values: number[]): number | null {
+  if (values.length === 0) return null
+  return values.reduce((a, b) => a + b, 0) / values.length
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const s = [...values].sort((a, b) => a - b)
+  const m = Math.floor(s.length / 2)
+  return s.length % 2 === 1 ? s[m]! : (s[m - 1]! + s[m]!) / 2
+}
+
+function formatStat(n: number): string {
+  if (!Number.isFinite(n)) return '—'
+  if (Math.abs(n - Math.round(n)) < 1e-6) return String(Math.round(n))
+  let s = n.toFixed(2)
+  while (s.includes('.') && (s.endsWith('0') || s.endsWith('.'))) {
+    s = s.slice(0, -1)
+  }
+  return s
+}
+
+/** Background tint by percentile within column (optional heat map). */
+function heatMapCellClass(t: number): string {
+  if (!Number.isFinite(t)) return ''
+  const u = Math.max(0, Math.min(1, t))
+  if (u <= 0.17) return 'bg-sky-100/90 dark:bg-sky-950/35'
+  if (u <= 0.33) return 'bg-sky-50/80 dark:bg-sky-950/20'
+  if (u <= 0.5) return 'bg-slate-50 dark:bg-neutral-800/70'
+  if (u <= 0.67) return 'bg-amber-50/90 dark:bg-amber-950/25'
+  if (u <= 0.83) return 'bg-amber-100/85 dark:bg-amber-950/40'
+  return 'bg-orange-100/80 dark:bg-orange-950/45'
+}
+
 type SelectionBounds = { row0: number; row1: number; col0: number; col1: number }
 
 type FillDragState = { src: SelectionBounds; destRow1: number; destCol1: number }
@@ -196,6 +237,10 @@ export function GradebookGrid({
   const fillDragRef = useRef<FillDragState | null>(null)
   /** After a fill drag, ignore the synthetic click on the cell under the pointer so selection stays correct. */
   const skipNextCellClickRef = useRef(false)
+
+  const headerRowRef = useRef<HTMLTableRowElement>(null)
+  const [headerStickyPx, setHeaderStickyPx] = useState(0)
+  const [colorScaleEnabled, setColorScaleEnabled] = useState(false)
 
   const baseRowCount = students.length
   const baseColCount = columns.length
@@ -263,6 +308,55 @@ export function GradebookGrid({
     }
     return out
   }, [students, columnsForFinal, grades, assignmentGroups])
+
+  const columnScoreBounds = useMemo(() => {
+    return visibleColumns.map((col) => {
+      const nums: number[] = []
+      for (const s of filteredStudents) {
+        const n = parseGradeNumber(grades[s.id]?.[col.id] ?? '')
+        if (n != null) nums.push(n)
+      }
+      if (nums.length === 0) return { min: null as number | null, max: null as number | null }
+      return { min: Math.min(...nums), max: Math.max(...nums) }
+    })
+  }, [visibleColumns, filteredStudents, grades])
+
+  const classSummaryStats = useMemo(() => {
+    const finalVals: number[] = []
+    for (const s of filteredStudents) {
+      const p = finalPercentByStudentId[s.id]
+      if (p != null && Number.isFinite(p)) finalVals.push(p)
+    }
+    const columns = visibleColumns.map((col) => {
+      const nums: number[] = []
+      for (const s of filteredStudents) {
+        const n = parseGradeNumber(grades[s.id]?.[col.id] ?? '')
+        if (n != null) nums.push(n)
+      }
+      return { avg: mean(nums), med: median(nums) }
+    })
+    return {
+      finalAvg: mean(finalVals),
+      finalMed: median(finalVals),
+      columns,
+    }
+  }, [filteredStudents, visibleColumns, grades, finalPercentByStudentId])
+
+  const heatPercentForCell = useCallback(
+    (colIndex: number, valStr: string): number | null => {
+      const n = parseGradeNumber(valStr)
+      if (n == null) return null
+      const col = visibleColumns[colIndex]
+      if (!col) return null
+      if (col.maxPoints != null && col.maxPoints > 0) {
+        return Math.max(0, Math.min(1, n / col.maxPoints))
+      }
+      const { min, max } = columnScoreBounds[colIndex] ?? { min: null, max: null }
+      if (min == null || max == null || max <= min) return 0.5
+      return Math.max(0, Math.min(1, (n - min) / (max - min)))
+    },
+    [visibleColumns, columnScoreBounds],
+  )
 
   const cellRefs = useRef<(HTMLTableCellElement | null)[][]>([])
 
@@ -339,6 +433,18 @@ export function GradebookGrid({
   useEffect(() => {
     cellRefs.current = filteredStudents.map(() => visibleColumns.map(() => null))
   }, [filteredStudents, visibleColumns])
+
+  useLayoutEffect(() => {
+    const el = headerRowRef.current
+    if (!el) return
+    const measure = () => {
+      setHeaderStickyPx(el.getBoundingClientRect().height)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [visibleColumns, studentFilter, assignmentFilter, activeSort])
 
   const setCellRef = useCallback(
     (row: number, col: number, el: HTMLTableCellElement | null) => {
@@ -493,6 +599,37 @@ export function GradebookGrid({
       return next
     })
   }, [readOnly, selectionAnchor, focusRow, focusCol, filteredStudents, visibleColumns])
+
+  const applyBulkPaste = useCallback(
+    (text: string, startRow: number, startCol: number) => {
+      if (readOnly) return
+      if (rowCount === 0 || colCount === 0) return
+      let normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+      if (normalized.endsWith('\n')) normalized = normalized.replace(/\n+$/, '')
+      const lines = normalized === '' ? [] : normalized.split('\n')
+      if (lines.length === 0) return
+
+      setGrades((prev) => {
+        const next: Record<string, Record<string, string>> = { ...prev }
+        for (let i = 0; i < lines.length; i++) {
+          const r = startRow + i
+          if (r < 0 || r >= rowCount) break
+          const sid = filteredStudents[r]!.id
+          const rowEntry = { ...(next[sid] ?? {}) }
+          const cells = lines[i]!.split('\t')
+          for (let j = 0; j < cells.length; j++) {
+            const c = startCol + j
+            if (c < 0 || c >= colCount) break
+            const aid = visibleColumns[c]!.id
+            rowEntry[aid] = cells[j]!.trim()
+          }
+          next[sid] = rowEntry
+        }
+        return next
+      })
+    },
+    [readOnly, rowCount, colCount, filteredStudents, visibleColumns],
+  )
 
   const handleFillKnobPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLButtonElement>, src: SelectionBounds) => {
@@ -665,6 +802,24 @@ export function GradebookGrid({
           }
           break
         }
+        case 'Home':
+          e.preventDefault()
+          setSelectionAnchor(null)
+          if (e.metaKey || e.ctrlKey) {
+            focusCell(0, focusCol)
+          } else {
+            focusCell(focusRow, 0)
+          }
+          break
+        case 'End':
+          e.preventDefault()
+          setSelectionAnchor(null)
+          if (e.metaKey || e.ctrlKey) {
+            focusCell(rowCount - 1, focusCol)
+          } else {
+            focusCell(focusRow, colCount - 1)
+          }
+          break
         default:
           break
       }
@@ -674,12 +829,14 @@ export function GradebookGrid({
       editing,
       focusRow,
       focusCol,
+      rowCount,
       colCount,
       selectionAnchor,
       moveBy,
       moveToIndex,
       beginEdit,
       clearSelectedScores,
+      focusCell,
     ],
   )
 
@@ -864,6 +1021,23 @@ export function GradebookGrid({
             Clear filters
           </button>
         )}
+        {rowCount > 0 && colCount > 0 && (
+          <button
+            type="button"
+            aria-pressed={colorScaleEnabled}
+            title="Color each score cell from cool (low) to warm (high) within its column"
+            className={[
+              'inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium shadow-sm transition',
+              colorScaleEnabled
+                ? 'border-indigo-300 bg-indigo-50 text-indigo-950 dark:border-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-100'
+                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700/80',
+            ].join(' ')}
+            onClick={() => setColorScaleEnabled((v) => !v)}
+          >
+            <Thermometer className="size-4 shrink-0 opacity-80" aria-hidden />
+            Column heat map
+          </button>
+        )}
       </div>
 
       {rowCount === 0 && (
@@ -884,12 +1058,15 @@ export function GradebookGrid({
         <table
           role="grid"
           aria-label="Grades by student and assignment"
-          aria-rowcount={rowCount + 1}
+          aria-rowcount={rowCount + 2}
           aria-colcount={2 + colCount}
           className="w-full min-w-max border-collapse text-left"
         >
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 dark:border-neutral-700 dark:bg-neutral-800">
+            <tr
+              ref={headerRowRef}
+              className="border-b border-slate-200 bg-slate-50 dark:border-neutral-700 dark:bg-neutral-800"
+            >
               <th
                 scope="col"
                 className={`sticky top-0 left-0 z-30 ${STICKY_NAME_WIDTH_CLASS} ${CELL_PAD} border-b border-r border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
@@ -956,6 +1133,55 @@ export function GradebookGrid({
                 )
               })}
             </tr>
+            <tr className="border-b border-slate-200 bg-slate-100 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
+              <th
+                scope="row"
+                className={`sticky left-0 z-[28] ${STICKY_NAME_WIDTH_CLASS} ${CELL_PAD} border-b border-r border-slate-200 bg-slate-100 align-top text-left font-medium shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
+                style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
+              >
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                  Class avg / med
+                </span>
+              </th>
+              <th
+                scope="col"
+                className={`sticky left-[12rem] z-[27] min-w-[5.5rem] ${CELL_PAD} border-b border-r border-slate-200 bg-slate-100 text-right align-top font-normal shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
+                style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
+              >
+                <div className="flex flex-col items-end gap-0.5 text-[11px] tabular-nums leading-snug">
+                  <span>
+                    <span className="text-slate-500 dark:text-neutral-400">Avg </span>
+                    {classSummaryStats.finalAvg != null ? `${formatStat(classSummaryStats.finalAvg)}%` : '—'}
+                  </span>
+                  <span>
+                    <span className="text-slate-500 dark:text-neutral-400">Med </span>
+                    {classSummaryStats.finalMed != null ? `${formatStat(classSummaryStats.finalMed)}%` : '—'}
+                  </span>
+                </div>
+              </th>
+              {visibleColumns.map((col, colIndex) => {
+                const st = classSummaryStats.columns[colIndex]!
+                return (
+                  <th
+                    key={`stats-${col.id}`}
+                    scope="col"
+                    className={`sticky z-[26] ${CELL_PAD} min-w-[9rem] border-b border-slate-200 bg-slate-100 text-right align-top font-normal shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
+                    style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
+                  >
+                    <div className="flex flex-col items-end gap-0.5 text-[11px] tabular-nums leading-snug">
+                      <span title={col.maxPoints != null ? `Average of entered scores (out of ${col.maxPoints})` : 'Average of entered scores'}>
+                        <span className="text-slate-500 dark:text-neutral-400">Avg </span>
+                        {st.avg != null ? formatStat(st.avg) : '—'}
+                      </span>
+                      <span title={col.maxPoints != null ? `Median of entered scores (out of ${col.maxPoints})` : 'Median of entered scores'}>
+                        <span className="text-slate-500 dark:text-neutral-400">Med </span>
+                        {st.med != null ? formatStat(st.med) : '—'}
+                      </span>
+                    </div>
+                  </th>
+                )
+              })}
+            </tr>
           </thead>
           <tbody>
             {filteredStudents.map((student, row) => (
@@ -1010,6 +1236,10 @@ export function GradebookGrid({
                     colIndex <= fillDrag.src.col1
                   const inFillExtension = inFillDest && !inFillSource
 
+                  const heatT = colorScaleEnabled ? heatPercentForCell(colIndex, val) : null
+                  const heatSurface =
+                    heatT != null && !showEditor && !inFillDest ? heatMapCellClass(heatT) : null
+
                   const cellSurface = showEditor
                     ? ringActive
                     : inEditBand
@@ -1020,7 +1250,7 @@ export function GradebookGrid({
                           ? ringBand
                           : isFocusCell && !editing
                             ? ringActive
-                            : 'bg-white dark:bg-neutral-900/80'
+                            : (heatSurface ?? 'bg-white dark:bg-neutral-900/80')
 
                   const fillExtSurface = inFillExtension
                     ? 'bg-indigo-100/45 ring-1 ring-inset ring-dashed ring-indigo-400/80 dark:bg-indigo-950/35 dark:ring-indigo-500/70'
@@ -1048,6 +1278,15 @@ export function GradebookGrid({
                       }
                       className={`relative ${CELL_PAD} min-w-[5.5rem] border-l border-slate-100 text-right tabular-nums outline-none transition dark:border-neutral-700/80 ${cellSurface} ${fillExtSurface}`}
                       onKeyDown={(e) => handleGradeCellKeyDown(e, row, colIndex)}
+                      onPaste={(e) => {
+                        if (readOnly) return
+                        if (editing) return
+                        if (row !== focusRow || colIndex !== focusCol) return
+                        const text = e.clipboardData.getData('text/plain')
+                        if (text === '') return
+                        e.preventDefault()
+                        applyBulkPaste(text, focusRow, focusCol)
+                      }}
                       onPointerDown={(e) => {
                         if (e.button !== 0) return
                         if (fillDragRef.current != null) return
@@ -1093,6 +1332,14 @@ export function GradebookGrid({
                           className="m-0 w-full min-w-0 border-0 bg-transparent p-0 text-right text-sm tabular-nums text-slate-950 shadow-none outline-none ring-0 focus:ring-0 dark:text-neutral-100"
                           value={draft}
                           onChange={(e) => setDraft(e.target.value)}
+                          onPaste={(e) => {
+                            const text = e.clipboardData.getData('text/plain')
+                            if (!text.includes('\n') && !text.includes('\t')) return
+                            e.preventDefault()
+                            skipCommitOnBlurRef.current = true
+                            setEditing(null)
+                            applyBulkPaste(text, focusRow, focusCol)
+                          }}
                           onKeyDown={handleInputKeyDown}
                           onBlur={handleEditInputBlur}
                         />
@@ -1216,12 +1463,14 @@ export function GradebookGrid({
 
       <p className="text-xs text-slate-500 dark:text-neutral-400">
         <span className="font-medium text-slate-600 dark:text-neutral-300">Shortcuts:</span> click or arrows move
-        the active cell; drag or Shift+arrows / Shift+click extends a rectangular selection; Delete or Backspace
-        clears scores for the selection; Enter or F2 edits (filling every selected cell); Escape collapses a
-        multi-cell selection or cancels editing; Tab / Shift+Tab moves to the next or previous cell; double-click
-        edits one cell only. Drag the small square at the bottom-right of the selection (like Excel) to copy
-        values down or across — a multi-cell selection repeats as a tiled pattern. Click a column header to open
-        sort options.
+        the active cell; Home / End jump to the start or end of the row; Ctrl+Home / Ctrl+End (⌘ on Mac) jump to the
+        first or last row; drag or Shift+arrows / Shift+click extends a rectangular selection; Delete or Backspace clears
+        scores for the selection; Enter or F2 edits (filling every selected cell); Escape collapses a multi-cell
+        selection or cancels editing; Tab / Shift+Tab moves to the next or previous cell; double-click edits one
+        cell only. Paste from Excel or Google Sheets starting at the active cell: rows follow line breaks and
+        columns follow tabs. Drag the small square at the bottom-right of the selection (like Excel) to copy values
+        down or across — a multi-cell selection repeats as a tiled pattern. Click a column header to open sort
+        options.
         {footerNote ? ` ${footerNote}` : ''}
       </p>
     </div>

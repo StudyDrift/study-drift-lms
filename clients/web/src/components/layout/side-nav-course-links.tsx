@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   ArrowLeft,
   Award,
@@ -34,6 +34,7 @@ type SideNavCourseLinksProps = {
 }
 
 export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
+  const location = useLocation()
   const {
     notebookEnabled,
     feedEnabled,
@@ -168,8 +169,14 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
       )}
       {canManageCourse && (
         <NavLink
-          to={`${base}/settings`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+          to={`${base}/settings/general`}
+          className={() => {
+            const settingsPrefix = `${base}/settings`
+            const onSettings =
+              location.pathname === settingsPrefix ||
+              location.pathname.startsWith(`${settingsPrefix}/`)
+            return `${sideNavLinkClass} ${onSettings ? sideNavActiveClass : ''}`
+          }}
         >
           <Settings className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
           Settings

@@ -1018,6 +1018,7 @@ async fn canvas_export_append_quiz_details(
             adaptive_system_prompt: String::new(),
             adaptive_source_item_ids: vec![],
             adaptive_question_count: 5,
+            adaptive_delivery_mode: "ai".into(),
         },
     );
     *sort_order += 1;
@@ -1834,6 +1835,7 @@ pub async fn build_export_from_canvas(
         standards_alignment_enabled: false,
         adaptive_paths_enabled: false,
         srs_enabled: false,
+        diagnostic_assessments_enabled: false,
     };
 
     Ok(CourseExportV1 {
