@@ -1,5 +1,5 @@
 import type { Components } from 'react-markdown'
-import { forwardRef } from 'react'
+import { forwardRef, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
@@ -11,6 +11,7 @@ import { remarkMergeAdjacentLists } from './remark-merge-adjacent-lists'
 import type { SyllabusSection } from '../../lib/courses-api'
 import type { ResolvedMarkdownTheme } from '../../lib/markdown-theme'
 import { resolveMarkdownTheme } from '../../lib/markdown-theme'
+import { useReducedData } from '../../context/reduced-data-context'
 import { isMathRenderingEnabled } from '../../lib/math'
 import { sectionsToMarkdown } from './syllabus-section-markdown'
 import type { PluggableList } from 'unified'
@@ -19,12 +20,14 @@ const katexRehypePlugins: PluggableList = [
   [rehypeKatex, { output: 'htmlAndMathml', strict: 'ignore' }],
 ]
 
-const markdownMathPlugins = isMathRenderingEnabled()
-  ? {
-      remark: [remarkMath],
-      rehype: katexRehypePlugins,
-    }
-  : { remark: [], rehype: [] as PluggableList }
+function mathPluginsFor(enabled: boolean) {
+  return enabled && isMathRenderingEnabled()
+    ? {
+        remark: [remarkMath],
+        rehype: katexRehypePlugins,
+      }
+    : { remark: [], rehype: [] as PluggableList }
+}
 
 function createMarkdownComponents(
   theme: ResolvedMarkdownTheme,
@@ -159,12 +162,22 @@ type MarkdownArticleViewProps = {
 }
 
 /** Renders a single Markdown document with the same styling as the syllabus. */
+function markdownLooksLikeMath(src: string): boolean {
+  return /\$\$|\\\(|\\\[|\$[^$\s]/.test(src)
+}
+
 export const MarkdownArticleView = forwardRef<HTMLDivElement, MarkdownArticleViewProps>(
   function MarkdownArticleView(
     { markdown, emptyMessage = 'No content yet.', theme = defaultResolved, courseCode },
     ref,
   ) {
+    const reducedData = useReducedData()
     const src = markdown.trim()
+    const hasMath = useMemo(() => markdownLooksLikeMath(src), [src])
+    const [userForcedMath, setUserForcedMath] = useState(false)
+    const deferMath = reducedData && hasMath && !userForcedMath
+    const mathPlugins = useMemo(() => mathPluginsFor(!deferMath), [deferMath])
+
     if (!src) {
       return (
         <div ref={ref} className={`syllabus-md ${theme.classes.article}`}>
@@ -176,9 +189,21 @@ export const MarkdownArticleView = forwardRef<HTMLDivElement, MarkdownArticleVie
     const normalized = normalizeMarkdownLists(markdown)
     return (
       <div ref={ref} className={`syllabus-md ${theme.classes.article}`}>
+        {deferMath ? (
+          <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
+            <span className="font-medium">Math formatting is paused</span> to save data.{' '}
+            <button
+              type="button"
+              className="ml-2 font-semibold text-indigo-600 underline decoration-indigo-300 hover:text-indigo-500 dark:text-indigo-400"
+              onClick={() => setUserForcedMath(true)}
+            >
+              Load math
+            </button>
+          </div>
+        ) : null}
         <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMergeAdjacentLists, ...markdownMathPlugins.remark]}
-          rehypePlugins={markdownMathPlugins.rehype}
+          remarkPlugins={[remarkGfm, remarkMergeAdjacentLists, ...mathPlugins.remark]}
+          rehypePlugins={mathPlugins.rehype}
           components={components}
         >
           {normalized}
@@ -190,6 +215,12 @@ export const MarkdownArticleView = forwardRef<HTMLDivElement, MarkdownArticleVie
 
 export function SyllabusMarkdownView({ sections, theme = defaultResolved, courseCode }: SyllabusMarkdownViewProps) {
   const src = sectionsToMarkdown(sections)
+  const reducedData = useReducedData()
+  const hasMath = useMemo(() => markdownLooksLikeMath(src), [src])
+  const [userForcedMath, setUserForcedMath] = useState(false)
+  const deferMath = reducedData && hasMath && !userForcedMath
+  const mathPlugins = useMemo(() => mathPluginsFor(!deferMath), [deferMath])
+
   if (!src.trim()) {
     return <p className="text-sm leading-relaxed text-slate-500">No syllabus content yet.</p>
   }
@@ -197,9 +228,21 @@ export function SyllabusMarkdownView({ sections, theme = defaultResolved, course
   const normalized = normalizeMarkdownLists(src)
   return (
     <div className={`syllabus-md ${theme.classes.article}`}>
+      {deferMath ? (
+        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
+          <span className="font-medium">Math formatting is paused</span> to save data.{' '}
+          <button
+            type="button"
+            className="ml-2 font-semibold text-indigo-600 underline decoration-indigo-300 hover:text-indigo-500 dark:text-indigo-400"
+            onClick={() => setUserForcedMath(true)}
+          >
+            Load math
+          </button>
+        </div>
+      ) : null}
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMergeAdjacentLists, ...markdownMathPlugins.remark]}
-        rehypePlugins={markdownMathPlugins.rehype}
+        remarkPlugins={[remarkGfm, remarkMergeAdjacentLists, ...mathPlugins.remark]}
+        rehypePlugins={mathPlugins.rehype}
         components={components}
       >
         {normalized}

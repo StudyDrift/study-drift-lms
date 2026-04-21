@@ -14,6 +14,7 @@ import { ShellNavProvider } from './shell-nav-context'
 import { SideNav } from './side-nav'
 import { TopBar } from './top-bar'
 import { UiThemeSync } from './ui-theme-sync'
+import { LmsExperienceRoot } from './lms-experience-root'
 
 function AppShellLayout() {
   const location = useLocation()
@@ -27,6 +28,7 @@ function AppShellLayout() {
 
   return (
     <CourseNavFeaturesProvider>
+      <LmsExperienceRoot>
       <UiThemeSync />
       <div
         className={`flex h-dvh min-h-0 overflow-hidden bg-slate-50 dark:bg-neutral-950 ${
@@ -47,6 +49,7 @@ function AppShellLayout() {
           </main>
         </div>
       </div>
+      </LmsExperienceRoot>
     </CourseNavFeaturesProvider>
   )
 }

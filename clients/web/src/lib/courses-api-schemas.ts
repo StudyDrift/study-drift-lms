@@ -53,6 +53,7 @@ export const courseSchema = z
     srsEnabled: z.boolean().optional(),
     diagnosticAssessmentsEnabled: z.boolean().optional(),
     hintScaffoldingEnabled: z.boolean().optional(),
+    misconceptionDetectionEnabled: z.boolean().optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
     viewerEnrollmentRoles: z.array(z.string()).optional(),
@@ -92,6 +93,11 @@ export const bankQuestionRowSchema = z.object({
   srsEligible: z.boolean().optional(),
 })
 
+export const questionOptionMisconceptionTagSchema = z.object({
+  optionId: z.string(),
+  misconceptionId: z.string(),
+})
+
 export const bankQuestionDetailSchema = bankQuestionRowSchema.extend({
   options: z.unknown().optional(),
   correctAnswer: z.unknown().optional(),
@@ -102,6 +108,7 @@ export const bankQuestionDetailSchema = bankQuestionRowSchema.extend({
   irtStatus: z.string().optional(),
   createdBy: z.string().nullable().optional(),
   shuffleChoicesOverride: z.boolean().nullable().optional(),
+  optionMisconceptionTags: z.array(questionOptionMisconceptionTagSchema).optional(),
 })
 
 export const reviewQueueItemSchema = z.object({
@@ -190,7 +197,16 @@ export const courseStructureItemSchema = z
   .object({
     id: z.string(),
     sortOrder: z.number(),
-    kind: z.enum(['module', 'heading', 'content_page', 'assignment', 'quiz', 'external_link']),
+    kind: z.enum([
+      'module',
+      'heading',
+      'content_page',
+      'assignment',
+      'quiz',
+      'external_link',
+      'survey',
+      'lti_link',
+    ]),
     title: z.string(),
     parentId: z.string().nullable(),
     published: z.boolean(),
@@ -364,6 +380,7 @@ export const quizAttemptStartResponseSchema = z.object({
   deadlineAt: z.string().nullable().optional(),
   reducedDistractionMode: z.boolean().optional(),
   hintScaffoldingEnabled: z.boolean().optional(),
+  misconceptionDetectionEnabled: z.boolean().optional(),
   retakePolicy: z.string(),
   maxAttempts: z.number().nullable().optional(),
   remainingAttempts: z.number().nullable().optional(),
@@ -452,6 +469,14 @@ export const quizSubmitResponseSchema = z.object({
   scorePercent: z.number(),
 })
 
+export const quizMisconceptionResultSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  remediationBody: z.string().nullable().optional(),
+  remediationUrl: z.string().nullable().optional(),
+  recurrenceCount: z.number(),
+})
+
 export const quizResultsQuestionResultSchema = z.object({
   questionIndex: z.number(),
   questionId: z.string().nullable().optional(),
@@ -462,6 +487,7 @@ export const quizResultsQuestionResultSchema = z.object({
   pointsAwarded: z.number().nullable().optional(),
   maxPoints: z.number(),
   correctChoiceIndex: z.number().nullable().optional(),
+  misconception: quizMisconceptionResultSchema.nullable().optional(),
 })
 
 export const quizResultsPayloadSchema = z.object({
@@ -482,6 +508,38 @@ export const quizResultsPayloadSchema = z.object({
     .nullable()
     .optional(),
   questions: z.array(quizResultsQuestionResultSchema).nullable().optional(),
+})
+
+export const misconceptionRowSchema = z.object({
+  id: z.string(),
+  courseId: z.string(),
+  conceptId: z.string().nullable().optional(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  remediationBody: z.string().nullable().optional(),
+  remediationUrl: z.string().nullable().optional(),
+  locale: z.string(),
+  isSeed: z.boolean(),
+})
+
+export const importMisconceptionSeedLibraryResponseSchema = z.object({
+  imported: z.number(),
+  skipped: z.number(),
+})
+
+export const misconceptionReportRowSchema = z.object({
+  misconceptionId: z.string(),
+  misconceptionName: z.string(),
+  questionId: z.string(),
+  questionStem: z.string(),
+  triggerCount: z.number(),
+  affectedStudents: z.number(),
+  firstSeenAt: z.string().nullable().optional(),
+  lastSeenAt: z.string().nullable().optional(),
+})
+
+export const misconceptionReportResponseSchema = z.object({
+  misconceptions: z.array(misconceptionReportRowSchema),
 })
 
 export const accommodationSummaryPayloadSchema = z.object({

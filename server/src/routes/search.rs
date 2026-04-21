@@ -36,6 +36,7 @@ async fn search_index_handler(
             srs_enabled: c.srs_enabled,
             diagnostic_assessments_enabled: c.diagnostic_assessments_enabled,
             hint_scaffolding_enabled: c.hint_scaffolding_enabled,
+            misconception_detection_enabled: c.misconception_detection_enabled,
         })
         .collect();
 

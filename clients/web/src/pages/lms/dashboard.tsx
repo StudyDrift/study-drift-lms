@@ -509,7 +509,7 @@ export default function Dashboard() {
       )}
 
       {courses && courses.length > 0 && (
-        <div className="mt-8 space-y-10">
+        <div data-onboarding="dashboard-main" className="mt-8 space-y-10">
           <section aria-label="Quick links and unread">
             <div className="flex flex-wrap gap-3">
               <Link

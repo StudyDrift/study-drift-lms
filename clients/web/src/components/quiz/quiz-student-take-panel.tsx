@@ -32,6 +32,7 @@ import {
   type QuizAttemptStartResponse,
   type QuizAdvancedSettings,
   type QuizQuestion,
+  type QuizResultsPayload,
   type QuizWorkedExamplePayload,
 } from '../../lib/courses-api'
 import {
@@ -102,6 +103,8 @@ export function QuizStudentTakePanel({
 }: QuizStudentTakePanelProps) {
   const [accessCode, setAccessCode] = useState('')
   const [uiPhase, setUiPhase] = useState<UiPhase>({ kind: 'idle' })
+  const [postSubmitResults, setPostSubmitResults] = useState<QuizResultsPayload | null>(null)
+  const [understandingCheckDismissed, setUnderstandingCheckDismissed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lockdownModalOpen, setLockdownModalOpen] = useState(false)
   const [startMeta, setStartMeta] = useState<QuizAttemptStartResponse | null>(null)
@@ -198,6 +201,8 @@ export function QuizStudentTakePanel({
     setAdvanceBusy(false)
     setStaticTakeProgress(null)
     setFlaggedQuestionIds(new Set())
+    setPostSubmitResults(null)
+    setUnderstandingCheckDismissed(false)
     timeoutSubmitStartedRef.current = false
     tenMinuteWarningRef.current = false
     oneMinuteWarningRef.current = false
@@ -347,6 +352,8 @@ export function QuizStudentTakePanel({
       let extra = ''
       try {
         const res = await fetchQuizResults(courseCode, itemId, { attemptId: sub.attemptId })
+        setUnderstandingCheckDismissed(false)
+        setPostSubmitResults(res.questions?.some((q) => q.misconception) ? res : null)
         if (res.score) {
           extra = ` Score: ${res.score.pointsEarned.toFixed(2)} / ${res.score.pointsPossible.toFixed(2)} (${res.score.scorePercent.toFixed(0)}%).`
         }
@@ -355,6 +362,8 @@ export function QuizStudentTakePanel({
             ' This attempt was flagged for review (focus-loss count exceeded the course threshold).'
         }
       } catch {
+        setPostSubmitResults(null)
+        setUnderstandingCheckDismissed(false)
         /* review policy may hide results */
       }
       setUiPhase({ kind: 'done', summary: `Submitted successfully.${extra}` })
@@ -1152,6 +1161,62 @@ export function QuizStudentTakePanel({
           {uiPhase.kind === 'done' && (
             <div className="space-y-3">
               <p className="text-sm text-slate-800 dark:text-neutral-200">{uiPhase.summary}</p>
+              {postSubmitResults?.questions &&
+              postSubmitResults.questions.some((q) => q.misconception) &&
+              !understandingCheckDismissed && (
+                <div
+                  role="region"
+                  aria-live="polite"
+                  aria-label="Understanding check"
+                  className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-50"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="font-semibold">Understanding check</p>
+                    <button
+                      type="button"
+                      onClick={() => setUnderstandingCheckDismissed(true)}
+                      className="shrink-0 rounded-lg border border-amber-300/80 bg-white/80 px-2 py-1 text-xs font-medium text-amber-950 hover:bg-white dark:border-amber-800 dark:bg-black/30 dark:text-amber-50 dark:hover:bg-black/50"
+                    >
+                      Hide reminder
+                    </button>
+                  </div>
+                  <ul className="mt-2 space-y-3">
+                    {postSubmitResults.questions
+                      .filter((q) => q.misconception)
+                      .map((q) => {
+                        const m = q.misconception!
+                        const recurring =
+                          typeof m.recurrenceCount === 'number' && m.recurrenceCount >= 3
+                        return (
+                          <li key={`${q.questionIndex}-${m.id}`} className="rounded-lg bg-white/60 p-2 dark:bg-black/20">
+                            <p className="font-medium">{m.name}</p>
+                            {recurring && (
+                              <p className="mt-1 text-xs text-amber-900/90 dark:text-amber-100/90">
+                                You&apos;ve seen this pattern before — review the resource below if
+                                it helps.
+                              </p>
+                            )}
+                            {m.remediationBody && (
+                              <p className="mt-2 whitespace-pre-wrap text-slate-800 dark:text-neutral-100">
+                                {m.remediationBody}
+                              </p>
+                            )}
+                            {m.remediationUrl && (
+                              <a
+                                href={m.remediationUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-2 inline-flex text-sm font-medium text-indigo-700 underline underline-offset-2 dark:text-indigo-300"
+                              >
+                                Open resource
+                              </a>
+                            )}
+                          </li>
+                        )
+                      })}
+                  </ul>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={onClose}

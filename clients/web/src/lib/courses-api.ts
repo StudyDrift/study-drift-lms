@@ -29,6 +29,9 @@ import {
   generatedSyllabusSectionMarkdownSchema,
   idResponseSchema,
   learnerRecommendationsResponseSchema,
+  misconceptionReportResponseSchema,
+  misconceptionRowSchema,
+  importMisconceptionSeedLibraryResponseSchema,
   parseApiResponse,
   pathConceptsResponseSchema,
   quizAdvanceResponseSchema,
@@ -107,6 +110,8 @@ export type CoursePublic = {
   diagnosticAssessmentsEnabled?: boolean
   /** Progressive hints + worked examples (plan 1.9). */
   hintScaffoldingEnabled?: boolean
+  /** Misconception tagging + remediation in quiz results (plan 1.10). */
+  misconceptionDetectionEnabled?: boolean
   createdAt: string
   updatedAt: string
   /** Present on single-course GET: raw enrollment roles for the viewer (`teacher`, `student`, …). */
@@ -148,6 +153,8 @@ export function learnerCourseItemHref(courseCode: string, item: { kind: string; 
       return `/courses/${cc}/modules/quiz/${id}`
     case 'external_link':
       return `/courses/${cc}/modules/external-link/${id}`
+    case 'lti_link':
+      return `/courses/${cc}/modules/lti/${id}`
     default:
       return `/courses/${cc}/modules`
   }
@@ -327,6 +334,7 @@ export type BankQuestionDetail = BankQuestionRow & {
   createdBy?: string | null
   /** When false, keep authored option order even if the quiz has shuffle-answers enabled. */
   shuffleChoicesOverride?: boolean | null
+  optionMisconceptionTags?: { optionId: string; misconceptionId: string }[]
 }
 
 export type CreateBankQuestionBody = {
@@ -519,6 +527,7 @@ export async function patchCourseFeatures(
     srsEnabled?: boolean
     diagnosticAssessmentsEnabled?: boolean
     hintScaffoldingEnabled?: boolean
+    misconceptionDetectionEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -537,6 +546,7 @@ export async function patchCourseFeatures(
         srsEnabled: body.srsEnabled,
         diagnosticAssessmentsEnabled: body.diagnosticAssessmentsEnabled,
         hintScaffoldingEnabled: body.hintScaffoldingEnabled,
+        misconceptionDetectionEnabled: body.misconceptionDetectionEnabled,
       }),
     },
   )
@@ -1147,7 +1157,15 @@ export function viewerShouldShowMyGradesNav(
 export type CourseStructureItem = {
   id: string
   sortOrder: number
-  kind: 'module' | 'heading' | 'content_page' | 'assignment' | 'quiz' | 'external_link'
+  kind:
+    | 'module'
+    | 'heading'
+    | 'content_page'
+    | 'assignment'
+    | 'quiz'
+    | 'external_link'
+    | 'survey'
+    | 'lti_link'
   title: string
   /** Set when this row is nested under a module. */
   parentId: string | null
@@ -1586,6 +1604,96 @@ export async function createModuleExternalLink(
   return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
+export type LtiExternalToolSummary = { id: string; name: string }
+
+export async function fetchCourseLtiExternalTools(courseCode: string): Promise<LtiExternalToolSummary[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/lti-external-tools`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => {
+    const r = row as Record<string, unknown>
+    return { id: String(r.id ?? ''), name: String(r.name ?? '') }
+  })
+}
+
+export async function createModuleLtiLink(
+  courseCode: string,
+  moduleId: string,
+  body: {
+    title: string
+    externalToolId: string
+    resourceLinkId?: string
+    lineItemUrl?: string
+  },
+): Promise<CourseStructureItem> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/modules/${encodeURIComponent(moduleId)}/lti-links`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: body.title,
+        externalToolId: body.externalToolId,
+        resourceLinkId: body.resourceLinkId ?? '',
+        lineItemUrl: body.lineItemUrl,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
+}
+
+export type ModuleLtiLinkPayload = {
+  itemId: string
+  title: string
+  externalToolId: string
+  externalToolName: string
+  resourceLinkId: string
+  lineItemUrl: string | null
+}
+
+function normalizeModuleLtiLinkPayload(raw: unknown): ModuleLtiLinkPayload {
+  const r = raw as Record<string, unknown>
+  return {
+    itemId: String(r.itemId ?? ''),
+    title: String(r.title ?? ''),
+    externalToolId: String(r.externalToolId ?? ''),
+    externalToolName: String(r.externalToolName ?? ''),
+    resourceLinkId: String(r.resourceLinkId ?? ''),
+    lineItemUrl: r.lineItemUrl == null ? null : String(r.lineItemUrl),
+  }
+}
+
+export async function fetchModuleLtiLink(
+  courseCode: string,
+  itemId: string,
+): Promise<ModuleLtiLinkPayload> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/lti-links/${encodeURIComponent(itemId)}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return normalizeModuleLtiLinkPayload(raw)
+}
+
+export async function postModuleLtiEmbedTicket(
+  courseCode: string,
+  itemId: string,
+): Promise<{ ticket: string }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/lti-links/${encodeURIComponent(itemId)}/embed-ticket`,
+    { method: 'POST' },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const r = raw as Record<string, unknown>
+  return { ticket: String(r.ticket ?? '') }
+}
+
 export type ModuleExternalLinkPayload = {
   itemId: string
   title: string
@@ -1652,6 +1760,8 @@ export type QuizQuestion = {
     | 'audio_response'
     | 'video_response'
   choices: string[]
+  /** Stable UUID strings per choice (authored order), when the bank normalized options JSON. */
+  choiceIds?: string[]
   typeConfig?: Record<string, unknown>
   correctChoiceIndex: number | null
   multipleAnswer: boolean
@@ -1721,6 +1831,7 @@ export type ModuleQuizPayload = {
   assignmentGroupId: string | null
   /** Course feature: progressive hints + worked examples (plan 1.9). */
   hintScaffoldingEnabled?: boolean
+  misconceptionDetectionEnabled?: boolean
 }
 
 /** Editable advanced quiz options (editor draft); `quizAccessCode` is plain text for the form. */
@@ -1851,6 +1962,7 @@ export function normalizeModuleQuizPayload(raw: unknown): ModuleQuizPayload {
     adaptiveDeliveryMode: r.adaptiveDeliveryMode === 'cat' ? 'cat' : 'ai',
     assignmentGroupId: typeof r.assignmentGroupId === 'string' ? r.assignmentGroupId : null,
     hintScaffoldingEnabled: Boolean(r.hintScaffoldingEnabled),
+    misconceptionDetectionEnabled: Boolean(r.misconceptionDetectionEnabled),
   }
 }
 
@@ -2079,6 +2191,7 @@ export type QuizAttemptStartResponse = {
   /** Omitted when unlimited; tries left after this one. */
   remainingAttempts?: number | null
   hintScaffoldingEnabled?: boolean
+  misconceptionDetectionEnabled?: boolean
 }
 
 export async function postQuizStart(
@@ -2124,6 +2237,7 @@ export async function postQuizStart(
           ? null
           : undefined,
     hintScaffoldingEnabled: Boolean(o.hintScaffoldingEnabled),
+    misconceptionDetectionEnabled: Boolean(o.misconceptionDetectionEnabled),
   })
 }
 
@@ -2406,6 +2520,14 @@ export async function postQuizSubmit(
   return parseApiResponse('postQuizSubmit', quizSubmitResponseSchema, raw)
 }
 
+export type QuizMisconceptionResult = {
+  id: string
+  name: string
+  remediationBody?: string | null
+  remediationUrl?: string | null
+  recurrenceCount: number
+}
+
 export type QuizResultsQuestionResult = {
   questionIndex: number
   questionId?: string | null
@@ -2416,6 +2538,7 @@ export type QuizResultsQuestionResult = {
   pointsAwarded?: number | null
   maxPoints: number
   correctChoiceIndex?: number | null
+  misconception?: QuizMisconceptionResult | null
 }
 
 export type QuizResultsPayload = {
@@ -2452,6 +2575,137 @@ export async function fetchQuizResults(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseApiResponse('fetchQuizResults', quizResultsPayloadSchema, raw)
+}
+
+export type MisconceptionReportRow = {
+  misconceptionId: string
+  misconceptionName: string
+  questionId: string
+  questionStem: string
+  triggerCount: number
+  affectedStudents: number
+  firstSeenAt?: string | null
+  lastSeenAt?: string | null
+}
+
+export async function fetchMisconceptionReport(
+  courseCode: string,
+): Promise<{ misconceptions: MisconceptionReportRow[] }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/misconception-report`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('fetchMisconceptionReport', misconceptionReportResponseSchema, raw)
+}
+
+export type CourseMisconceptionRow = {
+  id: string
+  courseId: string
+  conceptId?: string | null
+  name: string
+  description?: string | null
+  remediationBody?: string | null
+  remediationUrl?: string | null
+  locale: string
+  isSeed: boolean
+}
+
+export async function fetchCourseMisconceptions(
+  courseCode: string,
+  opts?: { conceptId?: string; q?: string; limit?: number },
+): Promise<CourseMisconceptionRow[]> {
+  const params = new URLSearchParams()
+  if (opts?.conceptId) params.set('conceptId', opts.conceptId)
+  if (opts?.q) params.set('q', opts.q)
+  if (opts?.limit != null) params.set('limit', String(opts.limit))
+  const qs = params.toString()
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/misconceptions${qs ? `?${qs}` : ''}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  if (!Array.isArray(raw)) throw new Error('Invalid misconceptions response.')
+  return raw.map((row, i) =>
+    parseApiResponse(`fetchCourseMisconceptions[${i}]`, misconceptionRowSchema, row),
+  )
+}
+
+export type CreateCourseMisconceptionBody = {
+  name: string
+  conceptId?: string | null
+  description?: string | null
+  remediationBody?: string | null
+  remediationUrl?: string | null
+  locale?: string
+}
+
+export async function createCourseMisconception(
+  courseCode: string,
+  body: CreateCourseMisconceptionBody,
+): Promise<CourseMisconceptionRow> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/misconceptions`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: body.name,
+        conceptId: body.conceptId ?? undefined,
+        description: body.description ?? undefined,
+        remediationBody: body.remediationBody ?? undefined,
+        remediationUrl: body.remediationUrl ?? undefined,
+        locale: body.locale ?? undefined,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('createCourseMisconception', misconceptionRowSchema, raw)
+}
+
+export async function postImportMisconceptionSeedLibrary(
+  courseCode: string,
+  body?: { replaceExistingSeeds?: boolean },
+): Promise<{ imported: number; skipped: number }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/misconceptions/import-seed-library`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        replaceExistingSeeds: body?.replaceExistingSeeds ?? false,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse(
+    'postImportMisconceptionSeedLibrary',
+    importMisconceptionSeedLibraryResponseSchema,
+    raw,
+  )
+}
+
+export async function putQuestionOptionMisconception(
+  courseCode: string,
+  questionId: string,
+  optionId: string,
+  body: { misconceptionId: string | null },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/questions/${encodeURIComponent(questionId)}/options/${encodeURIComponent(optionId)}/misconception`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        misconceptionId: body.misconceptionId,
+      }),
+    },
+  )
+  if (res.status === 204) return
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
 }
 
 export type AccommodationSummaryPayload = {

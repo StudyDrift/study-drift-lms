@@ -64,6 +64,7 @@ pub async fn list_for_enrolled_user(
             c.srs_enabled,
             c.diagnostic_assessments_enabled,
             c.hint_scaffolding_enabled,
+            c.misconception_detection_enabled,
             c.created_at,
             c.updated_at
         FROM {} c
@@ -130,6 +131,7 @@ pub async fn insert_course(
                 srs_enabled,
                 diagnostic_assessments_enabled,
                 hint_scaffolding_enabled,
+                misconception_detection_enabled,
                 created_at,
                 updated_at
             "#,
@@ -242,6 +244,7 @@ pub async fn get_by_course_code(
             srs_enabled,
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
+            misconception_detection_enabled,
             created_at,
             updated_at
         FROM {}
@@ -290,6 +293,7 @@ pub async fn get_by_id(
             srs_enabled,
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
+            misconception_detection_enabled,
             created_at,
             updated_at
         FROM {}
@@ -392,6 +396,7 @@ pub async fn update_course(
             srs_enabled,
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
+            misconception_detection_enabled,
             created_at,
             updated_at
         "#,
@@ -426,6 +431,7 @@ pub async fn patch_course_features(
     srs_enabled: bool,
     diagnostic_assessments_enabled: bool,
     hint_scaffolding_enabled: bool,
+    misconception_detection_enabled: bool,
 ) -> Result<Option<CoursePublic>, sqlx::Error> {
     sqlx::query_as::<_, CoursePublic>(&format!(
         r#"
@@ -441,8 +447,9 @@ pub async fn patch_course_features(
             srs_enabled = $8,
             diagnostic_assessments_enabled = $9,
             hint_scaffolding_enabled = $10,
+            misconception_detection_enabled = $11,
             updated_at = NOW()
-        WHERE course_code = $11
+        WHERE course_code = $12
         RETURNING
             id,
             course_code,
@@ -473,6 +480,7 @@ pub async fn patch_course_features(
             srs_enabled,
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
+            misconception_detection_enabled,
             created_at,
             updated_at
         "#,
@@ -488,6 +496,7 @@ pub async fn patch_course_features(
     .bind(srs_enabled)
     .bind(diagnostic_assessments_enabled)
     .bind(hint_scaffolding_enabled)
+    .bind(misconception_detection_enabled)
     .bind(course_code)
     .fetch_optional(pool)
     .await
@@ -537,6 +546,7 @@ pub async fn set_hero_image_fields(
             srs_enabled,
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
+            misconception_detection_enabled,
             created_at,
             updated_at
         "#,
@@ -596,6 +606,7 @@ pub async fn update_markdown_theme(
             srs_enabled,
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
+            misconception_detection_enabled,
             created_at,
             updated_at
         "#,
@@ -731,6 +742,7 @@ pub async fn set_course_archived(
             srs_enabled,
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
+            misconception_detection_enabled,
             created_at,
             updated_at
         "#,
@@ -870,6 +882,7 @@ pub async fn factory_reset_course(
             srs_enabled = false,
             diagnostic_assessments_enabled = false,
             hint_scaffolding_enabled = false,
+            misconception_detection_enabled = false,
             updated_at = NOW()
         WHERE course_code = $1
         RETURNING
@@ -902,6 +915,7 @@ pub async fn factory_reset_course(
             srs_enabled,
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
+            misconception_detection_enabled,
             created_at,
             updated_at
         "#,

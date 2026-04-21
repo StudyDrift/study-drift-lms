@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool, Postgres};
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -17,6 +17,7 @@ use crate::repos::quiz_attempts;
 use crate::services::code_execution::{self, CodeTestCase, ExecuteCodeRequest};
 use crate::services::hint_service;
 use crate::services::learner_state;
+use crate::services::misconception;
 use crate::services::question_bank;
 use crate::services::srs;
 use crate::services::quiz_attempt_grading;
@@ -27,6 +28,46 @@ pub fn parse_code_test_cases(q: &QuizQuestion) -> Vec<CodeTestCase> {
         .get("testCases")
         .and_then(|v| serde_json::from_value::<Vec<CodeTestCase>>(v.clone()).ok())
         .unwrap_or_default()
+}
+
+async fn misconception_ema_multiplier_for_response<'e, E>(
+    ex: &mut E,
+    pool: &PgPool,
+    course_id: Uuid,
+    user_id: Uuid,
+    attempt_id: Uuid,
+    q: &QuizQuestion,
+    resp: &QuizQuestionResponseItem,
+    qid: &str,
+    is_ok: Option<bool>,
+    enabled: bool,
+) -> f64
+where
+    for<'a> &'a mut E: Executor<'a, Database = Postgres>,
+{
+    if !enabled || is_ok != Some(false) {
+        return 1.0;
+    }
+    let Some(sel) = resp.selected_choice_index else {
+        return 1.0;
+    };
+    let Ok(quuid) = Uuid::parse_str(qid) else {
+        return 1.0;
+    };
+    misconception::record_wrong_multiple_choice(
+        ex,
+        pool,
+        course_id,
+        user_id,
+        attempt_id,
+        quuid,
+        q,
+        sel,
+        enabled,
+    )
+    .await
+    .map(|_| misconception::mastery_alpha_multiplier_for_misconception_hit())
+    .unwrap_or(1.0)
 }
 
 async fn academic_integrity_from_focus_loss(
@@ -300,7 +341,7 @@ pub async fn submit_module_quiz(
 
     let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, quiz_row);
 
-    let mut concept_touches: Vec<(Uuid, f64, i32)> = Vec::new();
+    let mut concept_touches: Vec<(Uuid, f64, i32, f64)> = Vec::new();
     let (earned, possible, score_pct, academic_integrity_flag) = if quiz_lockdown::server_enforces_forward_lockdown(mode)
     {
         if !responses.is_empty() {
@@ -382,6 +423,19 @@ pub async fn submit_module_quiz(
                 .unwrap_or(&[]);
             let hint_n = *hint_counts.get(qid).unwrap_or(&0);
             let ms = hint_service::mastery_scale_for_hint_uses(hint_n);
+            let mis_mult = misconception_ema_multiplier_for_response(
+                &mut *tx,
+                pool,
+                course_id,
+                user_id,
+                att.id,
+                q,
+                &resp_item,
+                qid,
+                is_ok,
+                course_row.misconception_detection_enabled,
+            )
+            .await;
             learner_state::collect_concept_touches_from_question(
                 q,
                 i as i32,
@@ -389,6 +443,7 @@ pub async fn submit_module_quiz(
                 max_pts,
                 extra,
                 ms,
+                mis_mult,
                 &mut concept_touches,
             );
         }
@@ -485,6 +540,19 @@ pub async fn submit_module_quiz(
                 .get(resp_item.question_id.as_str())
                 .unwrap_or(&0);
             let ms = hint_service::mastery_scale_for_hint_uses(hint_n);
+            let mis_mult = misconception_ema_multiplier_for_response(
+                &mut *tx,
+                pool,
+                course_id,
+                user_id,
+                att.id,
+                q,
+                resp_item,
+                resp_item.question_id.as_str(),
+                is_ok,
+                course_row.misconception_detection_enabled,
+            )
+            .await;
             learner_state::collect_concept_touches_from_question(
                 q,
                 i as i32,
@@ -492,6 +560,7 @@ pub async fn submit_module_quiz(
                 max_pts,
                 extra,
                 ms,
+                mis_mult,
                 &mut concept_touches,
             );
         }
@@ -577,6 +646,7 @@ mod tests {
             prompt: "x".into(),
             question_type: "multiple_choice".into(),
             choices: vec![],
+            choice_ids: vec![],
             type_config: json!({}),
             correct_choice_index: None,
             multiple_answer: false,

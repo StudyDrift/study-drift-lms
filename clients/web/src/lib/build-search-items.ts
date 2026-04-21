@@ -6,7 +6,7 @@ import {
 import type { SearchCourseItem, SearchPersonItem } from './search-api'
 import { PERM_COURSE_CREATE, PERM_RBAC_MANAGE, PERM_REPORTS_VIEW } from './rbac-api'
 
-export type SearchGroup = 'course' | 'person' | 'page' | 'action'
+export type SearchGroup = 'course' | 'person' | 'page' | 'action' | 'goto'
 
 export type SearchListItem = {
   id: string
@@ -60,14 +60,16 @@ export function buildSearchItems(
     }
     const label = personLabel(p)
     const subtitle = `${p.courseTitle} · ${p.courseCode} · ${p.role}`
-    const path = `/courses/${enc(p.courseCode)}/enrollments`
+    const path = allows(courseGradebookViewPermission(p.courseCode))
+      ? `/courses/${enc(p.courseCode)}/gradebook?student=${enc(p.userId)}`
+      : `/courses/${enc(p.courseCode)}/enrollments`
     items.push({
       id: `person:${p.userId}:${p.courseCode}`,
       group: 'person',
       title: label,
       subtitle,
       path,
-      haystack: `${label} ${p.email} ${p.role} ${p.courseTitle} ${p.courseCode} people enrollment`.toLowerCase(),
+      haystack: `${label} ${p.email} ${p.role} ${p.courseTitle} ${p.courseCode} people enrollment gradebook`.toLowerCase(),
     })
   }
 
@@ -310,7 +312,7 @@ export function buildSearchItems(
   return items
 }
 
-function sortSearchItems(items: SearchListItem[]): SearchListItem[] {
+export function sortSearchItems(items: SearchListItem[]): SearchListItem[] {
   return [...items].sort((a, b) => {
     const gi = GROUP_ORDER.indexOf(a.group)
     const gj = GROUP_ORDER.indexOf(b.group)
@@ -332,9 +334,10 @@ export function filterSearchItems(items: SearchListItem[], query: string): Searc
   return sortSearchItems(filtered)
 }
 
-const GROUP_ORDER: SearchGroup[] = ['action', 'course', 'person', 'page']
+const GROUP_ORDER: SearchGroup[] = ['goto', 'action', 'course', 'person', 'page']
 
 export const SEARCH_GROUP_LABEL: Record<SearchGroup, string> = {
+  goto: 'Go to',
   action: 'Actions',
   course: 'Courses',
   person: 'People',

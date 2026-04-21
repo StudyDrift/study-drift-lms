@@ -35,6 +35,8 @@ import { expandQuizPromptWithRefs } from '../../lib/course-item-ref-tokens'
 import { QuizPageSettingsPanel } from '../../components/quiz/quiz-page-settings-panel'
 import { QuizStudentPreviewModal } from '../../components/quiz/quiz-student-preview-modal'
 import { QuizStudentTakePanel } from '../../components/quiz/quiz-student-take-panel'
+import { AuthoringSaveFootprint } from '../../components/authoring-save-footprint'
+import { FeatureHelpTrigger } from '../../components/feature-help/feature-help-trigger'
 import {
   assignmentGroupDisplayName,
   bankDetailToQuizQuestion,
@@ -234,6 +236,7 @@ export default function CourseModuleQuizPage() {
   const [unlimitedAttempts, setUnlimitedAttempts] = useState(false)
   const [oneQuestionAtATime, setOneQuestionAtATime] = useState(false)
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
+  const [lastLocalAuthoringSave, setLastLocalAuthoringSave] = useState<string | null>(null)
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -674,6 +677,7 @@ export default function CourseModuleQuizPage() {
       setQuizAdvanced(adv)
       setDraftQuizAdvanced(adv)
       setUpdatedAt(data.updatedAt)
+      setLastLocalAuthoringSave(new Date().toISOString())
       setEditingContent(false)
       setDraft([])
       void loadMarkups()
@@ -796,6 +800,7 @@ export default function CourseModuleQuizPage() {
         setDraftPointsWorth(data.pointsWorth ?? null)
         setAssignmentGroupId(data.assignmentGroupId ?? null)
         setUpdatedAt(data.updatedAt)
+        setLastLocalAuthoringSave(new Date().toISOString())
       } else {
         const payload = questionsDraft.map((q) => ({
           ...q,
@@ -827,6 +832,7 @@ export default function CourseModuleQuizPage() {
         setDraftPointsWorth(data.pointsWorth ?? null)
         setAssignmentGroupId(data.assignmentGroupId ?? null)
         setUpdatedAt(data.updatedAt)
+        setLastLocalAuthoringSave(new Date().toISOString())
       }
       setQuestionsOpen(false)
       setQuestionsDraft([])
@@ -935,6 +941,7 @@ export default function CourseModuleQuizPage() {
       actions={
         editingContent ? (
           <div className="flex flex-wrap items-center gap-2">
+            {canEdit ? <FeatureHelpTrigger topic="quiz-authoring" /> : null}
             <button
               type="button"
               onClick={cancelEditContent}
@@ -957,6 +964,7 @@ export default function CourseModuleQuizPage() {
             {canEdit ? (
               canEditQuizItems ? (
                 <>
+                  <FeatureHelpTrigger topic="quiz-authoring" />
                   <QuizEditorMoreMenu
                     disabled={loading}
                     onPreview={() => setPreviewOpen(true)}
@@ -1007,6 +1015,28 @@ export default function CourseModuleQuizPage() {
       ) : null}
 
       <div className="mx-auto w-full max-w-5xl min-w-0">
+        {canEdit && !loading && !loadError && (editingContent || questionsOpen) ? (
+          <div className="mt-6">
+            <AuthoringSaveFootprint
+              lastSavedIso={lastLocalAuthoringSave ?? updatedAt}
+              saving={saving || questionsSaving}
+              error={saveError ?? questionsError}
+              onRetry={() => {
+                if (saveError) void saveContent()
+                else if (questionsError) void saveQuestions()
+              }}
+            />
+          </div>
+        ) : null}
+        {canEdit && !loading && !loadError && !editingContent && !questionsOpen ? (
+          <div className="mt-6">
+            <AuthoringSaveFootprint
+              lastSavedIso={lastLocalAuthoringSave ?? updatedAt}
+              saving={false}
+              error={null}
+            />
+          </div>
+        ) : null}
         {loadError && (
           <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             {loadError}

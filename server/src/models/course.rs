@@ -88,6 +88,8 @@ pub struct CoursePublic {
     pub diagnostic_assessments_enabled: bool,
     /// Progressive quiz hints + worked examples (plan 1.9).
     pub hint_scaffolding_enabled: bool,
+    /// Tagged distractor remediation + misconception reporting (plan 1.10).
+    pub misconception_detection_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -163,6 +165,8 @@ pub struct PatchCourseFeaturesRequest {
     pub diagnostic_assessments_enabled: Option<bool>,
     #[serde(default)]
     pub hint_scaffolding_enabled: Option<bool>,
+    #[serde(default)]
+    pub misconception_detection_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Navigate, useParams } from 'react-router-dom'
+import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { usePermissions } from '../../context/use-permissions'
 import { fetchCourseStructure, type CourseStructureItem } from '../../lib/courses-api'
@@ -9,6 +9,8 @@ import { LmsPage } from './lms-page'
 
 export default function CourseCalendarPage() {
   const { courseCode } = useParams<{ courseCode: string }>()
+  const [searchParams] = useSearchParams()
+  const dateKey = searchParams.get('date')?.trim() || null
   const { calendarEnabled: courseCalendarEnabled, loading: courseFeatureFlagsLoading } =
     useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
@@ -87,6 +89,7 @@ export default function CourseCalendarPage() {
           assignments={assignments}
           canRescheduleDueByDrag={canRescheduleDueByDrag}
           onDueDatesChanged={load}
+          initialDateKey={dateKey}
         />
       )}
     </LmsPage>

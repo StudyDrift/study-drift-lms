@@ -37,15 +37,18 @@ use crate::models::course_module_quiz::{
     QuizQuestionResponseItem, QuizAdvanceResponse, QuizAttemptHintRequest, QuizCurrentQuestionResponse,
     QuizFocusLossEventApi, QuizHintRevealResponse, QuizWorkedExampleResponse,
     EnrollmentQuizOverrideUpsertRequest, QuizAttemptSummary, QuizAttemptsListResponse,
-    QuizFocusLossEventsResponse, QuizFocusLossRequest, QuizResultsQuestionResult,
-    QuizResultsResponse, QuizResultsScoreSummary, QuizStartRequest, QuizStartResponse, QuizSubmitRequest,
+    QuizFocusLossEventsResponse, QuizFocusLossRequest, QuizMisconceptionResultPayload,
+    QuizResultsQuestionResult, QuizResultsResponse, QuizResultsScoreSummary, QuizStartRequest, QuizStartResponse,
+    QuizSubmitRequest,
     QuizSubmitResponse, UpdateModuleQuizRequest, ADAPTIVE_SOURCE_KINDS,
 };
 use crate::models::course_structure::{
     CourseStructureItemResponse, CourseStructureResponse, CreateCourseAssignmentRequest,
-    CreateCourseExternalLinkRequest, CreateCourseHeadingRequest, CreateCourseModuleRequest,
-    ModuleExternalLinkResponse, PatchCourseModuleRequest, PatchModuleExternalLinkRequest,
-    PatchStructureItemDueAtRequest, PatchStructureItemRequest, ReorderCourseStructureRequest,
+    CreateCourseExternalLinkRequest, CreateCourseHeadingRequest, CreateCourseLtiLinkRequest,
+    CreateCourseModuleRequest, ModuleExternalLinkResponse, ModuleLtiEmbedTicketResponse,
+    ModuleLtiLinkResponse, PatchCourseModuleRequest, PatchModuleExternalLinkRequest,
+    PatchModuleLtiLinkRequest, PatchStructureItemDueAtRequest, PatchStructureItemRequest,
+    ReorderCourseStructureRequest,
 };
 use crate::models::course_outcomes_api::{
     CourseOutcomeApi, CourseOutcomeLinkApi, CourseOutcomesListResponse, PatchCourseOutcomeRequest,
@@ -71,8 +74,10 @@ use crate::repos::adaptive_path as adaptive_path_repo;
 use crate::repos::content_page_markups;
 use crate::repos::concepts::{self, ConceptJson};
 use crate::repos::course;
+use crate::repos::misconceptions as misconception_repo;
 use crate::repos::course_files;
 use crate::repos::course_grades;
+use crate::repos::lti as lti_repo;
 use crate::repos::course_grading;
 use crate::repos::course_grading::PutError;
 use crate::repos::course_grants;
@@ -177,6 +182,22 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/external-links/{item_id}",
             get(module_external_link_get_handler).patch(module_external_link_patch_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/lti-external-tools",
+            get(list_course_lti_external_tools_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/structure/modules/{module_id}/lti-links",
+            post(create_module_lti_link_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/lti-links/{item_id}",
+            get(module_lti_link_get_handler).patch(module_lti_link_patch_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/lti-links/{item_id}/embed-ticket",
+            post(module_lti_embed_ticket_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/content-pages/{item_id}",
@@ -678,6 +699,7 @@ fn module_quiz_response_for_api(
     shift: Option<&relative_schedule::RelativeShiftContext>,
     course_lockdown_enabled: bool,
     hint_scaffolding_enabled: bool,
+    misconception_detection_enabled: bool,
 ) -> ModuleQuizResponse {
     let due_at = match shift {
         Some(ctx) => relative_schedule::shift_opt(ctx, row.due_at),
@@ -755,6 +777,7 @@ fn module_quiz_response_for_api(
         adaptive_delivery_mode: row.adaptive_delivery_mode.clone(),
         assignment_group_id: row.assignment_group_id,
         hint_scaffolding_enabled,
+        misconception_detection_enabled,
     }
 }
 
@@ -1605,6 +1628,239 @@ async fn module_external_link_patch_handler(
     }))
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LtiExternalToolSummary {
+    id: Uuid,
+    name: String,
+}
+
+async fn list_course_lti_external_tools_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<LtiExternalToolSummary>>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let rows = lti_repo::list_external_tools(&state.pool).await?;
+    let out: Vec<LtiExternalToolSummary> = rows
+        .into_iter()
+        .filter(|t| t.active)
+        .map(|t| LtiExternalToolSummary {
+            id: t.id,
+            name: t.name,
+        })
+        .collect();
+    Ok(Json(out))
+}
+
+async fn create_module_lti_link_handler(
+    State(state): State<AppState>,
+    Path((course_code, module_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<CreateCourseLtiLinkRequest>,
+) -> Result<Json<CourseStructureItemResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let title = req.title.trim();
+    if title.is_empty() {
+        return Err(AppError::invalid_input("Title is required."));
+    }
+
+    let Some(tool) = lti_repo::get_external_tool(&state.pool, req.external_tool_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if !tool.active {
+        return Err(AppError::invalid_input("That LTI tool is inactive."));
+    }
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let row = course_structure::insert_lti_link_under_module(
+        &state.pool,
+        course_id,
+        module_id,
+        title,
+        req.external_tool_id,
+        req.resource_link_id.trim(),
+        req.line_item_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
+    )
+    .await
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => AppError::NotFound,
+        _ => e.into(),
+    })?;
+    let item =
+        course_structure::row_to_response_with_quiz_adaptive(&state.pool, course_id, row).await?;
+    Ok(Json(item))
+}
+
+async fn module_lti_link_get_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<ModuleLtiLinkResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    let can_edit = rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    if !can_edit {
+        let visible = course_structure::lti_link_visible_to_student(
+            &state.pool,
+            course_id,
+            item_id,
+            user.user_id,
+            Utc::now(),
+        )
+        .await?;
+        if !visible {
+            return Err(AppError::NotFound);
+        }
+    }
+
+    let Some(item) = course_structure::get_item_row(&state.pool, course_id, item_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if item.kind != "lti_link" {
+        return Err(AppError::NotFound);
+    }
+
+    let Some(link) =
+        lti_repo::get_resource_link_for_structure_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    let Some(tool) = lti_repo::get_external_tool(&state.pool, link.external_tool_id).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    Ok(Json(ModuleLtiLinkResponse {
+        item_id,
+        title: item.title,
+        external_tool_id: tool.id,
+        external_tool_name: tool.name,
+        resource_link_id: link.resource_link_id,
+        line_item_url: link.line_item_url,
+    }))
+}
+
+async fn module_lti_link_patch_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<PatchModuleLtiLinkRequest>,
+) -> Result<Json<ModuleLtiLinkResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let Some(item) = course_structure::get_item_row(&state.pool, course_id, item_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if item.kind != "lti_link" {
+        return Err(AppError::NotFound);
+    }
+
+    if let Some(t) = req.title.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        course_structure::patch_child_structure_item(&state.pool, course_id, item_id, Some(t), None, None)
+            .await
+            .map_err(|e| match e {
+                sqlx::Error::RowNotFound => AppError::NotFound,
+                _ => e.into(),
+            })?;
+    }
+
+    lti_repo::update_resource_link_fields(
+        &state.pool,
+        course_id,
+        item_id,
+        req.resource_link_id.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        req.line_item_url.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        req.title.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+    )
+    .await?;
+
+    let Some(item) = course_structure::get_item_row(&state.pool, course_id, item_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    let Some(link) =
+        lti_repo::get_resource_link_for_structure_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    let Some(tool) = lti_repo::get_external_tool(&state.pool, link.external_tool_id).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    Ok(Json(ModuleLtiLinkResponse {
+        item_id,
+        title: item.title,
+        external_tool_id: tool.id,
+        external_tool_name: tool.name,
+        resource_link_id: link.resource_link_id,
+        line_item_url: link.line_item_url,
+    }))
+}
+
+async fn module_lti_embed_ticket_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<ModuleLtiEmbedTicketResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let visible = course_structure::lti_link_visible_to_student(
+        &state.pool,
+        course_id,
+        item_id,
+        user.user_id,
+        Utc::now(),
+    )
+    .await?;
+    if !visible {
+        return Err(AppError::NotFound);
+    }
+
+    let Some(item) = course_structure::get_item_row(&state.pool, course_id, item_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if item.kind != "lti_link" {
+        return Err(AppError::NotFound);
+    }
+
+    let ticket = state
+        .jwt
+        .sign_lti_embed_ticket(user.user_id, course_id, item_id)
+        .map_err(|_| AppError::invalid_input("Could not issue embed ticket."))?;
+
+    Ok(Json(ModuleLtiEmbedTicketResponse { ticket }))
+}
+
 /// Course id after enrollment + (for students) published content page visibility checks.
 async fn ensure_user_can_view_content_page(
     state: &AppState,
@@ -2353,6 +2609,7 @@ async fn module_quiz_get_handler(
         shift_ctx.as_ref(),
         course_row.lockdown_mode_enabled,
         course_row.hint_scaffolding_enabled,
+        course_row.misconception_detection_enabled,
     );
     let attempt_for_q = if !can_edit {
         q.attempt_id
@@ -2620,6 +2877,7 @@ async fn module_quiz_patch_handler(
         None,
         course_row.lockdown_mode_enabled,
         course_row.hint_scaffolding_enabled,
+        course_row.misconception_detection_enabled,
     )))
 }
 
@@ -2939,6 +3197,7 @@ async fn module_quiz_start_handler(
             deadline_at: existing.deadline_at,
             reduced_distraction_mode: acc.reduced_distraction_mode,
             hint_scaffolding_enabled: course_row.hint_scaffolding_enabled,
+            misconception_detection_enabled: course_row.misconception_detection_enabled,
             retake_policy: row.grade_attempt_policy.clone(),
             max_attempts,
             remaining_attempts: remaining,
@@ -3034,6 +3293,7 @@ async fn module_quiz_start_handler(
         deadline_at: created.deadline_at,
         reduced_distraction_mode: acc.reduced_distraction_mode,
         hint_scaffolding_enabled: course_row.hint_scaffolding_enabled,
+        misconception_detection_enabled: course_row.misconception_detection_enabled,
         retake_policy: row.grade_attempt_policy.clone(),
         max_attempts,
         remaining_attempts: remaining,
@@ -3202,6 +3462,16 @@ async fn module_quiz_results_handler(
 
     let questions = if show_questions {
         let include_correct = can_edit || matches!(vis, "correct_answers" | "full");
+        let mut misconception_by_question: std::collections::HashMap<Uuid, misconception_repo::MisconceptionRow> =
+            std::collections::HashMap::new();
+        if course_row.misconception_detection_enabled {
+            let evs = misconception_repo::list_events_for_attempt(&state.pool, attempt.id)
+                .await
+                .map_err(AppError::Db)?;
+            for (qid, m, _) in evs {
+                misconception_by_question.entry(qid).or_insert(m);
+            }
+        }
         let mut out: Vec<QuizResultsQuestionResult> = Vec::new();
         for r in rows {
             let correct_idx = if !attempt.is_adaptive && include_correct {
@@ -3209,6 +3479,36 @@ async fn module_quiz_results_handler(
                     .as_ref()
                     .and_then(|id| bank_by_id.get(id))
                     .and_then(|q| q.correct_choice_index)
+            } else {
+                None
+            };
+            let misconception = if course_row.misconception_detection_enabled {
+                if let Some(qid_str) = r.question_id.as_deref() {
+                    if let Ok(qu) = Uuid::parse_str(qid_str) {
+                        if let Some(m) = misconception_by_question.get(&qu) {
+                            let recurrence_count = misconception_repo::count_user_misconception_triggers(
+                                &state.pool,
+                                target_user,
+                                m.id,
+                            )
+                            .await
+                            .map_err(AppError::Db)?;
+                            Some(QuizMisconceptionResultPayload {
+                                id: m.id,
+                                name: m.name.clone(),
+                                remediation_body: m.remediation_body.clone(),
+                                remediation_url: m.remediation_url.clone(),
+                                recurrence_count,
+                            })
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             } else {
                 None
             };
@@ -3222,6 +3522,7 @@ async fn module_quiz_results_handler(
                 points_awarded: r.points_awarded,
                 max_points: r.max_points,
                 correct_choice_index: correct_idx,
+                misconception,
             });
         }
         Some(out)
@@ -5092,6 +5393,9 @@ async fn patch_course_features_handler(
     let hint_scaffolding_enabled = req
         .hint_scaffolding_enabled
         .unwrap_or(existing.hint_scaffolding_enabled);
+    let misconception_detection_enabled = req
+        .misconception_detection_enabled
+        .unwrap_or(existing.misconception_detection_enabled);
 
     let row = course::patch_course_features(
         &state.pool,
@@ -5106,6 +5410,7 @@ async fn patch_course_features_handler(
         srs_enabled,
         diagnostic_assessments_enabled,
         hint_scaffolding_enabled,
+        misconception_detection_enabled,
     )
     .await?
     .ok_or(AppError::NotFound)?;

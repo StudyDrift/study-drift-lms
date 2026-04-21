@@ -21,6 +21,8 @@ pub struct SearchCourseItem {
     #[serde(default)]
     pub diagnostic_assessments_enabled: bool,
     pub hint_scaffolding_enabled: bool,
+    #[serde(default)]
+    pub misconception_detection_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]

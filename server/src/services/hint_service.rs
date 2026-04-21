@@ -303,6 +303,7 @@ mod tests {
             prompt: "Pick".into(),
             question_type: "multiple_choice".into(),
             choices: vec!["A".into(), "B".into(), "Paris".into()],
+            choice_ids: vec![],
             type_config: json!({}),
             correct_choice_index: Some(2),
             multiple_answer: false,

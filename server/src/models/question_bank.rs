@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionOptionMisconceptionTagApi {
+    pub option_id: Uuid,
+    pub misconception_id: Uuid,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuestionBankRowResponse {
@@ -41,6 +48,8 @@ pub struct QuestionBankRowResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shuffle_choices_override: Option<bool>,
     pub srs_eligible: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub option_misconception_tags: Option<Vec<QuestionOptionMisconceptionTagApi>>,
 }
 
 #[derive(Debug, Deserialize)]

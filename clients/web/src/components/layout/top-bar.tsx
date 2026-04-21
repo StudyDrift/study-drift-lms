@@ -346,6 +346,7 @@ export function TopBar() {
         <TopBarBreadcrumbs />
         <div
           ref={searchAnchorRef}
+          data-onboarding="command-palette"
           className="relative min-w-0 w-[min(100%,11rem)] shrink-0 sm:w-52 md:min-w-[12rem] md:max-w-xl md:flex-1"
         >
           <button

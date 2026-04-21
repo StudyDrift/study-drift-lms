@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileText,
   Heading,
+  Plug,
   Plus,
 } from 'lucide-react'
 
@@ -15,6 +16,7 @@ export type ModuleItemKind =
   | 'assignment'
   | 'quiz'
   | 'external_link'
+  | 'lti_link'
 
 type AddModuleItemMenuProps = {
   onAdd: (kind: ModuleItemKind) => void
@@ -141,6 +143,22 @@ export function AddModuleItemMenu({ onAdd, disabled }: AddModuleItemMenuProps) {
               <span className="font-semibold text-slate-950 dark:text-neutral-100">External link</span>
               <span className="text-xs text-slate-500 dark:text-neutral-400">
                 Opens a URL in a new tab
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => pick('lti_link')}
+            className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:hover:bg-neutral-700"
+          >
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-purple-200/90 bg-purple-50 text-purple-800 dark:border-purple-500/40 dark:bg-purple-950 dark:text-purple-200">
+              <Plug className="h-4 w-4" aria-hidden />
+            </span>
+            <span className="min-w-0 flex flex-col gap-0.5">
+              <span className="font-semibold text-slate-950 dark:text-neutral-100">LTI tool</span>
+              <span className="text-xs text-slate-500 dark:text-neutral-400">
+                Embedded publisher or external LTI 1.3 tool
               </span>
             </span>
           </button>

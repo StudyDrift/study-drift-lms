@@ -517,6 +517,7 @@ async fn apply_course_snapshot(
         snap.srs_enabled,
         snap.diagnostic_assessments_enabled,
         snap.hint_scaffolding_enabled,
+        snap.misconception_detection_enabled,
     )
     .await?
     .ok_or(AppError::NotFound)?;
@@ -888,6 +889,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         srs_enabled: course.srs_enabled,
         diagnostic_assessments_enabled: course.diagnostic_assessments_enabled,
         hint_scaffolding_enabled: course.hint_scaffolding_enabled,
+        misconception_detection_enabled: course.misconception_detection_enabled,
     };
 
     let grading = course_grading::get_settings_for_course_code(pool, course_code)

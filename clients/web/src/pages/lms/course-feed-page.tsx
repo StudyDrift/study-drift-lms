@@ -38,6 +38,7 @@ import { getAccessToken, getJwtSubject } from '../../lib/auth'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { useCourseFeedUnread } from '../../context/use-course-feed-unread'
 import { formatAbsolute, formatRelativeCompact } from '../../lib/format-datetime'
+import { TabPresenceHint } from '../../components/presence/tab-presence-hint'
 import { LmsPage } from './lms-page'
 
 function isCourseStaff(roles: string[] | undefined): boolean {
@@ -842,7 +843,8 @@ export default function CourseFeedPage() {
           )}
 
           <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:shadow-none">
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 sm:px-4 dark:border-neutral-800">
+            <div className="flex shrink-0 flex-col gap-1 border-b border-slate-100 px-3 py-2 sm:px-4 dark:border-neutral-800">
+              <div className="flex items-center justify-between gap-2">
               <h2 className="flex min-w-0 items-baseline gap-1.5 truncate text-base font-semibold tracking-tight text-slate-900 dark:text-neutral-50">
                 <span className="shrink-0 text-slate-400 dark:text-neutral-500" aria-hidden>
                   #
@@ -876,6 +878,8 @@ export default function CourseFeedPage() {
                   </button>
                 </div>
               </details>
+              </div>
+              <TabPresenceHint channelKey={courseCode} />
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col">

@@ -8,7 +8,14 @@ type ModuleNameModalProps = {
   saving?: boolean
   errorMessage?: string | null
   /** Adjusts labels only. */
-  mode?: 'module' | 'heading' | 'content_page' | 'assignment' | 'quiz' | 'external_link'
+  mode?:
+    | 'module'
+    | 'heading'
+    | 'content_page'
+    | 'assignment'
+    | 'quiz'
+    | 'external_link'
+    | 'lti_link'
   /** Prefill the input (e.g. edit title). */
   initialTitle?: string
   /** Overrides the dialog heading (e.g. "Edit title"). */
@@ -45,8 +52,10 @@ function ModuleNameModalInner({
           ? 'New assignment'
           : mode === 'quiz'
             ? 'New quiz'
-            : mode === 'external_link'
-              ? 'External link'
+            : mode === 'external_link' || mode === 'lti_link'
+              ? mode === 'lti_link'
+                ? 'LTI tool link'
+                : 'External link'
           : 'New module'
   const fieldLabel =
     mode === 'heading'
@@ -57,7 +66,7 @@ function ModuleNameModalInner({
           ? 'Assignment name'
           : mode === 'quiz'
             ? 'Quiz name'
-            : mode === 'external_link'
+            : mode === 'external_link' || mode === 'lti_link'
               ? 'Link title'
           : 'Module name'
   const placeholder =
@@ -69,7 +78,7 @@ function ModuleNameModalInner({
           ? 'e.g. Problem set 1'
           : mode === 'quiz'
             ? 'e.g. Week 1 check-in'
-            : mode === 'external_link'
+            : mode === 'external_link' || mode === 'lti_link'
               ? 'e.g. Textbook website'
           : 'e.g. Week 1 — Introduction'
   const submitLabel =
@@ -81,7 +90,7 @@ function ModuleNameModalInner({
           ? 'Save assignment'
           : mode === 'quiz'
             ? 'Save quiz'
-            : mode === 'external_link'
+            : mode === 'external_link' || mode === 'lti_link'
               ? 'Save title'
           : 'Save module'
 

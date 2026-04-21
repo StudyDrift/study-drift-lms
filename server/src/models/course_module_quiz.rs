@@ -276,6 +276,9 @@ pub struct QuizQuestion {
     pub question_type: String,
     #[serde(default)]
     pub choices: Vec<String>,
+    /// Stable UUID strings per choice (authored order), parallel to `choices`, for misconception tags and shuffles.
+    #[serde(default)]
+    pub choice_ids: Vec<String>,
     #[serde(default)]
     pub type_config: serde_json::Value,
     #[serde(default)]
@@ -375,6 +378,9 @@ pub struct ModuleQuizResponse {
     /// Course feature: progressive hints + worked examples (plan 1.9).
     #[serde(default)]
     pub hint_scaffolding_enabled: bool,
+    /// Course feature: misconception tagging + remediation in results (plan 1.10).
+    #[serde(default)]
+    pub misconception_detection_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -561,6 +567,9 @@ pub struct QuizStartResponse {
     /// Course feature: progressive hints + worked examples (plan 1.9).
     #[serde(default)]
     pub hint_scaffolding_enabled: bool,
+    /// Course feature: misconception tagging + remediation in results (plan 1.10).
+    #[serde(default)]
+    pub misconception_detection_enabled: bool,
     /// Same as quiz `gradeAttemptPolicy` (which score counts for the gradebook).
     pub retake_policy: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -759,6 +768,18 @@ pub struct QuizResultsScoreSummary {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct QuizMisconceptionResultPayload {
+    pub id: Uuid,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remediation_body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remediation_url: Option<String>,
+    pub recurrence_count: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QuizResultsQuestionResult {
     pub question_index: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -775,6 +796,9 @@ pub struct QuizResultsQuestionResult {
     /// Present when review policy allows and the item is non-adaptive.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub correct_choice_index: Option<usize>,
+    /// When course misconception detection is on and the learner triggered a tagged distractor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub misconception: Option<QuizMisconceptionResultPayload>,
 }
 
 #[derive(Debug, Serialize)]

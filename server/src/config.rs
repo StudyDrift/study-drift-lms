@@ -28,6 +28,14 @@ pub struct Config {
     pub smtp_password: Option<String>,
     /// RFC 5322 From address for transactional mail (required for real delivery when SMTP is set).
     pub smtp_from: Option<String>,
+    /// When true and `LTI_RSA_PRIVATE_KEY_PEM` is set, LTI 1.3 routes are active.
+    pub lti_enabled: bool,
+    /// Public base URL of this API (no trailing slash), e.g. `https://api.example.com`. Used as LTI platform issuer.
+    pub lti_api_base_url: String,
+    /// PKCS#8 PEM RSA private key for LTI RS256 signing.
+    pub lti_rsa_private_key_pem: Option<String>,
+    /// `kid` for LTI JWKS (defaults to `lti-key-1`).
+    pub lti_rsa_key_id: String,
 }
 
 const DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES: &[&str] = &["instructure.com"];
@@ -157,6 +165,31 @@ impl Config {
                     .collect()
             });
 
+        let lti_enabled = matches!(
+            env::var("LTI_ENABLED")
+                .ok()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("1") | Some("true") | Some("yes") | Some("on")
+        );
+
+        let lti_api_base_url = env::var("LTI_API_BASE_URL")
+            .ok()
+            .map(|s| s.trim().trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "http://localhost:8080".to_string());
+
+        let lti_rsa_private_key_pem = env::var("LTI_RSA_PRIVATE_KEY_PEM")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        let lti_rsa_key_id = env::var("LTI_RSA_KEY_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "lti-key-1".to_string());
+
         Ok(Self {
             database_url,
             jwt_secret,
@@ -170,6 +203,10 @@ impl Config {
             smtp_user,
             smtp_password,
             smtp_from,
+            lti_enabled,
+            lti_api_base_url,
+            lti_rsa_private_key_pem,
+            lti_rsa_key_id,
         })
     }
 }

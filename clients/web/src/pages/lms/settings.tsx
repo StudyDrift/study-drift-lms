@@ -1,8 +1,10 @@
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from 'react'
-import { matchPath, Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { ImageIcon, Save, Upload, X } from 'lucide-react'
+import { settingsViewFromPathname } from '../../components/layout/side-nav-path-utils'
 import { ImageModelPicker } from '../../components/image-model-picker'
 import { RequirePermission } from '../../components/require-permission'
+import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-settings-panel'
 import { RolesPermissionsPanel } from '../../components/settings/roles-permissions-panel'
 import { usePermissions } from '../../context/use-permissions'
 import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
@@ -12,21 +14,11 @@ import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { applyUiTheme, parseUiTheme, type UiTheme } from '../../lib/ui-theme'
-
-type SettingsViewId = 'ai-models' | 'ai-prompts' | 'account' | 'notifications' | 'roles'
-
-function settingsViewFromPathname(pathname: string): SettingsViewId {
-  if (pathname.startsWith('/settings/ai/system-prompts')) return 'ai-prompts'
-  if (pathname.startsWith('/settings/ai/models')) return 'ai-models'
-  const m = matchPath({ path: '/settings/:tab', end: true }, pathname)
-  const raw = m?.params.tab
-  if (raw === 'account' || raw === 'notifications' || raw === 'roles') return raw
-  return 'account'
-}
+import { useUiDensityControls } from '../../context/ui-density-context'
 
 function isSystemSettingsPath(pathname: string): boolean {
   if (pathname.startsWith('/settings/ai/')) return true
-  return pathname === '/settings/roles'
+  return pathname === '/settings/roles' || pathname === '/settings/lti-tools'
 }
 
 type SystemPromptItem = {
@@ -115,6 +107,7 @@ async function fetchModelsForKind(kind: ModelKind): Promise<{
 export default function Settings() {
   const location = useLocation()
   const { allows, loading: permLoading } = usePermissions()
+  const { density, setDensity } = useUiDensityControls()
   const activeView = settingsViewFromPathname(location.pathname)
 
   const [systemPrompts, setSystemPrompts] = useState<SystemPromptItem[]>([])
@@ -525,7 +518,7 @@ export default function Settings() {
     <LmsPage title="Settings" description="Account and learning preferences.">
       <div
         className={`mt-8 ${
-          activeView === 'roles'
+          activeView === 'roles' || activeView === 'lti-tools'
             ? 'max-w-4xl'
             : activeView === 'ai-prompts'
               ? 'max-w-3xl'
@@ -720,11 +713,40 @@ export default function Settings() {
             </p>
             {!accountLoading && (
               <div className="mt-6">
-                <p className="text-sm font-medium text-slate-700">Appearance</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Choose light or dark for the LMS interface. This applies on all your devices when
-                  you are signed in.
+                <p className="text-sm font-medium text-slate-700 dark:text-neutral-200">Appearance</p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+                  Theme follows your account when signed in; density is stored on this device only.
                 </p>
+                <p className="mt-8 text-sm font-medium text-slate-700 dark:text-neutral-200">Layout density</p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+                  Compact tightens spreadsheet-style views (for example the gradebook) for power users on large
+                  rosters. Stored on this device only.
+                </p>
+                <div className="mt-3 inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-neutral-600 dark:bg-neutral-800/50">
+                  <button
+                    type="button"
+                    onClick={() => setDensity('comfortable')}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      density === 'comfortable'
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-neutral-600 dark:text-neutral-50 dark:shadow-md dark:ring-1 dark:ring-inset dark:ring-white/10'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-neutral-200'
+                    }`}
+                  >
+                    Comfortable
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDensity('compact')}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      density === 'compact'
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-neutral-600 dark:text-neutral-50 dark:shadow-md dark:ring-1 dark:ring-inset dark:ring-white/10'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-neutral-200'
+                    }`}
+                  >
+                    Compact
+                  </button>
+                </div>
+                <p className="mt-8 text-sm font-medium text-slate-700 dark:text-neutral-200">Light or dark</p>
                 <div className="mt-3 inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-neutral-600 dark:bg-neutral-800/50">
                   <button
                     type="button"
@@ -899,6 +921,23 @@ export default function Settings() {
               <RolesPermissionsPanel />
             </RequirePermission>
           </div>
+        )}
+
+        {activeView === 'lti-tools' && (
+          <RequirePermission
+            permission={PERM_RBAC_MANAGE}
+            fallback={
+              <div>
+                <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">LTI tools</h2>
+                <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                  You do not have permission to manage LTI registrations (
+                  <code className="font-mono text-xs">{PERM_RBAC_MANAGE}</code>).
+                </p>
+              </div>
+            }
+          >
+            <LtiToolsSettingsPanel />
+          </RequirePermission>
         )}
       </div>
 

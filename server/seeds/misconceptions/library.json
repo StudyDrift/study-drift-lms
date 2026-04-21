@@ -1,0 +1,206 @@
+[
+  {
+    "name": "[Math] Treating '=' as 'do the operation' only",
+    "description": "Equals sign as process, not balance",
+    "remediationBody": "The equals sign means both sides have the same value. Whatever you do to one side, do to the other to keep balance.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Math] Multiplying always makes numbers bigger",
+    "description": "Ignoring numbers between 0 and 1",
+    "remediationBody": "Multiplying by a fraction or decimal between 0 and 1 makes a positive number smaller.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Math] Larger denominator means larger fraction",
+    "description": "Whole-number bias on denominators",
+    "remediationBody": "For the same numerator, a larger denominator means smaller pieces, so the fraction is smaller.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Math] Adding numerators and denominators",
+    "description": "Invalid fraction addition",
+    "remediationBody": "You need a common denominator (or clear meaning) before adding parts of a fraction.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Math] Subtracting a negative makes the result smaller",
+    "description": "Sign error with negatives",
+    "remediationBody": "Subtracting a negative is the same as adding its opposite; the result moves right on the number line.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Math] Area vs perimeter confusion",
+    "description": "Mixing length and area",
+    "remediationBody": "Perimeter is distance around; area is space inside. Use different units and formulas.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Math] Percent increase then decrease returns to start",
+    "description": "Percent change not reversible by same percent",
+    "remediationBody": "Percents apply to different bases; going up 20% then down 20% does not return to the original.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Math] Square is always larger than rectangle (same perimeter)",
+    "description": "Misconception about max area",
+    "remediationBody": "For a fixed perimeter, a square maximizes area among rectangles\u2014but compare actual dimensions.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Math] 0.25 is smaller than 0.3 because 25 > 3",
+    "description": "Ignoring place value",
+    "remediationBody": "Compare place by place: 0.30 vs 0.25; tenths dominate hundredths here.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Math] Division always makes numbers smaller",
+    "description": "Ignoring divisor < 1",
+    "remediationBody": "Dividing by a number between 0 and 1 (for positives) increases the value.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Grammar] Subject-verb agreement with 'each'",
+    "description": "Each is singular",
+    "remediationBody": "Treat 'each' as singular: 'Each student has' not 'Each student have'.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Grammar] Its vs it's",
+    "description": "Contraction vs possessive",
+    "remediationBody": "It's = it is. Its = possessive (no apostrophe).",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Grammar] Affect vs effect",
+    "description": "Verb vs noun tendency",
+    "remediationBody": "Usually: affect (verb) = influence; effect (noun) = result. Exceptions exist\u2014check a dictionary.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Grammar] Who vs whom",
+    "description": "Case confusion",
+    "remediationBody": "Who acts as subject; whom as object. Try substituting he/him to test.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Grammar] Fewer vs less",
+    "description": "Count vs mass nouns",
+    "remediationBody": "Fewer for countable items; less for mass nouns ('less water', 'fewer cups').",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Grammar] Then vs than",
+    "description": "Time vs comparison",
+    "remediationBody": "Then = time/order. Than = comparison.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Grammar] Lie vs lay",
+    "description": "Transitive confusion",
+    "remediationBody": "Lay needs an object (lay the book). Lie does not (I lie down).",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Grammar] Good vs well",
+    "description": "Adjective vs adverb",
+    "remediationBody": "Good describes nouns; well often describes how an action is done (exceptions: 'feel well').",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Science] Heavier objects always fall faster",
+    "description": "Ignoring air resistance context",
+    "remediationBody": "In many classroom cases, air resistance matters; in vacuum, acceleration due to gravity is the same for mass.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Science] Heat and temperature are the same",
+    "description": "Energy vs average kinetic picture",
+    "remediationBody": "Temperature relates to average particle motion; heat is energy transferred due to temperature difference.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Science] Plants get most mass from soil",
+    "description": "Photosynthesis inputs",
+    "remediationBody": "Most plant dry mass comes from carbon dioxide converted into sugars, not from soil alone.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Science] Seasons caused by Earth-Sun distance",
+    "description": "Orbit eccentricity misconception",
+    "remediationBody": "Seasons are mostly from Earth's axial tilt changing sunlight angle and day length.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Science] Evolution 'wants' a species to improve",
+    "description": "Teleological language",
+    "remediationBody": "Evolution describes change in populations over generations via variation and selection\u2014not goals.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Science] Electricity only flows if electrons 'run out'",
+    "description": "Current in a circuit",
+    "remediationBody": "In a steady circuit, current is a loop; charge is pushed around; components transform energy.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Science] Ozone hole is the same as climate change",
+    "description": "Different environmental issues",
+    "remediationBody": "Ozone depletion and greenhouse warming are distinct problems with some linked chemistry but different causes/effects.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[Science] Batteries store electrons like a tank",
+    "description": "Energy vs charge storage",
+    "remediationBody": "Batteries store chemical energy that drives charge through a circuit; it's not a bucket of electrons.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[General] Reading a graph: confusing slope with height",
+    "description": "Graph literacy",
+    "remediationBody": "Check axes labels: slope is rate of change; a point's height is a value at an input.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[General] Correlation implies causation",
+    "description": "Stats reasoning",
+    "remediationBody": "Correlation can be driven by a third variable. Look for study design and mechanisms.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[General] Average always represents a typical student",
+    "description": "Mean vs distribution",
+    "remediationBody": "Means hide spread and outliers; median or context may be more representative.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[General] Speed vs velocity are interchangeable",
+    "description": "Vectors",
+    "remediationBody": "Velocity includes direction; speed is magnitude only.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[General] If pH is 7, a solution has no ions",
+    "description": "Water autoionization",
+    "remediationBody": "Neutral water still has small concentrations of H+ and OH- ions.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[General] DNA is only in the nucleus in eukaryotes",
+    "description": "Organelle DNA",
+    "remediationBody": "Mitochondria/chloroplasts also contain DNA; prokaryotes have nucleoid regions.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[General] Natural means safe and synthetic means harmful",
+    "description": "Chemophobia oversimplification",
+    "remediationBody": "Toxicity depends on dose and substance, not the label natural vs synthetic.",
+    "remediationUrl": null
+  },
+  {
+    "name": "[General] Energy is 'used up' in a machine",
+    "description": "Conservation",
+    "remediationBody": "Energy transforms; efficiency limits useful output, but energy is conserved in accounting.",
+    "remediationUrl": null
+  }
+]

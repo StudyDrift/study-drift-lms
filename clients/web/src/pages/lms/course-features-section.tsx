@@ -65,6 +65,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const srsEnabled = course.srsEnabled === true
   const diagnosticAssessmentsEnabled = course.diagnosticAssessmentsEnabled === true
   const hintScaffoldingEnabled = course.hintScaffoldingEnabled === true
+  const misconceptionDetectionEnabled = course.misconceptionDetectionEnabled === true
 
   const persist = useCallback(
     async (patch: {
@@ -78,6 +79,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       srsEnabled?: boolean
       diagnosticAssessmentsEnabled?: boolean
       hintScaffoldingEnabled?: boolean
+      misconceptionDetectionEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -95,6 +97,8 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           diagnosticAssessmentsEnabled:
             patch.diagnosticAssessmentsEnabled ?? diagnosticAssessmentsEnabled,
           hintScaffoldingEnabled: patch.hintScaffoldingEnabled ?? hintScaffoldingEnabled,
+          misconceptionDetectionEnabled:
+            patch.misconceptionDetectionEnabled ?? misconceptionDetectionEnabled,
         }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
@@ -114,6 +118,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       srsEnabled,
       diagnosticAssessmentsEnabled,
       hintScaffoldingEnabled,
+      misconceptionDetectionEnabled,
       calendarEnabled,
       courseCode,
       feedEnabled,
@@ -206,6 +211,15 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           enabled={hintScaffoldingEnabled}
           disabled={saving}
           onToggle={() => void persist({ hintScaffoldingEnabled: !hintScaffoldingEnabled })}
+        />
+        <FeatureToggleRow
+          label="Misconception detection"
+          description="When tagged distractors are selected, record events, adjust mastery weighting, and show targeted remediation in quiz results (requires normalized question-bank options)."
+          enabled={misconceptionDetectionEnabled}
+          disabled={saving}
+          onToggle={() =>
+            void persist({ misconceptionDetectionEnabled: !misconceptionDetectionEnabled })
+          }
         />
       </div>
 

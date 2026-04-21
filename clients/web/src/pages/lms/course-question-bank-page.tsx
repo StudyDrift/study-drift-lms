@@ -1,25 +1,30 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Library } from 'lucide-react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { EmptyState } from '../../components/ui/empty-state'
 import { usePermissions } from '../../context/use-permissions'
 import {
+  createCourseMisconception,
   createCourseQuestion,
   courseItemsCreatePermission,
   fetchCourse,
+  fetchCourseMisconceptions,
   fetchCourseQuestion,
   fetchCourseQuestions,
   fetchCourseQuestionVersions,
+  putQuestionOptionMisconception,
   restoreCourseQuestionVersion,
   updateCourseQuestion,
   type BankQuestionDetail,
   type BankQuestionRow,
   type BankQuestionVersionSummary,
+  type CourseMisconceptionRow,
   type CreateBankQuestionBody,
   type UpdateBankQuestionBody,
 } from '../../lib/courses-api'
 import { QuestionBankStatusChip } from '../../components/ui/status-vocabulary'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
+import { FeatureHelpTrigger } from '../../components/feature-help/feature-help-trigger'
 import { LmsPage } from './lms-page'
 
 type QuestionDraft = {
@@ -70,6 +75,39 @@ function defaultDraft(): QuestionDraft {
 
 function questionTypeSupportsChoiceShuffle(t: string): boolean {
   return t === 'mc_single' || t === 'mc_multiple' || t === 'true_false'
+}
+
+type ParsedMcChoice = { id: string | null; text: string }
+
+function parseMcChoicesFromOptionsJson(
+  questionType: string,
+  optionsJson: string,
+): ParsedMcChoice[] | null {
+  if (!questionTypeSupportsChoiceShuffle(questionType)) return null
+  const trimmed = optionsJson.trim()
+  if (!trimmed) return []
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (!Array.isArray(parsed)) return null
+    const out: ParsedMcChoice[] = []
+    for (const el of parsed) {
+      if (typeof el === 'string') {
+        out.push({ id: null, text: el })
+        continue
+      }
+      if (el && typeof el === 'object') {
+        const o = el as Record<string, unknown>
+        const textRaw = o.text ?? o.label
+        const text = typeof textRaw === 'string' ? textRaw : String(textRaw ?? '')
+        const idRaw = o.id
+        const id = typeof idRaw === 'string' && idRaw.length > 0 ? idRaw : null
+        out.push({ id, text })
+      }
+    }
+    return out
+  } catch {
+    return null
+  }
 }
 
 function parseOptionalJson(raw: string, fieldLabel: string): unknown | undefined {
@@ -138,6 +176,9 @@ function draftFromDetail(detail: BankQuestionDetail): QuestionDraft {
 
 export function CourseQuestionBankPage() {
   const { courseCode = '' } = useParams<{ courseCode: string }>()
+  const [searchParams] = useSearchParams()
+  const questionFromUrl = searchParams.get('question')?.trim() || null
+  const openedQuestionFromUrl = useRef<string | null>(null)
   const searchId = useId()
   const stemFieldId = `${searchId}-stem`
   const { allows, loading: permLoading } = usePermissions()
@@ -148,6 +189,14 @@ export function CourseQuestionBankPage() {
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [bankOn, setBankOn] = useState(false)
+  const [misconceptionCourseFlag, setMisconceptionCourseFlag] = useState(false)
+  const [editDetail, setEditDetail] = useState<BankQuestionDetail | null>(null)
+  const [mcList, setMcList] = useState<CourseMisconceptionRow[]>([])
+  const [mcListLoading, setMcListLoading] = useState(false)
+  const [mcTagBusyOptionId, setMcTagBusyOptionId] = useState<string | null>(null)
+  const [newMcName, setNewMcName] = useState('')
+  const [newMcBody, setNewMcBody] = useState('')
+  const [newMcBusy, setNewMcBusy] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [previewId, setPreviewId] = useState<string | null>(null)
@@ -167,6 +216,7 @@ export function CourseQuestionBankPage() {
     try {
       const course = await fetchCourse(courseCode)
       setBankOn(course.questionBankEnabled === true)
+      setMisconceptionCourseFlag(course.misconceptionDetectionEnabled === true)
       if (course.questionBankEnabled !== true) {
         setRows([])
         return
@@ -190,9 +240,11 @@ export function CourseQuestionBankPage() {
         setPreviewQuestion(detail)
         if (mode === 'edit') {
           setDraft(draftFromDetail(detail))
+          setEditDetail(detail)
           setEditId(questionId)
           setCreateOpen(false)
         } else {
+          setEditDetail(null)
           setPreviewId(questionId)
         }
       } catch (e) {
@@ -230,7 +282,8 @@ export function CourseQuestionBankPage() {
     try {
       const updated = await updateCourseQuestion(courseCode, editId, toUpdatePayload(draft))
       setPreviewQuestion(updated)
-      setEditId(null)
+      setEditDetail(updated)
+      setDraft(draftFromDetail(updated))
       await load()
       toastSaveOk('Question updated')
     } catch (e) {
@@ -285,6 +338,13 @@ export function CourseQuestionBankPage() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (!questionFromUrl || !bankOn || !canEdit) return
+    if (openedQuestionFromUrl.current === questionFromUrl) return
+    openedQuestionFromUrl.current = questionFromUrl
+    void loadQuestionForEdit(questionFromUrl, 'edit')
+  }, [questionFromUrl, bankOn, canEdit, loadQuestionForEdit])
+
   const previewJson = useMemo(() => {
     if (!previewQuestion) return null
     return JSON.stringify(
@@ -298,6 +358,96 @@ export function CourseQuestionBankPage() {
     )
   }, [previewQuestion])
 
+  const parsedMcChoices = useMemo(
+    () => parseMcChoicesFromOptionsJson(draft.questionType, draft.optionsJson),
+    [draft.questionType, draft.optionsJson],
+  )
+
+  const tagByOptionId = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const t of editDetail?.optionMisconceptionTags ?? []) {
+      m.set(t.optionId, t.misconceptionId)
+    }
+    return m
+  }, [editDetail?.optionMisconceptionTags])
+
+  useEffect(() => {
+    if (!editId || !misconceptionCourseFlag || !courseCode) {
+      setMcList([])
+      return
+    }
+    let cancelled = false
+    setMcListLoading(true)
+    void (async () => {
+      try {
+        const rows = await fetchCourseMisconceptions(courseCode, { limit: 400 })
+        if (!cancelled) setMcList(rows)
+      } catch {
+        if (!cancelled) setMcList([])
+      } finally {
+        if (!cancelled) setMcListLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [editId, misconceptionCourseFlag, courseCode])
+
+  const setOptionMcTag = useCallback(
+    async (optionId: string, misconceptionId: string | null) => {
+      if (!courseCode || !editId) return
+      setMcTagBusyOptionId(optionId)
+      setModalError(null)
+      try {
+        await putQuestionOptionMisconception(courseCode, editId, optionId, { misconceptionId })
+        setEditDetail((d) => {
+          if (!d) return d
+          const rest = (d.optionMisconceptionTags ?? []).filter((t) => t.optionId !== optionId)
+          const nextTags =
+            misconceptionId != null && misconceptionId !== ''
+              ? [...rest, { optionId, misconceptionId }]
+              : rest
+          return { ...d, optionMisconceptionTags: nextTags }
+        })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Could not update misconception tag.'
+        setModalError(msg)
+        toastMutationError(msg)
+      } finally {
+        setMcTagBusyOptionId(null)
+      }
+    },
+    [courseCode, editId],
+  )
+
+  const submitNewMisconception = useCallback(
+    async (ev: FormEvent) => {
+      ev.preventDefault()
+      if (!courseCode) return
+      const name = newMcName.trim()
+      if (!name) return
+      setNewMcBusy(true)
+      setModalError(null)
+      try {
+        const row = await createCourseMisconception(courseCode, {
+          name,
+          remediationBody: newMcBody.trim() || undefined,
+        })
+        setMcList((prev) => [...prev, row].sort((a, b) => a.name.localeCompare(b.name)))
+        setNewMcName('')
+        setNewMcBody('')
+        toastSaveOk('Misconception created')
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Could not create misconception.'
+        setModalError(msg)
+        toastMutationError(msg)
+      } finally {
+        setNewMcBusy(false)
+      }
+    },
+    [courseCode, newMcBody, newMcName],
+  )
+
   if (!canEdit) {
     return (
       <LmsPage title="Question bank">
@@ -309,7 +459,14 @@ export function CourseQuestionBankPage() {
   }
 
   return (
-    <LmsPage title="Question bank">
+    <LmsPage
+      title="Question bank"
+      actions={
+        <div className="flex items-center gap-2">
+          <FeatureHelpTrigger topic="question-bank" />
+        </div>
+      }
+    >
       <div className="max-w-5xl space-y-4">
         <p className="text-sm text-slate-600 dark:text-neutral-300">
           Browse normalized questions for this course. Enable the tool under{' '}
@@ -328,6 +485,7 @@ export function CourseQuestionBankPage() {
               setModalError(null)
               setCreateOpen(true)
               setEditId(null)
+              setEditDetail(null)
               setDraft(defaultDraft())
             }}
             disabled={!bankOn}
@@ -373,6 +531,7 @@ export function CourseQuestionBankPage() {
                 setModalError(null)
                 setCreateOpen(true)
                 setEditId(null)
+                setEditDetail(null)
                 setDraft(defaultDraft())
               },
             }}
@@ -470,6 +629,7 @@ export function CourseQuestionBankPage() {
             if (e.target === e.currentTarget && !busy) {
               setCreateOpen(false)
               setEditId(null)
+              setEditDetail(null)
             }
           }}
         >
@@ -602,6 +762,84 @@ export function CourseQuestionBankPage() {
                   placeholder="Describe why this revision was made"
                 />
               </label>
+              {editId && misconceptionCourseFlag && questionTypeSupportsChoiceShuffle(draft.questionType) ? (
+                <div className="rounded-lg border border-slate-200 p-3 dark:border-neutral-700">
+                  <p className="text-xs font-medium text-slate-800 dark:text-neutral-100">
+                    Misconception tags (distractors)
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-neutral-400">
+                    Tag wrong choices for remediation when the course enables misconception detection. Stable option
+                    UUIDs are required — save the question once if tags are unavailable.
+                  </p>
+                  {parsedMcChoices === null ? (
+                    <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">
+                      Options JSON must be a JSON array for tagging.
+                    </p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {parsedMcChoices.map((c, idx) => (
+                        <li
+                          key={c.id ?? `choice-${idx}`}
+                          className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <span
+                            className="min-w-0 truncate text-xs text-slate-700 dark:text-neutral-300"
+                            title={c.text}
+                          >
+                            {c.text || `(Choice ${idx + 1})`}
+                          </span>
+                          {c.id ? (
+                            <select
+                              className="max-w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs dark:border-neutral-600 dark:bg-neutral-950"
+                              disabled={mcListLoading || mcTagBusyOptionId === c.id}
+                              value={tagByOptionId.get(c.id) ?? ''}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                void setOptionMcTag(c.id as string, v === '' ? null : v)
+                              }}
+                            >
+                              <option value="">— None —</option>
+                              {mcList.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-xs text-amber-800 dark:text-amber-200">Save for option IDs</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <form
+                    onSubmit={(e) => void submitNewMisconception(e)}
+                    className="mt-3 space-y-2 border-t border-slate-200 pt-3 dark:border-neutral-700"
+                  >
+                    <p className="text-xs font-medium text-slate-700 dark:text-neutral-200">New misconception</p>
+                    <input
+                      placeholder="Name"
+                      value={newMcName}
+                      onChange={(e) => setNewMcName(e.target.value)}
+                      className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-neutral-600 dark:bg-neutral-950"
+                    />
+                    <textarea
+                      placeholder="Remediation text (optional)"
+                      value={newMcBody}
+                      onChange={(e) => setNewMcBody(e.target.value)}
+                      rows={2}
+                      className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-neutral-600 dark:bg-neutral-950"
+                    />
+                    <button
+                      type="submit"
+                      disabled={newMcBusy || !newMcName.trim()}
+                      className="rounded-md border border-indigo-300 px-2 py-1 text-xs font-medium text-indigo-700 disabled:opacity-50 dark:border-indigo-500/60 dark:text-indigo-300"
+                    >
+                      {newMcBusy ? 'Creating…' : 'Create misconception'}
+                    </button>
+                  </form>
+                </div>
+              ) : null}
             </div>
             {modalError && (
               <p className="mt-3 text-sm text-rose-700 dark:text-rose-400" role="alert">
@@ -615,6 +853,7 @@ export function CourseQuestionBankPage() {
                 onClick={() => {
                   setCreateOpen(false)
                   setEditId(null)
+                  setEditDetail(null)
                 }}
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-100 dark:hover:bg-neutral-900"
               >

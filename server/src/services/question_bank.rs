@@ -206,12 +206,84 @@ fn editor_question_type_from_db(db: &str) -> String {
     }
 }
 
-fn options_json_from_quiz_question(q: &QuizQuestion) -> JsonValue {
-    json!(q
+fn choice_text_from_json_element(el: &JsonValue) -> String {
+    if let Some(s) = el.as_str() {
+        return s.to_string();
+    }
+    el.get("text")
+        .or_else(|| el.get("label"))
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn choice_id_from_json_element(el: &JsonValue) -> Option<Uuid> {
+    el.get("id")
+        .and_then(|x| x.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok())
+}
+
+fn extract_choice_lines_from_options_json(v: &JsonValue) -> (Vec<String>, Vec<Option<Uuid>>) {
+    let mut texts = vec![];
+    let mut ids = vec![];
+    let Some(arr) = v.as_array() else {
+        return (texts, ids);
+    };
+    for el in arr {
+        texts.push(choice_text_from_json_element(el));
+        ids.push(choice_id_from_json_element(el));
+    }
+    (texts, ids)
+}
+
+/// Normalized `{ id, text }[]` for `course.questions.options`, preserving stable ids when texts match.
+pub fn merge_question_options_on_write(submitted: &JsonValue, existing_options: Option<&JsonValue>) -> JsonValue {
+    let (new_texts, new_ids) = extract_choice_lines_from_options_json(submitted);
+    let n = new_texts.len();
+    let old_arr = existing_options.and_then(|x| x.as_array());
+    let mut out: Vec<JsonValue> = Vec::with_capacity(n);
+    for i in 0..n {
+        let text = &new_texts[i];
+        let id = if let Some(Some(parsed)) = new_ids.get(i).copied() {
+            parsed
+        } else if let Some(arr) = old_arr {
+            if i < arr.len() && choice_text_from_json_element(&arr[i]) == *text {
+                choice_id_from_json_element(&arr[i]).unwrap_or_else(Uuid::new_v4)
+            } else {
+                Uuid::new_v4()
+            }
+        } else {
+            Uuid::new_v4()
+        };
+        out.push(json!({ "id": id.to_string(), "text": text }));
+    }
+    JsonValue::Array(out)
+}
+
+pub fn normalize_question_options_json(opts: Option<&JsonValue>) -> Option<JsonValue> {
+    let v = opts?;
+    Some(merge_question_options_on_write(v, None))
+}
+
+fn merged_options_for_sync_from_quiz_question(q: &QuizQuestion, existing: Option<&JsonValue>) -> JsonValue {
+    let submitted: JsonValue = json!(q
         .choices
         .iter()
-        .map(|c| c.as_str())
-        .collect::<Vec<_>>())
+        .map(|c| json!(c))
+        .collect::<Vec<_>>());
+    let mut merged = merge_question_options_on_write(&submitted, existing);
+    if q.choice_ids.len() == q.choices.len() {
+        if let Some(arr) = merged.as_array_mut() {
+            for (i, el) in arr.iter_mut().enumerate() {
+                if let Some(id) = q.choice_ids.get(i).and_then(|s| Uuid::parse_str(s.trim()).ok()) {
+                    if let Some(obj) = el.as_object_mut() {
+                        obj.insert("id".to_string(), json!(id.to_string()));
+                    }
+                }
+            }
+        }
+    }
+    merged
 }
 
 fn correct_answer_json_from_quiz_question(q: &QuizQuestion) -> Option<JsonValue> {
@@ -222,16 +294,19 @@ fn correct_answer_json_from_quiz_question(q: &QuizQuestion) -> Option<JsonValue>
 }
 
 pub fn quiz_question_from_entity(e: &QuestionEntity) -> Result<QuizQuestion, AppError> {
-    let choices: Vec<String> = e
-        .options
-        .as_ref()
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|x| x.as_str().map(|s| s.to_string()))
-                .collect()
-        })
-        .unwrap_or_default();
+    let (choices, choice_ids): (Vec<String>, Vec<String>) = match e.options.as_ref() {
+        Some(v) => {
+            let (texts, ids) = extract_choice_lines_from_options_json(v);
+            let all_ids = ids.iter().all(|o| o.is_some());
+            let choice_ids = if all_ids {
+                ids.into_iter().flatten().map(|u| u.to_string()).collect()
+            } else {
+                vec![]
+            };
+            (texts, choice_ids)
+        }
+        None => (vec![], vec![]),
+    };
 
     let correct_choice_index = e
         .correct_answer
@@ -247,6 +322,7 @@ pub fn quiz_question_from_entity(e: &QuestionEntity) -> Result<QuizQuestion, App
         prompt: e.stem.clone(),
         question_type: editor_question_type_from_db(&e.question_type),
         choices,
+        choice_ids,
         type_config: serde_json::json!({}),
         correct_choice_index,
         multiple_answer: e.question_type == "mc_multiple",
@@ -257,6 +333,19 @@ pub fn quiz_question_from_entity(e: &QuestionEntity) -> Result<QuizQuestion, App
         concept_ids: vec![],
         srs_eligible: e.srs_eligible,
     })
+}
+
+/// Authored-order option UUIDs when options JSON is normalized; empty for legacy string-only rows.
+pub fn authored_choice_uuids_from_entity(e: &QuestionEntity) -> Vec<Uuid> {
+    let Some(v) = e.options.as_ref() else {
+        return vec![];
+    };
+    let (_, ids) = extract_choice_lines_from_options_json(v);
+    if ids.iter().all(|o| o.is_some()) {
+        ids.into_iter().flatten().collect()
+    } else {
+        vec![]
+    }
 }
 
 pub async fn load_quiz_questions_map(
@@ -305,7 +394,6 @@ pub async fn sync_quiz_refs_from_editor_json(
     for (pos, q) in questions.iter().enumerate() {
         let pos = i16::try_from(pos).map_err(|_| AppError::invalid_input("Too many questions."))?;
         let db_type = db_question_type_from_editor(q);
-        let opts = options_json_from_quiz_question(q);
         let corr = correct_answer_json_from_quiz_question(q);
         let meta = json!({
             "legacyQuizStructureItemId": structure_item_id.to_string(),
@@ -318,6 +406,21 @@ pub async fn sync_quiz_refs_from_editor_json(
             &q.id,
         )
         .await?;
+
+        let prior_opts: Option<JsonValue> = if let Some(id) = existing {
+            sqlx::query_scalar(&format!(
+                r#"SELECT options FROM {} WHERE course_id = $1 AND id = $2"#,
+                crate::db::schema::QUESTIONS
+            ))
+            .bind(course_id)
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .flatten()
+        } else {
+            None
+        };
+        let opts = merged_options_for_sync_from_quiz_question(q, prior_opts.as_ref());
 
         let q_uuid = if let Some(id) = existing {
             qb_repo::update_question_row(
