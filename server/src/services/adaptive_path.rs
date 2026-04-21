@@ -115,9 +115,7 @@ fn apply_remediation_insert(
     linear_next: Option<Uuid>,
     mastery: &HashMap<Uuid, f64>,
 ) -> Option<Uuid> {
-    let Some(from) = from_id else {
-        return None;
-    };
+    let from = from_id?;
     if rule.structure_item_id != from {
         return None;
     }
@@ -149,10 +147,10 @@ fn collect_applicable_gate_rules<'a>(
     out
 }
 
-fn collect_remediation_rules<'a>(
+fn collect_remediation_rules(
     from_id: Option<Uuid>,
-    rules: &'a [StructurePathRuleRow],
-) -> Vec<&'a StructurePathRuleRow> {
+    rules: &[StructurePathRuleRow],
+) -> Vec<&StructurePathRuleRow> {
     let Some(fid) = from_id else {
         return vec![];
     };

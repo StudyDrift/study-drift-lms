@@ -257,7 +257,7 @@ where
     .fetch_optional(&mut *executor)
     .await?;
 
-    let (stored_mastery, last_seen_at) = state_row.map(|(m, t)| (m, t)).unwrap_or((0.0, None));
+    let (stored_mastery, last_seen_at) = state_row.unwrap_or((0.0, None));
 
     let m_old_eff = effective_mastery_engine(stored_mastery, last_seen_at, decay_lambda);
     let score = input.score.clamp(0.0, 1.0);
@@ -376,7 +376,7 @@ where
     .fetch_optional(&mut *executor)
     .await?;
 
-    let (stored_mastery, last_seen_at) = state_row.map(|(m, t)| (m, t)).unwrap_or((0.0, None));
+    let (stored_mastery, last_seen_at) = state_row.unwrap_or((0.0, None));
 
     let m_old_eff = effective_mastery_engine(stored_mastery, last_seen_at, decay_lambda);
     let score = input.score.clamp(0.0, 1.0);

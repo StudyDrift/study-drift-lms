@@ -346,7 +346,7 @@ fn filter_grants_for_student_course_view(
                         course_role_catalog_matches_concrete(teacher_catalog, p, course_code);
                     let student_match =
                         course_role_catalog_matches_concrete(student_catalog, p, course_code);
-                    return !(teacher_match && !student_match);
+                    return !teacher_match || student_match;
                 }
                 // Different course — keep (may be staff or student elsewhere).
                 return true;

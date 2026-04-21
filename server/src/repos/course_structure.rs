@@ -217,9 +217,9 @@ pub fn first_navigable_after_module(
     while j < ordered.len() && ordered[j].parent_id == Some(module_id) {
         j += 1;
     }
-    for k in j..ordered.len() {
-        if navigable_kind(&ordered[k].kind) {
-            return Some(ordered[k].id);
+    for row in ordered.iter().skip(j) {
+        if navigable_kind(&row.kind) {
+            return Some(row.id);
         }
     }
     None
@@ -568,7 +568,7 @@ pub async fn assignment_visible_to_student(
                     available_until
                 };
                 let within_availability =
-                    eff_af.map_or(true, |t| now >= t) && eff_au.map_or(true, |t| now <= t);
+                    eff_af.is_none_or(|t| now >= t) && eff_au.is_none_or(|t| now <= t);
                 c_pub
                     && !c_arch
                     && m_pub
@@ -918,7 +918,7 @@ pub async fn survey_visible_to_student(
                     closes_at
                 };
                 let within_window =
-                    eff_open.map_or(true, |t| now >= t) && eff_close.map_or(true, |t| now <= t);
+                    eff_open.is_none_or(|t| now >= t) && eff_close.is_none_or(|t| now <= t);
                 c_pub
                     && !c_arch
                     && m_pub

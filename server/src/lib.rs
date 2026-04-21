@@ -1,5 +1,11 @@
 //! StudyDrift HTTP API library. The binary in `main.rs` is a thin wrapper around [`run`].
 
+// Route handlers and service layers intentionally take more parameters than Clippy’s default;
+// sqlx query shapes also produce very large `QueryAs` types. Keep `-D warnings` CI green without
+// large mechanical refactors.
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+
 pub mod app;
 pub mod authz;
 pub mod config;

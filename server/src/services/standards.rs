@@ -69,12 +69,10 @@ fn value_str(v: &Value) -> Option<String> {
 }
 
 fn case_item_identifier(item: &Value) -> Option<String> {
-    item.get("identifier")
-        .and_then(|x| value_str(x))
-        .or_else(|| {
-            item.get("uri")
-                .and_then(|u| u.as_str().map(|s| s.to_string()))
-        })
+    item.get("identifier").and_then(value_str).or_else(|| {
+        item.get("uri")
+            .and_then(|u| u.as_str().map(|s| s.to_string()))
+    })
 }
 
 fn case_item_code(item: &Value) -> Option<String> {
@@ -92,9 +90,7 @@ fn case_item_description(item: &Value) -> String {
 }
 
 fn case_education_level(item: &Value) -> Option<String> {
-    let Some(levels) = item.get("educationLevel").and_then(|x| x.as_array()) else {
-        return None;
-    };
+    let levels = item.get("educationLevel").and_then(|x| x.as_array())?;
     let mut out: Vec<String> = Vec::new();
     for l in levels {
         if let Some(s) = value_str(l) {

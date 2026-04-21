@@ -820,10 +820,10 @@ fn merge_quiz_settings_write(
 ) -> QuizSettingsWrite {
     let mut s = QuizSettingsWrite::from(cur);
     if let Some(v) = &req.available_from {
-        s.available_from = v.clone();
+        s.available_from = *v;
     }
     if let Some(v) = &req.available_until {
-        s.available_until = v.clone();
+        s.available_until = *v;
     }
     if let Some(v) = req.unlimited_attempts {
         s.unlimited_attempts = v;
@@ -5630,7 +5630,7 @@ fn normalize_relative_duration_iso(input: Option<&str>) -> Result<Option<String>
     if t.is_empty() {
         return Ok(None);
     }
-    relative_schedule::parse_iso8601_duration(t).map_err(|m| AppError::invalid_input(m))?;
+    relative_schedule::parse_iso8601_duration(t).map_err(AppError::invalid_input)?;
     Ok(Some(t.to_ascii_uppercase()))
 }
 

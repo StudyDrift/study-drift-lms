@@ -313,14 +313,13 @@ fn canvas_enrollment_rows_to_role_map(rows: &[Value]) -> HashMap<i64, CanvasRole
             .and_modify(|cur| {
                 let r_cur = lex_enrollment_rank(cur.role.as_str());
                 let r_new = lex_enrollment_rank(incoming.role.as_str());
-                if r_new < r_cur {
+                if r_new < r_cur
+                    || (r_new == r_cur
+                        && incoming.role == "instructor"
+                        && instructor_grant_rank(cur.instructor_grant_role.as_deref())
+                            > instructor_grant_rank(incoming.instructor_grant_role.as_deref()))
+                {
                     *cur = incoming.clone();
-                } else if r_new == r_cur && incoming.role == "instructor" {
-                    if instructor_grant_rank(cur.instructor_grant_role.as_deref())
-                        > instructor_grant_rank(incoming.instructor_grant_role.as_deref())
-                    {
-                        *cur = incoming.clone();
-                    }
                 }
                 if cur.display_hint.is_none() {
                     cur.display_hint.clone_from(&incoming.display_hint);

@@ -271,7 +271,7 @@ pub async fn generate_adaptive_next_questions(
         reference_materials = reference_materials.trim(),
         instructor_system_prompt = instructor_system_prompt.trim(),
         adaptive_difficulty = adaptive_difficulty.trim(),
-        history = history_json(history).to_string()
+        history = history_json(history)
     );
 
     let messages = vec![

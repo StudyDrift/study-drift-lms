@@ -204,7 +204,7 @@ pub fn language_id_from_name(language: &str) -> i32 {
 }
 
 pub fn validate_code_submission_size(code: &str) -> Result<(), AppError> {
-    if code.as_bytes().len() > MAX_CODE_BYTES {
+    if code.len() > MAX_CODE_BYTES {
         return Err(AppError::invalid_input(
             "Code submission exceeds 64 KB limit.",
         ));

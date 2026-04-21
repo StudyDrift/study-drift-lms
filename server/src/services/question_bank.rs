@@ -719,7 +719,7 @@ pub async fn set_quiz_delivery_pool_only(
     pool_id: Uuid,
     sample_n: i32,
 ) -> Result<(), AppError> {
-    if sample_n < 1 || sample_n > 300 {
+    if !(1..=300).contains(&sample_n) {
         return Err(AppError::invalid_input(
             "sampleN must be between 1 and 300.",
         ));

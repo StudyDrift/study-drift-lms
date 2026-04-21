@@ -34,11 +34,9 @@ pub fn slugify_name(name: &str) -> String {
         if ch.is_ascii_alphanumeric() {
             out.push(ch);
             prev_sep = false;
-        } else if ch.is_whitespace() || ch == '-' || ch == '_' {
-            if !out.is_empty() && !prev_sep {
-                out.push('-');
-                prev_sep = true;
-            }
+        } else if (ch.is_whitespace() || ch == '-' || ch == '_') && !out.is_empty() && !prev_sep {
+            out.push('-');
+            prev_sep = true;
         }
     }
     let t = out.trim_matches('-').to_string();

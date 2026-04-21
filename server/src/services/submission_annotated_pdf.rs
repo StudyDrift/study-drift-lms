@@ -27,7 +27,7 @@ fn media_box_wh(doc: &Document, page_id: ObjectId) -> (f64, f64) {
     if a.len() != 4 {
         return (612.0, 792.0);
     }
-    let x0 = a.get(0).and_then(pdf_num).unwrap_or(0.0);
+    let x0 = a.first().and_then(pdf_num).unwrap_or(0.0);
     let y0 = a.get(1).and_then(pdf_num).unwrap_or(0.0);
     let x1 = a.get(2).and_then(pdf_num).unwrap_or(612.0);
     let y1 = a.get(3).and_then(pdf_num).unwrap_or(792.0);

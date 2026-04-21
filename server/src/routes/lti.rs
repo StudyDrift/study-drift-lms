@@ -76,7 +76,7 @@ async fn provider_jwks_handler(
 }
 
 fn jwks_json(state: &AppState) -> Result<Json<serde_json::Value>, AppError> {
-    let lti = require_lti(&state)?;
+    let lti = require_lti(state)?;
     let jwk = lti.keys.jwk_public_json()?;
     Ok(Json(json!({ "keys": [jwk] })))
 }

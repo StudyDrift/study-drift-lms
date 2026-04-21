@@ -281,9 +281,9 @@ pub async fn load_worked_example_if_allowed(
     if !unlocked {
         return Err(AppError::Forbidden);
     }
-    Ok(hints_repo::get_worked_example(pool, quid)
+    hints_repo::get_worked_example(pool, quid)
         .await
-        .map_err(AppError::Db)?)
+        .map_err(AppError::Db)
 }
 
 #[cfg(test)]

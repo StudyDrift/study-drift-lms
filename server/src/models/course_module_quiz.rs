@@ -122,12 +122,10 @@ pub fn validate_quiz_comprehensive_settings(
             "adaptiveStopRule must be one of: fixed_count, mastery_estimate.",
         ));
     }
-    if !unlimited_attempts {
-        if max_attempts < MIN_MAX_ATTEMPTS || max_attempts > MAX_MAX_ATTEMPTS {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
+    if !unlimited_attempts && (!(MIN_MAX_ATTEMPTS..=MAX_MAX_ATTEMPTS).contains(&max_attempts)) {
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
                 "maxAttempts must be between {MIN_MAX_ATTEMPTS} and {MAX_MAX_ATTEMPTS} when unlimitedAttempts is false."
             )));
-        }
     }
     if let Some(p) = passing_score_percent {
         if !(0..=100).contains(&p) {
@@ -207,8 +205,8 @@ pub fn validate_adaptive_quiz_settings(
             format!("Too many adaptive source items (max {MAX_ADAPTIVE_SOURCE_ITEMS})."),
         ));
     }
-    if adaptive_question_count < MIN_ADAPTIVE_QUESTION_COUNT
-        || adaptive_question_count > MAX_ADAPTIVE_QUESTION_COUNT
+    if !(MIN_ADAPTIVE_QUESTION_COUNT..=MAX_ADAPTIVE_QUESTION_COUNT)
+        .contains(&adaptive_question_count)
     {
         return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
             "adaptiveQuestionCount must be between {MIN_ADAPTIVE_QUESTION_COUNT} and {MAX_ADAPTIVE_QUESTION_COUNT}."

@@ -132,11 +132,11 @@ async fn apply_one_enrollment_from_export(
     let role = row.role.trim();
     let is_creator = u.id == creator_user_id;
 
-    if enrollment::user_is_course_creator(pool, course_code, u.id).await? {
-        if role == "student" || role == "instructor" {
-            // Match roster API: do not add secondary student/instructor rows for the course creator.
-            return Ok(());
-        }
+    if enrollment::user_is_course_creator(pool, course_code, u.id).await?
+        && (role == "student" || role == "instructor")
+    {
+        // Match roster API: do not add secondary student/instructor rows for the course creator.
+        return Ok(());
     }
 
     match role {

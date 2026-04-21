@@ -55,9 +55,7 @@ where
     if q.choice_ids.len() != q.choices.len() || q.choice_ids.is_empty() {
         return None;
     }
-    let Some(id_str) = q.choice_ids.get(selected_display_index) else {
-        return None;
-    };
+    let id_str = q.choice_ids.get(selected_display_index)?;
     let Ok(option_id) = Uuid::parse_str(id_str.trim()) else {
         return None;
     };

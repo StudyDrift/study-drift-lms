@@ -737,7 +737,7 @@ async fn download_annotated_pdf_handler(
         submission_annotations::list_active_for_submission(&state.pool, submission_id).await?;
     let merged = submission_annotated_pdf::merge_annotations_into_pdf(&pdf_bytes, &annotations);
 
-    Ok(Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "application/pdf")
         .header(
@@ -747,5 +747,5 @@ async fn download_annotated_pdf_handler(
         .header(header::CACHE_CONTROL, "private, no-store")
         .header("X-Lextures-Annotation-Flatten", "overlay-v1")
         .body(Body::from(merged))
-        .map_err(|e| AppError::invalid_input(e.to_string()))?)
+        .map_err(|e| AppError::invalid_input(e.to_string()))
 }
