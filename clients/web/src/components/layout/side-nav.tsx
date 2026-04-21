@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { matchPath, NavLink, useLocation } from 'react-router-dom'
 import { BrandLogo } from '../brand-logo'
-import { useShellNav } from './shell-nav-context'
+import { useShellNav } from './use-shell-nav'
 import { SideNavCourseLinks } from './side-nav-course-links'
 import { SideNavCourseSettingsLinks } from './side-nav-course-settings-links'
 import { SideNavMainLinks } from './side-nav-main-links'

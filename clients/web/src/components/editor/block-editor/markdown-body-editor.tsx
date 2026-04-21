@@ -235,8 +235,11 @@ export function MarkdownBodyEditor({
   useEffect(() => {
     if (!courseCode) return
     let cancelled = false
-    setStructureLoading(true)
-    setStructureError(false)
+    queueMicrotask(() => {
+      if (cancelled) return
+      setStructureLoading(true)
+      setStructureError(false)
+    })
     void fetchCourseStructure(courseCode)
       .then((items) => {
         if (!cancelled) setStructure(items)
@@ -261,12 +264,16 @@ export function MarkdownBodyEditor({
   )
 
   useEffect(() => {
-    setActiveIndex(0)
+    queueMicrotask(() => {
+      setActiveIndex(0)
+    })
   }, [mentionUi?.from, mentionUi?.query])
 
   useEffect(() => {
     if (filtered.length === 0) return
-    setActiveIndex((i) => Math.min(i, filtered.length - 1))
+    queueMicrotask(() => {
+      setActiveIndex((i) => Math.min(i, filtered.length - 1))
+    })
   }, [filtered.length])
 
   useLayoutEffect(() => {
@@ -351,7 +358,9 @@ export function MarkdownBodyEditor({
     if (!editor) return
     editor.on('selectionUpdate', syncMention)
     editor.on('update', syncMention)
-    syncMention()
+    queueMicrotask(() => {
+      syncMention()
+    })
     return () => {
       editor.off('selectionUpdate', syncMention)
       editor.off('update', syncMention)
@@ -359,7 +368,10 @@ export function MarkdownBodyEditor({
   }, [editor, syncMention])
 
   useEffect(() => {
-    if (!courseCode) setMentionUi(null)
+    if (courseCode) return
+    queueMicrotask(() => {
+      setMentionUi(null)
+    })
   }, [courseCode])
 
   const applyPick = useCallback(

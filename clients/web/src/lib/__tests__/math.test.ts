@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseMathDelimitedText } from '../../components/math/math-plain-text'
+import { parseMathDelimitedText } from '../../components/math/math-plain-text-utils'
 import { renderKatexSafe } from '../math'
 
 describe('parseMathDelimitedText', () => {

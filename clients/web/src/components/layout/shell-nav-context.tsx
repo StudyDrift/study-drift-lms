@@ -1,21 +1,5 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type Dispatch,
-  type ReactNode,
-  type SetStateAction,
-} from 'react'
-
-type ShellNavContextValue = {
-  mobileNavOpen: boolean
-  setMobileNavOpen: Dispatch<SetStateAction<boolean>>
-  closeMobileNav: () => void
-}
-
-const ShellNavContext = createContext<ShellNavContextValue | null>(null)
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { ShellNavContext } from './shell-nav-context-core'
 
 export function ShellNavProvider({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -25,12 +9,4 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     [mobileNavOpen, closeMobileNav],
   )
   return <ShellNavContext.Provider value={value}>{children}</ShellNavContext.Provider>
-}
-
-export function useShellNav(): ShellNavContextValue {
-  const ctx = useContext(ShellNavContext)
-  if (!ctx) {
-    throw new Error('useShellNav must be used within ShellNavProvider')
-  }
-  return ctx
 }

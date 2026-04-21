@@ -64,8 +64,9 @@ export default function CourseMyGrades() {
   useEffect(() => {
     if (!courseCode || !canView) return
     let cancelled = false
-    void load().then(() => {
+    queueMicrotask(() => {
       if (cancelled) return
+      void load()
     })
     return () => {
       cancelled = true
