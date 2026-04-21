@@ -54,7 +54,11 @@ fn answer_snippets_for_leak_check(q: &QuizQuestion) -> Vec<String> {
             }
         }
         "numeric" => {
-            if let Some(v) = q.type_config.get("correct").and_then(serde_json::Value::as_f64) {
+            if let Some(v) = q
+                .type_config
+                .get("correct")
+                .and_then(serde_json::Value::as_f64)
+            {
                 out.push(format!("{v}").to_lowercase());
             }
         }
@@ -115,9 +119,8 @@ async fn ai_hint_body(
          any numeric result, any correct choice label, or any LaTeX that matches the model answer. \
          Respond with plain text only (no JSON, no markdown fences), at most 4 sentences."
     );
-    let user_body = format!(
-        "Question stem:\n---\n{stem}\n---\n{concept_block}\nWrite the hint now."
-    );
+    let user_body =
+        format!("Question stem:\n---\n{stem}\n---\n{concept_block}\nWrite the hint now.");
     let messages = vec![
         json!({"role": "system", "content": system}),
         json!({"role": "user", "content": user_body}),
@@ -202,17 +205,19 @@ pub async fn reveal_next_hint(
 
     // No static hints authored: AI fallback up to level 5
     let body = match open_router {
-        Some(client) => match ai_hint_body(pool, client, student_user_id, q, quid, next_level).await {
-            Ok(t) if !hint_leaks_answer(&t, q) => t,
-            Ok(_) => {
-                tracing::warn!(question_id = %quid, "hints.ai_leak_detected");
-                GENERIC_HINT.to_string()
+        Some(client) => {
+            match ai_hint_body(pool, client, student_user_id, q, quid, next_level).await {
+                Ok(t) if !hint_leaks_answer(&t, q) => t,
+                Ok(_) => {
+                    tracing::warn!(question_id = %quid, "hints.ai_leak_detected");
+                    GENERIC_HINT.to_string()
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "hints.ai_fallback");
+                    GENERIC_HINT.to_string()
+                }
             }
-            Err(e) => {
-                tracing::warn!(error = %e, "hints.ai_fallback");
-                GENERIC_HINT.to_string()
-            }
-        },
+        }
         None => {
             tracing::info!("hints.ai_skipped_no_client");
             GENERIC_HINT.to_string()
@@ -231,7 +236,9 @@ pub async fn reveal_next_hint(
     })
 }
 
-pub fn worked_example_steps_from_json(v: &serde_json::Value) -> Vec<crate::models::course_module_quiz::QuizWorkedExampleStep> {
+pub fn worked_example_steps_from_json(
+    v: &serde_json::Value,
+) -> Vec<crate::models::course_module_quiz::QuizWorkedExampleStep> {
     let Some(arr) = v.as_array() else {
         return Vec::new();
     };
@@ -315,6 +322,9 @@ mod tests {
             srs_eligible: true,
         };
         assert!(hint_leaks_answer("Think about Paris.", &q));
-        assert!(!hint_leaks_answer("Think about the capital conceptually.", &q));
+        assert!(!hint_leaks_answer(
+            "Think about the capital conceptually.",
+            &q
+        ));
     }
 }

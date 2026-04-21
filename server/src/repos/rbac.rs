@@ -460,7 +460,10 @@ pub async fn user_has_permission(
     Ok(any_grant_matches(&grants, required))
 }
 
-pub async fn app_role_id_by_name(pool: &PgPool, role_name: &str) -> Result<Option<Uuid>, sqlx::Error> {
+pub async fn app_role_id_by_name(
+    pool: &PgPool,
+    role_name: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
     sqlx::query_scalar(&format!(
         "SELECT id FROM {} WHERE name = $1",
         schema::APP_ROLES
@@ -514,7 +517,10 @@ pub async fn user_exists(pool: &PgPool, user_id: Uuid) -> Result<bool, sqlx::Err
     .await
 }
 
-pub async fn get_user_brief(pool: &PgPool, user_id: Uuid) -> Result<Option<UserBrief>, sqlx::Error> {
+pub async fn get_user_brief(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Option<UserBrief>, sqlx::Error> {
     sqlx::query_as::<_, UserBrief>(&format!(
         r#"SELECT id, email, display_name, sid FROM {} WHERE id = $1"#,
         schema::USERS

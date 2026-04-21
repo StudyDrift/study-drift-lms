@@ -9,7 +9,9 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::models::course::CoursePublic;
-use crate::models::course_module_quiz::{QuizQuestion, QuizQuestionResponseItem, QuizSubmitRequest, QuizSubmitResponse};
+use crate::models::course_module_quiz::{
+    QuizQuestion, QuizQuestionResponseItem, QuizSubmitRequest, QuizSubmitResponse,
+};
 use crate::repos::course_grades;
 use crate::repos::course_module_quizzes;
 use crate::repos::hints;
@@ -19,9 +21,9 @@ use crate::services::hint_service;
 use crate::services::learner_state;
 use crate::services::misconception;
 use crate::services::question_bank;
-use crate::services::srs;
 use crate::services::quiz_attempt_grading;
 use crate::services::quiz_lockdown;
+use crate::services::srs;
 
 pub fn parse_code_test_cases(q: &QuizQuestion) -> Vec<CodeTestCase> {
     q.type_config
@@ -55,15 +57,7 @@ where
         return 1.0;
     };
     misconception::record_wrong_multiple_choice(
-        ex,
-        pool,
-        course_id,
-        user_id,
-        attempt_id,
-        quuid,
-        q,
-        sel,
-        enabled,
+        ex, pool, course_id, user_id, attempt_id, quuid, q, sel, enabled,
     )
     .await
     .map(|_| misconception::mastery_alpha_multiplier_for_misconception_hit())
@@ -200,7 +194,12 @@ pub async fn submit_module_quiz(
         }
         if quiz_row.adaptive_delivery_mode == "cat" {
             for (i, turn) in hist.iter().enumerate() {
-                let Some(qs) = turn.question_id.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) else {
+                let Some(qs) = turn
+                    .question_id
+                    .as_ref()
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                else {
                     return Err(AppError::invalid_input(format!(
                         "adaptiveHistory[{i}] must include questionId for CAT delivery."
                     )));
@@ -213,7 +212,8 @@ pub async fn submit_module_quiz(
             }
         }
         quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
-        let hist_json = serde_json::to_value(&hist).map_err(|e| AppError::invalid_input(e.to_string()))?;
+        let hist_json =
+            serde_json::to_value(&hist).map_err(|e| AppError::invalid_input(e.to_string()))?;
         let mut earned = 0.0_f64;
         let mut possible = 0.0_f64;
         for (i, turn) in hist.iter().enumerate() {
@@ -270,10 +270,7 @@ pub async fn submit_module_quiz(
 
         if quiz_row.show_score_timing != "manual" {
             let attempts = quiz_attempts::list_submitted_attempts_for_item_student(
-                pool,
-                course_id,
-                item_id,
-                user_id,
+                pool, course_id, item_id, user_id,
             )
             .await?;
             if let Some((e, p)) =
@@ -287,11 +284,7 @@ pub async fn submit_module_quiz(
 
         if quiz_row.adaptive_delivery_mode == "cat" {
             crate::services::irt_theta::apply_cat_quiz_theta_updates(
-                pool,
-                course_id,
-                user_id,
-                att.id,
-                &hist,
+                pool, course_id, user_id, att.id, &hist,
             )
             .await?;
         }
@@ -342,239 +335,249 @@ pub async fn submit_module_quiz(
     let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, quiz_row);
 
     let mut concept_touches: Vec<(Uuid, f64, i32, f64)> = Vec::new();
-    let (earned, possible, score_pct, academic_integrity_flag) = if quiz_lockdown::server_enforces_forward_lockdown(mode)
-    {
-        if !responses.is_empty() {
-            return Err(AppError::invalid_input(
+    let (earned, possible, score_pct, academic_integrity_flag) =
+        if quiz_lockdown::server_enforces_forward_lockdown(mode) {
+            if !responses.is_empty() {
+                return Err(AppError::invalid_input(
                 "For lockdown-mode quizzes, omit responses on submit; answers are taken from your saved progress.",
             ));
-        }
-        let db_rows = quiz_attempts::list_responses(pool, att.id).await?;
-        if db_rows.len() != bank.len() {
-            return Err(AppError::invalid_input(
-                "Complete each question in order before submitting this quiz.",
-            ));
-        }
-        for (i, db_row) in db_rows.iter().enumerate() {
-            if db_row.question_index != i as i32 || !db_row.locked {
+            }
+            let db_rows = quiz_attempts::list_responses(pool, att.id).await?;
+            if db_rows.len() != bank.len() {
                 return Err(AppError::invalid_input(
-                    "Quiz responses are incomplete. Use Next after each question, then submit.",
+                    "Complete each question in order before submitting this quiz.",
                 ));
             }
-        }
-        quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
-        let mut earned = 0.0_f64;
-        let mut possible = 0.0_f64;
-        for (i, db_row) in db_rows.iter().enumerate() {
-            let qid = db_row.question_id.as_deref().ok_or_else(|| {
-                AppError::invalid_input("Missing question id on saved response.")
-            })?;
-            let q = by_id
-                .get(qid)
-                .ok_or_else(|| AppError::invalid_input("Invalid question id."))?;
-            let resp_item: QuizQuestionResponseItem =
-                serde_json::from_value(db_row.response_json.clone()).map_err(|e| {
-                    AppError::invalid_input(format!("Could not read saved answer: {e}"))
-                })?;
-            let (mut pts, max_pts, is_ok) = grade_question_with_code_support(q, &resp_item).await?;
-            if course_row.hint_scaffolding_enabled {
-                if let Ok(quuid) = Uuid::parse_str(qid) {
-                    let pen = hints::sum_static_penalty_pct_for_attempt_question(
-                        pool, att.id, quuid, qid, "en",
-                    )
-                    .await
-                    .map_err(AppError::Db)?;
-                    pts = hint_service::apply_hint_penalty_to_points(pts, pen);
-                }
-            }
-            earned += pts;
-            possible += max_pts;
-            let rj = json!({
-                "selectedChoiceIndex": resp_item.selected_choice_index,
-                "selectedChoiceIndices": resp_item.selected_choice_indices,
-                "textAnswer": resp_item.text_answer,
-                "matchingPairs": &resp_item.matching_pairs,
-                "orderingSequence": &resp_item.ordering_sequence,
-                "hotspotClick": &resp_item.hotspot_click,
-                "numericValue": &resp_item.numeric_value,
-                "formulaLatex": &resp_item.formula_latex,
-                "codeSubmission": &resp_item.code_submission,
-                "fileKey": &resp_item.file_key,
-                "audioKey": &resp_item.audio_key,
-                "videoKey": &resp_item.video_key,
-            });
-            quiz_attempts::insert_response(
-                &mut *tx,
-                att.id,
-                i as i32,
-                Some(qid),
-                &q.question_type,
-                Some(q.prompt.as_str()),
-                &rj,
-                is_ok,
-                Some(pts),
-                max_pts,
-                false,
-            )
-            .await?;
-            let extra: &[Uuid] = Uuid::parse_str(qid)
-                .ok()
-                .and_then(|u| tag_map.get(&u).map(|v| v.as_slice()))
-                .unwrap_or(&[]);
-            let hint_n = *hint_counts.get(qid).unwrap_or(&0);
-            let ms = hint_service::mastery_scale_for_hint_uses(hint_n);
-            let mis_mult = misconception_ema_multiplier_for_response(
-                &mut *tx,
-                pool,
-                course_id,
-                user_id,
-                att.id,
-                q,
-                &resp_item,
-                qid,
-                is_ok,
-                course_row.misconception_detection_enabled,
-            )
-            .await;
-            learner_state::collect_concept_touches_from_question(
-                q,
-                i as i32,
-                pts,
-                max_pts,
-                extra,
-                ms,
-                mis_mult,
-                &mut concept_touches,
-            );
-        }
-        let score_pct = if possible > 0.0 {
-            ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
-        } else {
-            0.0
-        };
-        let academic_integrity_flag =
-            academic_integrity_from_focus_loss(mode, quiz_row.focus_loss_threshold, pool, att.id)
-                .await?;
-        (earned, possible, score_pct, academic_integrity_flag)
-    } else {
-        if responses.is_empty() {
-            return Err(AppError::invalid_input(
-                "responses is required for non-adaptive quizzes.",
-            ));
-        }
-        if !resolved.uses_server_question_sampling {
-            if let Some(pool_n) = quiz_row.random_question_pool_count {
-                if pool_n >= 1 && responses.len() != pool_n as usize {
+            for (i, db_row) in db_rows.iter().enumerate() {
+                if db_row.question_index != i as i32 || !db_row.locked {
                     return Err(AppError::invalid_input(
-                        "Submitted response count does not match the configured question pool size.",
+                        "Quiz responses are incomplete. Use Next after each question, then submit.",
                     ));
                 }
             }
-        }
-        for r in &responses {
-            if !by_id.contains_key(&r.question_id) {
-                return Err(AppError::invalid_input(
-                    "One or more question ids are not part of this quiz.",
-                ));
-            }
-        }
-
-        quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
-
-        let mut earned = 0.0_f64;
-        let mut possible = 0.0_f64;
-        for (i, resp_item) in responses.iter().enumerate() {
-            let q = by_id
-                .get(&resp_item.question_id)
-                .ok_or_else(|| AppError::invalid_input("Invalid question id."))?;
-            let (mut pts, max_pts, is_ok) = grade_question_with_code_support(q, resp_item).await?;
-            if course_row.hint_scaffolding_enabled {
-                if let Ok(quuid) = Uuid::parse_str(&resp_item.question_id) {
-                    let pen = hints::sum_static_penalty_pct_for_attempt_question(
-                        pool,
-                        att.id,
-                        quuid,
-                        resp_item.question_id.as_str(),
-                        "en",
-                    )
-                    .await
-                    .map_err(AppError::Db)?;
-                    pts = hint_service::apply_hint_penalty_to_points(pts, pen);
+            quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
+            let mut earned = 0.0_f64;
+            let mut possible = 0.0_f64;
+            for (i, db_row) in db_rows.iter().enumerate() {
+                let qid = db_row.question_id.as_deref().ok_or_else(|| {
+                    AppError::invalid_input("Missing question id on saved response.")
+                })?;
+                let q = by_id
+                    .get(qid)
+                    .ok_or_else(|| AppError::invalid_input("Invalid question id."))?;
+                let resp_item: QuizQuestionResponseItem =
+                    serde_json::from_value(db_row.response_json.clone()).map_err(|e| {
+                        AppError::invalid_input(format!("Could not read saved answer: {e}"))
+                    })?;
+                let (mut pts, max_pts, is_ok) =
+                    grade_question_with_code_support(q, &resp_item).await?;
+                if course_row.hint_scaffolding_enabled {
+                    if let Ok(quuid) = Uuid::parse_str(qid) {
+                        let pen = hints::sum_static_penalty_pct_for_attempt_question(
+                            pool, att.id, quuid, qid, "en",
+                        )
+                        .await
+                        .map_err(AppError::Db)?;
+                        pts = hint_service::apply_hint_penalty_to_points(pts, pen);
+                    }
                 }
+                earned += pts;
+                possible += max_pts;
+                let rj = json!({
+                    "selectedChoiceIndex": resp_item.selected_choice_index,
+                    "selectedChoiceIndices": resp_item.selected_choice_indices,
+                    "textAnswer": resp_item.text_answer,
+                    "matchingPairs": &resp_item.matching_pairs,
+                    "orderingSequence": &resp_item.ordering_sequence,
+                    "hotspotClick": &resp_item.hotspot_click,
+                    "numericValue": &resp_item.numeric_value,
+                    "formulaLatex": &resp_item.formula_latex,
+                    "codeSubmission": &resp_item.code_submission,
+                    "fileKey": &resp_item.file_key,
+                    "audioKey": &resp_item.audio_key,
+                    "videoKey": &resp_item.video_key,
+                });
+                quiz_attempts::insert_response(
+                    &mut *tx,
+                    att.id,
+                    i as i32,
+                    Some(qid),
+                    &q.question_type,
+                    Some(q.prompt.as_str()),
+                    &rj,
+                    is_ok,
+                    Some(pts),
+                    max_pts,
+                    false,
+                )
+                .await?;
+                let extra: &[Uuid] = Uuid::parse_str(qid)
+                    .ok()
+                    .and_then(|u| tag_map.get(&u).map(|v| v.as_slice()))
+                    .unwrap_or(&[]);
+                let hint_n = *hint_counts.get(qid).unwrap_or(&0);
+                let ms = hint_service::mastery_scale_for_hint_uses(hint_n);
+                let mis_mult = misconception_ema_multiplier_for_response(
+                    &mut *tx,
+                    pool,
+                    course_id,
+                    user_id,
+                    att.id,
+                    q,
+                    &resp_item,
+                    qid,
+                    is_ok,
+                    course_row.misconception_detection_enabled,
+                )
+                .await;
+                learner_state::collect_concept_touches_from_question(
+                    q,
+                    i as i32,
+                    pts,
+                    max_pts,
+                    extra,
+                    ms,
+                    mis_mult,
+                    &mut concept_touches,
+                );
             }
-            earned += pts;
-            possible += max_pts;
-            let rj = json!({
-                "selectedChoiceIndex": resp_item.selected_choice_index,
-                "selectedChoiceIndices": resp_item.selected_choice_indices,
-                "textAnswer": resp_item.text_answer,
-                "matchingPairs": &resp_item.matching_pairs,
-                "orderingSequence": &resp_item.ordering_sequence,
-                "hotspotClick": &resp_item.hotspot_click,
-                "numericValue": &resp_item.numeric_value,
-                "formulaLatex": &resp_item.formula_latex,
-                "codeSubmission": &resp_item.code_submission,
-                "fileKey": &resp_item.file_key,
-                "audioKey": &resp_item.audio_key,
-                "videoKey": &resp_item.video_key,
-            });
-            quiz_attempts::insert_response(
-                &mut *tx,
+            let score_pct = if possible > 0.0 {
+                ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
+            } else {
+                0.0
+            };
+            let academic_integrity_flag = academic_integrity_from_focus_loss(
+                mode,
+                quiz_row.focus_loss_threshold,
+                pool,
                 att.id,
-                i as i32,
-                Some(resp_item.question_id.as_str()),
-                &q.question_type,
-                Some(q.prompt.as_str()),
-                &rj,
-                is_ok,
-                Some(pts),
-                max_pts,
-                false,
             )
             .await?;
-            let extra: &[Uuid] = Uuid::parse_str(&resp_item.question_id)
-                .ok()
-                .and_then(|u| tag_map.get(&u).map(|v| v.as_slice()))
-                .unwrap_or(&[]);
-            let hint_n = *hint_counts
-                .get(resp_item.question_id.as_str())
-                .unwrap_or(&0);
-            let ms = hint_service::mastery_scale_for_hint_uses(hint_n);
-            let mis_mult = misconception_ema_multiplier_for_response(
-                &mut *tx,
-                pool,
-                course_id,
-                user_id,
-                att.id,
-                q,
-                resp_item,
-                resp_item.question_id.as_str(),
-                is_ok,
-                course_row.misconception_detection_enabled,
-            )
-            .await;
-            learner_state::collect_concept_touches_from_question(
-                q,
-                i as i32,
-                pts,
-                max_pts,
-                extra,
-                ms,
-                mis_mult,
-                &mut concept_touches,
-            );
-        }
-
-        let score_pct = if possible > 0.0 {
-            ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
+            (earned, possible, score_pct, academic_integrity_flag)
         } else {
-            0.0
-        };
-        let academic_integrity_flag =
-            academic_integrity_from_focus_loss(mode, quiz_row.focus_loss_threshold, pool, att.id)
+            if responses.is_empty() {
+                return Err(AppError::invalid_input(
+                    "responses is required for non-adaptive quizzes.",
+                ));
+            }
+            if !resolved.uses_server_question_sampling {
+                if let Some(pool_n) = quiz_row.random_question_pool_count {
+                    if pool_n >= 1 && responses.len() != pool_n as usize {
+                        return Err(AppError::invalid_input(
+                        "Submitted response count does not match the configured question pool size.",
+                    ));
+                    }
+                }
+            }
+            for r in &responses {
+                if !by_id.contains_key(&r.question_id) {
+                    return Err(AppError::invalid_input(
+                        "One or more question ids are not part of this quiz.",
+                    ));
+                }
+            }
+
+            quiz_attempts::delete_responses_for_attempt(&mut *tx, att.id).await?;
+
+            let mut earned = 0.0_f64;
+            let mut possible = 0.0_f64;
+            for (i, resp_item) in responses.iter().enumerate() {
+                let q = by_id
+                    .get(&resp_item.question_id)
+                    .ok_or_else(|| AppError::invalid_input("Invalid question id."))?;
+                let (mut pts, max_pts, is_ok) =
+                    grade_question_with_code_support(q, resp_item).await?;
+                if course_row.hint_scaffolding_enabled {
+                    if let Ok(quuid) = Uuid::parse_str(&resp_item.question_id) {
+                        let pen = hints::sum_static_penalty_pct_for_attempt_question(
+                            pool,
+                            att.id,
+                            quuid,
+                            resp_item.question_id.as_str(),
+                            "en",
+                        )
+                        .await
+                        .map_err(AppError::Db)?;
+                        pts = hint_service::apply_hint_penalty_to_points(pts, pen);
+                    }
+                }
+                earned += pts;
+                possible += max_pts;
+                let rj = json!({
+                    "selectedChoiceIndex": resp_item.selected_choice_index,
+                    "selectedChoiceIndices": resp_item.selected_choice_indices,
+                    "textAnswer": resp_item.text_answer,
+                    "matchingPairs": &resp_item.matching_pairs,
+                    "orderingSequence": &resp_item.ordering_sequence,
+                    "hotspotClick": &resp_item.hotspot_click,
+                    "numericValue": &resp_item.numeric_value,
+                    "formulaLatex": &resp_item.formula_latex,
+                    "codeSubmission": &resp_item.code_submission,
+                    "fileKey": &resp_item.file_key,
+                    "audioKey": &resp_item.audio_key,
+                    "videoKey": &resp_item.video_key,
+                });
+                quiz_attempts::insert_response(
+                    &mut *tx,
+                    att.id,
+                    i as i32,
+                    Some(resp_item.question_id.as_str()),
+                    &q.question_type,
+                    Some(q.prompt.as_str()),
+                    &rj,
+                    is_ok,
+                    Some(pts),
+                    max_pts,
+                    false,
+                )
                 .await?;
-        (earned, possible, score_pct, academic_integrity_flag)
-    };
+                let extra: &[Uuid] = Uuid::parse_str(&resp_item.question_id)
+                    .ok()
+                    .and_then(|u| tag_map.get(&u).map(|v| v.as_slice()))
+                    .unwrap_or(&[]);
+                let hint_n = *hint_counts
+                    .get(resp_item.question_id.as_str())
+                    .unwrap_or(&0);
+                let ms = hint_service::mastery_scale_for_hint_uses(hint_n);
+                let mis_mult = misconception_ema_multiplier_for_response(
+                    &mut *tx,
+                    pool,
+                    course_id,
+                    user_id,
+                    att.id,
+                    q,
+                    resp_item,
+                    resp_item.question_id.as_str(),
+                    is_ok,
+                    course_row.misconception_detection_enabled,
+                )
+                .await;
+                learner_state::collect_concept_touches_from_question(
+                    q,
+                    i as i32,
+                    pts,
+                    max_pts,
+                    extra,
+                    ms,
+                    mis_mult,
+                    &mut concept_touches,
+                );
+            }
+
+            let score_pct = if possible > 0.0 {
+                ((earned / possible) * 100.0).clamp(0.0, 100.0) as f32
+            } else {
+                0.0
+            };
+            let academic_integrity_flag = academic_integrity_from_focus_loss(
+                mode,
+                quiz_row.focus_loss_threshold,
+                pool,
+                att.id,
+            )
+            .await?;
+            (earned, possible, score_pct, academic_integrity_flag)
+        };
 
     learner_state::apply_quiz_grades_mastery(
         &mut *tx,
@@ -587,8 +590,14 @@ pub async fn submit_module_quiz(
 
     for q in &bank {
         if let Ok(quid) = Uuid::parse_str(&q.id) {
-            srs::maybe_seed_after_quiz_exposure(&mut *tx, course_row, user_id, quid, q.srs_eligible)
-                .await?;
+            srs::maybe_seed_after_quiz_exposure(
+                &mut *tx,
+                course_row,
+                user_id,
+                quid,
+                q.srs_eligible,
+            )
+            .await?;
         }
     }
 
@@ -612,10 +621,7 @@ pub async fn submit_module_quiz(
 
     if quiz_row.show_score_timing != "manual" {
         let attempts = quiz_attempts::list_submitted_attempts_for_item_student(
-            pool,
-            course_id,
-            item_id,
-            user_id,
+            pool, course_id, item_id, user_id,
         )
         .await?;
         if let Some((e, p)) =

@@ -165,10 +165,9 @@ fn append_overlay_to_page(
 
     let old = page_dict.remove(b"Contents");
     let new_val = match old {
-        Some(Object::Reference(r)) => Object::Array(vec![
-            Object::Reference(r),
-            Object::Reference(stream_id),
-        ]),
+        Some(Object::Reference(r)) => {
+            Object::Array(vec![Object::Reference(r), Object::Reference(stream_id)])
+        }
         Some(Object::Array(mut a)) => {
             a.push(Object::Reference(stream_id));
             Object::Array(a)

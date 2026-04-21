@@ -75,7 +75,8 @@ pub async fn list_states_for_user(
     user_id: Uuid,
     concept_ids: Option<&[Uuid]>,
 ) -> Result<Vec<LearnerConceptStateRow>, sqlx::Error> {
-    let rows: Vec<LearnerConceptStateRow> = if let Some(ids) = concept_ids.filter(|x| !x.is_empty()) {
+    let rows: Vec<LearnerConceptStateRow> = if let Some(ids) = concept_ids.filter(|x| !x.is_empty())
+    {
         sqlx::query_as::<_, LearnerConceptStateRow>(&format!(
             r#"
             SELECT
@@ -256,9 +257,7 @@ where
     .fetch_optional(&mut *executor)
     .await?;
 
-    let (stored_mastery, last_seen_at) = state_row
-        .map(|(m, t)| (m, t))
-        .unwrap_or((0.0, None));
+    let (stored_mastery, last_seen_at) = state_row.map(|(m, t)| (m, t)).unwrap_or((0.0, None));
 
     let m_old_eff = effective_mastery_engine(stored_mastery, last_seen_at, decay_lambda);
     let score = input.score.clamp(0.0, 1.0);
@@ -312,7 +311,8 @@ where
             needs_review_at = EXCLUDED.needs_review_at,
             updated_at = NOW()
         "#,
-        schema::LEARNER_CONCEPT_STATES, schema::LEARNER_CONCEPT_STATES,
+        schema::LEARNER_CONCEPT_STATES,
+        schema::LEARNER_CONCEPT_STATES,
     ))
     .bind(input.user_id)
     .bind(input.concept_id)
@@ -376,9 +376,7 @@ where
     .fetch_optional(&mut *executor)
     .await?;
 
-    let (stored_mastery, last_seen_at) = state_row
-        .map(|(m, t)| (m, t))
-        .unwrap_or((0.0, None));
+    let (stored_mastery, last_seen_at) = state_row.map(|(m, t)| (m, t)).unwrap_or((0.0, None));
 
     let m_old_eff = effective_mastery_engine(stored_mastery, last_seen_at, decay_lambda);
     let score = input.score.clamp(0.0, 1.0);
@@ -431,7 +429,8 @@ where
             needs_review_at = EXCLUDED.needs_review_at,
             updated_at = NOW()
         "#,
-        schema::LEARNER_CONCEPT_STATES, schema::LEARNER_CONCEPT_STATES,
+        schema::LEARNER_CONCEPT_STATES,
+        schema::LEARNER_CONCEPT_STATES,
     ))
     .bind(input.user_id)
     .bind(input.concept_id)

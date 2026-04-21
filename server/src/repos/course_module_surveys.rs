@@ -38,7 +38,10 @@ pub async fn insert_empty_for_item(
     Ok(())
 }
 
-pub async fn list_for_course(pool: &PgPool, course_id: Uuid) -> Result<Vec<SurveyResponse>, sqlx::Error> {
+pub async fn list_for_course(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<Vec<SurveyResponse>, sqlx::Error> {
     let rows: Vec<CourseItemSurveyRow> = sqlx::query_as(&format!(
         r#"
         SELECT c.id, c.course_id, c.title, s.description, s.anonymity_mode::text AS anonymity_mode,
@@ -57,7 +60,10 @@ pub async fn list_for_course(pool: &PgPool, course_id: Uuid) -> Result<Vec<Surve
     Ok(rows.into_iter().map(map_row).collect())
 }
 
-pub async fn get_for_item(pool: &PgPool, item_id: Uuid) -> Result<Option<SurveyResponse>, sqlx::Error> {
+pub async fn get_for_item(
+    pool: &PgPool,
+    item_id: Uuid,
+) -> Result<Option<SurveyResponse>, sqlx::Error> {
     let row: Option<CourseItemSurveyRow> = sqlx::query_as(&format!(
         r#"
         SELECT c.id, c.course_id, c.title, s.description, s.anonymity_mode::text AS anonymity_mode,
@@ -138,13 +144,14 @@ pub async fn submit_response(
     user_id: Uuid,
     answers: &Value,
 ) -> Result<(bool, bool), sqlx::Error> {
-    let row: Option<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
-        "SELECT anonymity_mode::text, opens_at, closes_at FROM {} WHERE structure_item_id = $1",
-        schema::MODULE_SURVEYS
-    ))
-    .bind(item_id)
-    .fetch_optional(pool)
-    .await?;
+    let row: Option<(String, Option<DateTime<Utc>>, Option<DateTime<Utc>>)> =
+        sqlx::query_as(&format!(
+            "SELECT anonymity_mode::text, opens_at, closes_at FROM {} WHERE structure_item_id = $1",
+            schema::MODULE_SURVEYS
+        ))
+        .bind(item_id)
+        .fetch_optional(pool)
+        .await?;
     let Some((mode, opens_at, closes_at)) = row else {
         return Ok((false, false));
     };
@@ -153,7 +160,11 @@ pub async fn submit_response(
         return Ok((false, false));
     }
     let hash = submission_hash(user_id, item_id);
-    let stored_user_id = if mode == "anonymous" { None } else { Some(user_id) };
+    let stored_user_id = if mode == "anonymous" {
+        None
+    } else {
+        Some(user_id)
+    };
     let inserted = sqlx::query(&format!(
         r#"
         INSERT INTO {} (structure_item_id, user_id, submission_hash, answers_json)

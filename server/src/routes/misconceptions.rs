@@ -15,13 +15,14 @@ use crate::repos::course;
 use crate::repos::course_grants;
 use crate::repos::enrollment;
 use crate::repos::misconceptions as mc_repo;
-use crate::repos::rbac;
 use crate::repos::question_bank as qb_repo;
+use crate::repos::rbac;
 use crate::services::misconception;
 use crate::services::question_bank;
 use crate::state::AppState;
 
-const MISCONCEPTION_SEED_LIBRARY_JSON: &str = include_str!("../../seeds/misconceptions/library.json");
+const MISCONCEPTION_SEED_LIBRARY_JSON: &str =
+    include_str!("../../seeds/misconceptions/library.json");
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -47,7 +48,11 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-async fn require_course_items_create(state: &AppState, course_code: &str, user_id: Uuid) -> Result<(), AppError> {
+async fn require_course_items_create(
+    state: &AppState,
+    course_code: &str,
+    user_id: Uuid,
+) -> Result<(), AppError> {
     let required = course_grants::course_items_create_permission(course_code);
     assert_permission(&state.pool, user_id, &required).await
 }
@@ -114,16 +119,12 @@ async fn list_misconceptions_handler(
         return Err(AppError::NotFound);
     };
     let lim = q.limit.unwrap_or(200);
-    let rows = mc_repo::list_for_course(
-        &state.pool,
-        course_id,
-        q.concept_id,
-        q.q.as_deref(),
-        lim,
-    )
-    .await
-    .map_err(AppError::Db)?;
-    Ok(Json(rows.into_iter().map(MisconceptionApiRow::from).collect()))
+    let rows = mc_repo::list_for_course(&state.pool, course_id, q.concept_id, q.q.as_deref(), lim)
+        .await
+        .map_err(AppError::Db)?;
+    Ok(Json(
+        rows.into_iter().map(MisconceptionApiRow::from).collect(),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -229,9 +230,12 @@ async fn import_seed_library_handler(
         return Err(AppError::NotFound);
     };
 
-    let entries: Vec<SeedLibraryFileEntry> = serde_json::from_str(MISCONCEPTION_SEED_LIBRARY_JSON).map_err(|_| {
-        AppError::invalid_input("Built-in misconception seed library is invalid JSON (server bug).")
-    })?;
+    let entries: Vec<SeedLibraryFileEntry> = serde_json::from_str(MISCONCEPTION_SEED_LIBRARY_JSON)
+        .map_err(|_| {
+            AppError::invalid_input(
+                "Built-in misconception seed library is invalid JSON (server bug).",
+            )
+        })?;
 
     if req.replace_existing_seeds {
         mc_repo::delete_seed_misconceptions_for_course(&state.pool, course_id)

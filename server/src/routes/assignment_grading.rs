@@ -182,7 +182,9 @@ async fn list_submissions_handler(
         "ungraded" => GradedFilter::Ungraded,
         _ => GradedFilter::All,
     };
-    let rows = module_assignment_submissions::list_for_assignment(&state.pool, course_id, item_id, filter).await?;
+    let rows =
+        module_assignment_submissions::list_for_assignment(&state.pool, course_id, item_id, filter)
+            .await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in &rows {
         let file = if let Some(fid) = r.attachment_file_id {
@@ -245,7 +247,9 @@ async fn post_submission_json_handler(
         ));
     }
 
-    let Some(file_row) = course_files::get_for_course(&state.pool, &course_code, body.course_file_id).await? else {
+    let Some(file_row) =
+        course_files::get_for_course(&state.pool, &course_code, body.course_file_id).await?
+    else {
         return Err(AppError::NotFound);
     };
 
@@ -259,7 +263,13 @@ async fn post_submission_json_handler(
     };
 
     if submitted_by != user.user_id {
-        let is_student = enrollment::user_has_enrollment_role(&state.pool, &course_code, submitted_by, "student").await?;
+        let is_student = enrollment::user_has_enrollment_role(
+            &state.pool,
+            &course_code,
+            submitted_by,
+            "student",
+        )
+        .await?;
         if !is_student {
             return Err(AppError::invalid_input(
                 "studentUserId must refer to a student enrolled in this course.",
@@ -395,7 +405,9 @@ async fn get_submission_handler(
     let staff = enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await?;
 
     let course_id = resolve_course_id(&state, &course_code).await?;
-    let Some(row) = module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id).await?
+    let Some(row) =
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
     else {
         return Err(AppError::NotFound);
     };
@@ -461,7 +473,9 @@ async fn list_annotations_handler(
     let staff = enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await?;
 
     let course_id = resolve_course_id(&state, &course_code).await?;
-    let Some(row) = module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id).await?
+    let Some(row) =
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
     else {
         return Err(AppError::NotFound);
     };
@@ -472,7 +486,8 @@ async fn list_annotations_handler(
         return Err(AppError::Forbidden);
     }
 
-    let list = submission_annotations::list_active_for_submission(&state.pool, submission_id).await?;
+    let list =
+        submission_annotations::list_active_for_submission(&state.pool, submission_id).await?;
     let mapped: Vec<_> = list.iter().map(ann_row).collect();
     Ok(Json(json!({ "annotations": mapped })))
 }
@@ -508,7 +523,9 @@ async fn post_annotation_handler(
     check_annotation_write_rate_limit(user.user_id)?;
 
     let course_id = resolve_course_id(&state, &course_code).await?;
-    let Some(row) = module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id).await?
+    let Some(row) =
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
     else {
         return Err(AppError::NotFound);
     };
@@ -581,7 +598,9 @@ async fn patch_annotation_handler(
     check_annotation_write_rate_limit(user.user_id)?;
 
     let course_id = resolve_course_id(&state, &course_code).await?;
-    let Some(sub) = module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id).await?
+    let Some(sub) =
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
     else {
         return Err(AppError::NotFound);
     };
@@ -599,9 +618,14 @@ async fn patch_annotation_handler(
         return Err(AppError::Forbidden);
     }
 
-    let updated = submission_annotations::patch_body(&state.pool, annotation_id, user.user_id, body.body.as_deref())
-        .await?
-        .ok_or(AppError::NotFound)?;
+    let updated = submission_annotations::patch_body(
+        &state.pool,
+        annotation_id,
+        user.user_id,
+        body.body.as_deref(),
+    )
+    .await?
+    .ok_or(AppError::NotFound)?;
 
     Ok(Json(json!({ "annotation": ann_row(&updated) })))
 }
@@ -622,7 +646,9 @@ async fn delete_annotation_handler(
     check_annotation_write_rate_limit(user.user_id)?;
 
     let course_id = resolve_course_id(&state, &course_code).await?;
-    let Some(sub) = module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id).await?
+    let Some(sub) =
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
     else {
         return Err(AppError::NotFound);
     };
@@ -671,7 +697,9 @@ async fn download_annotated_pdf_handler(
     let staff = enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await?;
 
     let course_id = resolve_course_id(&state, &course_code).await?;
-    let Some(sub) = module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id).await?
+    let Some(sub) =
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
     else {
         return Err(AppError::NotFound);
     };
@@ -683,7 +711,9 @@ async fn download_annotated_pdf_handler(
     }
 
     let Some(fid) = sub.attachment_file_id else {
-        return Err(AppError::invalid_input("Submission has no attachment file."));
+        return Err(AppError::invalid_input(
+            "Submission has no attachment file.",
+        ));
     };
     let Some(file_row) = course_files::get_for_course(&state.pool, &course_code, fid).await? else {
         return Err(AppError::NotFound);
@@ -694,12 +724,17 @@ async fn download_annotated_pdf_handler(
         ));
     }
 
-    let path = course_files::blob_disk_path(&state.course_files_root, &course_code, &file_row.storage_key);
+    let path = course_files::blob_disk_path(
+        &state.course_files_root,
+        &course_code,
+        &file_row.storage_key,
+    );
     let pdf_bytes = tokio::fs::read(&path)
         .await
         .map_err(|_| AppError::NotFound)?;
 
-    let annotations = submission_annotations::list_active_for_submission(&state.pool, submission_id).await?;
+    let annotations =
+        submission_annotations::list_active_for_submission(&state.pool, submission_id).await?;
     let merged = submission_annotated_pdf::merge_annotations_into_pdf(&pdf_bytes, &annotations);
 
     Ok(Response::builder()

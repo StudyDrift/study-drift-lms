@@ -318,7 +318,8 @@ where
             due_count = {}.due_count + $7,
             updated_at = NOW()
         "#,
-        schema::SRS_ITEM_STATES, schema::SRS_ITEM_STATES
+        schema::SRS_ITEM_STATES,
+        schema::SRS_ITEM_STATES
     ))
     .bind(user_id)
     .bind(question_id)
@@ -432,7 +433,10 @@ pub async fn get_question_srs_meta(
     .await
 }
 
-pub async fn avg_easiness_for_user(pool: &PgPool, user_id: Uuid) -> Result<Option<f64>, sqlx::Error> {
+pub async fn avg_easiness_for_user(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Option<f64>, sqlx::Error> {
     let v: Option<f64> = sqlx::query_scalar(&format!(
         r#"
         SELECT AVG((s.easiness_factor)::float8)

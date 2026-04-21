@@ -35,7 +35,11 @@ If you did not request this, you can ignore this message.\n"
     );
 
     let email = Message::builder()
-        .from(from_str.parse().map_err(|e| format!("invalid SMTP_FROM: {e}"))?)
+        .from(
+            from_str
+                .parse()
+                .map_err(|e| format!("invalid SMTP_FROM: {e}"))?,
+        )
         .to(to_email
             .parse()
             .map_err(|e| format!("invalid recipient address: {e}"))?)
@@ -43,7 +47,10 @@ If you did not request this, you can ignore this message.\n"
         .body(body)
         .map_err(|e| e.to_string())?;
 
-    let creds = match (settings.smtp_user.as_deref(), settings.smtp_password.as_deref()) {
+    let creds = match (
+        settings.smtp_user.as_deref(),
+        settings.smtp_password.as_deref(),
+    ) {
         (Some(u), Some(p)) if !u.is_empty() => Some(Credentials::new(u.to_string(), p.to_string())),
         _ => None,
     };

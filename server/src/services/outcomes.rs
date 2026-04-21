@@ -99,7 +99,8 @@ pub async fn add_outcome_link(
             ));
         }
         let Some(quiz_row) =
-            course_module_quizzes::get_for_course_item(pool, course_id, req.structure_item_id).await?
+            course_module_quizzes::get_for_course_item(pool, course_id, req.structure_item_id)
+                .await?
         else {
             return Err(AppError::invalid_input("Quiz not found for that item."));
         };
@@ -154,8 +155,9 @@ pub async fn add_outcome_link(
         }
     };
 
-    let enrolled =
-        enrollment::list_student_users_for_course_code(pool, course_code).await?.len() as i32;
+    let enrolled = enrollment::list_student_users_for_course_code(pool, course_code)
+        .await?
+        .len() as i32;
 
     let progress = match kind {
         "quiz_question" => {

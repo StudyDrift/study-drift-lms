@@ -49,10 +49,7 @@ where
     if !feature_enabled {
         return None;
     }
-    if !matches!(
-        q.question_type.as_str(),
-        "multiple_choice" | "true_false"
-    ) {
+    if !matches!(q.question_type.as_str(), "multiple_choice" | "true_false") {
         return None;
     }
     if q.choice_ids.len() != q.choices.len() || q.choice_ids.is_empty() {

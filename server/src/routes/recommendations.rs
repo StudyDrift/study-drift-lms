@@ -12,14 +12,17 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::http_auth::{assert_permission, auth_user};
 use crate::repos::course;
+use crate::repos::course_structure;
 use crate::repos::enrollment;
 use crate::repos::recommendations as rec_repo;
-use crate::repos::course_structure;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/recommendations/event", post(post_recommendation_event))
+        .route(
+            "/api/v1/recommendations/event",
+            post(post_recommendation_event),
+        )
         .route(
             "/api/v1/courses/{course_code}/recommendation-overrides",
             post(post_recommendation_override),
@@ -47,9 +50,12 @@ async fn post_recommendation_event(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = auth_user(&state, &headers)?;
     if !["impression", "click", "dismiss"].contains(&body.event_type.as_str()) {
-        return Err(AppError::invalid_input("eventType must be impression, click, or dismiss."));
+        return Err(AppError::invalid_input(
+            "eventType must be impression, click, or dismiss.",
+        ));
     }
-    let ok = enrollment::user_has_access_by_course_id(&state.pool, body.course_id, user.user_id).await?;
+    let ok =
+        enrollment::user_has_access_by_course_id(&state.pool, body.course_id, user.user_id).await?;
     if !ok {
         return Err(AppError::Forbidden);
     }
@@ -91,10 +97,14 @@ async fn post_recommendation_override(
     };
 
     if body.override_type != "pin" && body.override_type != "suppress" {
-        return Err(AppError::invalid_input("overrideType must be pin or suppress."));
+        return Err(AppError::invalid_input(
+            "overrideType must be pin or suppress.",
+        ));
     }
     if body.override_type == "pin" {
-        let n = rec_repo::count_pins_for_course(&state.pool, course_row.id).await.map_err(AppError::Db)?;
+        let n = rec_repo::count_pins_for_course(&state.pool, course_row.id)
+            .await
+            .map_err(AppError::Db)?;
         if n >= 3 {
             return Err(AppError::invalid_input(
                 "At most three pinned recommendations per course. Remove a pin before adding another.",
@@ -120,7 +130,9 @@ async fn post_recommendation_override(
     .await
     .map_err(AppError::Db)?;
     if n == 0 {
-        return Err(AppError::invalid_input("structureItemId is not part of this course outline."));
+        return Err(AppError::invalid_input(
+            "structureItemId is not part of this course outline.",
+        ));
     }
 
     let row = rec_repo::insert_override(

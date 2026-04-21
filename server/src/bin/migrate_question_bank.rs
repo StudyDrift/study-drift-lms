@@ -33,7 +33,8 @@ async fn main() -> anyhow::Result<()> {
         if it.kind != "quiz" {
             continue;
         }
-        let Some(qz) = course_module_quizzes::get_for_course_item(pool, course_id, it.id).await? else {
+        let Some(qz) = course_module_quizzes::get_for_course_item(pool, course_id, it.id).await?
+        else {
             continue;
         };
         if qz.questions_json.0.is_empty() {

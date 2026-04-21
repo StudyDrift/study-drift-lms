@@ -82,7 +82,9 @@ struct AiLevelRaw {
 }
 
 fn trim_title(s: &Option<String>) -> Option<String> {
-    s.as_ref().map(|t| t.trim().to_string()).filter(|t| !t.is_empty())
+    s.as_ref()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
 }
 
 /// Pad criteria so every row has the same number of levels; sync level labels from the first row (matches web editor).
@@ -112,7 +114,11 @@ fn normalize_rubric_grid(mut r: RubricDefinition) -> RubricDefinition {
         }
     }
 
-    let ref_labels: Vec<String> = r.criteria[0].levels.iter().map(|l| l.label.clone()).collect();
+    let ref_labels: Vec<String> = r.criteria[0]
+        .levels
+        .iter()
+        .map(|l| l.label.clone())
+        .collect();
     for c in r.criteria.iter_mut().skip(1) {
         for (i, lvl) in c.levels.iter_mut().enumerate() {
             if let Some(lab) = ref_labels.get(i) {
@@ -208,11 +214,7 @@ pub async fn generate_assignment_rubric(
     let assignment_block = assignment_markdown
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|md| {
-            format!(
-                "Full assignment instructions (Markdown):\n---\n{md}\n---\n\n",
-            )
-        })
+        .map(|md| format!("Full assignment instructions (Markdown):\n---\n{md}\n---\n\n",))
         .unwrap_or_default();
 
     let user_body = format!(

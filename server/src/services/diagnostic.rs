@@ -151,7 +151,11 @@ struct PlacementRuleRow {
     start_item_id: Uuid,
 }
 
-fn placement_item_from_rules(rules: &JsonValue, mastery: &HashMap<Uuid, f64>, fallback: Uuid) -> Uuid {
+fn placement_item_from_rules(
+    rules: &JsonValue,
+    mastery: &HashMap<Uuid, f64>,
+    fallback: Uuid,
+) -> Uuid {
     let Some(arr) = rules.as_array() else {
         return fallback;
     };
@@ -198,14 +202,20 @@ async fn pick_next_question_id(
         qb_repo::list_active_diagnostic_question_ids(pool, course_id, &diagnostic.concept_ids)
             .await
             .map_err(AppError::Db)?;
-    let available: Vec<Uuid> = pool_ids.into_iter().filter(|id| !used.contains(id)).collect();
+    let available: Vec<Uuid> = pool_ids
+        .into_iter()
+        .filter(|id| !used.contains(id))
+        .collect();
     if available.is_empty() {
         return Ok(None);
     }
 
     let mut entities: Vec<QuestionEntity> = Vec::new();
     for pid in &available {
-        if let Some(e) = qb_repo::get_question(pool, course_id, *pid).await.map_err(AppError::Db)? {
+        if let Some(e) = qb_repo::get_question(pool, course_id, *pid)
+            .await
+            .map_err(AppError::Db)?
+        {
             entities.push(e);
         }
     }
@@ -213,13 +223,10 @@ async fn pick_next_question_id(
         return Ok(None);
     }
 
-    let tag_rows = qb_repo::list_concept_tags_for_questions(
-        pool,
-        &available,
-        &diagnostic.concept_ids,
-    )
-    .await
-    .map_err(AppError::Db)?;
+    let tag_rows =
+        qb_repo::list_concept_tags_for_questions(pool, &available, &diagnostic.concept_ids)
+            .await
+            .map_err(AppError::Db)?;
     let mut tag_map: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
     for r in tag_rows {
         tag_map.entry(r.question_id).or_default().push(r.concept_id);
@@ -241,15 +248,11 @@ async fn pick_next_question_id(
 
     if cat_on {
         let (theta_hat, _) = eap_theta_2pl(history_rows);
-        let candidates: Vec<(Uuid, Option<f64>, Option<f64>)> = entities
-            .iter()
-            .map(|e| (e.id, e.irt_a, e.irt_b))
-            .collect();
+        let candidates: Vec<(Uuid, Option<f64>, Option<f64>)> =
+            entities.iter().map(|e| (e.id, e.irt_a, e.irt_b)).collect();
         let exclude: Vec<Uuid> = used.iter().copied().collect();
-        if let Some(pid) =
-            select_max_information_item(theta_hat, &candidates, &exclude, true).or_else(|| {
-                select_max_information_item(theta_hat, &candidates, &exclude, false)
-            })
+        if let Some(pid) = select_max_information_item(theta_hat, &candidates, &exclude, true)
+            .or_else(|| select_max_information_item(theta_hat, &candidates, &exclude, false))
         {
             return Ok(Some(pid));
         }
@@ -259,9 +262,9 @@ async fn pick_next_question_id(
     let mut best_count = usize::MAX;
     for &cid in &diagnostic.concept_ids {
         let c = *counts_by_concept.get(&cid).unwrap_or(&0);
-        let has_unused = entities.iter().any(|e| {
-            concepts_for_entity(e, &tag_map, &diagnostic.concept_ids).contains(&cid)
-        });
+        let has_unused = entities
+            .iter()
+            .any(|e| concepts_for_entity(e, &tag_map, &diagnostic.concept_ids).contains(&cid));
         if !has_unused {
             continue;
         }
@@ -281,7 +284,9 @@ async fn pick_next_question_id(
 
     let mut cand_ids: Vec<Uuid> = entities
         .iter()
-        .filter(|e| concepts_for_entity(e, &tag_map, &diagnostic.concept_ids).contains(&target_concept))
+        .filter(|e| {
+            concepts_for_entity(e, &tag_map, &diagnostic.concept_ids).contains(&target_concept)
+        })
         .map(|e| e.id)
         .collect();
     if cand_ids.is_empty() {
@@ -312,7 +317,11 @@ pub struct PlacementSummary {
     pub placement_title: String,
 }
 
-async fn concept_name(pool: &PgPool, course_id: Uuid, concept_id: Uuid) -> Result<String, AppError> {
+async fn concept_name(
+    pool: &PgPool,
+    course_id: Uuid,
+    concept_id: Uuid,
+) -> Result<String, AppError> {
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT name FROM course.concepts WHERE id = $1 AND (course_id = $2 OR course_id IS NULL)",
     )
@@ -324,11 +333,17 @@ async fn concept_name(pool: &PgPool, course_id: Uuid, concept_id: Uuid) -> Resul
     Ok(row.map(|(n,)| n).unwrap_or_else(|| "Concept".to_string()))
 }
 
-async fn structure_title(pool: &PgPool, course_id: Uuid, item_id: Uuid) -> Result<String, AppError> {
+async fn structure_title(
+    pool: &PgPool,
+    course_id: Uuid,
+    item_id: Uuid,
+) -> Result<String, AppError> {
     let row = course_structure::get_item_row(pool, course_id, item_id)
         .await
         .map_err(AppError::Db)?;
-    Ok(row.map(|r| r.title).unwrap_or_else(|| "Start here".to_string()))
+    Ok(row
+        .map(|r| r.title)
+        .unwrap_or_else(|| "Start here".to_string()))
 }
 
 fn parse_theta_cuts(row: &diagnostic_repo::CourseDiagnosticRow) -> Option<[f64; 3]> {
@@ -356,9 +371,15 @@ async fn finalize_placement(
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok())
             .ok_or_else(|| AppError::invalid_input("Invalid diagnostic response log."))?;
-        let correct = turn.get("correct").and_then(|v| v.as_bool()).unwrap_or(false);
+        let correct = turn
+            .get("correct")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let u: u8 = if correct { 1 } else { 0 };
-        let Some(ent) = qb_repo::get_question(pool, course_id, qid).await.map_err(AppError::Db)? else {
+        let Some(ent) = qb_repo::get_question(pool, course_id, qid)
+            .await
+            .map_err(AppError::Db)?
+        else {
             continue;
         };
         if !is_calibrated(&ent) {
@@ -383,7 +404,10 @@ async fn finalize_placement(
     let mut theta_summary = json!({});
     let mut mastery_map: HashMap<Uuid, f64> = HashMap::new();
     for &cid in &diagnostic.concept_ids {
-        let rows = per_concept_irt.get(&cid).map(|v| v.as_slice()).unwrap_or(&[]);
+        let rows = per_concept_irt
+            .get(&cid)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[]);
         let (theta, _) = eap_theta_2pl(rows);
         let m = theta_to_mastery(theta);
         theta_summary[cid.to_string()] = json!(theta);
@@ -429,10 +453,7 @@ async fn finalize_placement(
         placement_title: title.clone(),
     })
     .map_err(|e| {
-        AppError::invalid_input_code(
-            ErrorCode::Internal,
-            format!("serialize placement: {e}"),
-        )
+        AppError::invalid_input_code(ErrorCode::Internal, format!("serialize placement: {e}"))
     })?;
 
     let rules = adaptive_path_repo::list_rules_for_course(pool, course_id)
@@ -465,7 +486,10 @@ async fn finalize_placement(
         .concept_ids
         .iter()
         .map(|cid| {
-            let rows = per_concept_irt.get(cid).map(|v| v.as_slice()).unwrap_or(&[]);
+            let rows = per_concept_irt
+                .get(cid)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
             let (theta, se) = eap_theta_2pl(rows);
             let m = theta_to_mastery(theta);
             let n = rows.len() as i32;
@@ -519,7 +543,9 @@ pub async fn respond_diagnostic_attempt(
         .map_err(AppError::Db)?
         .ok_or(AppError::NotFound)?;
     if attempt.completed_at.is_some() {
-        return Err(AppError::invalid_input("This diagnostic attempt is already finished."));
+        return Err(AppError::invalid_input(
+            "This diagnostic attempt is already finished.",
+        ));
     }
     let enr = enrollment::get_enrollment_by_id(pool, attempt.enrollment_id)
         .await
@@ -543,7 +569,9 @@ pub async fn respond_diagnostic_attempt(
         .and_then(|s| Uuid::parse_str(s).ok())
         .ok_or_else(|| AppError::invalid_input("No pending diagnostic question."))?;
     if pending != body.question_id {
-        return Err(AppError::invalid_input("Question does not match the current diagnostic item."));
+        return Err(AppError::invalid_input(
+            "Question does not match the current diagnostic item.",
+        ));
     }
 
     let ent = qb_repo::get_question(pool, course_id, body.question_id)
@@ -552,11 +580,7 @@ pub async fn respond_diagnostic_attempt(
         .ok_or(AppError::NotFound)?;
     let correct = bank_answer_is_correct(&ent, body.choice_index);
 
-    let mut responses: Vec<JsonValue> = attempt
-        .responses
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+    let mut responses: Vec<JsonValue> = attempt.responses.as_array().cloned().unwrap_or_default();
     responses.push(json!({
         "questionId": body.question_id.to_string(),
         "choiceIndex": body.choice_index,
@@ -566,7 +590,11 @@ pub async fn respond_diagnostic_attempt(
 
     let used: HashSet<Uuid> = responses
         .iter()
-        .filter_map(|t| t.get("questionId").and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok()))
+        .filter_map(|t| {
+            t.get("questionId")
+                .and_then(|v| v.as_str())
+                .and_then(|s| Uuid::parse_str(s).ok())
+        })
         .collect();
 
     let mut history: Vec<(f64, f64, u8)> = Vec::new();
@@ -576,7 +604,10 @@ pub async fn respond_diagnostic_attempt(
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok());
         let Some(qid) = qid else { continue };
-        let Some(qent) = qb_repo::get_question(pool, course_id, qid).await.map_err(AppError::Db)? else {
+        let Some(qent) = qb_repo::get_question(pool, course_id, qid)
+            .await
+            .map_err(AppError::Db)?
+        else {
             continue;
         };
         if !is_calibrated(&qent) {
@@ -593,9 +624,13 @@ pub async fn respond_diagnostic_attempt(
     }
     let (_, pooled_se) = eap_theta_2pl(&history);
 
-    let tag_rows = qb_repo::list_concept_tags_for_questions(pool, &used.iter().copied().collect::<Vec<_>>(), &diagnostic.concept_ids)
-        .await
-        .map_err(AppError::Db)?;
+    let tag_rows = qb_repo::list_concept_tags_for_questions(
+        pool,
+        &used.iter().copied().collect::<Vec<_>>(),
+        &diagnostic.concept_ids,
+    )
+    .await
+    .map_err(AppError::Db)?;
     let mut tag_map: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
     for r in tag_rows {
         tag_map.entry(r.question_id).or_default().push(r.concept_id);
@@ -607,7 +642,10 @@ pub async fn respond_diagnostic_attempt(
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok());
         let Some(qid) = qid else { continue };
-        let Some(qent) = qb_repo::get_question(pool, course_id, qid).await.map_err(AppError::Db)? else {
+        let Some(qent) = qb_repo::get_question(pool, course_id, qid)
+            .await
+            .map_err(AppError::Db)?
+        else {
             continue;
         };
         for cid in concepts_for_entity(&qent, &tag_map, &diagnostic.concept_ids) {
@@ -628,9 +666,16 @@ pub async fn respond_diagnostic_attempt(
         );
 
     if done {
-        let (theta_json, summary_json, placement_id) =
-            finalize_placement(pool, course_id, attempt.enrollment_id, user_id, &diagnostic, attempt_id, &responses)
-                .await?;
+        let (theta_json, summary_json, placement_id) = finalize_placement(
+            pool,
+            course_id,
+            attempt.enrollment_id,
+            user_id,
+            &diagnostic,
+            attempt_id,
+            &responses,
+        )
+        .await?;
         diagnostic_repo::complete_attempt(
             pool,
             attempt_id,
@@ -741,9 +786,10 @@ pub async fn start_or_resume_diagnostic(
         .ok_or(AppError::NotFound)?;
     let q = bank_entity_to_adaptive_question(&ent)?;
     let session = json!({ "pendingQuestionId": first_id.to_string() });
-    let row = diagnostic_repo::insert_diagnostic_attempt(pool, diagnostic.id, enrollment_id, &session)
-        .await
-        .map_err(AppError::Db)?;
+    let row =
+        diagnostic_repo::insert_diagnostic_attempt(pool, diagnostic.id, enrollment_id, &session)
+            .await
+            .map_err(AppError::Db)?;
     Ok((row.id, q))
 }
 
@@ -761,8 +807,14 @@ mod tests {
             proficiency_for_theta(-0.5, None),
             ProficiencyTier::Developing
         ));
-        assert!(matches!(proficiency_for_theta(0.5, None), ProficiencyTier::Proficient));
-        assert!(matches!(proficiency_for_theta(1.5, None), ProficiencyTier::Advanced));
+        assert!(matches!(
+            proficiency_for_theta(0.5, None),
+            ProficiencyTier::Proficient
+        ));
+        assert!(matches!(
+            proficiency_for_theta(1.5, None),
+            ProficiencyTier::Advanced
+        ));
     }
 
     #[test]
@@ -796,7 +848,9 @@ pub async fn bypass_diagnostic_for_enrollment(
         .map_err(AppError::Db)?;
     if let Some(a) = latest {
         if a.completed_at.is_none() {
-            diagnostic_repo::bypass_attempt(pool, a.id, &json!([])).await.map_err(AppError::Db)?;
+            diagnostic_repo::bypass_attempt(pool, a.id, &json!([]))
+                .await
+                .map_err(AppError::Db)?;
             tracing::info!(target: "diagnostic", attempt_id = %a.id, "diagnostic.bypassed");
             return Ok(());
         }

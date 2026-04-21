@@ -11,7 +11,10 @@ const MIN_RESPONSES: usize = 200;
 
 /// Re-fits 2PL parameters for items with at least [`MIN_RESPONSES`] dichotomous graded responses.
 /// `concept_id` limits to questions tagged to that concept (optional).
-pub async fn run_irt_calibration(pool: &PgPool, concept_id: Option<Uuid>) -> Result<(usize, usize), AppError> {
+pub async fn run_irt_calibration(
+    pool: &PgPool,
+    concept_id: Option<Uuid>,
+) -> Result<(usize, usize), AppError> {
     let targets: Vec<(Uuid, Uuid)> = if let Some(cid) = concept_id {
         sqlx::query_as::<_, (Uuid, Uuid)>(
             r#"

@@ -6,9 +6,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::repos::standards::{
-    self, StandardCodeRow, StandardCoverageRow, StandardFrameworkRow,
-};
+use crate::repos::standards::{self, StandardCodeRow, StandardCoverageRow, StandardFrameworkRow};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,7 +71,10 @@ fn value_str(v: &Value) -> Option<String> {
 fn case_item_identifier(item: &Value) -> Option<String> {
     item.get("identifier")
         .and_then(|x| value_str(x))
-        .or_else(|| item.get("uri").and_then(|u| u.as_str().map(|s| s.to_string())))
+        .or_else(|| {
+            item.get("uri")
+                .and_then(|u| u.as_str().map(|s| s.to_string()))
+        })
 }
 
 fn case_item_code(item: &Value) -> Option<String> {
@@ -208,12 +209,9 @@ fn parse_case_items(root: &Value) -> Result<(LexturesFrameworkInput, Vec<ImportI
         }
         let grade_band = case_education_level(it);
         let identifier = case_item_identifier(it).unwrap_or_default();
-        let parent_code = child_to_parent.get(&identifier).and_then(|pid| {
-            id_to_code
-                .get(pid)
-                .cloned()
-                .or_else(|| Some(pid.clone()))
-        });
+        let parent_code = child_to_parent
+            .get(&identifier)
+            .and_then(|pid| id_to_code.get(pid).cloned().or_else(|| Some(pid.clone())));
         let depth_level: i16 = it
             .get("CFItemType")
             .and_then(value_str)
@@ -295,7 +293,11 @@ pub async fn import_standards(
     .await
     .map_err(AppError::Db)?;
 
-    items.sort_by(|a, b| a.depth_level.cmp(&b.depth_level).then_with(|| a.code.cmp(&b.code)));
+    items.sort_by(|a, b| {
+        a.depth_level
+            .cmp(&b.depth_level)
+            .then_with(|| a.code.cmp(&b.code))
+    });
 
     let mut code_to_id: std::collections::HashMap<String, Uuid> = std::collections::HashMap::new();
     let mut count = 0usize;
@@ -378,9 +380,8 @@ pub async fn course_standards_coverage(
         .await
         .map_err(AppError::Db)?
         .ok_or_else(|| AppError::NotFound)?;
-    let rows =
-        standards::standards_coverage_for_course(pool, course_id, fw.id, grade)
-            .await
-            .map_err(AppError::Db)?;
+    let rows = standards::standards_coverage_for_course(pool, course_id, fw.id, grade)
+        .await
+        .map_err(AppError::Db)?;
     Ok(rows)
 }

@@ -22,7 +22,10 @@ use crate::repos::quiz_attempts::QuizResponseRow;
 /// `ADAPTIVE_LEARNER_MODEL_ENABLED` — default `false` (see rollout plan).
 pub fn learner_model_enabled() -> bool {
     match env::var("ADAPTIVE_LEARNER_MODEL_ENABLED") {
-        Ok(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"),
+        Ok(v) => matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
         Err(_) => false,
     }
 }
@@ -44,10 +47,7 @@ fn short_user_hash(user_id: Uuid) -> String {
     let mut h = Sha256::new();
     h.update(user_id.as_bytes());
     let d = h.finalize();
-    format!(
-        "{:02x}{:02x}{:02x}{:02x}",
-        d[0], d[1], d[2], d[3]
-    )
+    format!("{:02x}{:02x}{:02x}{:02x}", d[0], d[1], d[2], d[3])
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -309,10 +309,9 @@ where
         let ms = crate::services::hint_service::mastery_scale_for_hint_uses(hint_n);
         let mut ema_mult = 1.0_f64;
         if misconception_detection_enabled && r.is_correct == Some(false) {
-            if let Ok(resp_item) =
-                serde_json::from_value::<crate::models::course_module_quiz::QuizQuestionResponseItem>(
-                    r.response_json.clone(),
-                )
+            if let Ok(resp_item) = serde_json::from_value::<
+                crate::models::course_module_quiz::QuizQuestionResponseItem,
+            >(r.response_json.clone())
             {
                 if let Some(sel) = resp_item.selected_choice_index {
                     if let Ok(quuid) = Uuid::parse_str(qid) {

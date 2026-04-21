@@ -126,10 +126,7 @@ pub async fn patch_body(
     .await
 }
 
-pub async fn soft_delete(
-    pool: &PgPool,
-    annotation_id: Uuid,
-) -> Result<bool, sqlx::Error> {
+pub async fn soft_delete(pool: &PgPool, annotation_id: Uuid) -> Result<bool, sqlx::Error> {
     let res = sqlx::query(&format!(
         r#"
         UPDATE {}

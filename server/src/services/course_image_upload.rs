@@ -107,17 +107,13 @@ pub async fn ingest_multipart_image_field(
     }
 
     let Some(bytes) = file_bytes else {
-        return Err(AppError::invalid_input(
-            "Missing multipart field `file`.",
-        ));
+        return Err(AppError::invalid_input("Missing multipart field `file`."));
     };
     let original_filename = original_name.unwrap_or_else(|| "upload".into());
     let mime_type = match mime {
         Some(m) => m,
         None => {
-            return Err(AppError::invalid_input(
-                "Missing multipart field `file`.",
-            ));
+            return Err(AppError::invalid_input("Missing multipart field `file`."));
         }
     };
     Ok((bytes, original_filename, mime_type))
@@ -188,9 +184,7 @@ pub async fn ingest_multipart_submission_document_field(
     }
 
     let Some(bytes) = file_bytes else {
-        return Err(AppError::invalid_input(
-            "Missing multipart field `file`.",
-        ));
+        return Err(AppError::invalid_input("Missing multipart field `file`."));
     };
     let original_filename = original_name.unwrap_or_else(|| "upload".into());
     let mime_type = mime.unwrap_or_else(|| "application/octet-stream".into());

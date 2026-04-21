@@ -12,8 +12,8 @@ use crate::error::AppError;
 use crate::http_auth::{auth_user, require_permission};
 use crate::models::rbac::UserBrief;
 use crate::models::settings_account::{
-    AccountProfileResponse, GenerateAvatarRequest, GenerateAvatarResponse, PatchUserStudentIdRequest,
-    UpdateAccountProfileRequest,
+    AccountProfileResponse, GenerateAvatarRequest, GenerateAvatarResponse,
+    PatchUserStudentIdRequest, UpdateAccountProfileRequest,
 };
 use crate::models::settings_ai::{
     AiModelOption, AiModelsListResponse, AiSettingsResponse, AiSettingsUpdateRequest,
@@ -218,9 +218,7 @@ async fn generate_avatar_handler(
     let auth = auth_user(&state, &headers)?;
     let prompt = req.prompt.trim();
     if prompt.is_empty() {
-        return Err(AppError::invalid_input(
-            "Describe the avatar you want.",
-        ));
+        return Err(AppError::invalid_input("Describe the avatar you want."));
     }
     let client = state
         .open_router
@@ -296,9 +294,7 @@ async fn put_ai_handler(
     }
     let course_setup_model_id = req.course_setup_model_id.trim();
     if course_setup_model_id.is_empty() {
-        return Err(AppError::invalid_input(
-            "Choose a course setup model.",
-        ));
+        return Err(AppError::invalid_input("Choose a course setup model."));
     }
     let (image_model_id, course_setup_model_id) = user_ai_settings::upsert_ai_settings(
         &state.pool,

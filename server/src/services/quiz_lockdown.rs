@@ -6,7 +6,10 @@ pub const LOCKDOWN_STANDARD: &str = "standard";
 pub const LOCKDOWN_ONE_AT_A_TIME: &str = "one_at_a_time";
 pub const LOCKDOWN_KIOSK: &str = "kiosk";
 
-pub fn effective_lockdown_mode(course_lockdown_enabled: bool, row: &CourseItemQuizRow) -> &'static str {
+pub fn effective_lockdown_mode(
+    course_lockdown_enabled: bool,
+    row: &CourseItemQuizRow,
+) -> &'static str {
     if !course_lockdown_enabled {
         return LOCKDOWN_STANDARD;
     }

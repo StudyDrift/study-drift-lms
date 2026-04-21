@@ -63,7 +63,10 @@ fn choice_count_from_entity(e: &QuestionEntity) -> usize {
         .unwrap_or(0)
 }
 
-fn effective_shuffle_choices_for_attempt(quiz_shuffle_choices: bool, entity: &QuestionEntity) -> bool {
+fn effective_shuffle_choices_for_attempt(
+    quiz_shuffle_choices: bool,
+    entity: &QuestionEntity,
+) -> bool {
     quiz_shuffle_choices
         && db_type_allows_option_shuffle(&entity.question_type)
         && entity.shuffle_choices_override != Some(false)
@@ -91,24 +94,36 @@ fn question_entity_from_snapshot(snapshot: &JsonValue) -> Result<QuestionEntity,
         .unwrap_or_default()
         .to_string();
     let options = snapshot.get("options").cloned().filter(|v| !v.is_null());
-    let correct_answer = snapshot.get("correct_answer").cloned().filter(|v| !v.is_null());
+    let correct_answer = snapshot
+        .get("correct_answer")
+        .cloned()
+        .filter(|v| !v.is_null());
     let explanation = snapshot
         .get("explanation")
         .and_then(|v| v.as_str())
         .map(ToString::to_string);
-    let points = snapshot.get("points").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let points = snapshot
+        .get("points")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0);
     let status = snapshot
         .get("status")
         .and_then(|v| v.as_str())
         .unwrap_or("draft")
         .to_string();
-    let shared = snapshot.get("shared").and_then(|v| v.as_bool()).unwrap_or(false);
+    let shared = snapshot
+        .get("shared")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let source = snapshot
         .get("source")
         .and_then(|v| v.as_str())
         .unwrap_or("authored")
         .to_string();
-    let metadata = snapshot.get("metadata").cloned().unwrap_or_else(|| json!({}));
+    let metadata = snapshot
+        .get("metadata")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let irt_a = snapshot.get("irt_a").and_then(|v| v.as_f64());
     let irt_b = snapshot.get("irt_b").and_then(|v| v.as_f64());
     let irt_c = snapshot.get("irt_c").and_then(|v| v.as_f64());
@@ -237,7 +252,10 @@ fn extract_choice_lines_from_options_json(v: &JsonValue) -> (Vec<String>, Vec<Op
 }
 
 /// Normalized `{ id, text }[]` for `course.questions.options`, preserving stable ids when texts match.
-pub fn merge_question_options_on_write(submitted: &JsonValue, existing_options: Option<&JsonValue>) -> JsonValue {
+pub fn merge_question_options_on_write(
+    submitted: &JsonValue,
+    existing_options: Option<&JsonValue>,
+) -> JsonValue {
     let (new_texts, new_ids) = extract_choice_lines_from_options_json(submitted);
     let n = new_texts.len();
     let old_arr = existing_options.and_then(|x| x.as_array());
@@ -265,17 +283,20 @@ pub fn normalize_question_options_json(opts: Option<&JsonValue>) -> Option<JsonV
     Some(merge_question_options_on_write(v, None))
 }
 
-fn merged_options_for_sync_from_quiz_question(q: &QuizQuestion, existing: Option<&JsonValue>) -> JsonValue {
-    let submitted: JsonValue = json!(q
-        .choices
-        .iter()
-        .map(|c| json!(c))
-        .collect::<Vec<_>>());
+fn merged_options_for_sync_from_quiz_question(
+    q: &QuizQuestion,
+    existing: Option<&JsonValue>,
+) -> JsonValue {
+    let submitted: JsonValue = json!(q.choices.iter().map(|c| json!(c)).collect::<Vec<_>>());
     let mut merged = merge_question_options_on_write(&submitted, existing);
     if q.choice_ids.len() == q.choices.len() {
         if let Some(arr) = merged.as_array_mut() {
             for (i, el) in arr.iter_mut().enumerate() {
-                if let Some(id) = q.choice_ids.get(i).and_then(|s| Uuid::parse_str(s.trim()).ok()) {
+                if let Some(id) = q
+                    .choice_ids
+                    .get(i)
+                    .and_then(|s| Uuid::parse_str(s.trim()).ok())
+                {
                     if let Some(obj) = el.as_object_mut() {
                         obj.insert("id".to_string(), json!(id.to_string()));
                     }
@@ -399,13 +420,9 @@ pub async fn sync_quiz_refs_from_editor_json(
             "legacyQuizStructureItemId": structure_item_id.to_string(),
             "legacyEditorQuestionId": q.id,
         });
-        let existing = qb_repo::find_legacy_question_id(
-            tx.deref_mut(),
-            course_id,
-            structure_item_id,
-            &q.id,
-        )
-        .await?;
+        let existing =
+            qb_repo::find_legacy_question_id(tx.deref_mut(), course_id, structure_item_id, &q.id)
+                .await?;
 
         let prior_opts: Option<JsonValue> = if let Some(id) = existing {
             sqlx::query_scalar(&format!(
@@ -500,7 +517,9 @@ pub async fn materialize_attempt_questions(
         if let Some(qid) = r.question_id {
             let version = qb_repo::get_question(pool, course_id, qid)
                 .await?
-                .ok_or_else(|| AppError::invalid_input("Question bank data is inconsistent for this attempt."))?
+                .ok_or_else(|| {
+                    AppError::invalid_input("Question bank data is inconsistent for this attempt.")
+                })?
                 .version_number;
             picks.push((qid, version));
             continue;
@@ -516,7 +535,11 @@ pub async fn materialize_attempt_questions(
             for qid in sampled {
                 let version = qb_repo::get_question(pool, course_id, qid)
                     .await?
-                    .ok_or_else(|| AppError::invalid_input("Question bank data is inconsistent for this attempt."))?
+                    .ok_or_else(|| {
+                        AppError::invalid_input(
+                            "Question bank data is inconsistent for this attempt.",
+                        )
+                    })?
                     .version_number;
                 picks.push((qid, version));
             }
@@ -543,7 +566,9 @@ pub async fn materialize_attempt_questions(
         let map = load_quiz_questions_map(pool, course_id, &ids).await?;
         for (qid, _) in &picks {
             let Some(ent) = map.get(qid) else {
-                return Err(AppError::invalid_input("Question bank data is inconsistent for this attempt."));
+                return Err(AppError::invalid_input(
+                    "Question bank data is inconsistent for this attempt.",
+                ));
             };
             if !effective_shuffle_choices_for_attempt(shuffle_choices, ent) {
                 continue;
@@ -591,7 +616,9 @@ async fn quiz_questions_for_attempt_selections(
                     picked.version_number,
                 )
                 .await?
-                .ok_or_else(|| AppError::invalid_input("Question bank data is inconsistent for this attempt."))?;
+                .ok_or_else(|| {
+                    AppError::invalid_input("Question bank data is inconsistent for this attempt.")
+                })?;
                 let versioned = question_entity_from_snapshot(&snapshot)?;
                 quiz_question_from_entity(&versioned)?
             }
@@ -703,7 +730,15 @@ pub async fn set_quiz_delivery_pool_only(
 
     let mut tx = pool.begin().await?;
     qb_repo::delete_quiz_question_refs_for_item(&mut tx, structure_item_id).await?;
-    qb_repo::insert_quiz_question_ref(&mut tx, structure_item_id, None, Some(pool_id), Some(sample_n), 0).await?;
+    qb_repo::insert_quiz_question_ref(
+        &mut tx,
+        structure_item_id,
+        None,
+        Some(pool_id),
+        Some(sample_n),
+        0,
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -749,7 +784,11 @@ pub async fn search_questions(
 }
 
 /// Validates that every response question id exists in `bank` and matches count rules.
-pub fn validate_submitted_ids(_bank: &[QuizQuestion], responses_len: usize, random_pool: Option<i32>) -> Result<(), AppError> {
+pub fn validate_submitted_ids(
+    _bank: &[QuizQuestion],
+    responses_len: usize,
+    random_pool: Option<i32>,
+) -> Result<(), AppError> {
     if let Some(pool_n) = random_pool {
         if pool_n >= 1 && responses_len != pool_n as usize {
             return Err(AppError::invalid_input(

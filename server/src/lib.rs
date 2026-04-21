@@ -8,8 +8,8 @@ pub mod error;
 pub mod http_auth;
 pub mod jwt;
 pub mod lti_keys;
-pub mod openapi;
 pub mod models;
+pub mod openapi;
 pub mod repos;
 pub mod routes;
 pub mod services;
@@ -96,7 +96,10 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         );
     }
 
-    let lti = match (config.lti_enabled, config.lti_rsa_private_key_pem.as_deref()) {
+    let lti = match (
+        config.lti_enabled,
+        config.lti_rsa_private_key_pem.as_deref(),
+    ) {
         (true, Some(pem)) => match LtiRsaKeyPair::from_pkcs8_pem(pem, &config.lti_rsa_key_id) {
             Ok(keys) => Some(Arc::new(LtiRuntime {
                 enabled: true,
@@ -109,7 +112,9 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
             }
         },
         (true, None) => {
-            tracing::warn!("LTI_ENABLED is set but LTI_RSA_PRIVATE_KEY_PEM is missing; LTI disabled");
+            tracing::warn!(
+                "LTI_ENABLED is set but LTI_RSA_PRIVATE_KEY_PEM is missing; LTI disabled"
+            );
             None
         }
         _ => None,
@@ -154,7 +159,13 @@ pub async fn run() -> anyhow::Result<()> {
         loop {
             interval.tick().await;
             let now = chrono::Utc::now();
-            match crate::services::quiz_auto_submit::sweep_expired_attempts(&sweep_state.pool, now, 200).await {
+            match crate::services::quiz_auto_submit::sweep_expired_attempts(
+                &sweep_state.pool,
+                now,
+                200,
+            )
+            .await
+            {
                 Ok(n) if n > 0 => tracing::info!(count = n, "auto-submit sweep completed"),
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "auto-submit sweep failed"),

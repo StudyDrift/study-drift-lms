@@ -129,10 +129,11 @@ pub async fn get_cache(
         return Ok(None);
     };
     let expired = row.expires_at <= Utc::now();
-    let parsed: CachedRecommendations = serde_json::from_value(row.recommendations).unwrap_or(CachedRecommendations {
-        recommendations: vec![],
-        degraded: false,
-    });
+    let parsed: CachedRecommendations =
+        serde_json::from_value(row.recommendations).unwrap_or(CachedRecommendations {
+            recommendations: vec![],
+            degraded: false,
+        });
     Ok(Some((parsed, expired)))
 }
 

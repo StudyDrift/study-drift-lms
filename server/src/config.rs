@@ -140,7 +140,9 @@ impl Config {
             .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
-        let smtp_password = env::var("SMTP_PASSWORD").ok().filter(|s| !s.trim().is_empty());
+        let smtp_password = env::var("SMTP_PASSWORD")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
         let smtp_from = env::var("SMTP_FROM")
             .ok()
             .map(|s| s.trim().to_string())
