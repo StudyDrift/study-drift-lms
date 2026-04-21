@@ -18,6 +18,7 @@ use crate::repos::course_structure;
 use crate::repos::enrollment;
 use crate::repos::learner_model;
 use crate::services::adaptive_path as adaptive_path_service;
+use crate::services::competency_gating;
 use crate::services::learner_state;
 use crate::state::AppState;
 use chrono::Utc;
@@ -103,6 +104,14 @@ async fn enrollment_next_handler(
         enrollment::user_is_course_staff(&state.pool, &en.course_code, user.user_id).await?;
     if !is_staff {
         rows = course_structure::filter_structure_for_student_view(rows, Utc::now());
+        rows = competency_gating::filter_structure_rows_for_competency_student(
+            &state.pool,
+            course_row.id,
+            course_row.course_type.as_str(),
+            en.user_id,
+            rows,
+        )
+        .await?;
     }
 
     let rules = adaptive_path_repo::list_rules_for_course(&state.pool, course_row.id).await?;

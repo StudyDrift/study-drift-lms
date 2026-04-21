@@ -92,6 +92,8 @@ pub struct CoursePublic {
     pub hint_scaffolding_enabled: bool,
     /// Tagged distractor remediation + misconception reporting (plan 1.10).
     pub misconception_detection_enabled: bool,
+    /// `traditional` or `competency_based` (sequential module unlock via prior outcome assessments).
+    pub course_type: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -137,6 +139,9 @@ pub struct CreateCourseRequest {
     pub title: String,
     #[serde(default)]
     pub description: String,
+    /// `traditional` (default) or `competency_based`.
+    #[serde(default)]
+    pub course_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

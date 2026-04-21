@@ -21,6 +21,18 @@ pub struct LearningOutcomeRow {
     pub title: String,
     pub description: String,
     pub sort_order: i32,
+    pub module_structure_item_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct OutcomeSubOutcomeRow {
+    pub id: Uuid,
+    pub outcome_id: Uuid,
+    pub title: String,
+    pub description: String,
+    pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -29,6 +41,7 @@ pub struct LearningOutcomeRow {
 pub struct OutcomeLinkRow {
     pub id: Uuid,
     pub outcome_id: Uuid,
+    pub sub_outcome_id: Option<Uuid>,
     pub structure_item_id: Uuid,
     pub target_kind: String,
     pub quiz_question_id: String,
@@ -41,6 +54,7 @@ pub struct OutcomeLinkRow {
 pub struct OutcomeLinkWithItemRow {
     pub id: Uuid,
     pub outcome_id: Uuid,
+    pub sub_outcome_id: Option<Uuid>,
     pub structure_item_id: Uuid,
     pub target_kind: String,
     pub quiz_question_id: String,
@@ -65,7 +79,7 @@ pub async fn list_outcomes(
 ) -> Result<Vec<LearningOutcomeRow>, sqlx::Error> {
     sqlx::query_as::<_, LearningOutcomeRow>(&format!(
         r#"
-        SELECT id, course_id, title, description, sort_order, created_at, updated_at
+        SELECT id, course_id, title, description, sort_order, module_structure_item_id, created_at, updated_at
         FROM {}
         WHERE course_id = $1
         ORDER BY sort_order ASC, created_at ASC
@@ -87,6 +101,7 @@ pub async fn list_links_for_outcome(
         SELECT
             l.id,
             l.outcome_id,
+            l.sub_outcome_id,
             l.structure_item_id,
             l.target_kind,
             l.quiz_question_id,
@@ -120,6 +135,7 @@ pub async fn list_links_for_course(
         SELECT
             l.id,
             l.outcome_id,
+            l.sub_outcome_id,
             l.structure_item_id,
             l.target_kind,
             l.quiz_question_id,
@@ -161,7 +177,7 @@ pub async fn insert_outcome(
         r#"
         INSERT INTO {} (course_id, title, description, sort_order)
         VALUES ($1, $2, $3, $4)
-        RETURNING id, course_id, title, description, sort_order, created_at, updated_at
+        RETURNING id, course_id, title, description, sort_order, module_structure_item_id, created_at, updated_at
         "#,
         schema::COURSE_LEARNING_OUTCOMES
     ))
@@ -179,9 +195,10 @@ pub async fn update_outcome(
     outcome_id: Uuid,
     title: Option<&str>,
     description: Option<&str>,
+    module_structure_item_id: Option<Option<Uuid>>,
 ) -> Result<Option<LearningOutcomeRow>, sqlx::Error> {
     let Some(cur) = sqlx::query_as::<_, LearningOutcomeRow>(&format!(
-        r#"SELECT id, course_id, title, description, sort_order, created_at, updated_at FROM {} WHERE id = $1 AND course_id = $2"#,
+        r#"SELECT id, course_id, title, description, sort_order, module_structure_item_id, created_at, updated_at FROM {} WHERE id = $1 AND course_id = $2"#,
         schema::COURSE_LEARNING_OUTCOMES
     ))
     .bind(outcome_id)
@@ -208,12 +225,17 @@ pub async fn update_outcome(
         Some(d) => d,
     };
 
+    let module_id = match module_structure_item_id {
+        None => cur.module_structure_item_id,
+        Some(v) => v,
+    };
+
     sqlx::query_as::<_, LearningOutcomeRow>(&format!(
         r#"
         UPDATE {}
-        SET title = $3, description = $4, updated_at = NOW()
+        SET title = $3, description = $4, module_structure_item_id = $5, updated_at = NOW()
         WHERE id = $1 AND course_id = $2
-        RETURNING id, course_id, title, description, sort_order, created_at, updated_at
+        RETURNING id, course_id, title, description, sort_order, module_structure_item_id, created_at, updated_at
         "#,
         schema::COURSE_LEARNING_OUTCOMES
     ))
@@ -221,6 +243,7 @@ pub async fn update_outcome(
     .bind(course_id)
     .bind(title)
     .bind(description)
+    .bind(module_id)
     .fetch_optional(pool)
     .await
 }
@@ -244,6 +267,7 @@ pub async fn delete_outcome(
 pub async fn insert_link(
     pool: &PgPool,
     outcome_id: Uuid,
+    sub_outcome_id: Option<Uuid>,
     structure_item_id: Uuid,
     target_kind: &str,
     quiz_question_id: &str,
@@ -252,13 +276,14 @@ pub async fn insert_link(
 ) -> Result<OutcomeLinkRow, sqlx::Error> {
     sqlx::query_as::<_, OutcomeLinkRow>(&format!(
         r#"
-        INSERT INTO {} (outcome_id, structure_item_id, target_kind, quiz_question_id, measurement_level, intensity_level)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, outcome_id, structure_item_id, target_kind, quiz_question_id, measurement_level, intensity_level, created_at
+        INSERT INTO {} (outcome_id, sub_outcome_id, structure_item_id, target_kind, quiz_question_id, measurement_level, intensity_level)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, outcome_id, sub_outcome_id, structure_item_id, target_kind, quiz_question_id, measurement_level, intensity_level, created_at
         "#,
         schema::COURSE_OUTCOME_LINKS
     ))
     .bind(outcome_id)
+    .bind(sub_outcome_id)
     .bind(structure_item_id)
     .bind(target_kind)
     .bind(quiz_question_id)
@@ -289,6 +314,99 @@ pub async fn delete_link(
     .execute(pool)
     .await?;
     Ok(r.rows_affected() > 0)
+}
+
+pub async fn insert_sub_outcome(
+    pool: &PgPool,
+    course_id: Uuid,
+    outcome_id: Uuid,
+    title: &str,
+    description: &str,
+) -> Result<OutcomeSubOutcomeRow, sqlx::Error> {
+    let ok: bool = sqlx::query_scalar(&format!(
+        r#"SELECT EXISTS(SELECT 1 FROM {} o WHERE o.id = $1 AND o.course_id = $2)"#,
+        schema::COURSE_LEARNING_OUTCOMES
+    ))
+    .bind(outcome_id)
+    .bind(course_id)
+    .fetch_one(pool)
+    .await?;
+    if !ok {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    let next_sort: i32 = sqlx::query_scalar(&format!(
+        r#"SELECT COALESCE(MAX(sort_order), -1) + 1 FROM {} WHERE outcome_id = $1"#,
+        schema::COURSE_OUTCOME_SUB_OUTCOMES
+    ))
+    .bind(outcome_id)
+    .fetch_one(pool)
+    .await?;
+
+    sqlx::query_as::<_, OutcomeSubOutcomeRow>(&format!(
+        r#"
+        INSERT INTO {} (outcome_id, title, description, sort_order)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, outcome_id, title, description, sort_order, created_at, updated_at
+        "#,
+        schema::COURSE_OUTCOME_SUB_OUTCOMES
+    ))
+    .bind(outcome_id)
+    .bind(title)
+    .bind(description)
+    .bind(next_sort)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn sub_outcome_owned_by_outcome_in_course(
+    pool: &PgPool,
+    course_id: Uuid,
+    outcome_id: Uuid,
+    sub_outcome_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let v: bool = sqlx::query_scalar(&format!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM {} s
+            INNER JOIN {} o ON o.id = s.outcome_id
+            WHERE s.id = $1 AND s.outcome_id = $2 AND o.course_id = $3
+        )
+        "#,
+        schema::COURSE_OUTCOME_SUB_OUTCOMES,
+        schema::COURSE_LEARNING_OUTCOMES
+    ))
+    .bind(sub_outcome_id)
+    .bind(outcome_id)
+    .bind(course_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(v)
+}
+
+pub async fn list_whole_item_links_for_outcome(
+    pool: &PgPool,
+    course_id: Uuid,
+    outcome_id: Uuid,
+) -> Result<Vec<(Uuid, String)>, sqlx::Error> {
+    sqlx::query_as::<_, (Uuid, String)>(&format!(
+        r#"
+        SELECT DISTINCT l.structure_item_id, s.kind
+        FROM {} l
+        INNER JOIN {} o ON o.id = l.outcome_id
+        INNER JOIN {} s ON s.id = l.structure_item_id
+        WHERE o.course_id = $1 AND o.id = $2
+          AND l.target_kind IN ('assignment', 'quiz')
+        "#,
+        schema::COURSE_OUTCOME_LINKS,
+        schema::COURSE_LEARNING_OUTCOMES,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(course_id)
+    .bind(outcome_id)
+    .fetch_all(pool)
+    .await
 }
 
 async fn assignment_points_possible(pool: &PgPool, item_id: Uuid) -> Result<f64, sqlx::Error> {

@@ -1855,6 +1855,7 @@ pub async fn build_export_from_canvas(
         diagnostic_assessments_enabled: false,
         hint_scaffolding_enabled: false,
         misconception_detection_enabled: false,
+        course_type: "traditional".to_string(),
     };
 
     Ok(CourseExportV1 {

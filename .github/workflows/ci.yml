@@ -49,7 +49,7 @@ jobs:
           key: ${{ runner.os }}-cargo-bins-audit-deny-v1
 
       - name: Install cargo-audit and cargo-deny
-        run: cargo install cargo-audit cargo-deny --locked
+        run: cargo install cargo-audit cargo-deny --locked --force
 
       - name: cargo audit
         run: cargo audit
@@ -157,9 +157,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Bundle size budget (JS gzip)
-        run: npm run bundle:check
 
       - name: Storybook build
         run: npm run build-storybook

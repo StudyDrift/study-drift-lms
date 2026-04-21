@@ -1,12 +1,18 @@
 import { type FormEvent, useId, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, ChevronRight, FileText, LayoutList, Sparkles } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, FileText, LayoutList, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { RequirePermission } from '../../components/require-permission'
 import { usePermissions } from '../../context/use-permissions'
 import { LmsPage } from './lms-page'
 import {
+  addCourseOutcomeLink,
   createCourse,
   createCourseModule,
+  createCourseOutcome,
+  createCourseOutcomeSubOutcome,
+  createModuleAssignment,
+  createModuleQuiz,
+  patchCourseOutcome,
   patchCourseSyllabus,
   putCourse,
   type CoursePublic,
@@ -19,6 +25,21 @@ import {
 } from './course-create-templates'
 
 const BLANK_TEMPLATE_ID = 'blank'
+
+type CourseMode = 'traditional' | 'competency_based'
+
+type SubOutcomeDraft = {
+  title: string
+  description: string
+  assessmentTitle: string
+  assessmentKind: 'quiz' | 'assignment'
+}
+
+type CompetencyDraft = {
+  title: string
+  description: string
+  subOutcomes: SubOutcomeDraft[]
+}
 
 type WizardStep = 1 | 2 | 3
 
@@ -38,6 +59,19 @@ function putBodyFromCourse(c: CoursePublic, title: string, description: string) 
   } as const
 }
 
+function emptySubOutcome(): SubOutcomeDraft {
+  return {
+    title: '',
+    description: '',
+    assessmentTitle: '',
+    assessmentKind: 'quiz',
+  }
+}
+
+function emptyCompetency(): CompetencyDraft {
+  return { title: '', description: '', subOutcomes: [emptySubOutcome()] }
+}
+
 export default function CourseCreate() {
   const formErrorId = useId()
   const navigate = useNavigate()
@@ -45,13 +79,17 @@ export default function CourseCreate() {
   const [step, setStep] = useState<WizardStep>(1)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [courseMode, setCourseMode] = useState<CourseMode>('traditional')
   const [createdCourse, setCreatedCourse] = useState<CoursePublic | null>(null)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('higher-ed-15-week')
   const [firstModuleTitle, setFirstModuleTitle] = useState('')
+  const [competencies, setCompetencies] = useState<CompetencyDraft[]>(() => [emptyCompetency()])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const stepTitle = step === 1 ? 'Basics' : step === 2 ? 'Syllabus template' : 'First module'
+  const isCompetency = courseMode === 'competency_based'
+  const stepTitle =
+    step === 1 ? 'Basics' : step === 2 ? 'Syllabus template' : isCompetency ? 'Competencies' : 'First module'
 
   async function submitBasics(e: FormEvent) {
     e.preventDefault()
@@ -70,7 +108,11 @@ export default function CourseCreate() {
         )
         setCreatedCourse(updated)
       } else {
-        const course = await createCourse({ title: t, description: description.trim() })
+        const course = await createCourse({
+          title: t,
+          description: description.trim(),
+          courseType: courseMode,
+        })
         setCreatedCourse(course)
       }
       setStep(2)
@@ -96,12 +138,14 @@ export default function CourseCreate() {
           })
         }
       }
-      setFirstModuleTitle((prev) => {
-        if (prev.trim()) return prev
-        if (selectedTemplateId === BLANK_TEMPLATE_ID) return 'Getting started'
-        const tmpl = COURSE_CREATE_STARTER_TEMPLATES.find((x) => x.id === selectedTemplateId)
-        return tmpl?.suggestedFirstModuleTitle ?? 'Getting started'
-      })
+      if (!isCompetency) {
+        setFirstModuleTitle((prev) => {
+          if (prev.trim()) return prev
+          if (selectedTemplateId === BLANK_TEMPLATE_ID) return 'Getting started'
+          const tmpl = COURSE_CREATE_STARTER_TEMPLATES.find((x) => x.id === selectedTemplateId)
+          return tmpl?.suggestedFirstModuleTitle ?? 'Getting started'
+        })
+      }
       setStep(3)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not apply syllabus template.')
@@ -110,7 +154,32 @@ export default function CourseCreate() {
     }
   }
 
-  async function finishWizard(skipModule: boolean) {
+  function validateCompetencies(): string | null {
+    if (competencies.length === 0) {
+      return 'Add at least one competency (course outcome).'
+    }
+    for (let i = 0; i < competencies.length; i++) {
+      const c = competencies[i]
+      if (!c.title.trim()) {
+        return `Competency ${i + 1}: enter a title (this becomes the module name).`
+      }
+      if (c.subOutcomes.length === 0) {
+        return `Competency “${c.title.trim()}”: add at least one sub-outcome.`
+      }
+      for (let j = 0; j < c.subOutcomes.length; j++) {
+        const s = c.subOutcomes[j]
+        if (!s.title.trim()) {
+          return `Competency “${c.title.trim()}”: sub-outcome ${j + 1} needs a title.`
+        }
+        if (!s.assessmentTitle.trim()) {
+          return `Sub-outcome “${s.title.trim()}”: enter an assessment title.`
+        }
+      }
+    }
+    return null
+  }
+
+  async function finishTraditional(skipModule: boolean) {
     if (!createdCourse) return
     setSubmitting(true)
     setError(null)
@@ -130,12 +199,62 @@ export default function CourseCreate() {
     }
   }
 
+  async function finishCompetencyBased() {
+    if (!createdCourse) return
+    const v = validateCompetencies()
+    if (v) {
+      setError(v)
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      for (const comp of competencies) {
+        const module = await createCourseModule(createdCourse.courseCode, { title: comp.title.trim() })
+        const outcome = await createCourseOutcome(createdCourse.courseCode, {
+          title: comp.title.trim(),
+          description: comp.description.trim(),
+        })
+        await patchCourseOutcome(createdCourse.courseCode, outcome.id, {
+          moduleStructureItemId: module.id,
+        })
+        for (const sub of comp.subOutcomes) {
+          const subRow = await createCourseOutcomeSubOutcome(createdCourse.courseCode, outcome.id, {
+            title: sub.title.trim(),
+            description: sub.description.trim(),
+          })
+          const assessmentTitle = sub.assessmentTitle.trim()
+          const item =
+            sub.assessmentKind === 'assignment'
+              ? await createModuleAssignment(createdCourse.courseCode, module.id, { title: assessmentTitle })
+              : await createModuleQuiz(createdCourse.courseCode, module.id, { title: assessmentTitle })
+          await addCourseOutcomeLink(createdCourse.courseCode, outcome.id, {
+            structureItemId: item.id,
+            targetKind: sub.assessmentKind === 'assignment' ? 'assignment' : 'quiz',
+            subOutcomeId: subRow.id,
+            measurementLevel: 'summative',
+            intensityLevel: 'high',
+          })
+        }
+      }
+      await refresh()
+      navigate(`/courses/${encodeURIComponent(createdCourse.courseCode)}`, { replace: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not finish setup.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   function goBack() {
     setError(null)
     if (step === 2) {
       if (createdCourse) {
         setTitle(createdCourse.title)
         setDescription(createdCourse.description)
+        if (createdCourse.courseType === 'competency_based' || createdCourse.courseType === 'traditional') {
+          setCourseMode(createdCourse.courseType)
+        }
       }
       setStep(1)
       return
@@ -147,10 +266,16 @@ export default function CourseCreate() {
 
   const descriptionText =
     step === 1
-      ? 'Step 1 of 3 — name your course. You will enroll as teacher and can publish and add learners later.'
+      ? 'Step 1 of 3 — name your course and choose how modules progress. You enroll as teacher and can publish later.'
       : step === 2
         ? 'Step 2 of 3 — pick a syllabus scaffold or start blank. You can edit everything later on the Syllabus page.'
-        : 'Step 3 of 3 — optionally add your first module shell, then open the course.'
+        : isCompetency
+          ? 'Step 3 of 3 — each competency becomes its own module. Learners unlock the next module after they complete every assessment for the previous competency.'
+          : 'Step 3 of 3 — optionally add your first module shell, then open the course.'
+
+  const progressLabels = isCompetency
+    ? (['Basics', 'Syllabus', 'Competencies'] as const)
+    : (['Basics', 'Syllabus', 'Module'] as const)
 
   return (
     <LmsPage
@@ -177,7 +302,7 @@ export default function CourseCreate() {
                     }
                   >
                     <span className="sr-only">{step === n ? 'Current step: ' : step > n ? 'Completed: ' : 'Not started: '}</span>
-                    {n}. {n === 1 ? 'Basics' : n === 2 ? 'Syllabus' : 'Module'}
+                    {n}. {progressLabels[n - 1]}
                   </span>
                 </li>
               ))}
@@ -258,6 +383,61 @@ export default function CourseCreate() {
                   className="mt-1.5 w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none ring-indigo-500/0 transition focus:border-indigo-300 focus:ring-2 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500/60"
                 />
               </div>
+
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-medium text-slate-700 dark:text-neutral-200">Course structure</legend>
+                <p className="text-xs text-slate-600 dark:text-neutral-400">
+                  Traditional courses behave like a standard LMS outline. Competency-based courses require outcomes and
+                  assessments per competency; each competency is a module and the next module stays locked until prior
+                  assessments are completed.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label
+                    className={`flex cursor-pointer flex-col rounded-2xl border p-4 text-left shadow-sm transition ${
+                      courseMode === 'traditional'
+                        ? 'border-indigo-400 bg-indigo-50/80 ring-2 ring-indigo-300/60 dark:border-indigo-500/70 dark:bg-indigo-950/30 dark:ring-indigo-500/40'
+                        : 'border-slate-200 bg-white hover:border-slate-300 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-neutral-600'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-neutral-100">
+                      <input
+                        type="radio"
+                        name="course-mode"
+                        className="sr-only"
+                        disabled={!!createdCourse}
+                        checked={courseMode === 'traditional'}
+                        onChange={() => setCourseMode('traditional')}
+                      />
+                      Traditional
+                    </span>
+                    <span className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-neutral-400">
+                      Linear modules; visibility follows your publish dates and release rules.
+                    </span>
+                  </label>
+                  <label
+                    className={`flex cursor-pointer flex-col rounded-2xl border p-4 text-left shadow-sm transition ${
+                      courseMode === 'competency_based'
+                        ? 'border-indigo-400 bg-indigo-50/80 ring-2 ring-indigo-300/60 dark:border-indigo-500/70 dark:bg-indigo-950/30 dark:ring-indigo-500/40'
+                        : 'border-slate-200 bg-white hover:border-slate-300 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-neutral-600'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-neutral-100">
+                      <input
+                        type="radio"
+                        name="course-mode"
+                        className="sr-only"
+                        disabled={!!createdCourse}
+                        checked={courseMode === 'competency_based'}
+                        onChange={() => setCourseMode('competency_based')}
+                      />
+                      Competency-based
+                    </span>
+                    <span className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-neutral-400">
+                      Outcomes, sub-outcomes, and assessments per competency; sequential unlock between modules.
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
 
               <div className="flex flex-wrap gap-3">
                 <button
@@ -360,7 +540,7 @@ export default function CourseCreate() {
             </div>
           )}
 
-          {step === 3 && (
+          {step === 3 && !isCompetency && (
             <div className="space-y-5">
               <p className="text-sm text-slate-600 dark:text-neutral-300">
                 Modules organize pages, assignments, and quizzes. You can rename, reorder, and add items anytime.
@@ -385,7 +565,7 @@ export default function CourseCreate() {
                 <button
                   type="button"
                   disabled={submitting}
-                  onClick={() => void finishWizard(false)}
+                  onClick={() => void finishTraditional(false)}
                   className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Sparkles className="h-4 w-4" aria-hidden />
@@ -394,10 +574,244 @@ export default function CourseCreate() {
                 <button
                   type="button"
                   disabled={submitting}
-                  onClick={() => void finishWizard(true)}
+                  onClick={() => void finishTraditional(true)}
                   className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
                 >
                   Skip module
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={goBack}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && isCompetency && (
+            <div className="space-y-6">
+              <p className="text-sm text-slate-600 dark:text-neutral-300">
+                Each competency becomes one published module. Add sub-outcomes, then an assessment (quiz or assignment)
+                for each sub-outcome. You can edit questions and pages after setup.
+              </p>
+
+              <div className="space-y-6">
+                {competencies.map((comp, ci) => (
+                  <div
+                    key={ci}
+                    className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 dark:border-neutral-700 dark:bg-neutral-900/40"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
+                        Competency {ci + 1}
+                      </h2>
+                      {competencies.length > 1 ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 dark:border-rose-900/40 dark:text-rose-100 dark:hover:bg-rose-950/40"
+                          onClick={() => setCompetencies((rows) => rows.filter((_, i) => i !== ci))}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Module title</label>
+                        <input
+                          value={comp.title}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            setCompetencies((rows) => rows.map((r, i) => (i === ci ? { ...r, title: v } : r)))
+                          }}
+                          maxLength={500}
+                          placeholder="e.g. Patient assessment"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">
+                          Outcome description
+                        </label>
+                        <textarea
+                          value={comp.description}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            setCompetencies((rows) => rows.map((r, i) => (i === ci ? { ...r, description: v } : r)))
+                          }}
+                          rows={2}
+                          maxLength={20000}
+                          placeholder="What learners will demonstrate in this competency"
+                          className="mt-1 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-4 border-t border-slate-200 pt-4 dark:border-neutral-700">
+                      <p className="text-xs font-medium text-slate-600 dark:text-neutral-400">Sub-outcomes & assessments</p>
+                      {comp.subOutcomes.map((sub, sj) => (
+                        <div
+                          key={sj}
+                          className="rounded-xl border border-slate-200 bg-white p-3 dark:border-neutral-600 dark:bg-neutral-950"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-slate-700 dark:text-neutral-200">
+                              Sub-outcome {sj + 1}
+                            </span>
+                            {comp.subOutcomes.length > 1 ? (
+                              <button
+                                type="button"
+                                className="text-xs font-semibold text-rose-700 hover:underline dark:text-rose-300"
+                                onClick={() =>
+                                  setCompetencies((rows) =>
+                                    rows.map((r, i) =>
+                                      i === ci
+                                        ? {
+                                            ...r,
+                                            subOutcomes: r.subOutcomes.filter((_, k) => k !== sj),
+                                          }
+                                        : r,
+                                    ),
+                                  )
+                                }
+                              >
+                                Remove
+                              </button>
+                            ) : null}
+                          </div>
+                          <input
+                            value={sub.title}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              setCompetencies((rows) =>
+                                rows.map((r, i) =>
+                                  i === ci
+                                    ? {
+                                        ...r,
+                                        subOutcomes: r.subOutcomes.map((s, k) => (k === sj ? { ...s, title: v } : s)),
+                                      }
+                                    : r,
+                                ),
+                              )
+                            }}
+                            maxLength={500}
+                            placeholder="Sub-outcome title"
+                            className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                          />
+                          <textarea
+                            value={sub.description}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              setCompetencies((rows) =>
+                                rows.map((r, i) =>
+                                  i === ci
+                                    ? {
+                                        ...r,
+                                        subOutcomes: r.subOutcomes.map((s, k) =>
+                                          k === sj ? { ...s, description: v } : s,
+                                        ),
+                                      }
+                                    : r,
+                                ),
+                              )
+                            }}
+                            rows={2}
+                            maxLength={20000}
+                            placeholder="Optional detail"
+                            className="mt-2 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                          />
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            <div>
+                              <label className="text-xs text-slate-600 dark:text-neutral-400">Assessment title</label>
+                              <input
+                                value={sub.assessmentTitle}
+                                onChange={(e) => {
+                                  const v = e.target.value
+                                  setCompetencies((rows) =>
+                                    rows.map((r, i) =>
+                                      i === ci
+                                        ? {
+                                            ...r,
+                                            subOutcomes: r.subOutcomes.map((s, k) =>
+                                              k === sj ? { ...s, assessmentTitle: v } : s,
+                                            ),
+                                          }
+                                        : r,
+                                    ),
+                                  )
+                                }}
+                                maxLength={500}
+                                placeholder="e.g. Check-in quiz"
+                                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-600 dark:text-neutral-400">Type</label>
+                              <select
+                                value={sub.assessmentKind}
+                                onChange={(e) => {
+                                  const v = e.target.value as 'quiz' | 'assignment'
+                                  setCompetencies((rows) =>
+                                    rows.map((r, i) =>
+                                      i === ci
+                                        ? {
+                                            ...r,
+                                            subOutcomes: r.subOutcomes.map((s, k) =>
+                                              k === sj ? { ...s, assessmentKind: v } : s,
+                                            ),
+                                          }
+                                        : r,
+                                    ),
+                                  )
+                                }}
+                                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                              >
+                                <option value="quiz">Quiz</option>
+                                <option value="assignment">Assignment</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-700 hover:underline dark:text-indigo-300"
+                        onClick={() =>
+                          setCompetencies((rows) =>
+                            rows.map((r, i) => (i === ci ? { ...r, subOutcomes: [...r.subOutcomes, emptySubOutcome()] } : r)),
+                          )
+                        }
+                      >
+                        <Plus className="h-4 w-4" aria-hidden />
+                        Add sub-outcome
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-xl border border-dashed border-indigo-300 px-4 py-2 text-sm font-semibold text-indigo-800 transition hover:bg-indigo-50 dark:border-indigo-500/40 dark:text-indigo-100 dark:hover:bg-indigo-950/30"
+                onClick={() => setCompetencies((rows) => [...rows, emptyCompetency()])}
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                Add competency
+              </button>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => void finishCompetencyBased()}
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Sparkles className="h-4 w-4" aria-hidden />
+                  Create competencies & open course
                 </button>
                 <button
                   type="button"

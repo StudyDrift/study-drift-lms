@@ -15,6 +15,7 @@ pub mod assignment_rubric_ai;
 pub mod auth;
 pub mod canvas_course_import;
 pub mod code_execution;
+pub mod competency_gating;
 pub mod concept_graph;
 pub mod course_export_import;
 pub mod course_image_upload;

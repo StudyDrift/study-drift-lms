@@ -54,6 +54,7 @@ export const courseSchema = z
     diagnosticAssessmentsEnabled: z.boolean().optional(),
     hintScaffoldingEnabled: z.boolean().optional(),
     misconceptionDetectionEnabled: z.boolean().optional(),
+    courseType: z.string().optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
     viewerEnrollmentRoles: z.array(z.string()).optional(),
@@ -625,6 +626,7 @@ const courseOutcomeLinkProgressSchema = z.object({
 
 export const courseOutcomeLinkSchema = z.object({
   id: z.string(),
+  subOutcomeId: z.string().optional(),
   structureItemId: z.string(),
   targetKind: z.enum(['assignment', 'quiz', 'quiz_question']),
   quizQuestionId: z.string(),
@@ -633,6 +635,14 @@ export const courseOutcomeLinkSchema = z.object({
   itemTitle: z.string(),
   itemKind: z.string(),
   progress: courseOutcomeLinkProgressSchema,
+})
+
+export const courseOutcomeSubOutcomeSchema = z.object({
+  id: z.string(),
+  outcomeId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  sortOrder: z.number(),
 })
 
 export const courseOutcomeSchema = z.object({

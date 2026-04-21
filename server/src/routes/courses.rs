@@ -45,8 +45,9 @@ use crate::models::course_module_quiz::{
     QuizSubmitResponse, QuizWorkedExampleResponse, UpdateModuleQuizRequest, ADAPTIVE_SOURCE_KINDS,
 };
 use crate::models::course_outcomes_api::{
-    CourseOutcomeApi, CourseOutcomeLinkApi, CourseOutcomesListResponse, PatchCourseOutcomeRequest,
-    PostCourseOutcomeLinkRequest, PostCourseOutcomeRequest,
+    CourseOutcomeApi, CourseOutcomeLinkApi, CourseOutcomeSubOutcomeApi, CourseOutcomesListResponse,
+    PatchCourseOutcomeRequest, PostCourseOutcomeLinkRequest, PostCourseOutcomeRequest,
+    PostCourseOutcomeSubOutcomeRequest,
 };
 use crate::models::course_structure::{
     CourseStructureItemResponse, CourseStructureResponse, CreateCourseAssignmentRequest,
@@ -109,6 +110,7 @@ use crate::services::ai::OpenRouterError;
 use crate::services::assignment_rubric_ai;
 use crate::services::canvas_course_import;
 use crate::services::code_execution::{self, CodeExecutionResult, ExecuteCodeRequest};
+use crate::services::competency_gating;
 use crate::services::course_export_import;
 use crate::services::enrollments as enrollments_service;
 use crate::services::hint_service;
@@ -441,6 +443,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/outcomes/{outcome_id}",
             patch(course_outcomes_patch_handler).delete(course_outcomes_delete_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/outcomes/{outcome_id}/sub-outcomes",
+            post(course_outcome_sub_outcomes_create_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/outcomes/{outcome_id}/links",
@@ -1206,8 +1212,25 @@ async fn create_handler(
         return Err(AppError::invalid_input("Course title is required."));
     }
 
-    let row =
-        course::insert_course(&state.pool, title, req.description.trim(), user.user_id).await?;
+    let ct_raw = req.course_type.as_deref().unwrap_or("traditional").trim();
+    let course_type = if ct_raw.is_empty() || ct_raw == "traditional" {
+        "traditional"
+    } else if ct_raw == "competency_based" {
+        "competency_based"
+    } else {
+        return Err(AppError::invalid_input(
+            "courseType must be traditional or competency_based.",
+        ));
+    };
+
+    let row = course::insert_course(
+        &state.pool,
+        title,
+        req.description.trim(),
+        user.user_id,
+        course_type,
+    )
+    .await?;
     Ok(Json(row))
 }
 
@@ -1238,6 +1261,14 @@ async fn structure_list_handler(
             rows = relative_schedule::shift_structure_item_rows(rows, &ctx);
         }
         rows = course_structure::filter_structure_for_student_view(rows, Utc::now());
+        rows = competency_gating::filter_structure_rows_for_competency_student(
+            &state.pool,
+            course_id,
+            course_row.course_type.as_str(),
+            user.user_id,
+            rows,
+        )
+        .await?;
     }
     let items =
         course_structure::rows_to_responses_with_quiz_adaptive(&state.pool, course_id, rows)
@@ -4132,6 +4163,7 @@ async fn course_outcomes_list_handler(
             };
             link_apis.push(CourseOutcomeLinkApi {
                 id: lr.id,
+                sub_outcome_id: lr.sub_outcome_id,
                 structure_item_id: lr.structure_item_id,
                 target_kind: lr.target_kind.clone(),
                 quiz_question_id: lr.quiz_question_id.clone(),
@@ -4219,12 +4251,24 @@ async fn course_outcomes_patch_handler(
         }
     }
 
+    if let Some(Some(mid)) = &req.module_structure_item_id {
+        let Some(m) = course_structure::get_item_row(&state.pool, course_id, *mid).await? else {
+            return Err(AppError::invalid_input("Unknown moduleStructureItemId."));
+        };
+        if m.kind != "module" || m.parent_id.is_some() {
+            return Err(AppError::invalid_input(
+                "moduleStructureItemId must reference a top-level module.",
+            ));
+        }
+    }
+
     let Some(updated) = course_outcomes::update_outcome(
         &state.pool,
         course_id,
         outcome_id,
         req.title.as_deref(),
         req.description.as_deref(),
+        req.module_structure_item_id,
     )
     .await?
     else {
@@ -4268,6 +4312,7 @@ async fn course_outcomes_patch_handler(
         };
         link_apis.push(CourseOutcomeLinkApi {
             id: lr.id,
+            sub_outcome_id: lr.sub_outcome_id,
             structure_item_id: lr.structure_item_id,
             target_kind: lr.target_kind.clone(),
             quiz_question_id: lr.quiz_question_id.clone(),
@@ -4289,6 +4334,47 @@ async fn course_outcomes_patch_handler(
         rollup_avg_score_percent,
         links: link_apis,
     }))
+}
+
+async fn course_outcome_sub_outcomes_create_handler(
+    State(state): State<AppState>,
+    Path((course_code, outcome_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<PostCourseOutcomeSubOutcomeRequest>,
+) -> Result<Json<CourseOutcomeSubOutcomeApi>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let course_id = require_course_outcomes_edit(&state, &course_code, user.user_id).await?;
+
+    let title = req.title.trim();
+    if title.is_empty() {
+        return Err(AppError::invalid_input("Title is required."));
+    }
+    if title.len() > 500 {
+        return Err(AppError::invalid_input("Title is too long."));
+    }
+    if req.description.len() > 20_000 {
+        return Err(AppError::invalid_input("Description is too long."));
+    }
+
+    match course_outcomes::insert_sub_outcome(
+        &state.pool,
+        course_id,
+        outcome_id,
+        title,
+        req.description.trim(),
+    )
+    .await
+    {
+        Ok(row) => Ok(Json(CourseOutcomeSubOutcomeApi {
+            id: row.id,
+            outcome_id: row.outcome_id,
+            title: row.title,
+            description: row.description,
+            sort_order: row.sort_order,
+        })),
+        Err(sqlx::Error::RowNotFound) => Err(AppError::NotFound),
+        Err(e) => Err(e.into()),
+    }
 }
 
 async fn course_outcomes_delete_handler(
@@ -6354,12 +6440,12 @@ async fn path_rules_post_handler(
         return Err(AppError::invalid_input("conceptIds must be non-empty."));
     }
     match req.rule_type.as_str() {
-        "required_if_not_mastered" | "unlock_after" | "remediation_insert" => {
-            if req.target_item_id.is_none() {
-                return Err(AppError::invalid_input(
-                    "targetItemId is required for this rule type.",
-                ));
-            }
+        "required_if_not_mastered" | "unlock_after" | "remediation_insert"
+            if req.target_item_id.is_none() =>
+        {
+            return Err(AppError::invalid_input(
+                "targetItemId is required for this rule type.",
+            ));
         }
         _ => {}
     }

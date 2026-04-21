@@ -47,13 +47,14 @@ pub fn validate_outcome_link_levels(
 
 /// One score per gradable evidence target so duplicate links (e.g. different measurement labels) do not double-count.
 pub fn rollup_avg_for_outcome_links(links: &[CourseOutcomeLinkApi]) -> Option<f32> {
-    let mut by_evidence: HashMap<(Uuid, String, String), f32> = HashMap::new();
+    let mut by_evidence: HashMap<(Uuid, String, String, Option<Uuid>), f32> = HashMap::new();
     for link in links {
         if let Some(p) = link.progress.avg_score_percent {
             let key = (
                 link.structure_item_id,
                 link.target_kind.clone(),
                 link.quiz_question_id.clone(),
+                link.sub_outcome_id,
             );
             by_evidence.entry(key).or_insert(p);
         }
@@ -131,9 +132,28 @@ pub async fn add_outcome_link(
         req.intensity_level.as_deref(),
     )?;
 
+    let sub_outcome_id = req.sub_outcome_id;
+    if let Some(soid) = sub_outcome_id {
+        let ok = course_outcomes::sub_outcome_owned_by_outcome_in_course(
+            pool, course_id, outcome_id, soid,
+        )
+        .await?;
+        if !ok {
+            return Err(AppError::invalid_input(
+                "subOutcomeId must belong to this outcome in the same course.",
+            ));
+        }
+        if kind == "quiz_question" {
+            return Err(AppError::invalid_input(
+                "subOutcomeId is only supported for whole-quiz or assignment evidence links.",
+            ));
+        }
+    }
+
     let inserted = match course_outcomes::insert_link(
         pool,
         outcome_id,
+        sub_outcome_id,
         req.structure_item_id,
         kind,
         qid_store,
@@ -145,7 +165,11 @@ pub async fn add_outcome_link(
         Ok(r) => r,
         Err(e) => {
             if let sqlx::Error::Database(ref dbe) = e {
-                if dbe.constraint() == Some("ux_course_outcome_links_unique_target") {
+                if matches!(
+                    dbe.constraint(),
+                    Some("ux_course_outcome_links_unique_root")
+                        | Some("ux_course_outcome_links_unique_sub")
+                ) {
                     return Err(AppError::invalid_input(
                         "This outcome already maps that item with the same measurement and intensity levels. Change the levels or remove the existing mapping first.",
                     ));
@@ -185,6 +209,7 @@ pub async fn add_outcome_link(
 
     Ok(CourseOutcomeLinkApi {
         id: inserted.id,
+        sub_outcome_id: inserted.sub_outcome_id,
         structure_item_id: inserted.structure_item_id,
         target_kind: inserted.target_kind,
         quiz_question_id: inserted.quiz_question_id,
