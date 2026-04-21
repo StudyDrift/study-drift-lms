@@ -110,7 +110,11 @@ pub async fn update_hint(
     .await
 }
 
-pub async fn delete_hint(pool: &PgPool, hint_id: Uuid, question_id: Uuid) -> Result<bool, sqlx::Error> {
+pub async fn delete_hint(
+    pool: &PgPool,
+    hint_id: Uuid,
+    question_id: Uuid,
+) -> Result<bool, sqlx::Error> {
     let res = sqlx::query(&format!(
         r#"DELETE FROM {} WHERE id = $1 AND question_id = $2"#,
         schema::QUESTION_HINTS

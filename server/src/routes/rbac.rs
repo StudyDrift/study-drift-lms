@@ -91,9 +91,7 @@ async fn create_permission(
     require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
     let permission_string = req.permission_string.trim();
     if permission_string.is_empty() {
-        return Err(AppError::invalid_input(
-            "Permission string is required.",
-        ));
+        return Err(AppError::invalid_input("Permission string is required."));
     }
     rbac::validate_permission_string(permission_string).map_err(AppError::invalid_input)?;
     let description = req.description.trim();

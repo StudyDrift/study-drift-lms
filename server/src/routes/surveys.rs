@@ -10,7 +10,7 @@ use crate::error::AppError;
 use crate::http_auth::{assert_permission, auth_user};
 use crate::models::course_module_survey::{
     validate_anonymity_mode, validate_questions, CreateCourseSurveyRequest, SubmitSurveyResponse,
-    SubmitSurveyResponseRequest, SurveyResultsResponse, SurveyResponse, UpdateSurveyRequest,
+    SubmitSurveyResponseRequest, SurveyResponse, SurveyResultsResponse, UpdateSurveyRequest,
 };
 use crate::repos::course;
 use crate::repos::course_grants;
@@ -25,9 +25,18 @@ pub fn router() -> Router<AppState> {
             "/api/v1/courses/{course_code}/surveys",
             get(list_course_surveys_handler).post(create_course_survey_handler),
         )
-        .route("/api/v1/surveys/{id}", get(get_survey_handler).put(update_survey_handler))
-        .route("/api/v1/surveys/{id}/respond", post(submit_survey_response_handler))
-        .route("/api/v1/surveys/{id}/results", get(get_survey_results_handler))
+        .route(
+            "/api/v1/surveys/{id}",
+            get(get_survey_handler).put(update_survey_handler),
+        )
+        .route(
+            "/api/v1/surveys/{id}/respond",
+            post(submit_survey_response_handler),
+        )
+        .route(
+            "/api/v1/surveys/{id}/results",
+            get(get_survey_results_handler),
+        )
 }
 
 async fn require_course_access(
@@ -56,7 +65,9 @@ async fn list_course_surveys_handler(
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
-    Ok(Json(course_module_surveys::list_for_course(&state.pool, course_id).await?))
+    Ok(Json(
+        course_module_surveys::list_for_course(&state.pool, course_id).await?,
+    ))
 }
 
 async fn create_course_survey_handler(
@@ -132,7 +143,8 @@ async fn get_survey_handler(
     require_course_access(&state, &course_code, user.user_id).await?;
 
     let required = course_grants::course_item_create_permission(&course_code);
-    let can_edit = crate::repos::rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
+    let can_edit =
+        crate::repos::rbac::user_has_permission(&state.pool, user.user_id, &required).await?;
     if !can_edit {
         let visible = course_structure::survey_visible_to_student(
             &state.pool,
@@ -255,7 +267,8 @@ async fn get_survey_results_handler(
     let required = course_grants::course_item_create_permission(&course_code);
     assert_permission(&state.pool, user.user_id, &required).await?;
 
-    let (response_count, questions) = course_module_surveys::aggregate_results(&state.pool, id).await?;
+    let (response_count, questions) =
+        course_module_surveys::aggregate_results(&state.pool, id).await?;
     Ok(Json(SurveyResultsResponse {
         response_count,
         questions,

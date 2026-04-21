@@ -9,7 +9,7 @@ import {
   ListOrdered,
   Sigma,
 } from 'lucide-react'
-import type { MouseEvent, RefObject } from 'react'
+import type { MouseEvent } from 'react'
 import type { MarkdownEditKind } from './markdown-insert'
 
 export type MarkdownFormatToolbarProps = {
@@ -23,7 +23,8 @@ export type MarkdownFormatToolbarProps = {
   /** Open math insert popover (LaTeX + KaTeX preview). */
   mathInsert?: {
     onOpen: () => void
-    buttonRef?: RefObject<HTMLButtonElement | null>
+    /** Anchor element for popover positioning (mount/unmount). */
+    registerMathAnchor?: (node: HTMLButtonElement | null) => void
   }
 }
 
@@ -119,7 +120,9 @@ export function MarkdownFormatToolbar({ disabled, onApply, courseImage, mathInse
       {mathInsert ? (
         <button
           type="button"
-          ref={mathInsert.buttonRef}
+          ref={(node) => {
+            mathInsert.registerMathAnchor?.(node)
+          }}
           disabled={disabled}
           onMouseDown={preventBlur}
           onClick={() => mathInsert.onOpen()}

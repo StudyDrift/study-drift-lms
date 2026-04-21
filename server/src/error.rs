@@ -53,10 +53,7 @@ pub enum AppError {
     #[error("email already registered")]
     EmailTaken,
     #[error("invalid input")]
-    InvalidInput {
-        code: ErrorCode,
-        message: String,
-    },
+    InvalidInput { code: ErrorCode, message: String },
     #[error("unprocessable entity: {message}")]
     UnprocessableEntity { message: String },
     #[error("invalid or expired password reset link")]
@@ -211,7 +208,8 @@ impl IntoResponse for AppError {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
                         code: ErrorCode::QuestionAlreadyLocked,
-                        message: "This question has already been submitted for this attempt.".into(),
+                        message: "This question has already been submitted for this attempt."
+                            .into(),
                     },
                 });
                 (StatusCode::FORBIDDEN, body).into_response()
@@ -257,7 +255,8 @@ impl IntoResponse for AppError {
                 let body = Json(ErrorBody {
                     error: ErrorDetail {
                         code: ErrorCode::LtiToolConfiguration,
-                        message: "Tool configuration error — please contact your administrator.".into(),
+                        message: "Tool configuration error — please contact your administrator."
+                            .into(),
                     },
                 });
                 (StatusCode::SERVICE_UNAVAILABLE, body).into_response()
@@ -372,11 +371,11 @@ mod tests {
             (AppError::Unauthorized, StatusCode::UNAUTHORIZED),
             (AppError::NotFound, StatusCode::NOT_FOUND),
             (AppError::Forbidden, StatusCode::FORBIDDEN),
+            (AppError::AiNotConfigured, StatusCode::SERVICE_UNAVAILABLE),
             (
-                AppError::AiNotConfigured,
-                StatusCode::SERVICE_UNAVAILABLE,
+                AppError::AiGenerationFailed("e".into()),
+                StatusCode::BAD_GATEWAY,
             ),
-            (AppError::AiGenerationFailed("e".into()), StatusCode::BAD_GATEWAY),
             (AppError::InvalidCredentials, StatusCode::UNAUTHORIZED),
             (AppError::EmailTaken, StatusCode::CONFLICT),
             (AppError::invalid_input("x"), StatusCode::BAD_REQUEST),

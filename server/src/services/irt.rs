@@ -118,7 +118,7 @@ pub fn select_max_information_item(
         let info = fisher_information_2pl(theta, a, b);
         match best {
             None => best = Some((id, info)),
-            Some((bid, bi)) if info > bi => best = Some((id, info)),
+            Some((_bid, bi)) if info > bi => best = Some((id, info)),
             _ => {}
         }
     }
@@ -156,11 +156,7 @@ pub fn icc_curve_points(a: f64, b: f64, c: f64) -> Vec<(f64, f64)> {
     let mut t = THETA_GRID_MIN;
     while t <= THETA_GRID_MAX + 1e-9 {
         let p2 = prob_2pl(t, a, b);
-        let p = if c > 1e-6 {
-            c + (1.0 - c) * p2
-        } else {
-            p2
-        };
+        let p = if c > 1e-6 { c + (1.0 - c) * p2 } else { p2 };
         out.push((t, p.clamp(0.0, 1.0)));
         t += 0.25;
     }

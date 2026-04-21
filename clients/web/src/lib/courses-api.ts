@@ -121,6 +121,8 @@ export type CoursePublic = {
   viewerEnrollmentRoles?: string[]
   /** Student enrollment row id for adaptive “next” navigation when the viewer is enrolled as a student. */
   viewerStudentEnrollmentId?: string
+  /** Server `ANNOTATION_ENABLED` — inline submission annotation / SpeedGrader surfaces. */
+  annotationsEnabled?: boolean
 }
 
 export type StructurePathRule = {
@@ -3526,4 +3528,163 @@ export async function postCourseImportCanvas(
       }
     }
   })
+}
+
+/** Row from `/assignments/:itemId/submissions` (plan 3.1). */
+export type ModuleAssignmentSubmissionApi = {
+  id: string
+  submittedBy: string
+  attachmentFileId: string | null
+  submittedAt: string
+  updatedAt: string
+  attachmentContentPath?: string | null
+  attachmentMimeType?: string | null
+}
+
+export type SubmissionAnnotationApi = {
+  id: string
+  submissionId: string
+  annotatorId: string
+  clientId: string
+  page: number
+  toolType: string
+  colour: string
+  coordsJson: unknown
+  body?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchModuleAssignmentMySubmission(
+  courseCode: string,
+  itemId: string,
+): Promise<ModuleAssignmentSubmissionApi | null> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/mine`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { submission?: ModuleAssignmentSubmissionApi | null }
+  if (o.submission == null || o.submission === undefined) return null
+  return o.submission
+}
+
+export async function fetchModuleAssignmentSubmissions(
+  courseCode: string,
+  itemId: string,
+  opts?: { graded?: 'all' | 'graded' | 'ungraded' },
+): Promise<ModuleAssignmentSubmissionApi[]> {
+  const q =
+    opts?.graded && opts.graded !== 'all' ? `?graded=${encodeURIComponent(opts.graded)}` : ''
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions${q}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { submissions?: ModuleAssignmentSubmissionApi[] }
+  return Array.isArray(o.submissions) ? o.submissions : []
+}
+
+export async function uploadModuleAssignmentSubmissionFile(
+  courseCode: string,
+  itemId: string,
+  file: File,
+): Promise<{ submission: ModuleAssignmentSubmissionApi }> {
+  const fd = new FormData()
+  fd.set('file', file)
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/upload`,
+    { method: 'POST', body: fd },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { submission: ModuleAssignmentSubmissionApi }
+}
+
+export async function fetchSubmissionAnnotations(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+): Promise<SubmissionAnnotationApi[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/annotations`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { annotations?: SubmissionAnnotationApi[] }
+  return Array.isArray(o.annotations) ? o.annotations : []
+}
+
+export type PostSubmissionAnnotationInput = {
+  clientId: string
+  page: number
+  toolType: 'highlight' | 'draw' | 'text' | 'pin'
+  colour: string
+  coordsJson: unknown
+  body?: string
+}
+
+export async function postSubmissionAnnotation(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+  body: PostSubmissionAnnotationInput,
+): Promise<SubmissionAnnotationApi> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/annotations`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientId: body.clientId,
+        page: body.page,
+        toolType: body.toolType,
+        colour: body.colour,
+        coordsJson: body.coordsJson,
+        body: body.body,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { annotation?: SubmissionAnnotationApi }
+  if (!o.annotation) throw new Error('Invalid annotation response.')
+  return o.annotation
+}
+
+export async function deleteSubmissionAnnotation(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+  annotationId: string,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/annotations/${encodeURIComponent(annotationId)}`,
+    { method: 'DELETE' },
+  )
+  if (res.ok) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+export async function downloadSubmissionAnnotatedPdf(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/annotated-pdf`,
+  )
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'annotated-submission.pdf'
+  a.rel = 'noopener'
+  a.click()
+  URL.revokeObjectURL(url)
 }

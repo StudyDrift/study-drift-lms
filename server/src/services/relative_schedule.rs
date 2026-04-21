@@ -66,13 +66,13 @@ pub fn parse_iso8601_duration(s: &str) -> Result<IsoDuration, &'static str> {
 }
 
 fn take_u32_component(rest: &mut &str, unit: char) -> Result<u32, &'static str> {
-    let (n, next) = take_component(*rest, unit)?;
+    let (n, next) = take_component(rest, unit)?;
     *rest = next;
     u32::try_from(n).map_err(|_| "Duration value is too large.")
 }
 
 fn take_u64_component(rest: &mut &str, unit: char) -> Result<u64, &'static str> {
-    let (n, next) = take_component(*rest, unit)?;
+    let (n, next) = take_component(rest, unit)?;
     *rest = next;
     Ok(n)
 }

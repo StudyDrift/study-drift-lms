@@ -93,24 +93,24 @@ pub async fn run_code(req: ExecuteCodeRequest) -> Result<CodeExecutionResult, Ap
         .unwrap_or_else(|| DEFAULT_JUDGE0_URL.to_string());
     let api_key = std::env::var("CODE_EXECUTION_API_KEY").ok();
 
-    let submit_url = format!("{}/submissions?base64_encoded=false&wait=false", base.trim_end_matches('/'));
-    let mut submit_req = client
-        .post(submit_url)
-        .json(&serde_json::json!({
-            "language_id": req.language_id,
-            "source_code": req.source_code,
-            "stdin": req.stdin,
-            "expected_output": req.expected_output,
-            "cpu_time_limit": (req.time_limit_ms.max(100) as f64) / 1000.0,
-            "memory_limit": req.memory_limit_kb.max(1024),
-        }));
+    let submit_url = format!(
+        "{}/submissions?base64_encoded=false&wait=false",
+        base.trim_end_matches('/')
+    );
+    let mut submit_req = client.post(submit_url).json(&serde_json::json!({
+        "language_id": req.language_id,
+        "source_code": req.source_code,
+        "stdin": req.stdin,
+        "expected_output": req.expected_output,
+        "cpu_time_limit": (req.time_limit_ms.max(100) as f64) / 1000.0,
+        "memory_limit": req.memory_limit_kb.max(1024),
+    }));
     if let Some(key) = api_key.as_ref() {
         submit_req = submit_req.header("X-Auth-Token", key);
     }
-    let submit = submit_req
-        .send()
-        .await
-        .map_err(|e| AppError::invalid_input(format!("Code execution backend request failed: {e}")))?;
+    let submit = submit_req.send().await.map_err(|e| {
+        AppError::invalid_input(format!("Code execution backend request failed: {e}"))
+    })?;
     if !submit.status().is_success() {
         let status = submit.status();
         let body = submit.text().await.unwrap_or_default();
@@ -146,10 +146,9 @@ pub async fn run_code(req: ExecuteCodeRequest) -> Result<CodeExecutionResult, Ap
                 "Code execution polling failed ({status}): {body}"
             )));
         }
-        let out: Judge0ResultResponse = poll
-            .json()
-            .await
-            .map_err(|e| AppError::invalid_input(format!("Invalid code execution poll response: {e}")))?;
+        let out: Judge0ResultResponse = poll.json().await.map_err(|e| {
+            AppError::invalid_input(format!("Invalid code execution poll response: {e}"))
+        })?;
 
         if out.status.id <= 2 {
             if attempts >= 30 {
@@ -205,7 +204,7 @@ pub fn language_id_from_name(language: &str) -> i32 {
 }
 
 pub fn validate_code_submission_size(code: &str) -> Result<(), AppError> {
-    if code.as_bytes().len() > MAX_CODE_BYTES {
+    if code.len() > MAX_CODE_BYTES {
         return Err(AppError::invalid_input(
             "Code submission exceeds 64 KB limit.",
         ));

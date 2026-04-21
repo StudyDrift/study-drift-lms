@@ -1,10 +1,16 @@
 import type { Editor } from '@tiptap/core'
-import type { RefObject } from 'react'
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import type { CSSProperties, RefObject } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { loadKatex, renderKatexSafe, type KatexModule } from '../../lib/math'
 
 const RECENT_KEY = 'lextures:mathRecent'
 const RECENT_MAX = 5
+
+const FALLBACK_PANEL_POSITION: CSSProperties = {
+  top: '20%',
+  left: '50%',
+  transform: 'translateX(-50%)',
+}
 
 function readRecent(): string[] {
   try {
@@ -45,6 +51,7 @@ export function MathInsertPopover({ open, onClose, editor, anchorRef }: MathInse
   const [katex, setKatex] = useState<KatexModule | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [panelPosition, setPanelPosition] = useState<CSSProperties>(FALLBACK_PANEL_POSITION)
 
   useEffect(() => {
     if (!open) return
@@ -80,6 +87,22 @@ export function MathInsertPopover({ open, onClose, editor, anchorRef }: MathInse
     return html
   }, [katex, latex, block])
 
+  useLayoutEffect(() => {
+    if (!open) return
+    queueMicrotask(() => {
+      const el = anchorRef?.current
+      if (!el) {
+        setPanelPosition(FALLBACK_PANEL_POSITION)
+        return
+      }
+      const r = el.getBoundingClientRect()
+      setPanelPosition({
+        top: `${Math.min(r.bottom + 8, window.innerHeight - 320)}px`,
+        left: `${Math.min(Math.max(16, r.left), window.innerWidth - 320)}px`,
+      })
+    })
+  }, [open, anchorRef])
+
   const insert = useCallback(() => {
     if (!editor) return
     const t = latex.trim()
@@ -92,18 +115,6 @@ export function MathInsertPopover({ open, onClose, editor, anchorRef }: MathInse
     editor.chain().focus().insertContent(node).run()
     onClose()
   }, [editor, latex, block, onClose])
-
-  const position = useMemo(() => {
-    const el = anchorRef?.current
-    if (!el) {
-      return { top: '20%', left: '50%', transform: 'translateX(-50%)' as const }
-    }
-    const r = el.getBoundingClientRect()
-    return {
-      top: `${Math.min(r.bottom + 8, window.innerHeight - 320)}px`,
-      left: `${Math.min(Math.max(16, r.left), window.innerWidth - 320)}px`,
-    }
-  }, [anchorRef, open])
 
   if (!open) return null
 
@@ -120,7 +131,7 @@ export function MathInsertPopover({ open, onClose, editor, anchorRef }: MathInse
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        style={position}
+        style={panelPosition}
         className="absolute w-[min(100vw-2rem,22rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-neutral-600 dark:bg-neutral-900"
         onMouseDown={(e) => e.stopPropagation()}
       >

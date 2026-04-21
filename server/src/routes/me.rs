@@ -109,7 +109,10 @@ async fn post_notebooks_query(
         .as_ref()
         .ok_or(AppError::AiNotConfigured)?;
 
-    let StudentNotebookRagRequest { question, notebooks: raw } = req;
+    let StudentNotebookRagRequest {
+        question,
+        notebooks: raw,
+    } = req;
 
     let notebooks: Vec<StudentNotebookDocInput> = raw
         .into_iter()

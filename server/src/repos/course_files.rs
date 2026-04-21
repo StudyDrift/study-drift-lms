@@ -79,7 +79,8 @@ fn disk_course_dir_segment(course_code: &str) -> String {
 }
 
 pub fn blob_disk_path(root: &Path, course_code: &str, storage_key: &str) -> PathBuf {
-    root.join(disk_course_dir_segment(course_code)).join(storage_key)
+    root.join(disk_course_dir_segment(course_code))
+        .join(storage_key)
 }
 
 pub async fn remove_stored_blobs(root: &Path, course_code: &str, storage_keys: &[String]) {

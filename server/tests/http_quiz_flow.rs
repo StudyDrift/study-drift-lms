@@ -291,9 +291,7 @@ async fn add_enrollments_forbidden_for_student_only_member() {
     let token_b = login_b["access_token"].as_str().unwrap();
 
     let r = client
-        .post(format!(
-            "{base}/api/v1/courses/{course_code}/enrollments"
-        ))
+        .post(format!("{base}/api/v1/courses/{course_code}/enrollments"))
         .bearer_auth(token_b)
         .json(&json!({ "emails": "someone@example.com" }))
         .send()
@@ -481,7 +479,10 @@ async fn learner_mastery_tracks_tagged_quiz_question() {
     let mastery_body = json_body(r).await;
     let concepts = mastery_body["concepts"].as_array().expect("concepts array");
     assert_eq!(concepts.len(), 1);
-    assert_eq!(concepts[0]["conceptId"].as_str().unwrap(), concept_id.to_string());
+    assert_eq!(
+        concepts[0]["conceptId"].as_str().unwrap(),
+        concept_id.to_string()
+    );
     assert!(concepts[0]["mastery"].as_f64().unwrap_or(0.0) > 0.0);
 
     let r = client

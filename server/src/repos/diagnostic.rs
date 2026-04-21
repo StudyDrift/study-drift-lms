@@ -131,7 +131,10 @@ pub async fn insert_diagnostic_attempt(
     .await
 }
 
-pub async fn get_attempt_by_id(pool: &PgPool, attempt_id: Uuid) -> Result<Option<DiagnosticAttemptRow>, sqlx::Error> {
+pub async fn get_attempt_by_id(
+    pool: &PgPool,
+    attempt_id: Uuid,
+) -> Result<Option<DiagnosticAttemptRow>, sqlx::Error> {
     sqlx::query_as::<_, DiagnosticAttemptRow>(&format!(
         r#"
         SELECT

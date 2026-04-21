@@ -38,7 +38,9 @@ pub async fn resolve_effective_for_course(
     user_id: Uuid,
     course_id: Uuid,
 ) -> Result<EffectiveAccommodations, sqlx::Error> {
-    if let Some(r) = student_accommodations::find_active_for_course(pool, user_id, course_id).await? {
+    if let Some(r) =
+        student_accommodations::find_active_for_course(pool, user_id, course_id).await?
+    {
         return Ok(EffectiveAccommodations::from_row(&r));
     }
     if let Some(r) = student_accommodations::find_active_global(pool, user_id).await? {
@@ -48,7 +50,11 @@ pub async fn resolve_effective_for_course(
 }
 
 /// On lookup failure, log and return defaults so quiz delivery never blocks (FR reliability).
-pub async fn resolve_effective_or_default(pool: &PgPool, user_id: Uuid, course_id: Uuid) -> EffectiveAccommodations {
+pub async fn resolve_effective_or_default(
+    pool: &PgPool,
+    user_id: Uuid,
+    course_id: Uuid,
+) -> EffectiveAccommodations {
     match resolve_effective_for_course(pool, user_id, course_id).await {
         Ok(v) => v,
         Err(e) => {
@@ -108,14 +114,21 @@ pub fn compute_attempt_deadline(
     )
 }
 
-pub fn effective_max_submitted_attempts(quiz_max_attempts: i32, unlimited: bool, extra: i32) -> Option<i64> {
+pub fn effective_max_submitted_attempts(
+    quiz_max_attempts: i32,
+    unlimited: bool,
+    extra: i32,
+) -> Option<i64> {
     if unlimited {
         return None;
     }
     Some(quiz_max_attempts as i64 + extra.max(0) as i64)
 }
 
-pub fn require_attempt_within_deadline(att: &QuizAttemptRow, now: DateTime<Utc>) -> Result<(), AppError> {
+pub fn require_attempt_within_deadline(
+    att: &QuizAttemptRow,
+    now: DateTime<Utc>,
+) -> Result<(), AppError> {
     if let Some(dl) = att.deadline_at {
         if now > dl {
             return Err(AppError::AttemptTimeExpired);
@@ -142,10 +155,7 @@ mod tests {
 
     #[test]
     fn effective_max_attempts_adds_grant() {
-        assert_eq!(
-            effective_max_submitted_attempts(2, false, 1),
-            Some(3)
-        );
+        assert_eq!(effective_max_submitted_attempts(2, false, 1), Some(3));
         assert_eq!(effective_max_submitted_attempts(2, true, 5), None);
     }
 }

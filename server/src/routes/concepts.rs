@@ -10,9 +10,7 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::http_auth::{assert_permission, auth_user};
 use crate::models::standards::StandardCodeApi;
-use crate::repos::concepts::{
-    self, ConceptJson, GraphBundle, ListConceptsQuery,
-};
+use crate::repos::concepts::{self, ConceptJson, GraphBundle, ListConceptsQuery};
 use crate::repos::standards as standards_repo;
 use crate::services::concept_graph;
 use crate::state::AppState;

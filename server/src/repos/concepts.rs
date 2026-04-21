@@ -524,10 +524,7 @@ pub async fn list_descendants(pool: &PgPool, concept_id: Uuid) -> Result<GraphBu
     })
 }
 
-async fn load_concepts_by_ids(
-    pool: &PgPool,
-    ids: &[Uuid],
-) -> Result<Vec<ConceptRow>, sqlx::Error> {
+async fn load_concepts_by_ids(pool: &PgPool, ids: &[Uuid]) -> Result<Vec<ConceptRow>, sqlx::Error> {
     if ids.is_empty() {
         return Ok(vec![]);
     }
@@ -611,16 +608,14 @@ pub async fn concept_ids_for_question_ids(
     if question_ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
-        &format!(
-            r#"
+    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(&format!(
+        r#"
             SELECT question_id, concept_id
             FROM {}
             WHERE question_id = ANY($1)
             "#,
-            schema::CONCEPT_QUESTION_TAGS
-        ),
-    )
+        schema::CONCEPT_QUESTION_TAGS
+    ))
     .bind(question_ids)
     .fetch_all(pool)
     .await?;

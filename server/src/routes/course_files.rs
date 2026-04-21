@@ -82,15 +82,16 @@ async fn download_course_file_handler(
         return Err(AppError::NotFound);
     };
 
-    let path = course_files::blob_disk_path(&state.course_files_root, &course_code, &row.storage_key);
+    let path =
+        course_files::blob_disk_path(&state.course_files_root, &course_code, &row.storage_key);
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|_| AppError::NotFound)?;
 
-    Ok(Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, row.mime_type.as_str())
         .header(header::CACHE_CONTROL, "private, max-age=86400")
         .body(Body::from(bytes))
-        .map_err(|e| AppError::invalid_input(e.to_string()))?)
+        .map_err(|e| AppError::invalid_input(e.to_string()))
 }

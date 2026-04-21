@@ -137,7 +137,8 @@ async fn enrollment_accommodation_summary_handler(
     let required = course_grants::course_enrollments_read_permission(&en.course_code);
     assert_permission(&state.pool, user.user_id, &required).await?;
 
-    let eff = accommodations::resolve_effective_or_default(&state.pool, en.user_id, en.course_id).await;
+    let eff =
+        accommodations::resolve_effective_or_default(&state.pool, en.user_id, en.course_id).await;
     let flags = accommodations::instructor_flag_labels(&eff);
     let has_accommodation = !flags.is_empty();
     Ok(Json(AccommodationSummaryPublic {
@@ -154,7 +155,8 @@ async fn list_user_accommodations_handler(
     let user = auth_user(&state, &headers)?;
     require_manage_accommodations(&state.pool, user.user_id).await?;
 
-    let rows = student_accommodations::list_for_user_with_course(&state.pool, target_user_id).await?;
+    let rows =
+        student_accommodations::list_for_user_with_course(&state.pool, target_user_id).await?;
     let out = rows
         .into_iter()
         .map(|r| api_row(&r.row, r.course_code))
@@ -184,7 +186,12 @@ async fn create_user_accommodation_handler(
     }
     let extra = req.extra_attempts.max(0);
 
-    let course_id = match req.course_code.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let course_id = match req
+        .course_code
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(code) => {
             let Some(cid) = course::get_id_by_course_code(&state.pool, code).await? else {
                 return Err(AppError::invalid_input_code(
@@ -275,7 +282,8 @@ async fn delete_user_accommodation_handler(
 ) -> Result<axum::http::StatusCode, AppError> {
     let user = auth_user(&state, &headers)?;
     require_manage_accommodations(&state.pool, user.user_id).await?;
-    let ok = student_accommodations::delete_row(&state.pool, accommodation_id, target_user_id).await?;
+    let ok =
+        student_accommodations::delete_row(&state.pool, accommodation_id, target_user_id).await?;
     if !ok {
         return Err(AppError::NotFound);
     }

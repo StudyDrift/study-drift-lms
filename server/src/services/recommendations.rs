@@ -32,7 +32,10 @@ const CHALLENGE_SELF_MAX: f64 = 0.78;
 /// `RECOMMENDATIONS_ENABLED` — platform kill-switch (default off).
 pub fn recommendations_globally_enabled() -> bool {
     match env::var("RECOMMENDATIONS_ENABLED") {
-        Ok(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"),
+        Ok(v) => matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
         Err(_) => false,
     }
 }
@@ -166,10 +169,7 @@ pub fn rank_strengthen(
 }
 
 /// Pure: challenge candidates sorted by readiness gap.
-pub fn rank_challenge(
-    items: &[(Uuid, String, f64)],
-    surface: &str,
-) -> Vec<RecommendationDto> {
+pub fn rank_challenge(items: &[(Uuid, String, f64)], surface: &str) -> Vec<RecommendationDto> {
     let mut v: Vec<(f64, RecommendationDto)> = items
         .iter()
         .map(|(sid, title, score)| {
@@ -296,7 +296,9 @@ pub async fn compute_surface(
                     degraded: false,
                 });
             }
-            let rows = srs_repo::list_review_queue_for_course(pool, target_user_id, course.id, 80, 0).await?;
+            let rows =
+                srs_repo::list_review_queue_for_course(pool, target_user_id, course.id, 80, 0)
+                    .await?;
             let slim: Vec<_> = rows
                 .into_iter()
                 .map(|r| (r.question_id, r.next_review_at, truncate_title(&r.stem)))
@@ -315,9 +317,16 @@ pub async fn compute_surface(
                     degraded: false,
                 });
             }
-            let states = learner_model::list_states_for_user_and_course(pool, target_user_id, course.id, 500).await?;
+            let states = learner_model::list_states_for_user_and_course(
+                pool,
+                target_user_id,
+                course.id,
+                500,
+            )
+            .await?;
             let concept_quiz = rec_repo::list_concept_quiz_structure_items(pool, course.id).await?;
-            let mut cq_by_concept: HashMap<Uuid, Vec<&rec_repo::ConceptQuizItemRow>> = HashMap::new();
+            let mut cq_by_concept: HashMap<Uuid, Vec<&rec_repo::ConceptQuizItemRow>> =
+                HashMap::new();
             for r in &concept_quiz {
                 cq_by_concept.entry(r.concept_id).or_default().push(r);
             }
@@ -365,8 +374,7 @@ pub async fn compute_surface(
                     }
                 }
                 weak_rows.sort_by(|a, b| {
-                    a.1
-                        .partial_cmp(&b.1)
+                    a.1.partial_cmp(&b.1)
                         .unwrap_or(std::cmp::Ordering::Equal)
                         .then_with(|| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal))
                 });
@@ -381,7 +389,10 @@ pub async fn compute_surface(
                     }
                 }
                 if recs.is_empty() && !states.is_empty() {
-                    for s in states.iter().filter(|x| x.mastery_effective <= STRENGTHEN_MASTERY_CUTOFF) {
+                    for s in states
+                        .iter()
+                        .filter(|x| x.mastery_effective <= STRENGTHEN_MASTERY_CUTOFF)
+                    {
                         if let Some(items) = cq_by_concept.get(&s.concept_id) {
                             let it = &items[0];
                             if seen_quiz.insert(it.structure_item_id) {
@@ -408,8 +419,12 @@ pub async fn compute_surface(
                         }
                     }
                 }
-                let recs = apply_suppress_pins(recs, &suppressed, &pinned_continue, surface, &pin_titles);
-                RecommendationsResponse { recommendations: recs, degraded }
+                let recs =
+                    apply_suppress_pins(recs, &suppressed, &pinned_continue, surface, &pin_titles);
+                RecommendationsResponse {
+                    recommendations: recs,
+                    degraded,
+                }
             } else {
                 let mut challenge_scored: Vec<(Uuid, String, f64)> = Vec::new();
                 for cid in &concept_ids {
@@ -426,15 +441,23 @@ pub async fn compute_surface(
                     let it = &items[0];
                     let min_prereq = prereq_edges
                         .iter()
-                        .filter_map(|(c, p)| if *c == *cid { Some(*mastery.get(p).unwrap_or(&0.0)) } else { None })
+                        .filter_map(|(c, p)| {
+                            if *c == *cid {
+                                Some(*mastery.get(p).unwrap_or(&0.0))
+                            } else {
+                                None
+                            }
+                        })
                         .fold(1.0f64, f64::min);
                     let score = (m + 0.15).recip() * (min_prereq + 0.1);
                     challenge_scored.push((it.structure_item_id, it.title.clone(), score));
                 }
-                challenge_scored.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+                challenge_scored
+                    .sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
                 challenge_scored.dedup_by(|a, b| a.0 == b.0);
                 let mut recs = rank_challenge(&challenge_scored, surface);
-                recs = apply_suppress_pins(recs, &suppressed, &pinned_continue, surface, &pin_titles);
+                recs =
+                    apply_suppress_pins(recs, &suppressed, &pinned_continue, surface, &pin_titles);
                 RecommendationsResponse {
                     recommendations: recs,
                     degraded,
@@ -442,15 +465,17 @@ pub async fn compute_surface(
             }
         }
         "continue" => {
-            let enrollment_id = match enrollment::get_student_enrollment_id(pool, course.id, target_user_id).await? {
-                Some(id) => id,
-                None => {
-                    return Ok(RecommendationsResponse {
-                        recommendations: vec![],
-                        degraded: false,
-                    });
-                }
-            };
+            let enrollment_id =
+                match enrollment::get_student_enrollment_id(pool, course.id, target_user_id).await?
+                {
+                    Some(id) => id,
+                    None => {
+                        return Ok(RecommendationsResponse {
+                            recommendations: vec![],
+                            degraded: false,
+                        });
+                    }
+                };
             let rules = adaptive_path_repo::list_rules_for_course(pool, course.id).await?;
             let ov = adaptive_path_repo::get_path_override(pool, enrollment_id).await?;
             let mut mastery: HashMap<Uuid, f64> = HashMap::new();
@@ -461,11 +486,18 @@ pub async fn compute_surface(
                 course.adaptive_paths_enabled,
             );
             if adaptive_on && ov.is_none() && learner_state::learner_model_enabled() {
-                let mut concept_ids: Vec<Uuid> = rules.iter().flat_map(|r| r.concept_ids.clone()).collect();
+                let mut concept_ids: Vec<Uuid> =
+                    rules.iter().flat_map(|r| r.concept_ids.clone()).collect();
                 concept_ids.sort_unstable();
                 concept_ids.dedup();
                 if !concept_ids.is_empty() {
-                    match learner_model::list_states_for_user(pool, target_user_id, Some(&concept_ids)).await {
+                    match learner_model::list_states_for_user(
+                        pool,
+                        target_user_id,
+                        Some(&concept_ids),
+                    )
+                    .await
+                    {
                         Ok(states) => {
                             for s in states {
                                 mastery.insert(s.concept_id, s.mastery_effective);
@@ -476,7 +508,10 @@ pub async fn compute_surface(
                 }
             }
 
-            let from_id = rec_repo::get_last_path_to_item(pool, enrollment_id).await.ok().flatten();
+            let from_id = rec_repo::get_last_path_to_item(pool, enrollment_id)
+                .await
+                .ok()
+                .flatten();
 
             let override_seq = ov.as_ref().map(|o| o.item_sequence.as_slice());
             let res = adaptive_path_service::resolve_next_item(
@@ -491,7 +526,9 @@ pub async fn compute_surface(
 
             let mut recs: Vec<RecommendationDto> = Vec::new();
             if let Some(path) = res {
-                if let Some(row) = course_structure::get_item_row(pool, course.id, path.to_item_id).await? {
+                if let Some(row) =
+                    course_structure::get_item_row(pool, course.id, path.to_item_id).await?
+                {
                     let pos = nav_pos.get(&row.id).copied().unwrap_or(0);
                     let progress_pct = if nav_ids.is_empty() {
                         0.0
@@ -529,7 +566,11 @@ pub async fn compute_surface(
             if let Some(fid) = from_id {
                 if let Some(row) = course_structure::get_item_row(pool, course.id, fid).await? {
                     let days = (now - row.updated_at).num_seconds() as f64 / 86400.0;
-                    let bump = if days < continue_recency_days() { 0.15 } else { 0.5 };
+                    let bump = if days < continue_recency_days() {
+                        0.15
+                    } else {
+                        0.5
+                    };
                     if !recs.iter().any(|r| r.item_id == fid) {
                         recs.push(RecommendationDto {
                             item_id: row.id,
@@ -543,9 +584,14 @@ pub async fn compute_surface(
                 }
             }
 
-            recs.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+            recs.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             recs.dedup_by(|a, b| a.item_id == b.item_id);
-            let recs = apply_suppress_pins(recs, &suppressed, &pinned_continue, surface, &pin_titles);
+            let recs =
+                apply_suppress_pins(recs, &suppressed, &pinned_continue, surface, &pin_titles);
             RecommendationsResponse {
                 recommendations: recs,
                 degraded,
@@ -583,7 +629,8 @@ pub async fn get_recommendations_for_learner_course(
 
     let mut rows = course_structure::list_for_course(pool, course.id).await?;
     rows = course_structure::filter_archived_items_from_structure_list(rows);
-    let is_staff = enrollment::user_is_course_staff(pool, &course.course_code, target_user_id).await?;
+    let is_staff =
+        enrollment::user_is_course_staff(pool, &course.course_code, target_user_id).await?;
     if !is_staff {
         rows = course_structure::filter_structure_for_student_view(rows, Utc::now());
         rows = competency_gating::filter_structure_rows_for_competency_student(
@@ -597,7 +644,9 @@ pub async fn get_recommendations_for_learner_course(
     }
 
     let ttl = chrono::Duration::seconds(CACHE_TTL_SECS);
-    if let Ok(Some((cached, expired))) = rec_repo::get_cache(pool, target_user_id, course.id, surface).await {
+    if let Ok(Some((cached, expired))) =
+        rec_repo::get_cache(pool, target_user_id, course.id, surface).await
+    {
         let parse_cached = |c: &rec_repo::CachedRecommendations| -> Vec<RecommendationDto> {
             c.recommendations
                 .iter()
@@ -617,7 +666,11 @@ pub async fn get_recommendations_for_learner_course(
         let rows_clone = rows.clone();
         let surface_owned = surface.to_string();
         tokio::spawn(async move {
-            let Some(course_row) = course::get_by_id(&pool_clone, course_id).await.ok().flatten() else {
+            let Some(course_row) = course::get_by_id(&pool_clone, course_id)
+                .await
+                .ok()
+                .flatten()
+            else {
                 return;
             };
             let computed = match compute_surface(
@@ -657,10 +710,11 @@ pub async fn get_recommendations_for_learner_course(
         });
     }
 
-    let computed = match compute_surface(pool, &course, target_user_id, surface, &rows, is_staff).await {
-        Ok(v) => v,
-        Err(_) => RecommendationsResponse::degraded_empty(),
-    };
+    let computed =
+        match compute_surface(pool, &course, target_user_id, surface, &rows, is_staff).await {
+            Ok(v) => v,
+            Err(_) => RecommendationsResponse::degraded_empty(),
+        };
     let payload = rec_repo::CachedRecommendations {
         recommendations: computed
             .recommendations
@@ -704,5 +758,4 @@ mod tests {
         assert_eq!(r.len(), 1);
         assert!(r[0].score > 0.7);
     }
-
 }

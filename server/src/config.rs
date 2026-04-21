@@ -36,6 +36,8 @@ pub struct Config {
     pub lti_rsa_private_key_pem: Option<String>,
     /// `kid` for LTI JWKS (defaults to `lti-key-1`).
     pub lti_rsa_key_id: String,
+    /// Inline submission annotation APIs + grader UI (plan 3.1). Default off for staged rollout.
+    pub annotation_enabled: bool,
 }
 
 const DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES: &[&str] = &["instructure.com"];
@@ -138,7 +140,9 @@ impl Config {
             .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
-        let smtp_password = env::var("SMTP_PASSWORD").ok().filter(|s| !s.trim().is_empty());
+        let smtp_password = env::var("SMTP_PASSWORD")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
         let smtp_from = env::var("SMTP_FROM")
             .ok()
             .map(|s| s.trim().to_string())
@@ -190,6 +194,14 @@ impl Config {
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "lti-key-1".to_string());
 
+        let annotation_enabled = matches!(
+            env::var("ANNOTATION_ENABLED")
+                .ok()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("1") | Some("true") | Some("yes") | Some("on")
+        );
+
         Ok(Self {
             database_url,
             jwt_secret,
@@ -207,6 +219,7 @@ impl Config {
             lti_api_base_url,
             lti_rsa_private_key_pem,
             lti_rsa_key_id,
+            annotation_enabled,
         })
     }
 }

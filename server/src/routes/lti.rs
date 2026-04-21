@@ -76,7 +76,7 @@ async fn provider_jwks_handler(
 }
 
 fn jwks_json(state: &AppState) -> Result<Json<serde_json::Value>, AppError> {
-    let lti = require_lti(&state)?;
+    let lti = require_lti(state)?;
     let jwk = lti.keys.jwk_public_json()?;
     Ok(Json(json!({ "keys": [jwk] })))
 }
@@ -178,12 +178,8 @@ async fn provider_launch_handler(
     };
 
     let key = lti_jwt::decoding_key_for_jwt(&reg.platform_jwks_url, &form.id_token).await?;
-    let claims = lti_jwt::verify_lti_id_token(
-        &form.id_token,
-        &key,
-        &reg.platform_iss,
-        &reg.client_id,
-    )?;
+    let claims =
+        lti_jwt::verify_lti_id_token(&form.id_token, &key, &reg.platform_iss, &reg.client_id)?;
 
     if claims.nonce != oidc_nonce {
         return Err(AppError::invalid_input("OIDC nonce mismatch."));
@@ -211,7 +207,8 @@ async fn provider_launch_handler(
 
     let redirect = state.public_web_origin.trim_end_matches('/').to_string();
     let token_json = serde_json::to_string(&app_token).unwrap_or_else(|_| "\"\"".into());
-    let redirect_json = serde_json::to_string(&format!("{redirect}/")).unwrap_or_else(|_| "\"/\"".into());
+    let redirect_json =
+        serde_json::to_string(&format!("{redirect}/")).unwrap_or_else(|_| "\"/\"".into());
 
     tracing::info!(target: "lti", %user_id, platform = %reg.platform_iss, "lti.provider_launch_success");
 
@@ -255,7 +252,11 @@ async fn nrps_memberships_handler(
     let aud = body
         .get("aud")
         .and_then(jwt_aud_str)
-        .or_else(|| body.get("client_id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .or_else(|| {
+            body.get("client_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
         .ok_or(AppError::Unauthorized)?;
 
     let Some(reg) = lti_repo::find_platform_registration(&state.pool, iss, &aud).await? else {
@@ -379,9 +380,10 @@ async fn consumer_frame_handler(
     Query(q): Query<ConsumerFrameQuery>,
 ) -> Result<Html<String>, AppError> {
     let _lti = require_lti(&state)?;
-    let (user_id, course_id, item_id) = state.jwt.verify_lti_embed_ticket(&q.ticket).map_err(|_| {
-        AppError::invalid_input("Invalid or expired launch ticket.")
-    })?;
+    let (user_id, course_id, item_id) = state
+        .jwt
+        .verify_lti_embed_ticket(&q.ticket)
+        .map_err(|_| AppError::invalid_input("Invalid or expired launch ticket."))?;
 
     let Some(_course_code) = course::get_course_code_by_id(&state.pool, course_id).await? else {
         return Err(AppError::NotFound);
@@ -512,7 +514,10 @@ async fn admin_create_external_handler(
         body.tool_issuer.trim(),
         body.tool_jwks_url.trim(),
         body.tool_oidc_auth_url.trim(),
-        body.tool_token_url.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        body.tool_token_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
     )
     .await?;
     Ok((StatusCode::CREATED, Json(json!({ "id": id }))))

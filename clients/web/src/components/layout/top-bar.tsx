@@ -20,7 +20,7 @@ import {
   shortcutHint,
   type TopBarAccountProfile,
 } from './top-bar-utils'
-import { useShellNav } from './shell-nav-context'
+import { useShellNav } from './use-shell-nav'
 import { TopBarBreadcrumbs } from './top-bar-breadcrumbs'
 import { NotificationsDrawer, NotificationsDrawerTrigger } from './notifications-drawer'
 

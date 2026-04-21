@@ -1,6 +1,8 @@
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse, ws } from 'msw'
 
 const mockUserId = '00000000-0000-0000-0000-000000000001'
+
+const communicationMailboxWs = ws.link('ws://localhost:8080/api/v1/communication/ws')
 
 /**
  * Default happy-path handlers. Override per test with server.use(...) for TDD (errors, edge cases).
@@ -42,6 +44,21 @@ export const handlers = [
       people: [],
     })
   }),
+  http.get('http://localhost:8080/api/v1/courses', () => {
+    return HttpResponse.json({ courses: [] })
+  }),
+  http.get('http://localhost:8080/api/v1/settings/account', () => {
+    return HttpResponse.json({
+      email: 'learner@example.com',
+      displayName: null,
+      firstName: null,
+      lastName: null,
+      avatarUrl: null,
+    })
+  }),
+  http.get('http://localhost:8080/api/v1/communication/unread-count', () => {
+    return HttpResponse.json({ unread_inbox: 0 })
+  }),
   http.post('http://localhost:8080/api/v1/auth/login', async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string }
     return HttpResponse.json({
@@ -70,6 +87,10 @@ export const handlers = [
   http.delete('http://localhost:8080/api/v1/settings/roles/:roleId/users/:userId', () => {
     return new HttpResponse(null, { status: 204 })
   }),
+  communicationMailboxWs.addEventListener('connection', () => {
+    /* Accept mailbox WS; client only needs connect + optional auth message. */
+  }),
+
   http.post('http://localhost:8080/api/v1/auth/signup', async ({ request }) => {
     const body = (await request.json()) as {
       email: string

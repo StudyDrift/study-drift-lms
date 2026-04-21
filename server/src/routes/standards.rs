@@ -107,8 +107,7 @@ async fn admin_import_handler(
     Json(body): Json<Value>,
 ) -> Result<(axum::http::StatusCode, Json<StandardsImportResponse>), AppError> {
     let actor = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
-    let outcome =
-        standards_service::import_standards(&state.pool, &body, actor.user_id).await?;
+    let outcome = standards_service::import_standards(&state.pool, &body, actor.user_id).await?;
     Ok((
         axum::http::StatusCode::ACCEPTED,
         Json(StandardsImportResponse {

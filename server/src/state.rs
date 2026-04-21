@@ -77,4 +77,6 @@ pub struct AppState {
     pub mail: MailSettings,
     /// LTI 1.3 signing + issuer settings. `None` when LTI is disabled or misconfigured.
     pub lti: Option<Arc<LtiRuntime>>,
+    /// Plan 3.1 — inline PDF/image annotation APIs + grader surfaces.
+    pub annotation_enabled: bool,
 }

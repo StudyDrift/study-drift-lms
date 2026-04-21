@@ -19,13 +19,13 @@ use crate::models::course_syllabus::SyllabusSection;
 use crate::repos::course;
 use crate::repos::course::UpdateCourse;
 use crate::repos::course_grading;
+use crate::repos::course_grants;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
 use crate::repos::course_module_external_links;
 use crate::repos::course_module_quizzes::{self, QuizSettingsWrite};
 use crate::repos::course_structure;
 use crate::repos::course_syllabus;
-use crate::repos::course_grants;
 use crate::repos::enrollment;
 use crate::repos::rbac;
 use crate::repos::user;
@@ -132,11 +132,11 @@ async fn apply_one_enrollment_from_export(
     let role = row.role.trim();
     let is_creator = u.id == creator_user_id;
 
-    if enrollment::user_is_course_creator(pool, course_code, u.id).await? {
-        if role == "student" || role == "instructor" {
-            // Match roster API: do not add secondary student/instructor rows for the course creator.
-            return Ok(());
-        }
+    if enrollment::user_is_course_creator(pool, course_code, u.id).await?
+        && (role == "student" || role == "instructor")
+    {
+        // Match roster API: do not add secondary student/instructor rows for the course creator.
+        return Ok(());
     }
 
     match role {
@@ -200,10 +200,9 @@ async fn apply_enrollments_from_export(
     if rows.is_empty() {
         return Ok(());
     }
-    let Some(creator_user_id) =
-        course::get_created_by_user_id(pool, target_course_code)
-            .await
-            .map_err(AppError::from)?
+    let Some(creator_user_id) = course::get_created_by_user_id(pool, target_course_code)
+        .await
+        .map_err(AppError::from)?
     else {
         return Err(AppError::invalid_input(
             "Course is missing a creator; cannot apply enrollments.",
@@ -273,9 +272,11 @@ fn quiz_settings_from_export(body: &ExportedQuizBody) -> QuizSettingsWrite {
         random_question_pool_count: body.random_question_pool_count,
         adaptive_delivery_mode: body.adaptive_delivery_mode.clone(),
         points_worth: body.points_worth,
-        lockdown_mode: crate::services::quiz_lockdown::parse_lockdown_mode_setting(&body.lockdown_mode)
-            .unwrap_or(crate::services::quiz_lockdown::LOCKDOWN_STANDARD)
-            .to_string(),
+        lockdown_mode: crate::services::quiz_lockdown::parse_lockdown_mode_setting(
+            &body.lockdown_mode,
+        )
+        .unwrap_or(crate::services::quiz_lockdown::LOCKDOWN_STANDARD)
+        .to_string(),
         focus_loss_threshold: body.focus_loss_threshold,
     }
 }
@@ -295,14 +296,10 @@ fn validate_syllabus_sections(sections: &[SyllabusSection]) -> Result<(), AppErr
             return Err(AppError::invalid_input("Each section needs an id."));
         }
         if s.heading.len() > MAX_SYLLABUS_HEADING_LEN {
-            return Err(AppError::invalid_input(
-                "Section heading is too long.",
-            ));
+            return Err(AppError::invalid_input("Section heading is too long."));
         }
         if s.markdown.len() > MAX_SYLLABUS_MARKDOWN_LEN {
-            return Err(AppError::invalid_input(
-                "Section content is too long.",
-            ));
+            return Err(AppError::invalid_input("Section content is too long."));
         }
     }
     Ok(())
@@ -337,9 +334,7 @@ fn validate_structure_export(items: &[CourseStructureItemResponse]) -> Result<()
             ));
         }
         if !seen.insert(it.id) {
-            return Err(AppError::invalid_input(
-                "Duplicate structure item id.",
-            ));
+            return Err(AppError::invalid_input("Duplicate structure item id."));
         }
     }
     Ok(())
@@ -352,15 +347,11 @@ fn validate_export_payload(ex: &CourseExportV1) -> Result<(), AppError> {
         ));
     }
     if ex.course_code.trim().is_empty() {
-        return Err(AppError::invalid_input(
-            "Export is missing courseCode.",
-        ));
+        return Err(AppError::invalid_input("Export is missing courseCode."));
     }
     // `courseCode` in the file records the source course; imports may target any course.
     if !GRADING_SCALES.contains(&ex.grading.grading_scale.as_str()) {
-        return Err(AppError::invalid_input(
-            "Invalid grading scale in export.",
-        ));
+        return Err(AppError::invalid_input("Invalid grading scale in export."));
     }
     for g in &ex.grading.assignment_groups {
         if g.name.trim().is_empty() {
@@ -588,9 +579,9 @@ async fn apply_module_bodies(
                     course_structure::set_content_page_due_at(pool, course_id, it.id, body.due_at)
                         .await
                         .map_err(|e| match e {
-                            sqlx::Error::RowNotFound => AppError::invalid_input(
-                                "Content page due date update failed.",
-                            ),
+                            sqlx::Error::RowNotFound => {
+                                AppError::invalid_input("Content page due date update failed.")
+                            }
                             _ => e.into(),
                         })?;
                 }

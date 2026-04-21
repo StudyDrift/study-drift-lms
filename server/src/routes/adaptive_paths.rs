@@ -31,7 +31,8 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/api/v1/enrollments/{enrollment_id}/path-override",
-            put(enrollment_path_override_put_handler).delete(enrollment_path_override_delete_handler),
+            put(enrollment_path_override_put_handler)
+                .delete(enrollment_path_override_delete_handler),
         )
 }
 
@@ -42,7 +43,11 @@ struct EnrollmentNextQuery {
     from_item_id: Option<Uuid>,
 }
 
-async fn require_course_access(state: &AppState, course_code: &str, user_id: Uuid) -> Result<(), AppError> {
+async fn require_course_access(
+    state: &AppState,
+    course_code: &str,
+    user_id: Uuid,
+) -> Result<(), AppError> {
     let ok = enrollment::user_has_access(&state.pool, course_code, user_id).await?;
     if !ok {
         return Err(AppError::NotFound);
@@ -62,7 +67,11 @@ async fn assert_can_read_enrollment_next(
     assert_permission(pool, caller_id, &required).await
 }
 
-async fn assert_can_manage_path_override(pool: &sqlx::PgPool, caller_id: Uuid, course_code: &str) -> Result<(), AppError> {
+async fn assert_can_manage_path_override(
+    pool: &sqlx::PgPool,
+    caller_id: Uuid,
+    course_code: &str,
+) -> Result<(), AppError> {
     let required = course_grants::course_item_create_permission(course_code);
     assert_permission(pool, caller_id, &required).await
 }
@@ -84,12 +93,15 @@ async fn enrollment_next_handler(
     };
 
     let global_on = adaptive_path_service::adaptive_paths_globally_enabled();
-    let adaptive_on =
-        adaptive_path_service::adaptive_paths_active_for_course(global_on, course_row.adaptive_paths_enabled);
+    let adaptive_on = adaptive_path_service::adaptive_paths_active_for_course(
+        global_on,
+        course_row.adaptive_paths_enabled,
+    );
 
     let mut rows = course_structure::list_for_course(&state.pool, course_row.id).await?;
     rows = course_structure::filter_archived_items_from_structure_list(rows);
-    let is_staff = enrollment::user_is_course_staff(&state.pool, &en.course_code, user.user_id).await?;
+    let is_staff =
+        enrollment::user_is_course_staff(&state.pool, &en.course_code, user.user_id).await?;
     if !is_staff {
         rows = course_structure::filter_structure_for_student_view(rows, Utc::now());
         rows = competency_gating::filter_structure_rows_for_competency_student(
@@ -112,7 +124,9 @@ async fn enrollment_next_handler(
         concept_ids.sort_unstable();
         concept_ids.dedup();
         if !concept_ids.is_empty() && learner_state::learner_model_enabled() {
-            match learner_model::list_states_for_user(&state.pool, en.user_id, Some(&concept_ids)).await {
+            match learner_model::list_states_for_user(&state.pool, en.user_id, Some(&concept_ids))
+                .await
+            {
                 Ok(states) => {
                     for s in states {
                         mastery.insert(s.concept_id, s.mastery_effective);
@@ -221,4 +235,3 @@ async fn enrollment_path_override_delete_handler(
     }
     Ok(StatusCode::NO_CONTENT)
 }
-

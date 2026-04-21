@@ -292,9 +292,9 @@ async fn full_http_walkthrough() {
     let stds = json_body(r).await;
     let std_rows = stds.as_array().expect("standards json array");
     assert!(std_rows.len() >= 3);
-    assert!(std_rows.iter().any(|v| {
-        v["code"].as_str() == Some("CCSS.MATH.CONTENT.6.RP.A.1")
-    }));
+    assert!(std_rows
+        .iter()
+        .any(|v| { v["code"].as_str() == Some("CCSS.MATH.CONTENT.6.RP.A.1") }));
 
     let r = client
         .get(format!(
@@ -307,12 +307,12 @@ async fn full_http_walkthrough() {
     assert_eq!(r.status(), reqwest::StatusCode::OK);
     let ratio_search = json_body(r).await;
     let rs = ratio_search.as_array().expect("search array");
-    assert!(rs.iter().any(|v| v["shortCode"].as_str() == Some("6.RP.A.1")));
+    assert!(rs
+        .iter()
+        .any(|v| v["shortCode"].as_str() == Some("6.RP.A.1")));
 
     let r = client
-        .patch(format!(
-            "{base}/api/v1/courses/{course_code}/features"
-        ))
+        .patch(format!("{base}/api/v1/courses/{course_code}/features"))
         .bearer_auth(token)
         .json(&json!({
             "notebookEnabled": true,

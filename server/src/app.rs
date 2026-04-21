@@ -39,6 +39,7 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::me::router())
         .merge(routes::search::router())
         .merge(routes::courses::router())
+        .merge(routes::assignment_grading::router())
         .merge(routes::question_bank::router())
         .merge(routes::misconceptions::router())
         .merge(routes::surveys::router())
@@ -72,7 +73,6 @@ mod tests {
             course_files_root: std::path::PathBuf::from("data/course-files"),
             canvas_allowed_host_suffixes: vec!["instructure.com".into()],
             public_web_origin: "http://localhost:5173".into(),
-            lti: None,
             mail: crate::state::MailSettings {
                 smtp_host: None,
                 smtp_port: 587,
@@ -80,6 +80,8 @@ mod tests {
                 smtp_password: None,
                 smtp_from: None,
             },
+            lti: None,
+            annotation_enabled: false,
         }
     }
 

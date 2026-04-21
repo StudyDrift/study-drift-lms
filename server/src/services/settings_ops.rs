@@ -31,9 +31,7 @@ pub fn normalize_avatar_url(s: Option<String>) -> Result<Option<String>, AppErro
         return Ok(None);
     }
     if t.len() > 2_000_000 {
-        return Err(AppError::invalid_input(
-            "Avatar image URL is too long.",
-        ));
+        return Err(AppError::invalid_input("Avatar image URL is too long."));
     }
     let is_http = t.starts_with("http://") || t.starts_with("https://");
     let is_data = t.starts_with("data:image/");
@@ -99,7 +97,10 @@ mod tests {
     #[test]
     fn normalize_name_trims_and_rejects_too_long() {
         assert_eq!(normalize_name(None, "X").unwrap(), None);
-        assert_eq!(normalize_name(Some("  ann  ".into()), "First").unwrap(), Some("ann".into()));
+        assert_eq!(
+            normalize_name(Some("  ann  ".into()), "First").unwrap(),
+            Some("ann".into())
+        );
         let long = "x".repeat(81);
         assert!(normalize_name(Some(long), "First").is_err());
     }
@@ -119,7 +120,10 @@ mod tests {
 
     #[test]
     fn normalize_ui_theme_accepts_light_dark() {
-        assert_eq!(normalize_ui_theme(Some("LIGHT".into())).unwrap(), Some("light".into()));
+        assert_eq!(
+            normalize_ui_theme(Some("LIGHT".into())).unwrap(),
+            Some("light".into())
+        );
         assert!(normalize_ui_theme(Some("sepia".into())).is_err());
     }
 }

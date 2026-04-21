@@ -12,11 +12,12 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::http_auth::{assert_permission, auth_user};
 use crate::models::question_bank::{
-    AddPoolMembersRequest, BulkImportQuestionsResponse, CreateQuestionHintRequest, CreateQuestionPoolRequest,
-    CreateQuestionRequest, HintAnalyticsLevel, HintAnalyticsResponse, IccPoint, QuestionBankRowResponse,
-    QuestionHintAuthorResponse, QuestionIrtStatsResponse, QuestionOptionMisconceptionTagApi,
-    QuestionPoolResponse, QuestionVersionSummaryResponse, RestoreQuestionVersionRequest, SetQuizDeliveryRefsRequest,
-    UpdateQuestionHintRequest, UpdateQuestionRequest, UpsertWorkedExampleRequest,
+    AddPoolMembersRequest, BulkImportQuestionsResponse, CreateQuestionHintRequest,
+    CreateQuestionPoolRequest, CreateQuestionRequest, HintAnalyticsLevel, HintAnalyticsResponse,
+    IccPoint, QuestionBankRowResponse, QuestionHintAuthorResponse, QuestionIrtStatsResponse,
+    QuestionOptionMisconceptionTagApi, QuestionPoolResponse, QuestionVersionSummaryResponse,
+    RestoreQuestionVersionRequest, SetQuizDeliveryRefsRequest, UpdateQuestionHintRequest,
+    UpdateQuestionRequest, UpsertWorkedExampleRequest,
 };
 use crate::repos::course;
 use crate::repos::course_grants;
@@ -95,7 +96,11 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-async fn require_instructor(state: &AppState, course_code: &str, user_id: Uuid) -> Result<(), AppError> {
+async fn require_instructor(
+    state: &AppState,
+    course_code: &str,
+    user_id: Uuid,
+) -> Result<(), AppError> {
     let required = course_grants::course_items_create_permission(course_code);
     assert_permission(&state.pool, user_id, &required).await
 }
@@ -313,8 +318,7 @@ async fn get_question_handler(
         .map_err(AppError::Db)?;
     let mut resp = entity_to_api(row);
     resp.option_misconception_tags = Some(
-        tags
-            .into_iter()
+        tags.into_iter()
             .map(|t| QuestionOptionMisconceptionTagApi {
                 option_id: t.option_id,
                 misconception_id: t.misconception_id,
@@ -535,9 +539,10 @@ async fn get_question_version_handler(
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
-    let snapshot = qb_repo::get_question_version_snapshot(&state.pool, course_id, question_id, version_number)
-        .await?
-        .ok_or(AppError::NotFound)?;
+    let snapshot =
+        qb_repo::get_question_version_snapshot(&state.pool, course_id, question_id, version_number)
+            .await?
+            .ok_or(AppError::NotFound)?;
     Ok(Json(snapshot))
 }
 
@@ -556,21 +561,40 @@ async fn restore_question_version_handler(
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
-    let snapshot = qb_repo::get_question_version_snapshot(&state.pool, course_id, question_id, version_number)
-        .await?
-        .ok_or(AppError::NotFound)?;
+    let snapshot =
+        qb_repo::get_question_version_snapshot(&state.pool, course_id, question_id, version_number)
+            .await?
+            .ok_or(AppError::NotFound)?;
     let cur = qb_repo::get_question(&state.pool, course_id, question_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let question_type = snapshot.get("question_type").and_then(|v| v.as_str()).unwrap_or("mc_single");
-    let stem = snapshot.get("stem").and_then(|v| v.as_str()).unwrap_or_default();
+    let question_type = snapshot
+        .get("question_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("mc_single");
+    let stem = snapshot
+        .get("stem")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
     let options = snapshot.get("options").filter(|v| !v.is_null());
     let correct_answer = snapshot.get("correct_answer").filter(|v| !v.is_null());
     let explanation = snapshot.get("explanation").and_then(|v| v.as_str());
-    let points = snapshot.get("points").and_then(|v| v.as_f64()).unwrap_or(cur.points);
-    let status = snapshot.get("status").and_then(|v| v.as_str()).unwrap_or("draft");
-    let shared = snapshot.get("shared").and_then(|v| v.as_bool()).unwrap_or(false);
-    let metadata = snapshot.get("metadata").cloned().unwrap_or_else(|| json!({}));
+    let points = snapshot
+        .get("points")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(cur.points);
+    let status = snapshot
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("draft");
+    let shared = snapshot
+        .get("shared")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let metadata = snapshot
+        .get("metadata")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let shuffle_choices_override = match snapshot.get("shuffle_choices_override") {
         None => cur.shuffle_choices_override,
         Some(v) if v.is_null() => None,
@@ -616,7 +640,10 @@ async fn restore_question_version_handler(
         snapshot_row.is_published = true;
     }
     snapshot_row.updated_at = Utc::now();
-    let note = req.change_note.as_deref().or(Some("Restored from prior version"));
+    let note = req
+        .change_note
+        .as_deref()
+        .or(Some("Restored from prior version"));
     let summary = json!({ "restoredFromVersion": version_number });
     qb_repo::insert_question_version_snapshot(
         &mut *tx,
@@ -627,7 +654,9 @@ async fn restore_question_version_handler(
     )
     .await?;
     tx.commit().await?;
-    Ok(Json(json!({ "newVersionNumber": snapshot_row.version_number })))
+    Ok(Json(
+        json!({ "newVersionNumber": snapshot_row.version_number }),
+    ))
 }
 
 async fn delete_question_handler(
@@ -701,7 +730,8 @@ async fn create_pool_handler(
     if name.is_empty() {
         return Err(AppError::invalid_input("name is required."));
     }
-    let row = qb_repo::insert_pool(&state.pool, course_id, name, req.description.as_deref()).await?;
+    let row =
+        qb_repo::insert_pool(&state.pool, course_id, name, req.description.as_deref()).await?;
     Ok(Json(QuestionPoolResponse {
         id: row.id,
         course_id: row.course_id,
@@ -1120,11 +1150,14 @@ async fn set_quiz_delivery_handler(
     match mode.as_str() {
         "json" => question_bank::clear_quiz_delivery_refs(&state.pool, item_id).await?,
         "pool" => {
-            let pid = req.pool_id.ok_or_else(|| AppError::invalid_input("poolId is required."))?;
+            let pid = req
+                .pool_id
+                .ok_or_else(|| AppError::invalid_input("poolId is required."))?;
             let sn = req
                 .sample_n
                 .ok_or_else(|| AppError::invalid_input("sampleN is required."))?;
-            question_bank::set_quiz_delivery_pool_only(&state.pool, course_id, item_id, pid, sn).await?;
+            question_bank::set_quiz_delivery_pool_only(&state.pool, course_id, item_id, pid, sn)
+                .await?;
         }
         _ => {
             return Err(AppError::invalid_input(

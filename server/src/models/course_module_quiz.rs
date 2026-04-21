@@ -51,9 +51,10 @@ pub const MAX_ITEM_POINTS_WORTH: i32 = 1_000_000;
 pub fn validate_item_points_worth(points_worth: Option<i32>) -> Result<(), AppError> {
     if let Some(p) = points_worth {
         if !(0..=MAX_ITEM_POINTS_WORTH).contains(&p) {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
-                "pointsWorth must be between 0 and {MAX_ITEM_POINTS_WORTH}."
-            )));
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
+                format!("pointsWorth must be between 0 and {MAX_ITEM_POINTS_WORTH}."),
+            ));
         }
     }
     Ok(())
@@ -85,74 +86,83 @@ pub fn validate_quiz_comprehensive_settings(
     let adaptive_stop_rule = adaptive_stop_rule.trim();
 
     if !GRADE_ATTEMPT_POLICIES.contains(&grade_attempt_policy) {
-        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
             "gradeAttemptPolicy must be one of: highest, latest, first, average.",
         ));
     }
     validate_late_submission_policy_pair(late_submission_policy, late_penalty_percent)?;
     if !SHOW_SCORE_TIMINGS.contains(&show_score_timing) {
-        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
             "showScoreTiming must be one of: immediate, after_due, manual.",
         ));
     }
     if !REVIEW_VISIBILITIES.contains(&review_visibility) {
-        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
             "reviewVisibility must be one of: none, score_only, responses, correct_answers, full.",
         ));
     }
     if !REVIEW_WHENS.contains(&review_when) {
-        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
             "reviewWhen must be one of: after_submit, after_due, always, never.",
         ));
     }
     if !ADAPTIVE_DIFFICULTIES.contains(&adaptive_difficulty) {
-        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
             "adaptiveDifficulty must be one of: introductory, standard, challenging.",
         ));
     }
     if !ADAPTIVE_STOP_RULES.contains(&adaptive_stop_rule) {
-        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
             "adaptiveStopRule must be one of: fixed_count, mastery_estimate.",
         ));
     }
-    if !unlimited_attempts {
-        if max_attempts < MIN_MAX_ATTEMPTS || max_attempts > MAX_MAX_ATTEMPTS {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
+    if !unlimited_attempts && (!(MIN_MAX_ATTEMPTS..=MAX_MAX_ATTEMPTS).contains(&max_attempts)) {
+        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
                 "maxAttempts must be between {MIN_MAX_ATTEMPTS} and {MAX_MAX_ATTEMPTS} when unlimitedAttempts is false."
             )));
-        }
     }
     if let Some(p) = passing_score_percent {
         if !(0..=100).contains(&p) {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
                 "passingScorePercent must be between 0 and 100.",
             ));
         }
     }
     if let Some(m) = time_limit_minutes {
         if !(1..=10080).contains(&m) {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
                 "timeLimitMinutes must be between 1 and 10080.",
             ));
         }
     }
     if let Some(s) = per_question_time_limit_seconds {
         if !(10..=86400).contains(&s) {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
                 "perQuestionTimeLimitSeconds must be between 10 and 86400.",
             ));
         }
     }
     if let Some(n) = random_question_pool_count {
         if !(1..=300).contains(&n) {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
                 "randomQuestionPoolCount must be between 1 and 300.",
             ));
         }
     }
     if let Some(code) = quiz_access_code {
         if code.len() > MAX_QUIZ_ACCESS_CODE_LEN {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
                 "quizAccessCode is too long (max 128 characters).",
             ));
         }
@@ -178,22 +188,25 @@ pub fn validate_adaptive_quiz_settings(
         ));
     }
     if adaptive_system_prompt.len() > MAX_ADAPTIVE_SYSTEM_PROMPT_LEN {
-        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
             "Adaptive system prompt is too long.",
         ));
     }
     if mode == "ai" && adaptive_source_item_ids.is_empty() {
-        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
             "Adaptive AI mode requires at least one course item with source content.",
         ));
     }
     if adaptive_source_item_ids.len() > MAX_ADAPTIVE_SOURCE_ITEMS {
-        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
-            "Too many adaptive source items (max {MAX_ADAPTIVE_SOURCE_ITEMS})."
-        )));
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
+            format!("Too many adaptive source items (max {MAX_ADAPTIVE_SOURCE_ITEMS})."),
+        ));
     }
-    if adaptive_question_count < MIN_ADAPTIVE_QUESTION_COUNT
-        || adaptive_question_count > MAX_ADAPTIVE_QUESTION_COUNT
+    if !(MIN_ADAPTIVE_QUESTION_COUNT..=MAX_ADAPTIVE_QUESTION_COUNT)
+        .contains(&adaptive_question_count)
     {
         return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
             "adaptiveQuestionCount must be between {MIN_ADAPTIVE_QUESTION_COUNT} and {MAX_ADAPTIVE_QUESTION_COUNT}."
@@ -211,47 +224,55 @@ pub fn sanitize_quiz_questions_for_learner(mut questions: Vec<QuizQuestion>) -> 
 
 pub fn validate_quiz_questions(questions: &[QuizQuestion]) -> Result<(), AppError> {
     if questions.len() > MAX_QUIZ_QUESTIONS {
-        return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, format!(
-            "Too many quiz questions (max {MAX_QUIZ_QUESTIONS})."
-        )));
+        return Err(AppError::invalid_input_code(
+            crate::error::ErrorCode::QuizSettingsInvalid,
+            format!("Too many quiz questions (max {MAX_QUIZ_QUESTIONS})."),
+        ));
     }
     for q in questions {
         if q.id.trim().is_empty() {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
                 "Each quiz question needs an id.",
             ));
         }
         if q.prompt.len() > MAX_QUIZ_PROMPT_LEN {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
                 "A quiz question prompt is too long.",
             ));
         }
         if !QUIZ_QUESTION_TYPES.contains(&q.question_type.as_str()) {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
                 "Unsupported quiz question type.",
             ));
         }
         if q.choices.len() > MAX_QUIZ_CHOICES_PER_QUESTION {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
                 "A quiz question has too many choices.",
             ));
         }
         for c in &q.choices {
             if c.len() > MAX_QUIZ_CHOICE_LEN {
-                return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                return Err(AppError::invalid_input_code(
+                    crate::error::ErrorCode::QuizSettingsInvalid,
                     "A quiz answer choice is too long.",
                 ));
             }
         }
         if let Some(idx) = q.correct_choice_index {
             if idx >= q.choices.len() {
-                return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+                return Err(AppError::invalid_input_code(
+                    crate::error::ErrorCode::QuizSettingsInvalid,
                     "A quiz correct answer index is out of range.",
                 ));
             }
         }
         if q.concept_ids.len() > 32 {
-            return Err(AppError::invalid_input_code(crate::error::ErrorCode::QuizSettingsInvalid, 
+            return Err(AppError::invalid_input_code(
+                crate::error::ErrorCode::QuizSettingsInvalid,
                 "Too many concept tag ids on a question (max 32).",
             ));
         }
