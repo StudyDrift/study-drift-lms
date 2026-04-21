@@ -24,6 +24,7 @@ pub mod question_bank;
 pub mod rbac;
 pub mod reports;
 pub mod search;
+pub mod standards;
 pub mod settings_account;
 pub mod settings_ai;
 pub mod settings_system_prompts;

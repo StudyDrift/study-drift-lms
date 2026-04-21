@@ -29,5 +29,6 @@ pub mod quiz_submission;
 pub mod question_bank;
 pub mod relative_schedule;
 pub mod settings_ops;
+pub mod standards;
 pub mod student_notebook_rag_ai;
 pub mod syllabus_section_ai;

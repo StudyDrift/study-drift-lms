@@ -9,9 +9,11 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::http_auth::{assert_permission, auth_user};
+use crate::models::standards::StandardCodeApi;
 use crate::repos::concepts::{
     self, ConceptJson, GraphBundle, ListConceptsQuery,
 };
+use crate::repos::standards as standards_repo;
 use crate::services::concept_graph;
 use crate::state::AppState;
 
@@ -39,6 +41,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/concepts/question-tags",
             post(add_question_tag).delete(remove_question_tag_delete),
+        )
+        .route(
+            "/api/v1/concepts/{id}/standards",
+            get(list_concept_standards).post(add_concept_standard),
+        )
+        .route(
+            "/api/v1/concepts/{id}/standards/{standard_code_id}",
+            delete(remove_concept_standard),
         )
 }
 
@@ -273,6 +283,104 @@ async fn remove_question_tag_delete(
     let user = auth_user(&state, &headers)?;
     assert_permission(&state.pool, user.user_id, PERM_CONCEPTS_MANAGE).await?;
     let ok = concepts::delete_question_tag(&state.pool, q.concept_id, q.question_id)
+        .await
+        .map_err(AppError::Db)?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+async fn list_concept_standards(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<StandardCodeApi>>, AppError> {
+    let _ = auth_user(&state, &headers)?;
+    let _concept = concepts::get_by_id(&state.pool, id)
+        .await
+        .map_err(AppError::Db)?
+        .ok_or(AppError::NotFound)?;
+    let rows = standards_repo::list_alignments_for_concept(&state.pool, id)
+        .await
+        .map_err(AppError::Db)?;
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let fw = standards_repo::get_framework_by_id(&state.pool, row.framework_id)
+            .await
+            .map_err(AppError::Db)?
+            .ok_or(AppError::NotFound)?;
+        out.push(StandardCodeApi::from_row(row, &fw));
+    }
+    Ok(Json(out))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddConceptStandardBody {
+    pub standard_code_id: Uuid,
+    #[serde(default = "default_alignment")]
+    pub alignment_type: String,
+}
+
+fn default_alignment() -> String {
+    "primary".to_string()
+}
+
+async fn add_concept_standard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(body): Json<AddConceptStandardBody>,
+) -> Result<axum::http::StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    assert_permission(&state.pool, user.user_id, PERM_CONCEPTS_MANAGE).await?;
+    let _concept = concepts::get_by_id(&state.pool, id)
+        .await
+        .map_err(AppError::Db)?
+        .ok_or(AppError::NotFound)?;
+    let at = body.alignment_type.trim();
+    if at != "primary" && at != "supplementary" {
+        return Err(AppError::invalid_input(
+            "alignmentType must be 'primary' or 'supplementary'.",
+        ));
+    }
+    let code = standards_repo::get_standard_code_by_id(&state.pool, body.standard_code_id)
+        .await
+        .map_err(AppError::Db)?
+        .ok_or_else(|| AppError::invalid_input("Unknown standard_code_id."))?;
+    if code.archived_at.is_some() {
+        return Err(AppError::invalid_input(
+            "Cannot align to an archived standard code.",
+        ));
+    }
+    standards_repo::insert_concept_alignment(
+        &state.pool,
+        id,
+        body.standard_code_id,
+        at,
+        Some(user.user_id),
+    )
+    .await
+    .map_err(AppError::Db)?;
+    tracing::info!(
+        target: "standards_alignment",
+        concept_id = %id,
+        standard_code_id = %body.standard_code_id,
+        user_id = %user.user_id,
+        "standards.concept_alignment_upserted"
+    );
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+async fn remove_concept_standard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((id, standard_code_id)): Path<(Uuid, Uuid)>,
+) -> Result<axum::http::StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    assert_permission(&state.pool, user.user_id, PERM_CONCEPTS_MANAGE).await?;
+    let ok = standards_repo::delete_concept_alignment(&state.pool, id, standard_code_id)
         .await
         .map_err(AppError::Db)?;
     if !ok {

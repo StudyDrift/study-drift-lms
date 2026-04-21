@@ -13,6 +13,7 @@ pub struct SearchCourseItem {
     pub question_bank_enabled: bool,
     #[serde(default)]
     pub lockdown_mode_enabled: bool,
+    pub standards_alignment_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]

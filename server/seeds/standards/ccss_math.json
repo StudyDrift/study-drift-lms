@@ -1,0 +1,18 @@
+{
+  "framework": {
+    "code": "ccss-math",
+    "name": "Common Core State Standards — Mathematics",
+    "version": "2010",
+    "publisher": "NGA Center / CCSSO"
+  },
+  "items": [
+    {
+      "code": "CCSS.MATH.CONTENT.6.NS.B.4",
+      "shortCode": "6.NS.B.4",
+      "description": "Find the greatest common factor of two whole numbers less than or equal to 100 and the least common multiple of two whole numbers less than or equal to 12.",
+      "gradeBand": "6",
+      "depthLevel": 4,
+      "parentCode": null
+    }
+  ]
+}

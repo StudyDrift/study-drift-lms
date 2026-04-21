@@ -9,6 +9,7 @@ export type SearchCourseItem = {
   feedEnabled?: boolean
   calendarEnabled?: boolean
   questionBankEnabled?: boolean
+  standardsAlignmentEnabled?: boolean
 }
 
 export type SearchPersonItem = {

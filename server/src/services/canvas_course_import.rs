@@ -1824,6 +1824,7 @@ pub async fn build_export_from_canvas(
         calendar_enabled: true,
         question_bank_enabled: false,
         lockdown_mode_enabled: false,
+        standards_alignment_enabled: false,
     };
 
     Ok(CourseExportV1 {

@@ -281,6 +281,67 @@ async fn full_http_walkthrough() {
     assert_eq!(one["courseCode"], course_code);
 
     let r = client
+        .get(format!(
+            "{base}/api/v1/standards?framework=ccss-math&grade=6"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+    let stds = json_body(r).await;
+    let std_rows = stds.as_array().expect("standards json array");
+    assert!(std_rows.len() >= 3);
+    assert!(std_rows.iter().any(|v| {
+        v["code"].as_str() == Some("CCSS.MATH.CONTENT.6.RP.A.1")
+    }));
+
+    let r = client
+        .get(format!(
+            "{base}/api/v1/standards/search?q=ratio&framework=ccss-math"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+    let ratio_search = json_body(r).await;
+    let rs = ratio_search.as_array().expect("search array");
+    assert!(rs.iter().any(|v| v["shortCode"].as_str() == Some("6.RP.A.1")));
+
+    let r = client
+        .patch(format!(
+            "{base}/api/v1/courses/{course_code}/features"
+        ))
+        .bearer_auth(token)
+        .json(&json!({
+            "notebookEnabled": true,
+            "feedEnabled": true,
+            "calendarEnabled": true,
+            "questionBankEnabled": false,
+            "lockdownModeEnabled": false,
+            "standardsAlignmentEnabled": true,
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+
+    let r = client
+        .get(format!(
+            "{base}/api/v1/courses/{course_code}/standards-coverage?framework=ccss-math&grade=6"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+    let cov = json_body(r).await;
+    let cov_rows = cov["standards"].as_array().expect("coverage.standards");
+    assert!(!cov_rows.is_empty());
+    assert!(cov_rows.iter().all(|v| v["coverageStatus"].is_string()));
+
+    let r = client
         .get(format!("{base}/api/v1/courses/{course_code}/structure"))
         .bearer_auth(token)
         .send()

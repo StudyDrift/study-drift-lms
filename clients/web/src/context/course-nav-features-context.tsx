@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- context module exports provider + hooks */
 import {
   createContext,
   useCallback,
@@ -15,6 +16,7 @@ export type CourseNavFeatures = {
   feedEnabled: boolean
   calendarEnabled: boolean
   questionBankEnabled: boolean
+  standardsAlignmentEnabled: boolean
   /** True while loading or re-fetching flags for the active course. */
   loading: boolean
   /** Re-load feature flags from the server (e.g. after saving settings). */
@@ -26,6 +28,7 @@ const defaultFeatures: CourseNavFeatures = {
   feedEnabled: true,
   calendarEnabled: true,
   questionBankEnabled: false,
+  standardsAlignmentEnabled: false,
   loading: false,
   refresh: async () => {},
 }
@@ -42,6 +45,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
   const [feedEnabled, setFeedEnabled] = useState(true)
   const [calendarEnabled, setCalendarEnabled] = useState(true)
   const [questionBankEnabled, setQuestionBankEnabled] = useState(false)
+  const [standardsAlignmentEnabled, setStandardsAlignmentEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -50,6 +54,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setFeedEnabled(true)
       setCalendarEnabled(true)
       setQuestionBankEnabled(false)
+      setStandardsAlignmentEnabled(false)
       return
     }
     setLoading(true)
@@ -59,11 +64,13 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setFeedEnabled(c.feedEnabled !== false)
       setCalendarEnabled(c.calendarEnabled !== false)
       setQuestionBankEnabled(c.questionBankEnabled === true)
+      setStandardsAlignmentEnabled(c.standardsAlignmentEnabled === true)
     } catch {
       setNotebookEnabled(true)
       setFeedEnabled(true)
       setCalendarEnabled(true)
       setQuestionBankEnabled(false)
+      setStandardsAlignmentEnabled(false)
     } finally {
       setLoading(false)
     }
@@ -79,10 +86,19 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       feedEnabled,
       calendarEnabled,
       questionBankEnabled,
+      standardsAlignmentEnabled,
       loading,
       refresh,
     }),
-    [notebookEnabled, feedEnabled, calendarEnabled, questionBankEnabled, loading, refresh],
+    [
+      notebookEnabled,
+      feedEnabled,
+      calendarEnabled,
+      questionBankEnabled,
+      standardsAlignmentEnabled,
+      loading,
+      refresh,
+    ],
   )
 
   return (

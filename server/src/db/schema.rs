@@ -53,3 +53,7 @@ pub const CONCEPT_PREREQUISITES: &str = "course.concept_prerequisites";
 pub const CONCEPT_QUESTION_TAGS: &str = "course.concept_question_tags";
 pub const LEARNER_CONCEPT_STATES: &str = "course.learner_concept_states";
 pub const LEARNER_CONCEPT_EVENTS: &str = "course.learner_concept_events";
+pub const STANDARD_FRAMEWORKS: &str = "course.standard_frameworks";
+pub const STANDARD_CODES: &str = "course.standard_codes";
+pub const CONCEPT_STANDARD_ALIGNMENTS: &str = "course.concept_standard_alignments";
+pub const QUESTION_STANDARD_ALIGNMENTS: &str = "course.question_standard_alignments";

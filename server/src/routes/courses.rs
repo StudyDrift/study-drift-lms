@@ -50,6 +50,7 @@ use crate::models::course_syllabus::{
     CourseSyllabusResponse, GenerateSyllabusSectionRequest, GenerateSyllabusSectionResponse,
     SyllabusAcceptanceStatusResponse, SyllabusSection, UpdateCourseSyllabusRequest,
 };
+use crate::models::standards::CourseStandardsCoverageResponse;
 use crate::models::enrollment::{
     AddEnrollmentsRequest, AddEnrollmentsResponse, CourseEnrollmentsResponse,
     EnrollSelfAsStudentResponse, PatchEnrollmentRequest,
@@ -101,6 +102,7 @@ use crate::services::canvas_course_import;
 use crate::services::course_export_import;
 use crate::services::quiz_generation_ai;
 use crate::services::relative_schedule;
+use crate::services::standards as standards_service;
 use crate::services::syllabus_section_ai;
 use crate::state::AppState;
 use axum::{
@@ -357,6 +359,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/features",
             patch(patch_course_features_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/standards-coverage",
+            get(course_standards_coverage_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/archived",
@@ -4984,6 +4990,13 @@ async fn patch_course_features_handler(
     let required = course_grants::course_item_create_permission(&course_code);
     assert_permission(&state.pool, user.user_id, &required).await?;
 
+    let existing = course::get_by_course_code(&state.pool, &course_code)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let standards_alignment_enabled = req
+        .standards_alignment_enabled
+        .unwrap_or(existing.standards_alignment_enabled);
+
     let row = course::patch_course_features(
         &state.pool,
         &course_code,
@@ -4992,10 +5005,81 @@ async fn patch_course_features_handler(
         req.calendar_enabled,
         req.question_bank_enabled,
         req.lockdown_mode_enabled,
+        standards_alignment_enabled,
     )
     .await?
     .ok_or(AppError::NotFound)?;
     Ok(Json(row))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CourseStandardsCoverageQuery {
+    framework: String,
+    #[serde(default)]
+    grade: Option<String>,
+}
+
+async fn course_standards_coverage_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Query(q): Query<CourseStandardsCoverageQuery>,
+) -> Result<Json<CourseStandardsCoverageResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let can_manage = rbac::user_has_permission(
+        &state.pool,
+        user.user_id,
+        &course_grants::course_item_create_permission(&course_code),
+    )
+    .await?;
+    let can_gradebook = rbac::user_has_permission(
+        &state.pool,
+        user.user_id,
+        &course_grants::course_gradebook_view_permission(&course_code),
+    )
+    .await?;
+    if !can_manage && !can_gradebook {
+        return Err(AppError::Forbidden);
+    }
+
+    let course_row = course::get_by_course_code(&state.pool, &course_code)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if !course_row.standards_alignment_enabled {
+        return Err(AppError::Forbidden);
+    }
+
+    let rows = standards_service::course_standards_coverage(
+        &state.pool,
+        course_row.id,
+        q.framework.trim(),
+        q.grade.as_deref().map(str::trim),
+    )
+    .await?;
+    let total = rows.len() as f64;
+    let covered = rows
+        .iter()
+        .filter(|r| r.coverage_status == "covered")
+        .count() as f64;
+    let coverage_pct = if total > 0.0 {
+        (covered / total) * 100.0
+    } else {
+        0.0
+    };
+    tracing::info!(
+        target = "standards_alignment",
+        course_id = %course_row.id,
+        coverage_pct,
+        framework = %q.framework,
+        "standards.coverage_reported"
+    );
+
+    Ok(Json(CourseStandardsCoverageResponse {
+        standards: rows.into_iter().map(Into::into).collect(),
+    }))
 }
 
 async fn patch_course_archived_handler(

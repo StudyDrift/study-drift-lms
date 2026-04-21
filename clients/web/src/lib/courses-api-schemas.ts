@@ -48,6 +48,7 @@ export const courseSchema = z
     calendarEnabled: z.boolean().optional(),
     questionBankEnabled: z.boolean().optional(),
     lockdownModeEnabled: z.boolean().optional(),
+    standardsAlignmentEnabled: z.boolean().optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
     viewerEnrollmentRoles: z.array(z.string()).optional(),
@@ -509,3 +510,23 @@ export const versionsListResponseSchema = z.object({
 export const restoreVersionResponseSchema = z.object({
   newVersionNumber: z.number().optional(),
 })
+
+export const standardCoverageItemSchema = z.object({
+  standardCodeId: z.string(),
+  code: z.string(),
+  shortCode: z.string().nullable().optional(),
+  description: z.string(),
+  gradeBand: z.string().nullable().optional(),
+  questionCount: z.number(),
+  averageMastery: z.number().nullable().optional(),
+  coverageStatus: z.string(),
+  superseded: z.boolean(),
+  supersededByStandardCodeId: z.string().nullable().optional(),
+})
+
+export const courseStandardsCoverageResponseSchema = z.object({
+  standards: z.array(standardCoverageItemSchema),
+})
+
+export type StandardCoverageItem = z.infer<typeof standardCoverageItemSchema>
+export type CourseStandardsCoveragePayload = z.infer<typeof courseStandardsCoverageResponseSchema>

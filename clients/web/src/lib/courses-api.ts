@@ -18,6 +18,7 @@ import {
   courseScopedRolesResponseSchema,
   courseStructureItemSchema,
   courseStructureItemsResponseSchema,
+  courseStandardsCoverageResponseSchema,
   courseSyllabusPayloadSchema,
   courseGradebookGridResponseSchema,
   courseMyGradesRawSchema,
@@ -42,7 +43,11 @@ import {
   versionsListResponseSchema,
 } from './courses-api-schemas'
 
+import type { CourseStandardsCoveragePayload, StandardCoverageItem } from './courses-api-schemas'
+
 import type { MarkdownThemeCustom } from './markdown-theme'
+
+export type { StandardCoverageItem }
 
 export type LateSubmissionPolicy = 'allow' | 'penalty' | 'block'
 
@@ -82,6 +87,8 @@ export type CoursePublic = {
   questionBankEnabled?: boolean
   /** When true, instructors can configure quiz lockdown / kiosk delivery (plan 2.10). */
   lockdownModeEnabled?: boolean
+  /** K-12 standards coverage UI and APIs (plan 1.3). */
+  standardsAlignmentEnabled?: boolean
   createdAt: string
   updatedAt: string
   /** Present on single-course GET: raw enrollment roles for the viewer (`teacher`, `student`, …). */
@@ -406,6 +413,7 @@ export async function patchCourseFeatures(
     calendarEnabled: boolean
     questionBankEnabled: boolean
     lockdownModeEnabled?: boolean
+    standardsAlignmentEnabled: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -419,12 +427,27 @@ export async function patchCourseFeatures(
         calendarEnabled: body.calendarEnabled,
         questionBankEnabled: body.questionBankEnabled,
         lockdownModeEnabled: body.lockdownModeEnabled ?? false,
+        standardsAlignmentEnabled: body.standardsAlignmentEnabled,
       }),
     },
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseApiResponse('patchCourseFeatures', courseSchema, raw)
+}
+
+export async function fetchCourseStandardsCoverage(
+  courseCode: string,
+  params: { framework: string; grade?: string },
+): Promise<CourseStandardsCoveragePayload> {
+  const qs = new URLSearchParams({ framework: params.framework })
+  if (params.grade) qs.set('grade', params.grade)
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/standards-coverage?${qs.toString()}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('fetchCourseStandardsCoverage', courseStandardsCoverageResponseSchema, raw)
 }
 
 async function parseJson(res: Response): Promise<unknown> {

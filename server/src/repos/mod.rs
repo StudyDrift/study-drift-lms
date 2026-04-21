@@ -28,6 +28,7 @@ pub mod enrollment_groups;
 pub mod password_reset;
 pub mod rbac;
 pub mod reports;
+pub mod standards;
 pub mod syllabus_acceptance;
 pub mod syllabus_markups;
 pub mod system_prompts;

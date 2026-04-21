@@ -75,6 +75,8 @@ pub struct CoursePublic {
     pub question_bank_enabled: bool,
     /// When true, instructors may configure quiz lockdown / kiosk delivery (plan 2.10).
     pub lockdown_mode_enabled: bool,
+    /// K-12 standards alignment UI and coverage APIs (plan 1.3).
+    pub standards_alignment_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -139,6 +141,9 @@ pub struct PatchCourseFeaturesRequest {
     pub question_bank_enabled: bool,
     #[serde(default)]
     pub lockdown_mode_enabled: bool,
+    /// When omitted, the previous course value is preserved (backward compatible PATCH body).
+    #[serde(default)]
+    pub standards_alignment_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -25,6 +25,7 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::accommodations::router())
         .merge(routes::learners::router())
         .merge(routes::concepts::router())
+        .merge(routes::standards::router())
         .merge(routes::me::router())
         .merge(routes::search::router())
         .merge(routes::courses::router())

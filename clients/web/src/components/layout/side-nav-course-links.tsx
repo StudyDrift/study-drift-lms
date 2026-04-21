@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   ArrowLeft,
   Award,
+  BookMarked,
   Calendar,
   ClipboardList,
   FileText,
@@ -33,7 +34,13 @@ type SideNavCourseLinksProps = {
 }
 
 export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
-  const { notebookEnabled, feedEnabled, calendarEnabled, questionBankEnabled } = useCourseNavFeatures()
+  const {
+    notebookEnabled,
+    feedEnabled,
+    calendarEnabled,
+    questionBankEnabled,
+    standardsAlignmentEnabled,
+  } = useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
   const courseViewPreview = useCourseViewAs(courseCode)
   const viewerEnrollmentRoles = useViewerEnrollmentRoles(courseCode)
@@ -139,6 +146,15 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
         >
           <ClipboardList className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
           Gradebook
+        </NavLink>
+      )}
+      {standardsAlignmentEnabled && (canViewGradebook || canManageCourse) && (
+        <NavLink
+          to={`${base}/standards-coverage`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <BookMarked className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Standards coverage
         </NavLink>
       )}
       {canViewEnrollments && (

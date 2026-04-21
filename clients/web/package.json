@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "prepare": "cd ../.. && node clients/web/node_modules/husky/bin.js clients/web/.husky",
+    "prepare": "node scripts/install-husky.mjs",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",

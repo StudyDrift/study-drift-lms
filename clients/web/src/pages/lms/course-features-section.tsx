@@ -59,6 +59,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const calendarEnabled = course.calendarEnabled !== false
   const questionBankEnabled = course.questionBankEnabled === true
   const lockdownModeEnabled = course.lockdownModeEnabled === true
+  const standardsAlignmentEnabled = course.standardsAlignmentEnabled === true
 
   const persist = useCallback(
     async (body: {
@@ -67,6 +68,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       calendarEnabled: boolean
       questionBankEnabled: boolean
       lockdownModeEnabled: boolean
+      standardsAlignmentEnabled: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -106,6 +108,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
               calendarEnabled,
               questionBankEnabled,
               lockdownModeEnabled,
+              standardsAlignmentEnabled,
             })
           }
         />
@@ -121,6 +124,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
               calendarEnabled,
               questionBankEnabled,
               lockdownModeEnabled,
+              standardsAlignmentEnabled,
             })
           }
         />
@@ -136,6 +140,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
               calendarEnabled: !calendarEnabled,
               questionBankEnabled,
               lockdownModeEnabled,
+              standardsAlignmentEnabled,
             })
           }
         />
@@ -151,6 +156,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
               calendarEnabled,
               questionBankEnabled: !questionBankEnabled,
               lockdownModeEnabled,
+              standardsAlignmentEnabled,
             })
           }
         />
@@ -166,6 +172,23 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
               calendarEnabled,
               questionBankEnabled,
               lockdownModeEnabled: !lockdownModeEnabled,
+              standardsAlignmentEnabled,
+            })
+          }
+        />
+        <FeatureToggleRow
+          label="Standards alignment"
+          description="Map concepts to Common Core / NGSS codes and view per-standard coverage for this course."
+          enabled={standardsAlignmentEnabled}
+          disabled={saving}
+          onToggle={() =>
+            void persist({
+              notebookEnabled,
+              feedEnabled,
+              calendarEnabled,
+              questionBankEnabled,
+              lockdownModeEnabled,
+              standardsAlignmentEnabled: !standardsAlignmentEnabled,
             })
           }
         />

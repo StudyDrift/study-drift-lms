@@ -59,6 +59,7 @@ pub async fn list_for_enrolled_user(
             c.calendar_enabled,
             c.question_bank_enabled,
             c.lockdown_mode_enabled,
+            c.standards_alignment_enabled,
             c.created_at,
             c.updated_at
         FROM {} c
@@ -120,6 +121,7 @@ pub async fn insert_course(
                 calendar_enabled,
                 question_bank_enabled,
                 lockdown_mode_enabled,
+                standards_alignment_enabled,
                 created_at,
                 updated_at
             "#,
@@ -227,6 +229,7 @@ pub async fn get_by_course_code(
             calendar_enabled,
             question_bank_enabled,
             lockdown_mode_enabled,
+            standards_alignment_enabled,
             created_at,
             updated_at
         FROM {}
@@ -270,6 +273,7 @@ pub async fn get_by_id(
             calendar_enabled,
             question_bank_enabled,
             lockdown_mode_enabled,
+            standards_alignment_enabled,
             created_at,
             updated_at
         FROM {}
@@ -367,6 +371,7 @@ pub async fn update_course(
             calendar_enabled,
             question_bank_enabled,
             lockdown_mode_enabled,
+            standards_alignment_enabled,
             created_at,
             updated_at
         "#,
@@ -396,6 +401,7 @@ pub async fn patch_course_features(
     calendar_enabled: bool,
     question_bank_enabled: bool,
     lockdown_mode_enabled: bool,
+    standards_alignment_enabled: bool,
 ) -> Result<Option<CoursePublic>, sqlx::Error> {
     sqlx::query_as::<_, CoursePublic>(&format!(
         r#"
@@ -406,8 +412,9 @@ pub async fn patch_course_features(
             calendar_enabled = $3,
             question_bank_enabled = $4,
             lockdown_mode_enabled = $5,
+            standards_alignment_enabled = $6,
             updated_at = NOW()
-        WHERE course_code = $6
+        WHERE course_code = $7
         RETURNING
             id,
             course_code,
@@ -433,6 +440,7 @@ pub async fn patch_course_features(
             calendar_enabled,
             question_bank_enabled,
             lockdown_mode_enabled,
+            standards_alignment_enabled,
             created_at,
             updated_at
         "#,
@@ -443,6 +451,7 @@ pub async fn patch_course_features(
     .bind(calendar_enabled)
     .bind(question_bank_enabled)
     .bind(lockdown_mode_enabled)
+    .bind(standards_alignment_enabled)
     .bind(course_code)
     .fetch_optional(pool)
     .await
@@ -487,6 +496,7 @@ pub async fn set_hero_image_fields(
             calendar_enabled,
             question_bank_enabled,
             lockdown_mode_enabled,
+            standards_alignment_enabled,
             created_at,
             updated_at
         "#,
@@ -541,6 +551,7 @@ pub async fn update_markdown_theme(
             calendar_enabled,
             question_bank_enabled,
             lockdown_mode_enabled,
+            standards_alignment_enabled,
             created_at,
             updated_at
         "#,
@@ -671,6 +682,7 @@ pub async fn set_course_archived(
             calendar_enabled,
             question_bank_enabled,
             lockdown_mode_enabled,
+            standards_alignment_enabled,
             created_at,
             updated_at
         "#,
@@ -805,6 +817,7 @@ pub async fn factory_reset_course(
             calendar_enabled = true,
             question_bank_enabled = false,
             lockdown_mode_enabled = false,
+            standards_alignment_enabled = false,
             updated_at = NOW()
         WHERE course_code = $1
         RETURNING
@@ -832,6 +845,7 @@ pub async fn factory_reset_course(
             calendar_enabled,
             question_bank_enabled,
             lockdown_mode_enabled,
+            standards_alignment_enabled,
             created_at,
             updated_at
         "#,
