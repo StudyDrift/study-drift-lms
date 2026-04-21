@@ -65,10 +65,16 @@ pub struct CourseExportSnapshot {
     pub hint_scaffolding_enabled: bool,
     #[serde(default)]
     pub misconception_detection_enabled: bool,
+    #[serde(default = "default_course_type_export")]
+    pub course_type: String,
 }
 
 fn default_export_schedule_mode() -> String {
     "fixed".to_string()
+}
+
+fn default_course_type_export() -> String {
+    "traditional".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

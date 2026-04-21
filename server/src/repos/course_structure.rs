@@ -10,6 +10,7 @@ use crate::repos::course_module_content;
 use crate::repos::course_module_external_links;
 use crate::repos::course_module_quizzes;
 use crate::repos::course_module_surveys;
+use crate::services::competency_gating;
 use crate::services::relative_schedule::{self, RelativeShiftContext};
 
 /// Counts how many of `ids` exist in this course with `kind` in `kinds`.
@@ -408,7 +409,7 @@ pub async fn content_page_visible_to_student(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row
+    let base = row
         .map(
             |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at)| {
                 let effective_vf = if schedule_mode == "relative" {
@@ -428,7 +429,21 @@ pub async fn content_page_visible_to_student(
                 c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now)
             },
         )
-        .unwrap_or(false))
+        .unwrap_or(false);
+    if !base {
+        return Ok(false);
+    }
+    if competency_gating::student_structure_item_competency_blocked_under_parent(
+        pool,
+        course_id,
+        content_page_id,
+        user_id,
+    )
+    .await?
+    {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 pub async fn set_assignment_due_at(
@@ -508,7 +523,7 @@ pub async fn assignment_visible_to_student(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row
+    let base = row
         .map(
             |(
                 c_pub,
@@ -574,7 +589,21 @@ pub async fn assignment_visible_to_student(
                     && within_availability
             },
         )
-        .unwrap_or(false))
+        .unwrap_or(false);
+    if !base {
+        return Ok(false);
+    }
+    if competency_gating::student_structure_item_competency_blocked_under_parent(
+        pool,
+        course_id,
+        assignment_id,
+        user_id,
+    )
+    .await?
+    {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 pub async fn set_quiz_due_at(
@@ -648,7 +677,7 @@ pub async fn quiz_visible_to_student(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row
+    let base = row
         .map(
             |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at)| {
                 let effective_vf = if schedule_mode == "relative" {
@@ -668,7 +697,21 @@ pub async fn quiz_visible_to_student(
                 c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now)
             },
         )
-        .unwrap_or(false))
+        .unwrap_or(false);
+    if !base {
+        return Ok(false);
+    }
+    if competency_gating::student_structure_item_competency_blocked_under_parent(
+        pool,
+        course_id,
+        quiz_id,
+        user_id,
+    )
+    .await?
+    {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 pub async fn external_link_visible_to_student(
@@ -716,7 +759,7 @@ pub async fn external_link_visible_to_student(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row
+    let base = row
         .map(
             |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at)| {
                 let effective_vf = if schedule_mode == "relative" {
@@ -736,7 +779,21 @@ pub async fn external_link_visible_to_student(
                 c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now)
             },
         )
-        .unwrap_or(false))
+        .unwrap_or(false);
+    if !base {
+        return Ok(false);
+    }
+    if competency_gating::student_structure_item_competency_blocked_under_parent(
+        pool,
+        course_id,
+        link_id,
+        user_id,
+    )
+    .await?
+    {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 pub async fn lti_link_visible_to_student(
@@ -784,7 +841,7 @@ pub async fn lti_link_visible_to_student(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row
+    let base = row
         .map(
             |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at)| {
                 let effective_vf = if schedule_mode == "relative" {
@@ -804,7 +861,21 @@ pub async fn lti_link_visible_to_student(
                 c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now)
             },
         )
-        .unwrap_or(false))
+        .unwrap_or(false);
+    if !base {
+        return Ok(false);
+    }
+    if competency_gating::student_structure_item_competency_blocked_under_parent(
+        pool,
+        course_id,
+        link_id,
+        user_id,
+    )
+    .await?
+    {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 pub async fn survey_visible_to_student(
@@ -858,7 +929,7 @@ pub async fn survey_visible_to_student(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row
+    let base = row
         .map(
             |(c_pub, c_arch, m_pub, m_arch, vf, schedule_mode, anchor, enrolled_at, opens_at, closes_at)| {
                 let effective_vf = if schedule_mode == "relative" {
@@ -907,7 +978,21 @@ pub async fn survey_visible_to_student(
                 c_pub && !c_arch && m_pub && !m_arch && effective_vf.is_none_or(|t| t <= now) && within_window
             },
         )
-        .unwrap_or(false))
+        .unwrap_or(false);
+    if !base {
+        return Ok(false);
+    }
+    if competency_gating::student_structure_item_competency_blocked_under_parent(
+        pool,
+        course_id,
+        survey_id,
+        user_id,
+    )
+    .await?
+    {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 pub async fn update_module(

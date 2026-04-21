@@ -37,6 +37,7 @@ pub const ENROLLMENT_GROUP_SETS: &str = "course.enrollment_group_sets";
 pub const ENROLLMENT_GROUPS: &str = "course.enrollment_groups";
 pub const ENROLLMENT_GROUP_MEMBERSHIPS: &str = "course.enrollment_group_memberships";
 pub const COURSE_LEARNING_OUTCOMES: &str = "course.course_learning_outcomes";
+pub const COURSE_OUTCOME_SUB_OUTCOMES: &str = "course.course_outcome_sub_outcomes";
 pub const COURSE_OUTCOME_LINKS: &str = "course.course_outcome_links";
 pub const QUESTIONS: &str = "course.questions";
 pub const QUESTION_VERSIONS: &str = "course.question_versions";

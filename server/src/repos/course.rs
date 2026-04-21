@@ -65,6 +65,7 @@ pub async fn list_for_enrolled_user(
             c.diagnostic_assessments_enabled,
             c.hint_scaffolding_enabled,
             c.misconception_detection_enabled,
+            c.course_type,
             c.created_at,
             c.updated_at
         FROM {} c
@@ -93,14 +94,15 @@ pub async fn insert_course(
     title: &str,
     description: &str,
     created_by_user_id: Uuid,
+    course_type: &str,
 ) -> Result<CoursePublic, sqlx::Error> {
     for _ in 0..32 {
         let code = new_course_code();
         let mut tx = pool.begin().await?;
         let result = sqlx::query_as::<_, CoursePublic>(&format!(
             r#"
-            INSERT INTO {} (course_code, title, description, published, created_by_user_id)
-            VALUES ($1, $2, $3, false, $4)
+            INSERT INTO {} (course_code, title, description, published, created_by_user_id, course_type)
+            VALUES ($1, $2, $3, false, $4, $5)
             RETURNING
                 id,
                 course_code,
@@ -132,6 +134,7 @@ pub async fn insert_course(
                 diagnostic_assessments_enabled,
                 hint_scaffolding_enabled,
                 misconception_detection_enabled,
+                course_type,
                 created_at,
                 updated_at
             "#,
@@ -141,6 +144,7 @@ pub async fn insert_course(
         .bind(title)
         .bind(description)
         .bind(created_by_user_id)
+        .bind(course_type)
         .fetch_one(&mut *tx)
         .await;
 
@@ -245,6 +249,7 @@ pub async fn get_by_course_code(
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
             misconception_detection_enabled,
+            course_type,
             created_at,
             updated_at
         FROM {}
@@ -294,6 +299,7 @@ pub async fn get_by_id(
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
             misconception_detection_enabled,
+            course_type,
             created_at,
             updated_at
         FROM {}
@@ -397,6 +403,7 @@ pub async fn update_course(
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
             misconception_detection_enabled,
+            course_type,
             created_at,
             updated_at
         "#,
@@ -481,6 +488,7 @@ pub async fn patch_course_features(
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
             misconception_detection_enabled,
+            course_type,
             created_at,
             updated_at
         "#,
@@ -500,6 +508,23 @@ pub async fn patch_course_features(
     .bind(course_code)
     .fetch_optional(pool)
     .await
+}
+
+pub async fn set_course_type(pool: &PgPool, course_code: &str, course_type: &str) -> Result<(), sqlx::Error> {
+    let t = if course_type.trim() == "competency_based" {
+        "competency_based"
+    } else {
+        "traditional"
+    };
+    sqlx::query(&format!(
+        r#"UPDATE {} SET course_type = $2, updated_at = NOW() WHERE course_code = $1"#,
+        schema::COURSES
+    ))
+    .bind(course_code)
+    .bind(t)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn set_hero_image_fields(
@@ -547,6 +572,7 @@ pub async fn set_hero_image_fields(
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
             misconception_detection_enabled,
+            course_type,
             created_at,
             updated_at
         "#,
@@ -607,6 +633,7 @@ pub async fn update_markdown_theme(
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
             misconception_detection_enabled,
+            course_type,
             created_at,
             updated_at
         "#,
@@ -743,6 +770,7 @@ pub async fn set_course_archived(
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
             misconception_detection_enabled,
+            course_type,
             created_at,
             updated_at
         "#,
@@ -916,6 +944,7 @@ pub async fn factory_reset_course(
             diagnostic_assessments_enabled,
             hint_scaffolding_enabled,
             misconception_detection_enabled,
+            course_type,
             created_at,
             updated_at
         "#,

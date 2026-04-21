@@ -16,6 +16,7 @@ pub mod irt_theta;
 pub mod assignment_rubric_ai;
 pub mod ai;
 pub mod auth;
+pub mod competency_gating;
 pub mod concept_graph;
 pub mod code_execution;
 pub mod mail;

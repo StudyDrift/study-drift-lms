@@ -521,6 +521,9 @@ async fn apply_course_snapshot(
     )
     .await?
     .ok_or(AppError::NotFound)?;
+    course::set_course_type(pool, course_code, snap.course_type.trim())
+        .await
+        .map_err(AppError::from)?;
     Ok(())
 }
 
@@ -890,6 +893,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
         diagnostic_assessments_enabled: course.diagnostic_assessments_enabled,
         hint_scaffolding_enabled: course.hint_scaffolding_enabled,
         misconception_detection_enabled: course.misconception_detection_enabled,
+        course_type: course.course_type.clone(),
     };
 
     let grading = course_grading::get_settings_for_course_code(pool, course_code)

@@ -19,6 +19,7 @@ use crate::repos::learner_model;
 use crate::repos::recommendations as rec_repo;
 use crate::repos::srs as srs_repo;
 use crate::services::adaptive_path as adaptive_path_service;
+use crate::services::competency_gating;
 use crate::services::learner_state;
 use crate::services::srs::{srs_active_for_course, srs_practice_globally_enabled};
 
@@ -585,6 +586,14 @@ pub async fn get_recommendations_for_learner_course(
     let is_staff = enrollment::user_is_course_staff(pool, &course.course_code, target_user_id).await?;
     if !is_staff {
         rows = course_structure::filter_structure_for_student_view(rows, Utc::now());
+        rows = competency_gating::filter_structure_rows_for_competency_student(
+            pool,
+            course.id,
+            course.course_type.as_str(),
+            target_user_id,
+            rows,
+        )
+        .await?;
     }
 
     let ttl = chrono::Duration::seconds(CACHE_TTL_SECS);

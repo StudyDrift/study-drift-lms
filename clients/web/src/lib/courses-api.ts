@@ -13,6 +13,7 @@ import {
   courseGradingSettingsResultSchema,
   courseOutcomeLinkSchema,
   courseOutcomeSchema,
+  courseOutcomeSubOutcomeSchema,
   courseOutcomesListResponseSchema,
   adaptivePathPreviewResponseSchema,
   courseSchema,
@@ -112,6 +113,8 @@ export type CoursePublic = {
   hintScaffoldingEnabled?: boolean
   /** Misconception tagging + remediation in quiz results (plan 1.10). */
   misconceptionDetectionEnabled?: boolean
+  /** `traditional` or `competency_based` (server default when omitted: traditional). */
+  courseType?: string
   createdAt: string
   updatedAt: string
   /** Present on single-course GET: raw enrollment roles for the viewer (`teacher`, `student`, …). */
@@ -863,6 +866,7 @@ export async function uploadCourseFile(courseCode: string, file: File): Promise<
 export async function createCourse(body: {
   title: string
   description: string
+  courseType?: 'traditional' | 'competency_based'
 }): Promise<CoursePublic> {
   const res = await authorizedFetch('/api/v1/courses', {
     method: 'POST',
@@ -3183,6 +3187,7 @@ export type OutcomeIntensityLevelId = (typeof OUTCOME_INTENSITY_LEVEL_IDS)[numbe
 
 export type CourseOutcomeLink = {
   id: string
+  subOutcomeId?: string
   structureItemId: string
   targetKind: 'assignment' | 'quiz' | 'quiz_question'
   quizQuestionId: string
@@ -3216,6 +3221,32 @@ export async function fetchCourseOutcomes(courseCode: string): Promise<CourseOut
   return parseApiResponse('fetchCourseOutcomes', courseOutcomesListResponseSchema, raw)
 }
 
+export type CourseOutcomeSubOutcome = {
+  id: string
+  outcomeId: string
+  title: string
+  description: string
+  sortOrder: number
+}
+
+export async function createCourseOutcomeSubOutcome(
+  courseCode: string,
+  outcomeId: string,
+  body: { title: string; description?: string },
+): Promise<CourseOutcomeSubOutcome> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/outcomes/${encodeURIComponent(outcomeId)}/sub-outcomes`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: body.title, description: body.description ?? '' }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('createCourseOutcomeSubOutcome', courseOutcomeSubOutcomeSchema, raw)
+}
+
 export async function createCourseOutcome(
   courseCode: string,
   body: { title: string; description?: string },
@@ -3233,7 +3264,7 @@ export async function createCourseOutcome(
 export async function patchCourseOutcome(
   courseCode: string,
   outcomeId: string,
-  body: { title?: string; description?: string },
+  body: { title?: string; description?: string; moduleStructureItemId?: string | null },
 ): Promise<CourseOutcome> {
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/outcomes/${encodeURIComponent(outcomeId)}`,
@@ -3268,6 +3299,7 @@ export async function addCourseOutcomeLink(
     quizQuestionId?: string
     measurementLevel?: string
     intensityLevel?: string
+    subOutcomeId?: string
   },
 ): Promise<CourseOutcomeLink> {
   const res = await authorizedFetch(
