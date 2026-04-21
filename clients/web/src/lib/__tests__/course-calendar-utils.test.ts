@@ -93,8 +93,8 @@ describe('isInTodoWindow', () => {
 })
 
 describe('formatDueShort', () => {
-  it('returns original string when date is invalid', () => {
-    expect(formatDueShort('not-a-date')).toBe('not-a-date')
+  it('returns an em dash when date is invalid', () => {
+    expect(formatDueShort('not-a-date')).toBe('—')
   })
 
   it('formats valid ISO strings', () => {

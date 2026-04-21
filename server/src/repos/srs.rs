@@ -134,6 +134,53 @@ pub async fn list_review_queue(
     .await
 }
 
+pub async fn list_review_queue_for_course(
+    pool: &PgPool,
+    user_id: Uuid,
+    course_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<SrsReviewQueueRow>, sqlx::Error> {
+    sqlx::query_as::<_, SrsReviewQueueRow>(&format!(
+        r#"
+        SELECT
+            s.id AS state_id,
+            s.question_id,
+            q.course_id,
+            c.course_code,
+            c.title AS course_title,
+            s.next_review_at,
+            q.stem,
+            q.question_type::text AS question_type,
+            q.options,
+            q.correct_answer,
+            q.explanation
+        FROM {} s
+        INNER JOIN {} q ON q.id = s.question_id
+        INNER JOIN {} c ON c.id = q.course_id
+        INNER JOIN {} e ON e.course_id = q.course_id AND e.user_id = s.user_id
+        WHERE s.user_id = $1
+          AND q.course_id = $2
+          AND c.srs_enabled = TRUE
+          AND q.srs_eligible = TRUE
+          AND s.next_review_at <= NOW()
+          AND (s.suppressed_until IS NULL OR s.suppressed_until < NOW())
+        ORDER BY s.next_review_at ASC, s.question_id ASC
+        LIMIT $3 OFFSET $4
+        "#,
+        schema::SRS_ITEM_STATES,
+        schema::QUESTIONS,
+        schema::COURSES,
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(user_id)
+    .bind(course_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+}
+
 pub async fn get_state_for_user_question<'e, E>(
     ex: E,
     user_id: Uuid,

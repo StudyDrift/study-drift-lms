@@ -12,8 +12,10 @@ use crate::models::course::CoursePublic;
 use crate::models::course_module_quiz::{QuizQuestion, QuizQuestionResponseItem, QuizSubmitRequest, QuizSubmitResponse};
 use crate::repos::course_grades;
 use crate::repos::course_module_quizzes;
+use crate::repos::hints;
 use crate::repos::quiz_attempts;
 use crate::services::code_execution::{self, CodeTestCase, ExecuteCodeRequest};
+use crate::services::hint_service;
 use crate::services::learner_state;
 use crate::services::question_bank;
 use crate::services::srs;
@@ -288,6 +290,14 @@ pub async fn submit_module_quiz(
         .await
         .map_err(AppError::Db)?;
 
+    let hint_counts: HashMap<String, i64> = if course_row.hint_scaffolding_enabled {
+        hints::hint_use_counts_for_attempt(pool, att.id)
+            .await
+            .map_err(AppError::Db)?
+    } else {
+        HashMap::new()
+    };
+
     let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, quiz_row);
 
     let mut concept_touches: Vec<(Uuid, f64, i32)> = Vec::new();
@@ -325,7 +335,17 @@ pub async fn submit_module_quiz(
                 serde_json::from_value(db_row.response_json.clone()).map_err(|e| {
                     AppError::invalid_input(format!("Could not read saved answer: {e}"))
                 })?;
-            let (pts, max_pts, is_ok) = grade_question_with_code_support(q, &resp_item).await?;
+            let (mut pts, max_pts, is_ok) = grade_question_with_code_support(q, &resp_item).await?;
+            if course_row.hint_scaffolding_enabled {
+                if let Ok(quuid) = Uuid::parse_str(qid) {
+                    let pen = hints::sum_static_penalty_pct_for_attempt_question(
+                        pool, att.id, quuid, qid, "en",
+                    )
+                    .await
+                    .map_err(AppError::Db)?;
+                    pts = hint_service::apply_hint_penalty_to_points(pts, pen);
+                }
+            }
             earned += pts;
             possible += max_pts;
             let rj = json!({
@@ -360,12 +380,15 @@ pub async fn submit_module_quiz(
                 .ok()
                 .and_then(|u| tag_map.get(&u).map(|v| v.as_slice()))
                 .unwrap_or(&[]);
+            let hint_n = *hint_counts.get(qid).unwrap_or(&0);
+            let ms = hint_service::mastery_scale_for_hint_uses(hint_n);
             learner_state::collect_concept_touches_from_question(
                 q,
                 i as i32,
                 pts,
                 max_pts,
                 extra,
+                ms,
                 &mut concept_touches,
             );
         }
@@ -409,7 +432,21 @@ pub async fn submit_module_quiz(
             let q = by_id
                 .get(&resp_item.question_id)
                 .ok_or_else(|| AppError::invalid_input("Invalid question id."))?;
-            let (pts, max_pts, is_ok) = grade_question_with_code_support(q, resp_item).await?;
+            let (mut pts, max_pts, is_ok) = grade_question_with_code_support(q, resp_item).await?;
+            if course_row.hint_scaffolding_enabled {
+                if let Ok(quuid) = Uuid::parse_str(&resp_item.question_id) {
+                    let pen = hints::sum_static_penalty_pct_for_attempt_question(
+                        pool,
+                        att.id,
+                        quuid,
+                        resp_item.question_id.as_str(),
+                        "en",
+                    )
+                    .await
+                    .map_err(AppError::Db)?;
+                    pts = hint_service::apply_hint_penalty_to_points(pts, pen);
+                }
+            }
             earned += pts;
             possible += max_pts;
             let rj = json!({
@@ -444,12 +481,17 @@ pub async fn submit_module_quiz(
                 .ok()
                 .and_then(|u| tag_map.get(&u).map(|v| v.as_slice()))
                 .unwrap_or(&[]);
+            let hint_n = *hint_counts
+                .get(resp_item.question_id.as_str())
+                .unwrap_or(&0);
+            let ms = hint_service::mastery_scale_for_hint_uses(hint_n);
             learner_state::collect_concept_touches_from_question(
                 q,
                 i as i32,
                 pts,
                 max_pts,
                 extra,
+                ms,
                 &mut concept_touches,
             );
         }

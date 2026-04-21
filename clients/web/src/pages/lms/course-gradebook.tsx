@@ -18,6 +18,8 @@ import {
 } from './gradebook/gradebook-grid'
 import type { AssignmentGroupWeight } from './gradebook/compute-course-final-percent'
 import { GradebookLoadingSkeleton } from '../../components/ui/lms-content-skeletons'
+import { formatAbsolute, formatAbsoluteShort } from '../../lib/format-datetime'
+import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { LmsPage } from './lms-page'
 
 function buildEmptyGrades(students: GradebookStudent[], columns: GradebookColumn[]): Record<string, Record<string, string>> {
@@ -140,15 +142,6 @@ function buildFullRubricScoresPayload(
     }
   }
   return out
-}
-
-function formatSavedTimestamp(d: Date): string {
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
 }
 
 function formatPointsCell(n: number): string {
@@ -421,8 +414,11 @@ export default function CourseGradebook() {
         rubricScores: rubricPayload,
       })
       await loadGrid()
+      toastSaveOk('Gradebook saved')
     } catch (e: unknown) {
-      setSaveError(e instanceof Error ? e.message : 'Could not save grades.')
+      const msg = e instanceof Error ? e.message : 'Could not save grades.'
+      setSaveError(msg)
+      toastMutationError(msg)
     } finally {
       setSaving(false)
     }
@@ -511,7 +507,7 @@ export default function CourseGradebook() {
         <>
           {canEditGrades && gridStudents.length > 0 && gridColumns.length > 0 && (
             <div
-              className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"
+              className="lms-print-hide mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"
               aria-live="polite"
             >
               <div className="min-w-0 flex-1 text-sm text-slate-600 dark:text-neutral-400">
@@ -528,10 +524,14 @@ export default function CourseGradebook() {
                       All changes saved
                     </span>
                     {lastSavedAt ? (
-                      <span className="text-slate-500 dark:text-neutral-500">
+                      <time
+                        className="text-slate-500 dark:text-neutral-500"
+                        dateTime={lastSavedAt.toISOString()}
+                        title={formatAbsolute(lastSavedAt)}
+                      >
                         {' '}
-                        ({formatSavedTimestamp(lastSavedAt)})
-                      </span>
+                        ({formatAbsoluteShort(lastSavedAt)})
+                      </time>
                     ) : null}
                   </span>
                 )}

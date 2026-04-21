@@ -52,6 +52,7 @@ export const courseSchema = z
     adaptivePathsEnabled: z.boolean().optional(),
     srsEnabled: z.boolean().optional(),
     diagnosticAssessmentsEnabled: z.boolean().optional(),
+    hintScaffoldingEnabled: z.boolean().optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
     viewerEnrollmentRoles: z.array(z.string()).optional(),
@@ -127,6 +128,20 @@ export const reviewStatsResponseSchema = z.object({
   dueToday: z.number(),
   dueWeek: z.number(),
   retentionEstimate: z.number(),
+})
+
+export const recommendationItemSchema = z.object({
+  itemId: z.string(),
+  itemType: z.string(),
+  title: z.string(),
+  surface: z.string(),
+  reason: z.string(),
+  score: z.number(),
+})
+
+export const learnerRecommendationsResponseSchema = z.object({
+  recommendations: z.array(recommendationItemSchema),
+  degraded: z.boolean().optional(),
 })
 
 export const bankQuestionVersionSummarySchema = z.object({
@@ -348,6 +363,7 @@ export const quizAttemptStartResponseSchema = z.object({
   currentQuestionIndex: z.number(),
   deadlineAt: z.string().nullable().optional(),
   reducedDistractionMode: z.boolean().optional(),
+  hintScaffoldingEnabled: z.boolean().optional(),
   retakePolicy: z.string(),
   maxAttempts: z.number().nullable().optional(),
   remainingAttempts: z.number().nullable().optional(),
@@ -379,6 +395,25 @@ export const quizAdvanceResponseSchema = z.object({
   locked: z.boolean(),
   currentQuestionIndex: z.number(),
   completed: z.boolean(),
+})
+
+export const quizHintRevealResponseSchema = z.object({
+  level: z.number().nullable().optional(),
+  body: z.string().nullable().optional(),
+  mediaUrl: z.string().nullable().optional(),
+  noMoreHints: z.boolean().optional(),
+})
+
+export const quizWorkedExampleStepSchema = z.object({
+  number: z.number(),
+  explanation: z.string(),
+  expression: z.string().nullable().optional(),
+})
+
+export const quizWorkedExampleResponseSchema = z.object({
+  title: z.string().nullable().optional(),
+  body: z.string().nullable().optional(),
+  steps: z.array(quizWorkedExampleStepSchema),
 })
 
 export const quizCodeRunResultSchema = z.object({

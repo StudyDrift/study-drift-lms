@@ -228,11 +228,12 @@ pub fn collect_concept_touches_from_question(
     pts: f64,
     max_pts: f64,
     extra_concept_ids: &[Uuid],
+    mastery_scale: f64,
     out: &mut Vec<(Uuid, f64, i32)>,
 ) {
     use std::collections::HashSet;
     let denom = if max_pts > 0.0 { max_pts } else { 1.0 };
-    let score = (pts / denom).clamp(0.0, 1.0);
+    let score = (pts / denom).clamp(0.0, 1.0) * mastery_scale.clamp(0.0, 1.0);
     let mut seen: HashSet<(Uuid, i32)> = HashSet::new();
     for sid in &q.concept_ids {
         let Ok(cid) = Uuid::parse_str(sid.trim()) else {
@@ -260,6 +261,7 @@ pub async fn apply_mastery_from_saved_responses<'e, E>(
     attempt_id: Uuid,
     bank: &[QuizQuestion],
     responses: &[QuizResponseRow],
+    hint_scaffolding_enabled: bool,
 ) -> Result<(), AppError>
 where
     for<'a> &'a mut E: sqlx::Executor<'a, Database = Postgres>,
@@ -267,6 +269,13 @@ where
     if !learner_model_enabled() {
         return Ok(());
     }
+    let hint_counts = if hint_scaffolding_enabled {
+        crate::repos::hints::hint_use_counts_for_attempt(pool, attempt_id)
+            .await
+            .map_err(AppError::Db)?
+    } else {
+        std::collections::HashMap::new()
+    };
     let mut by_id: HashMap<String, &QuizQuestion> = HashMap::new();
     for q in bank {
         by_id.insert(q.id.clone(), q);
@@ -292,7 +301,17 @@ where
             .ok()
             .and_then(|u| tag_map.get(&u).map(|v| v.as_slice()))
             .unwrap_or(&[]);
-        collect_concept_touches_from_question(q, r.question_index, pts, max, extra, &mut touches);
+        let hint_n = *hint_counts.get(qid).unwrap_or(&0);
+        let ms = crate::services::hint_service::mastery_scale_for_hint_uses(hint_n);
+        collect_concept_touches_from_question(
+            q,
+            r.question_index,
+            pts,
+            max,
+            extra,
+            ms,
+            &mut touches,
+        );
     }
     apply_quiz_grades_mastery(executor, course_id, user_id, attempt_id, &touches).await
 }

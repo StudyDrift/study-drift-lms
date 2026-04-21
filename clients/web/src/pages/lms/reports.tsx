@@ -92,8 +92,8 @@ export default function Reports() {
               onClick={() => setPreset(p)}
               className={`rounded-xl border px-3 py-2 text-sm font-semibold shadow-sm transition ${
                 preset === p
-                  ? 'border-indigo-300 bg-indigo-50 text-indigo-900'
-                  : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/60'
+                  ? 'border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/50 dark:bg-indigo-950/60 dark:text-indigo-100'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-indigo-500/40 dark:hover:bg-indigo-950/40'
               }`}
             >
               {p === '7d' ? '7 days' : p === '30d' ? '30 days' : '90 days'}
@@ -105,9 +105,9 @@ export default function Reports() {
       <RequirePermission
         permission={PERM_REPORTS_VIEW}
         fallback={
-          <p className="mt-8 max-w-xl rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <p className="mt-8 max-w-xl rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200">
             You do not have permission to view reports. Ask an administrator to grant{' '}
-            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-xs">
+            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-xs dark:bg-neutral-800">
               {PERM_REPORTS_VIEW}
             </code>
             .
@@ -115,13 +115,13 @@ export default function Reports() {
         }
       >
         {loading && (
-          <p className="mt-8 text-sm text-slate-500" aria-live="polite">
+          <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400" aria-live="polite">
             Loading report…
           </p>
         )}
         {error && (
           <p
-            className="mt-8 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+            className="mt-8 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100"
             role="alert"
           >
             {error}
@@ -129,36 +129,36 @@ export default function Reports() {
         )}
         {!loading && !error && report && (
           <div className="mt-8 space-y-10">
-            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-              <BarChart3 className="h-4 w-4 shrink-0 text-indigo-600" aria-hidden />
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-neutral-400">
+              <BarChart3 className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" aria-hidden />
               <span className="tabular-nums">{formatRange(report.range.from, report.range.to)}</span>
-              <span className="text-slate-400">(UTC)</span>
+              <span className="text-slate-400 dark:text-neutral-500">(UTC)</span>
             </div>
 
             <section>
-              <h2 className="text-lg font-semibold text-slate-900">Summary</h2>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Summary</h2>
               <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-neutral-400">
                     Total events
                   </p>
-                  <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-neutral-100">
                     {report.summary.totalEvents.toLocaleString()}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-neutral-400">
                     Active learners
                   </p>
-                  <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-neutral-100">
                     {report.summary.uniqueUsers.toLocaleString()}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-neutral-400">
                     Courses with activity
                   </p>
-                  <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-neutral-100">
                     {report.summary.uniqueCourses.toLocaleString()}
                   </p>
                 </div>
@@ -166,12 +166,12 @@ export default function Reports() {
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold text-slate-900">Activity by day</h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Activity by day</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
                 Stacked daily totals (course visits, content opens, content leaves).
               </p>
               {report.byDay.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-600">No events in this range.</p>
+                <p className="mt-4 text-sm text-slate-600 dark:text-neutral-400">No events in this range.</p>
               ) : (
                 <div className="mt-4 flex max-h-80 flex-col gap-2 overflow-y-auto pr-1">
                   {report.byDay.map((row) => {
@@ -180,11 +180,11 @@ export default function Reports() {
                     const seg = (n: number) => (total > 0 ? n : 0)
                     return (
                       <div key={row.day} className="flex min-h-[28px] items-center gap-3 text-sm">
-                        <span className="w-28 shrink-0 text-slate-600 tabular-nums">
+                        <span className="w-28 shrink-0 text-slate-600 tabular-nums dark:text-neutral-400">
                           {formatDay(row.day)}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <div className="flex h-7 w-full rounded-lg bg-slate-100">
+                          <div className="flex h-7 w-full rounded-lg bg-slate-100 dark:bg-neutral-800">
                             <div
                               className="flex h-full min-w-0 flex-row overflow-hidden rounded-lg"
                               style={{ width: `${barPct}%` }}
@@ -196,7 +196,7 @@ export default function Reports() {
                             </div>
                           </div>
                         </div>
-                        <span className="w-10 shrink-0 text-right tabular-nums text-slate-700">
+                        <span className="w-10 shrink-0 text-right tabular-nums text-slate-700 dark:text-neutral-200">
                           {total}
                         </span>
                       </div>
@@ -204,7 +204,7 @@ export default function Reports() {
                   })}
                 </div>
               )}
-              <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-600">
+              <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-600 dark:text-neutral-400">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-2 w-4 rounded bg-indigo-500" /> Course visit
                 </span>
@@ -218,21 +218,21 @@ export default function Reports() {
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold text-slate-900">Events by type</h2>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Events by type</h2>
               {report.byEventKind.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-600">No events in this range.</p>
+                <p className="mt-4 text-sm text-slate-600 dark:text-neutral-400">No events in this range.</p>
               ) : (
                 <ul className="mt-4 space-y-3">
                   {report.byEventKind.map((k) => (
                     <li key={k.eventKind}>
                       <div className="flex items-center justify-between gap-4 text-sm">
-                        <span className="text-slate-700">{eventKindLabel(k.eventKind)}</span>
-                        <span className="tabular-nums text-slate-900">
+                        <span className="text-slate-700 dark:text-neutral-300">{eventKindLabel(k.eventKind)}</span>
+                        <span className="tabular-nums text-slate-900 dark:text-neutral-100">
                           {k.count.toLocaleString()} (
                           {Math.round((k.count / kindTotal) * 100)}%)
                         </span>
                       </div>
-                      <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-neutral-800">
                         <div
                           className="h-full rounded-full bg-indigo-500"
                           style={{ width: `${(k.count / kindTotal) * 100}%` }}
@@ -245,33 +245,35 @@ export default function Reports() {
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold text-slate-900">Top courses</h2>
-              <p className="mt-1 text-sm text-slate-500">By total audit events in the selected range.</p>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Top courses</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+                By total audit events in the selected range.
+              </p>
               {report.topCourses.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-600">No course activity in this range.</p>
+                <p className="mt-4 text-sm text-slate-600 dark:text-neutral-400">No course activity in this range.</p>
               ) : (
-                <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
                   <table className="min-w-full text-left text-sm">
-                    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-neutral-300">
                       <tr>
                         <th className="px-4 py-3">Course</th>
                         <th className="px-4 py-3">Code</th>
                         <th className="px-4 py-3 text-right">Events</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                       {report.topCourses.map((c) => (
-                        <tr key={c.courseId} className="hover:bg-slate-50/80">
-                          <td className="px-4 py-3 font-medium text-slate-900">
+                        <tr key={c.courseId} className="hover:bg-slate-50/80 dark:hover:bg-neutral-800/80">
+                          <td className="px-4 py-3 font-medium text-slate-900 dark:text-neutral-100">
                             <Link
                               to={`/courses/${encodeURIComponent(c.courseCode)}`}
-                              className="text-indigo-700 hover:underline"
+                              className="text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300"
                             >
                               {c.title}
                             </Link>
                           </td>
-                          <td className="px-4 py-3 text-slate-600">{c.courseCode}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-slate-900">
+                          <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">{c.courseCode}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-900 dark:text-neutral-100">
                             {c.eventCount.toLocaleString()}
                           </td>
                         </tr>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ConfirmDialog } from '../../components/confirm-dialog'
 import {
   ChevronDown,
   Link2,
@@ -122,6 +123,9 @@ export function CourseOutcomesSection({ courseCode }: { courseCode: string }) {
   const [newTitle, setNewTitle] = useState('')
   const [newDescription, setNewDescription] = useState('')
   const [creating, setCreating] = useState(false)
+  const [deleteOutcomeOpen, setDeleteOutcomeOpen] = useState(false)
+  const [deleteOutcomeId, setDeleteOutcomeId] = useState<string | null>(null)
+  const [deleteOutcomeTyped, setDeleteOutcomeTyped] = useState('')
 
   const gradableOptions = useMemo(() => gradableOptionsFromStructure(structure), [structure])
 
@@ -168,12 +172,21 @@ export function CourseOutcomesSection({ courseCode }: { courseCode: string }) {
     }
   }
 
-  async function onDeleteOutcome(id: string) {
-    if (!window.confirm('Delete this outcome and all of its mappings?')) return
+  function requestDeleteOutcome(id: string) {
+    setDeleteOutcomeId(id)
+    setDeleteOutcomeTyped('')
+    setDeleteOutcomeOpen(true)
+  }
+
+  async function confirmDeleteOutcome() {
+    if (!deleteOutcomeId) return
     setLoadError(null)
     try {
-      await deleteCourseOutcome(courseCode, id)
-      setOutcomes((prev) => prev.filter((o) => o.id !== id))
+      await deleteCourseOutcome(courseCode, deleteOutcomeId)
+      setOutcomes((prev) => prev.filter((o) => o.id !== deleteOutcomeId))
+      setDeleteOutcomeOpen(false)
+      setDeleteOutcomeId(null)
+      setDeleteOutcomeTyped('')
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not delete outcome.')
     }
@@ -294,7 +307,7 @@ export function CourseOutcomesSection({ courseCode }: { courseCode: string }) {
                 outcome={o}
                 enrolledLearners={enrolledLearners}
                 gradableOptions={gradableOptions}
-                onDelete={() => void onDeleteOutcome(o.id)}
+                onDelete={() => requestDeleteOutcome(o.id)}
                 onSaveMeta={(title, description) => void onSaveOutcomeMeta(o, title, description)}
                 onLinksChanged={() => void load()}
               />
@@ -404,6 +417,23 @@ export function CourseOutcomesSection({ courseCode }: { courseCode: string }) {
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={deleteOutcomeOpen}
+        title="Delete learning outcome?"
+        description="This removes the outcome and every mapping to assignments or quiz items."
+        variant="danger"
+        requireTypedPhrase="DELETE"
+        typedPhrase={deleteOutcomeTyped}
+        onTypedPhraseChange={setDeleteOutcomeTyped}
+        confirmLabel="Delete outcome"
+        onClose={() => {
+          setDeleteOutcomeOpen(false)
+          setDeleteOutcomeId(null)
+          setDeleteOutcomeTyped('')
+        }}
+        onConfirm={() => void confirmDeleteOutcome()}
+      />
     </div>
   )
 }

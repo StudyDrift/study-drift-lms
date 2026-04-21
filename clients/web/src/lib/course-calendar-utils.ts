@@ -1,3 +1,5 @@
+import { formatAbsoluteShort } from './format-datetime'
+
 /** Local calendar day key (YYYY-MM-DD) for bucketing due dates. */
 export function dateKeyLocal(d: Date): string {
   const y = d.getFullYear()
@@ -63,9 +65,7 @@ export function isInTodoWindow(due: Date, now: Date): boolean {
 }
 
 export function formatDueShort(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  return formatAbsoluteShort(iso)
 }
 
 /**

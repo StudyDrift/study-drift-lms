@@ -35,6 +35,7 @@ async fn search_index_handler(
             adaptive_paths_enabled: c.adaptive_paths_enabled,
             srs_enabled: c.srs_enabled,
             diagnostic_assessments_enabled: c.diagnostic_assessments_enabled,
+            hint_scaffolding_enabled: c.hint_scaffolding_enabled,
         })
         .collect();
 

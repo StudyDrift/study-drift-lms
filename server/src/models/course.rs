@@ -86,6 +86,8 @@ pub struct CoursePublic {
     pub srs_enabled: bool,
     /// Placement diagnostic before adaptive routing (also requires `DIAGNOSTIC_ASSESSMENTS_ENABLED`).
     pub diagnostic_assessments_enabled: bool,
+    /// Progressive quiz hints + worked examples (plan 1.9).
+    pub hint_scaffolding_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -159,6 +161,8 @@ pub struct PatchCourseFeaturesRequest {
     pub srs_enabled: Option<bool>,
     #[serde(default)]
     pub diagnostic_assessments_enabled: Option<bool>,
+    #[serde(default)]
+    pub hint_scaffolding_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

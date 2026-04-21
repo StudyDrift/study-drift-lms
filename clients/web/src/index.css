@@ -250,3 +250,27 @@ body {
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+
+/* Printable LMS views: hide app chrome and non-essential controls (see .lms-chrome / .lms-print-hide). */
+@media print {
+  html {
+    color-scheme: light;
+  }
+  body {
+    background: #fff !important;
+  }
+  .lms-chrome,
+  .lms-print-hide {
+    display: none !important;
+  }
+  .lms-print-root {
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  .lms-print-root table {
+    break-inside: auto;
+  }
+  .lms-print-root tr {
+    break-inside: avoid-page;
+  }
+}

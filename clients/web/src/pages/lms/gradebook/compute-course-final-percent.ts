@@ -83,7 +83,7 @@ export function computeCourseFinalPercent(
     rawWeight.set(UNGROUPED, (rawWeight.get(UNGROUPED) ?? 0) + wU)
   }
 
-  let weightSum = [...rawWeight.values()].reduce((a, b) => a + b, 0)
+  const weightSum = [...rawWeight.values()].reduce((a, b) => a + b, 0)
   if (weightSum <= 0) {
     const earnedTotal = [...earnedByBucket.values()].reduce((a, b) => a + b, 0)
     return (earnedTotal / totalMaxPoints) * 100

@@ -61,6 +61,8 @@ pub struct CourseExportSnapshot {
     pub srs_enabled: bool,
     #[serde(default)]
     pub diagnostic_assessments_enabled: bool,
+    #[serde(default)]
+    pub hint_scaffolding_enabled: bool,
 }
 
 fn default_export_schedule_mode() -> String {

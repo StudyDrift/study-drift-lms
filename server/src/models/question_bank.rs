@@ -180,3 +180,68 @@ pub struct SetQuizDeliveryRefsRequest {
     #[serde(default)]
     pub sample_n: Option<i32>,
 }
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionHintAuthorResponse {
+    pub id: Uuid,
+    pub question_id: Uuid,
+    pub level: i32,
+    pub body: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_url: Option<String>,
+    pub locale: String,
+    pub penalty_pct: f64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateQuestionHintRequest {
+    pub level: i32,
+    pub body: String,
+    #[serde(default)]
+    pub media_url: Option<String>,
+    #[serde(default)]
+    pub locale: Option<String>,
+    #[serde(default)]
+    pub penalty_pct: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateQuestionHintRequest {
+    pub level: i32,
+    pub body: String,
+    #[serde(default)]
+    pub media_url: Option<String>,
+    #[serde(default)]
+    pub locale: Option<String>,
+    #[serde(default)]
+    pub penalty_pct: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertWorkedExampleRequest {
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub steps: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HintAnalyticsLevel {
+    pub level: i32,
+    pub request_count: i64,
+    pub pct_users: f64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HintAnalyticsResponse {
+    pub levels: Vec<HintAnalyticsLevel>,
+}

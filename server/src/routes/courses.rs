@@ -34,7 +34,8 @@ use crate::models::course_module_quiz::{
     validate_quiz_comprehensive_settings, validate_quiz_questions, AdaptiveQuizNextRequest,
     AdaptiveQuizNextResponse, CreateCourseQuizRequest, GenerateModuleQuizQuestionsRequest,
     GenerateModuleQuizQuestionsResponse, ModuleQuizGetQuery, ModuleQuizResponse, QuizQuestion,
-    QuizQuestionResponseItem,     QuizAdvanceResponse, QuizAttemptHintRequest, QuizCurrentQuestionResponse, QuizFocusLossEventApi,
+    QuizQuestionResponseItem, QuizAdvanceResponse, QuizAttemptHintRequest, QuizCurrentQuestionResponse,
+    QuizFocusLossEventApi, QuizHintRevealResponse, QuizWorkedExampleResponse,
     EnrollmentQuizOverrideUpsertRequest, QuizAttemptSummary, QuizAttemptsListResponse,
     QuizFocusLossEventsResponse, QuizFocusLossRequest, QuizResultsQuestionResult,
     QuizResultsResponse, QuizResultsScoreSummary, QuizStartRequest, QuizStartResponse, QuizSubmitRequest,
@@ -104,6 +105,7 @@ use crate::services::quiz_attempt_grading;
 use crate::services::quiz_lockdown;
 use crate::services::enrollments as enrollments_service;
 use crate::services::outcomes as outcomes_service;
+use crate::services::hint_service;
 use crate::services::quiz_submission;
 use crate::services::ai::OpenRouterError;
 use crate::services::canvas_course_import;
@@ -261,8 +263,12 @@ pub fn router() -> Router<AppState> {
             get(quiz_attempt_focus_loss_events_handler),
         )
         .route(
-            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/hint",
-            post(quiz_attempt_hint_stub_handler),
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/questions/{question_id}/hint",
+            post(quiz_attempt_question_hint_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/quizzes/{item_id}/attempts/{attempt_id}/questions/{question_id}/worked-example",
+            get(quiz_attempt_worked_example_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/structure/archived",
@@ -671,6 +677,7 @@ fn module_quiz_response_for_api(
     show_adaptive_details: bool,
     shift: Option<&relative_schedule::RelativeShiftContext>,
     course_lockdown_enabled: bool,
+    hint_scaffolding_enabled: bool,
 ) -> ModuleQuizResponse {
     let due_at = match shift {
         Some(ctx) => relative_schedule::shift_opt(ctx, row.due_at),
@@ -747,6 +754,7 @@ fn module_quiz_response_for_api(
         adaptive_question_count: row.adaptive_question_count,
         adaptive_delivery_mode: row.adaptive_delivery_mode.clone(),
         assignment_group_id: row.assignment_group_id,
+        hint_scaffolding_enabled,
     }
 }
 
@@ -2344,6 +2352,7 @@ async fn module_quiz_get_handler(
         can_edit,
         shift_ctx.as_ref(),
         course_row.lockdown_mode_enabled,
+        course_row.hint_scaffolding_enabled,
     );
     let attempt_for_q = if !can_edit {
         q.attempt_id
@@ -2610,6 +2619,7 @@ async fn module_quiz_patch_handler(
         true,
         None,
         course_row.lockdown_mode_enabled,
+        course_row.hint_scaffolding_enabled,
     )))
 }
 
@@ -2928,6 +2938,7 @@ async fn module_quiz_start_handler(
             current_question_index: existing.current_question_index,
             deadline_at: existing.deadline_at,
             reduced_distraction_mode: acc.reduced_distraction_mode,
+            hint_scaffolding_enabled: course_row.hint_scaffolding_enabled,
             retake_policy: row.grade_attempt_policy.clone(),
             max_attempts,
             remaining_attempts: remaining,
@@ -3022,6 +3033,7 @@ async fn module_quiz_start_handler(
         current_question_index: created.current_question_index,
         deadline_at: created.deadline_at,
         reduced_distraction_mode: acc.reduced_distraction_mode,
+        hint_scaffolding_enabled: course_row.hint_scaffolding_enabled,
         retake_policy: row.grade_attempt_policy.clone(),
         max_attempts,
         remaining_attempts: remaining,
@@ -5077,6 +5089,9 @@ async fn patch_course_features_handler(
     let diagnostic_assessments_enabled = req
         .diagnostic_assessments_enabled
         .unwrap_or(existing.diagnostic_assessments_enabled);
+    let hint_scaffolding_enabled = req
+        .hint_scaffolding_enabled
+        .unwrap_or(existing.hint_scaffolding_enabled);
 
     let row = course::patch_course_features(
         &state.pool,
@@ -5090,6 +5105,7 @@ async fn patch_course_features_handler(
         adaptive_paths_enabled,
         srs_enabled,
         diagnostic_assessments_enabled,
+        hint_scaffolding_enabled,
     )
     .await?
     .ok_or(AppError::NotFound)?;
@@ -5799,18 +5815,21 @@ async fn quiz_attempt_focus_loss_events_handler(
     Ok(Json(QuizFocusLossEventsResponse { events, total }))
 }
 
-async fn quiz_attempt_hint_stub_handler(
+async fn quiz_attempt_question_hint_handler(
     State(state): State<AppState>,
-    Path((course_code, item_id, attempt_id)): Path<(String, Uuid, Uuid)>,
+    Path((course_code, item_id, attempt_id, question_id)): Path<(String, Uuid, Uuid, String)>,
     headers: HeaderMap,
     Json(_req): Json<QuizAttemptHintRequest>,
-) -> Result<StatusCode, AppError> {
+) -> Result<Json<QuizHintRevealResponse>, AppError> {
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
     let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
+    if !course_row.hint_scaffolding_enabled {
+        return Err(AppError::NotFound);
+    }
     let course_id = course_row.id;
 
     let Some(quiz_row) =
@@ -5818,6 +5837,11 @@ async fn quiz_attempt_hint_stub_handler(
     else {
         return Err(AppError::NotFound);
     };
+    if quiz_row.is_adaptive {
+        return Err(AppError::invalid_input(
+            "Hints are not available for adaptive quizzes.",
+        ));
+    }
     let Some(att) = quiz_attempts::get_attempt(&state.pool, attempt_id).await? else {
         return Err(AppError::NotFound);
     };
@@ -5834,11 +5858,97 @@ async fn quiz_attempt_hint_stub_handler(
     let mode = quiz_lockdown::effective_lockdown_mode(course_row.lockdown_mode_enabled, &quiz_row);
     let acc = accommodations::resolve_effective_or_default(&state.pool, user.user_id, course_id).await;
     if quiz_lockdown::hints_disabled(mode) && !acc.hints_always_enabled {
+        return Err(AppError::HintsDisabled);
+    }
+
+    let resolved = question_bank::resolve_delivery_questions(
+        &state.pool,
+        course_id,
+        item_id,
+        course_row.question_bank_enabled,
+        &quiz_row.questions_json.0,
+        Some(att.id),
+        Some(user.user_id),
+        false,
+    )
+    .await?;
+    let bank = &resolved.questions;
+    let Some(q) = bank.iter().find(|x| x.id == question_id) else {
+        return Err(AppError::invalid_input("That question is not part of this attempt."));
+    };
+
+    let out = hint_service::reveal_next_hint(
+        &state.pool,
+        state.open_router.as_ref(),
+        user.user_id,
+        att.id,
+        &question_id,
+        q,
+        "en",
+    )
+    .await?;
+    Ok(Json(out))
+}
+
+async fn quiz_attempt_worked_example_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, attempt_id, question_id)): Path<(String, Uuid, Uuid, String)>,
+    headers: HeaderMap,
+) -> Result<Json<QuizWorkedExampleResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let Some(course_row) = course::get_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    if !course_row.hint_scaffolding_enabled {
+        return Err(AppError::NotFound);
+    }
+    let course_id = course_row.id;
+
+    let Some(quiz_row) =
+        course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    if quiz_row.is_adaptive {
+        return Err(AppError::invalid_input(
+            "Worked examples are not available for adaptive quizzes.",
+        ));
+    }
+    let Some(att) = quiz_attempts::get_attempt(&state.pool, attempt_id).await? else {
+        return Err(AppError::NotFound);
+    };
+    if att.student_user_id != user.user_id
+        || att.course_id != course_id
+        || att.structure_item_id != item_id
+    {
         return Err(AppError::Forbidden);
     }
-    Err(AppError::invalid_input(
-        "Hints are not implemented for this quiz yet.",
-    ))
+    if att.status != "in_progress" && att.status != "submitted" {
+        return Err(AppError::Forbidden);
+    }
+
+    if att.status == "in_progress" {
+        accommodations::require_attempt_within_deadline(&att, Utc::now())?;
+    }
+
+    let row = hint_service::load_worked_example_if_allowed(
+        &state.pool,
+        att.id,
+        &question_id,
+        att.status.as_str(),
+    )
+    .await?;
+    let Some(ex) = row else {
+        return Err(AppError::NotFound);
+    };
+    let steps = hint_service::worked_example_steps_from_json(&ex.steps);
+    Ok(Json(QuizWorkedExampleResponse {
+        title: ex.title,
+        body: ex.body,
+        steps,
+    }))
 }
 
 fn structure_path_rule_row_to_api(

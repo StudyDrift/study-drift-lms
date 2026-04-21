@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { X } from 'lucide-react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
+import { Clock, X } from 'lucide-react'
 import { useOptionalQuizShellFocus } from '../layout/quiz-shell-focus-context'
 import type { QuizShellFocusMode, QuizShellLockdownAccent } from '../layout/quiz-shell-focus-context'
 import { MathPlainText } from '../math/math-plain-text'
@@ -9,9 +17,11 @@ import {
   fetchModuleQuiz,
   fetchQuizCurrentQuestion,
   fetchQuizResults,
+  fetchQuizWorkedExample,
   postAdaptiveQuizNext,
   postQuizAdvance,
   postQuizFocusLoss,
+  postQuizQuestionHint,
   postQuizQuestionRun,
   postQuizStart,
   postQuizSubmit,
@@ -22,6 +32,7 @@ import {
   type QuizAttemptStartResponse,
   type QuizAdvancedSettings,
   type QuizQuestion,
+  type QuizWorkedExamplePayload,
 } from '../../lib/courses-api'
 import {
   buildMatchingPairsPayload,
@@ -32,6 +43,10 @@ import {
   starterAnswersForCodeQuestions,
   visibleChoices,
 } from './quiz-take-utils'
+
+function isBankQuestionId(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+}
 
 function formatRetakePolicyNotice(policy: string): string {
   switch (policy) {
@@ -140,6 +155,15 @@ export function QuizStudentTakePanel({
     if (quiz.isAdaptive) return false
     return quiz.lockdownMode === 'one_at_a_time' || quiz.lockdownMode === 'kiosk'
   }, [quiz.isAdaptive, quiz.lockdownMode])
+
+  const hintToolsEnabled = useMemo(() => {
+    if (quiz.isAdaptive) return false
+    if (!quiz.hintScaffoldingEnabled) return false
+    if (!startMeta) return false
+    if (startMeta.hintScaffoldingEnabled !== true) return false
+    if (startMeta.hintsDisabled) return false
+    return true
+  }, [quiz.hintScaffoldingEnabled, quiz.isAdaptive, startMeta])
 
   const reset = useCallback(() => {
     adaptiveSessionRef.current += 1
@@ -930,6 +954,11 @@ export function QuizStudentTakePanel({
               role="status"
               aria-live={(timeLeftSec ?? 0) <= 60 ? 'assertive' : 'polite'}
             >
+              {timeLeftSec !== null && timeLeftSec <= 300 ? (
+                <span className="mr-1.5 inline-flex align-middle" aria-hidden>
+                  <Clock className="inline h-3.5 w-3.5" strokeWidth={2.5} />
+                </span>
+              ) : null}
               Time remaining: {timeLabel}
               {timeLeftSec === 0 ? ' — submit your answers now.' : null}
             </div>
@@ -1004,6 +1033,7 @@ export function QuizStudentTakePanel({
               ) : null}
               {srvQuestion ? (
                 <StaticTakeBody
+                  key={attemptId ?? 'srv'}
                   questions={[srvQuestion]}
                   oneQuestionAtATime
                   allowBackNavigation={false}
@@ -1018,6 +1048,8 @@ export function QuizStudentTakePanel({
                   setRunningCodeQuestionId={setRunningCodeQuestionId}
                   onSubmit={() => void advanceServerQuestion()}
                   advanceOnly
+                  hintToolsEnabled={hintToolsEnabled}
+                  onLearnerMessage={setError}
                 />
               ) : null}
               {srvCompleted ? (
@@ -1039,6 +1071,7 @@ export function QuizStudentTakePanel({
 
           {uiPhase.kind === 'static' && !quiz.isAdaptive && !serverLockdown && staticQuestions.length > 0 && (
             <StaticTakeBody
+              key={attemptId ?? 'static'}
               questions={staticQuestions}
               oneQuestionAtATime={oneQuestionAtATime}
               allowBackNavigation={allowBackNavigation}
@@ -1054,6 +1087,8 @@ export function QuizStudentTakePanel({
               onSubmit={() => void submitStatic()}
               onTakeProgress={shellFocusSession ? setStaticTakeProgress : undefined}
               suppressInlineQuestionProgress={immersiveChrome}
+              hintToolsEnabled={hintToolsEnabled}
+              onLearnerMessage={setError}
             />
           )}
 
@@ -1150,6 +1185,8 @@ function StaticTakeBody({
   nextLabel,
   onTakeProgress,
   suppressInlineQuestionProgress,
+  hintToolsEnabled = false,
+  onLearnerMessage,
 }: {
   questions: QuizQuestion[]
   oneQuestionAtATime: boolean
@@ -1171,13 +1208,32 @@ function StaticTakeBody({
     info: { stepIndex: number; totalSteps: number; currentQuestionId: string } | null,
   ) => void
   suppressInlineQuestionProgress?: boolean
+  hintToolsEnabled?: boolean
+  onLearnerMessage?: (msg: string | null) => void
 }) {
   const [step, setStep] = useState(0)
   const textInputRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({})
+  const [hintByQ, setHintByQ] = useState<Record<string, { bodies: string[]; noMore: boolean }>>({})
+  const [hintBusy, setHintBusy] = useState<string | null>(null)
+  const [weModal, setWeModal] = useState<{ questionId: string; data: QuizWorkedExamplePayload } | null>(
+    null,
+  )
 
   useEffect(() => {
     setStep(0)
   }, [questions])
+
+  useEffect(() => {
+    if (!weModal) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setWeModal(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [weModal])
 
   useEffect(() => {
     if (!onTakeProgress) return
@@ -1192,6 +1248,47 @@ function StaticTakeBody({
       currentQuestionId: cur?.id ?? '',
     })
   }, [onTakeProgress, oneQuestionAtATime, questions, step])
+
+  async function requestHintForQuestion(q: QuizQuestion) {
+    if (!attemptId || !hintToolsEnabled || !isBankQuestionId(q.id)) return
+    setHintBusy(q.id)
+    onLearnerMessage?.(null)
+    try {
+      const res = await postQuizQuestionHint(courseCode, itemId, attemptId, q.id)
+      if (res.noMoreHints) {
+        setHintByQ((prev) => ({
+          ...prev,
+          [q.id]: { bodies: prev[q.id]?.bodies ?? [], noMore: true },
+        }))
+        return
+      }
+      const line = res.body?.trim()
+      if (line) {
+        setHintByQ((prev) => {
+          const cur = prev[q.id] ?? { bodies: [], noMore: false }
+          return { ...prev, [q.id]: { bodies: [...cur.bodies, line], noMore: false } }
+        })
+      }
+    } catch (e) {
+      onLearnerMessage?.(e instanceof Error ? e.message : 'Could not load a hint.')
+    } finally {
+      setHintBusy(null)
+    }
+  }
+
+  async function openWorkedExample(q: QuizQuestion) {
+    if (!attemptId || !hintToolsEnabled || !isBankQuestionId(q.id)) return
+    setHintBusy(q.id)
+    onLearnerMessage?.(null)
+    try {
+      const data = await fetchQuizWorkedExample(courseCode, itemId, attemptId, q.id)
+      setWeModal({ questionId: q.id, data })
+    } catch (e) {
+      onLearnerMessage?.(e instanceof Error ? e.message : 'Worked example is not available yet.')
+    } finally {
+      setHintBusy(null)
+    }
+  }
 
   async function runCodeQuestion(q: QuizQuestion) {
     if (!attemptId) return
@@ -1645,13 +1742,106 @@ function StaticTakeBody({
             ) : null}
           </div>
         )}
+        {hintToolsEnabled && attemptId && isBankQuestionId(q.id) ? (
+          <div
+            className="mt-4 border-t border-slate-200 pt-4 dark:border-neutral-700"
+            role="region"
+            aria-label="Hints and worked example"
+          >
+            <p className="text-xs text-slate-500 dark:text-neutral-400">
+              Using hints may reduce your score if your instructor configured per-hint penalties.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={hintBusy === q.id || (hintByQ[q.id]?.noMore ?? false)}
+                onClick={() => void requestHintForQuestion(q)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+              >
+                {hintByQ[q.id]?.bodies?.length ? 'Another hint' : 'Get a hint'}
+              </button>
+              <button
+                type="button"
+                disabled={hintBusy === q.id}
+                onClick={() => void openWorkedExample(q)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+              >
+                Show worked example
+              </button>
+            </div>
+            {(hintByQ[q.id]?.bodies?.length ?? 0) > 0 ? (
+              <div
+                className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-800 dark:bg-neutral-800/60 dark:text-neutral-100"
+                role="status"
+                aria-live="polite"
+              >
+                {hintByQ[q.id]?.bodies.map((line, i) => (
+                  <p key={`${q.id}-h-${i}`} className={i > 0 ? 'mt-2 border-t border-slate-200 pt-2 dark:border-neutral-600' : ''}>
+                    <MathPlainText text={line} />
+                  </p>
+                ))}
+              </div>
+            ) : null}
+            {hintByQ[q.id]?.noMore ? (
+              <p className="mt-2 text-xs text-slate-500 dark:text-neutral-400">No more hints for this question.</p>
+            ) : null}
+          </div>
+        ) : null}
       </section>
+    )
+  }
+
+  function workedExampleModal() {
+    if (!weModal) return null
+    const { data } = weModal
+    return (
+      <div
+        className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="worked-example-title"
+      >
+        <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-950">
+          <div className="flex items-start justify-between gap-3">
+            <h2 id="worked-example-title" className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
+              {data.title?.trim() || 'Worked example'}
+            </h2>
+            <button
+              type="button"
+              onClick={() => setWeModal(null)}
+              className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              Close
+            </button>
+          </div>
+          {data.body?.trim() ? (
+            <p className="mt-3 text-sm text-slate-700 dark:text-neutral-200">
+              <MathPlainText text={data.body.trim()} />
+            </p>
+          ) : null}
+          <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm text-slate-800 dark:text-neutral-100">
+            {data.steps.map((s) => (
+              <li key={s.number}>
+                <span className="font-medium">Step {s.number}.</span>{' '}
+                <MathPlainText text={s.explanation} />
+                {s.expression?.trim() ? (
+                  <div className="mt-1 text-xs text-slate-600 dark:text-neutral-400">
+                    <MathPlainText text={s.expression.trim()} />
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
     )
   }
 
   if (!oneQuestionAtATime) {
     return (
-      <div className="space-y-6">
+      <>
+        {workedExampleModal()}
+        <div className="space-y-6">
         {questions.map((q, i) => renderQuestion(q, i))}
         <button
           type="button"
@@ -1661,6 +1851,7 @@ function StaticTakeBody({
           Submit quiz
         </button>
       </div>
+      </>
     )
   }
 
@@ -1670,7 +1861,9 @@ function StaticTakeBody({
   const primaryLabel = advanceOnly ? (nextLabel ?? 'Next') : isLast ? 'Submit' : 'Next'
 
   return (
-    <div className="space-y-4">
+    <>
+      {workedExampleModal()}
+      <div className="space-y-4">
       {!advanceOnly && !suppressInlineQuestionProgress ? (
         <p className="text-xs font-semibold text-slate-500 dark:text-neutral-400">
           Question {step + 1} of {questions.length}
@@ -1706,5 +1899,6 @@ function StaticTakeBody({
         </button>
       </div>
     </div>
+    </>
   )
 }

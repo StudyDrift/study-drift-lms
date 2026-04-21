@@ -40,4 +40,6 @@ pub mod user_ai_settings;
 pub mod user_audit;
 pub mod quiz_attempts;
 pub mod question_bank;
+pub mod hints;
+pub mod recommendations;
 pub mod student_accommodations;

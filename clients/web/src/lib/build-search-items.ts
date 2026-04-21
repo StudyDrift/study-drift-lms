@@ -22,6 +22,12 @@ function enc(s: string): string {
   return encodeURIComponent(s)
 }
 
+/** Second line in command palette: course title + code (disambiguates duplicate page names). */
+function courseSearchBreadcrumb(c: SearchCourseItem): string {
+  const t = c.title.trim()
+  return t ? `${t} · ${c.courseCode}` : c.courseCode
+}
+
 function personLabel(p: SearchPersonItem): string {
   const name = p.displayName?.trim()
   return name || p.email
@@ -53,7 +59,7 @@ export function buildSearchItems(
       continue
     }
     const label = personLabel(p)
-    const subtitle = `${p.role} · ${p.courseTitle}`
+    const subtitle = `${p.courseTitle} · ${p.courseCode} · ${p.role}`
     const path = `/courses/${enc(p.courseCode)}/enrollments`
     items.push({
       id: `person:${p.userId}:${p.courseCode}`,
@@ -211,8 +217,8 @@ export function buildSearchItems(
       items.push({
         id: `page:${path}`,
         group: 'page',
-        title: `${def.title} — ${c.title}`,
-        subtitle: c.courseCode,
+        title: def.title,
+        subtitle: courseSearchBreadcrumb(c),
         path,
         haystack: `${def.title} ${c.title} ${c.courseCode} ${def.hint} page`.toLowerCase(),
       })
@@ -267,8 +273,8 @@ export function buildSearchItems(
       items.push({
         id: `page:${path}`,
         group: 'page',
-        title: `${def.title} — ${c.title}`,
-        subtitle: c.courseCode,
+        title: def.title,
+        subtitle: courseSearchBreadcrumb(c),
         path,
         haystack: `${def.title} ${c.title} ${c.courseCode} course settings ${def.hint} page`.toLowerCase(),
       })
@@ -294,10 +300,10 @@ export function buildSearchItems(
     items.push({
       id: `action:${path}:add`,
       group: 'action',
-      title: `Add people — ${c.title}`,
-      subtitle: 'Open enrollments to invite learners',
+      title: 'Add people',
+      subtitle: courseSearchBreadcrumb(c),
       path,
-      haystack: `add enrollment enroll people invite students ${c.title} ${c.courseCode} action`.toLowerCase(),
+      haystack: `add enrollment enroll people invite students open enrollments learners ${c.title} ${c.courseCode} action`.toLowerCase(),
     })
   }
 
@@ -309,7 +315,11 @@ function sortSearchItems(items: SearchListItem[]): SearchListItem[] {
     const gi = GROUP_ORDER.indexOf(a.group)
     const gj = GROUP_ORDER.indexOf(b.group)
     if (gi !== gj) return gi - gj
-    return a.title.localeCompare(b.title)
+    const byTitle = a.title.localeCompare(b.title)
+    if (byTitle !== 0) return byTitle
+    const byCtx = a.subtitle.localeCompare(b.subtitle)
+    if (byCtx !== 0) return byCtx
+    return a.path.localeCompare(b.path)
   })
 }
 

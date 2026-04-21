@@ -1836,6 +1836,7 @@ pub async fn build_export_from_canvas(
         adaptive_paths_enabled: false,
         srs_enabled: false,
         diagnostic_assessments_enabled: false,
+        hint_scaffolding_enabled: false,
     };
 
     Ok(CourseExportV1 {

@@ -1,3 +1,4 @@
+import { formatAbsoluteShort } from '../../lib/format-datetime'
 import { type BankQuestionDetail, type CourseStructureItem, type LockdownMode, type QuizQuestion } from '../../lib/courses-api'
 
 export const QUESTION_TYPE_OPTIONS = [
@@ -43,9 +44,8 @@ export function quizDateTimeIsSet(iso: string | null): boolean {
 
 export function formatQuizDateTime(iso: string | null): string {
   if (!iso) return 'Not set'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return 'Not set'
-  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  const s = formatAbsoluteShort(iso)
+  return s === '—' ? 'Not set' : s
 }
 
 export function formatGradePolicyShort(p: string): string {

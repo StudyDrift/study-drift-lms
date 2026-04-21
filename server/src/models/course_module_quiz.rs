@@ -372,6 +372,9 @@ pub struct ModuleQuizResponse {
     pub adaptive_delivery_mode: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assignment_group_id: Option<Uuid>,
+    /// Course feature: progressive hints + worked examples (plan 1.9).
+    #[serde(default)]
+    pub hint_scaffolding_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -555,6 +558,9 @@ pub struct QuizStartResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deadline_at: Option<DateTime<Utc>>,
     pub reduced_distraction_mode: bool,
+    /// Course feature: progressive hints + worked examples (plan 1.9).
+    #[serde(default)]
+    pub hint_scaffolding_enabled: bool,
     /// Same as quiz `gradeAttemptPolicy` (which score counts for the gradebook).
     pub retake_policy: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -637,10 +643,40 @@ pub struct QuizFocusLossEventsResponse {
     pub total: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct QuizAttemptHintRequest {
-    pub question_id: String,
+pub struct QuizAttemptHintRequest {}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizHintRevealResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_url: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_more_hints: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizWorkedExampleStep {
+    pub number: i32,
+    pub explanation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expression: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizWorkedExampleResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    pub steps: Vec<QuizWorkedExampleStep>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

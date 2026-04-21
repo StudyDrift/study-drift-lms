@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useId, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check, ChevronRight, FileText, LayoutList, Sparkles } from 'lucide-react'
 import { RequirePermission } from '../../components/require-permission'
@@ -39,6 +39,7 @@ function putBodyFromCourse(c: CoursePublic, title: string, description: string) 
 }
 
 export default function CourseCreate() {
+  const formErrorId = useId()
   const navigate = useNavigate()
   const { refresh } = usePermissions()
   const [step, setStep] = useState<WizardStep>(1)
@@ -211,6 +212,7 @@ export default function CourseCreate() {
         <div className="mt-8 max-w-3xl space-y-6">
           {error && (
             <p
+              id={formErrorId}
               className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100"
               role="alert"
             >
@@ -231,6 +233,8 @@ export default function CourseCreate() {
                   required
                   maxLength={500}
                   placeholder="Introduction to Biology"
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? formErrorId : undefined}
                   className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none ring-indigo-500/0 transition focus:border-indigo-300 focus:ring-2 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500/60"
                 />
               </div>
@@ -249,6 +253,8 @@ export default function CourseCreate() {
                   rows={5}
                   maxLength={20000}
                   placeholder="Optional overview for the course catalog."
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? formErrorId : undefined}
                   className="mt-1.5 w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none ring-indigo-500/0 transition focus:border-indigo-300 focus:ring-2 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500/60"
                 />
               </div>

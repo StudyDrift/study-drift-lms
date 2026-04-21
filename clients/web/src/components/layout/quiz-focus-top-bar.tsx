@@ -14,7 +14,7 @@ export function QuizFocusTopBar({ model }: { model: QuizShellFocusMode }) {
 
   return (
     <header
-      className={`flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-3 py-2 shadow-md sm:px-4 md:px-6 ${barTint}`}
+      className={`flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-3 py-2 shadow-md print:hidden sm:px-4 md:px-6 ${barTint}`}
       role="banner"
       aria-label="Quiz session"
     >

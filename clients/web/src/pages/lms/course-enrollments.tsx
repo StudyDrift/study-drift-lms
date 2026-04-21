@@ -126,6 +126,7 @@ export default function CourseEnrollments() {
 
   const enrollmentMeta = useMemo(() => {
     if (!enrollments?.length) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- signature matches non-empty branch
       return { isPrimaryRoleRow: (_e: CourseEnrollment) => false }
     }
     const byUser = new Map<string, CourseEnrollment[]>()

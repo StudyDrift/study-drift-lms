@@ -1,5 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Plus, Settings, Trash2, Users, X } from 'lucide-react'
+import { ConfirmDialog } from '../confirm-dialog'
 import {
   addUserToRole,
   createPermission,
@@ -41,6 +42,10 @@ export function RolesPermissionsPanel() {
   const [addModalRoleId, setAddModalRoleId] = useState<string | null>(null)
   const [addModalFilter, setAddModalFilter] = useState('')
   const [addModalSelected, setAddModalSelected] = useState<Set<string>>(new Set())
+
+  const [pendingPermDelete, setPendingPermDelete] = useState<string | null>(null)
+  const [pendingRoleDelete, setPendingRoleDelete] = useState<string | null>(null)
+  const [deleteTyped, setDeleteTyped] = useState('')
 
   const [manageUsersModal, setManageUsersModal] = useState<{ roleId: string; roleName: string } | null>(
     null,
@@ -105,12 +110,20 @@ export function RolesPermissionsPanel() {
     }
   }
 
-  async function onDeletePermission(id: string) {
-    if (!window.confirm('Delete this permission? It will be removed from all roles.')) return
+  function requestDeletePermission(id: string) {
+    setPendingRoleDelete(null)
+    setPendingPermDelete(id)
+    setDeleteTyped('')
+  }
+
+  async function confirmDeletePermission() {
+    if (!pendingPermDelete) return
     setError(null)
     try {
-      await deletePermission(id)
+      await deletePermission(pendingPermDelete)
       await loadAll()
+      setPendingPermDelete(null)
+      setDeleteTyped('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not delete permission.')
     }
@@ -133,13 +146,21 @@ export function RolesPermissionsPanel() {
     }
   }
 
-  async function onDeleteRole(id: string) {
-    if (!window.confirm('Delete this role?')) return
+  function requestDeleteRole(id: string) {
+    setPendingPermDelete(null)
+    setPendingRoleDelete(id)
+    setDeleteTyped('')
+  }
+
+  async function confirmDeleteRole() {
+    if (!pendingRoleDelete) return
     setError(null)
     try {
-      await deleteRole(id)
-      if (expandedRoleId === id) setExpandedRoleId(null)
+      await deleteRole(pendingRoleDelete)
+      if (expandedRoleId === pendingRoleDelete) setExpandedRoleId(null)
       await loadAll()
+      setPendingRoleDelete(null)
+      setDeleteTyped('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not delete role.')
     }
@@ -256,7 +277,7 @@ export function RolesPermissionsPanel() {
                   key={`${p.id}::${p.description}`}
                   permission={p}
                   onSaveDescription={onSaveDescription}
-                  onDelete={() => void onDeletePermission(p.id)}
+                  onDelete={() => requestDeletePermission(p.id)}
                 />
               ))}
             </tbody>
@@ -379,7 +400,7 @@ export function RolesPermissionsPanel() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void onDeleteRole(role.id)}
+                    onClick={() => requestDeleteRole(role.id)}
                     className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-700 dark:text-neutral-400 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
                     aria-label={`Delete role ${role.name}`}
                   >
@@ -464,6 +485,37 @@ export function RolesPermissionsPanel() {
           onClose={() => setManageUsersModal(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={pendingPermDelete != null}
+        title="Delete permission?"
+        description="This removes the permission string from the catalog and strips it from every role."
+        variant="danger"
+        requireTypedPhrase="DELETE"
+        typedPhrase={deleteTyped}
+        onTypedPhraseChange={setDeleteTyped}
+        confirmLabel="Delete permission"
+        onClose={() => {
+          setPendingPermDelete(null)
+          setDeleteTyped('')
+        }}
+        onConfirm={() => void confirmDeletePermission()}
+      />
+      <ConfirmDialog
+        open={pendingRoleDelete != null}
+        title="Delete role?"
+        description="Users lose this role assignment. This cannot be undone."
+        variant="danger"
+        requireTypedPhrase="DELETE"
+        typedPhrase={deleteTyped}
+        onTypedPhraseChange={setDeleteTyped}
+        confirmLabel="Delete role"
+        onClose={() => {
+          setPendingRoleDelete(null)
+          setDeleteTyped('')
+        }}
+        onConfirm={() => void confirmDeleteRole()}
+      />
     </div>
   )
 }
@@ -1095,6 +1147,7 @@ function PermissionRow({ permission, onSaveDescription, onDelete }: PermissionRo
         <input
           value={desc}
           onChange={(e) => setDesc(e.target.value)}
+          aria-label={`Description for permission ${permission.permissionString}`}
           className="w-full min-w-[12rem] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-500/30 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500"
         />
       </td>

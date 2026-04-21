@@ -10,6 +10,7 @@ import { LmsPage } from './lms-page'
 import { FALLBACK_IMAGE_MODEL_OPTIONS, FALLBACK_TEXT_MODEL_OPTIONS } from '../../lib/ai-models'
 import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
+import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { applyUiTheme, parseUiTheme, type UiTheme } from '../../lib/ui-theme'
 
 type SettingsViewId = 'ai-models' | 'ai-prompts' | 'account' | 'notifications' | 'roles'
@@ -278,8 +279,10 @@ export default function Settings() {
       if (data.imageModelId) setImageModelId(data.imageModelId)
       if (data.courseSetupModelId) setCourseSetupModelId(data.courseSetupModelId)
       setAiMessage('Saved.')
+      toastSaveOk('AI defaults saved')
     } catch {
       setAiError('Could not save settings.')
+      toastMutationError('Could not save AI settings.')
     } finally {
       setAiSaving(false)
     }
@@ -451,9 +454,11 @@ export default function Settings() {
       setAvatarUrl(nextAvatar)
       setAvatarPreviewUrl(nextAvatar || null)
       setAccountMessage('Saved.')
+      toastSaveOk('Account saved')
       window.dispatchEvent(new Event('studydrift-profile-updated'))
     } catch {
       setAccountError('Could not save account settings.')
+      toastMutationError('Could not save account settings.')
     } finally {
       setAccountSaving(false)
     }
@@ -490,8 +495,10 @@ export default function Settings() {
         ),
       )
       setSystemPromptsMessage('Saved.')
+      toastSaveOk('System prompt saved')
     } catch {
       setSystemPromptsError('Could not save system prompt.')
+      toastMutationError('Could not save system prompt.')
     } finally {
       setSystemPromptsSaving(false)
     }

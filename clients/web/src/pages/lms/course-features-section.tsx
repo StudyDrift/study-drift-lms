@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { patchCourseFeatures } from '../../lib/courses-api'
+import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import type { CoursePublic } from './courses'
 
 type Props = {
@@ -63,6 +64,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const adaptivePathsEnabled = course.adaptivePathsEnabled === true
   const srsEnabled = course.srsEnabled === true
   const diagnosticAssessmentsEnabled = course.diagnosticAssessmentsEnabled === true
+  const hintScaffoldingEnabled = course.hintScaffoldingEnabled === true
 
   const persist = useCallback(
     async (patch: {
@@ -75,6 +77,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       adaptivePathsEnabled?: boolean
       srsEnabled?: boolean
       diagnosticAssessmentsEnabled?: boolean
+      hintScaffoldingEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -91,13 +94,17 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           srsEnabled: patch.srsEnabled ?? srsEnabled,
           diagnosticAssessmentsEnabled:
             patch.diagnosticAssessmentsEnabled ?? diagnosticAssessmentsEnabled,
+          hintScaffoldingEnabled: patch.hintScaffoldingEnabled ?? hintScaffoldingEnabled,
         }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
         await refresh()
         setMessage('Saved.')
+        toastSaveOk('Course tools updated')
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not save.')
+        const msg = e instanceof Error ? e.message : 'Could not save.'
+        setError(msg)
+        toastMutationError(msg)
       } finally {
         setSaving(false)
       }
@@ -106,6 +113,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       adaptivePathsEnabled,
       srsEnabled,
       diagnosticAssessmentsEnabled,
+      hintScaffoldingEnabled,
       calendarEnabled,
       courseCode,
       feedEnabled,
@@ -191,6 +199,13 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           onToggle={() =>
             void persist({ diagnosticAssessmentsEnabled: !diagnosticAssessmentsEnabled })
           }
+        />
+        <FeatureToggleRow
+          label="Quiz hints & worked examples"
+          description="Let learners request progressive hints and unlock worked examples during quizzes (question-bank items with UUID ids)."
+          enabled={hintScaffoldingEnabled}
+          disabled={saving}
+          onToggle={() => void persist({ hintScaffoldingEnabled: !hintScaffoldingEnabled })}
         />
       </div>
 

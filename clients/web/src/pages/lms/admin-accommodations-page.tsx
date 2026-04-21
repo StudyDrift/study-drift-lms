@@ -1,4 +1,5 @@
 import { useCallback, useId, useState, type FormEvent } from 'react'
+import { ConfirmDialog } from '../../components/confirm-dialog'
 import { usePermissions } from '../../context/use-permissions'
 import {
   createStudentAccommodation,
@@ -47,6 +48,9 @@ export default function AdminAccommodationsPage() {
   const [effectiveUntil, setEffectiveUntil] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveBusy, setSaveBusy] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [deleteTyped, setDeleteTyped] = useState('')
 
   const runSearch = useCallback(async () => {
     const q = searchInput.trim()
@@ -142,13 +146,22 @@ export default function AdminAccommodationsPage() {
     }
   }
 
-  async function onDelete(id: string) {
+  function requestDelete(id: string) {
     if (!selectedUser) return
-    if (!window.confirm('Delete this accommodation record?')) return
+    setDeleteTargetId(id)
+    setDeleteTyped('')
+    setDeleteOpen(true)
+  }
+
+  async function confirmDelete() {
+    if (!selectedUser || !deleteTargetId) return
     setSaveError(null)
     try {
-      await deleteStudentAccommodation(selectedUser.id, id)
+      await deleteStudentAccommodation(selectedUser.id, deleteTargetId)
       await loadList()
+      setDeleteOpen(false)
+      setDeleteTargetId(null)
+      setDeleteTyped('')
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Delete failed.')
     }
@@ -173,7 +186,10 @@ export default function AdminAccommodationsPage() {
         </p>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
-          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-neutral-400">
+          <label
+            htmlFor={`${formId}-learner-search`}
+            className="mb-1 block text-xs font-medium text-slate-600 dark:text-neutral-400"
+          >
             Find learner
           </label>
           <p className="mb-2 text-xs text-slate-500 dark:text-neutral-500">
@@ -182,6 +198,7 @@ export default function AdminAccommodationsPage() {
           </p>
           <div className="flex flex-wrap gap-2">
             <input
+              id={`${formId}-learner-search`}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => {
@@ -388,7 +405,7 @@ export default function AdminAccommodationsPage() {
                       <button
                         type="button"
                         className="text-rose-700 hover:underline dark:text-rose-300"
-                        onClick={() => void onDelete(r.id)}
+                        onClick={() => requestDelete(r.id)}
                       >
                         Delete
                       </button>
@@ -400,6 +417,23 @@ export default function AdminAccommodationsPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Delete accommodation?"
+        description="This removes the accommodation record for this learner."
+        variant="danger"
+        requireTypedPhrase="DELETE"
+        typedPhrase={deleteTyped}
+        onTypedPhraseChange={setDeleteTyped}
+        confirmLabel="Delete record"
+        onClose={() => {
+          setDeleteOpen(false)
+          setDeleteTargetId(null)
+          setDeleteTyped('')
+        }}
+        onConfirm={() => void confirmDelete()}
+      />
     </LmsPage>
   )
 }

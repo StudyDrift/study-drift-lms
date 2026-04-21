@@ -1,6 +1,8 @@
 /* eslint-disable react-hooks/set-state-in-effect -- sync localStorage notebook and course title from network */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
+import { ConfirmDialog } from '../../components/confirm-dialog'
+import { ReadingFocusToggle } from '../../components/layout/reading-focus-toggle'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { MarkdownBodyEditor } from '../../components/editor/block-editor/markdown-body-editor'
 import { CourseNotebookSidebar } from '../../components/notebook/course-notebook-sidebar'
@@ -28,6 +30,9 @@ export default function CourseNotebookPage() {
   const [data, setData] = useState<CourseNotebookStore | null>(null)
   const [courseTitle, setCourseTitle] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deletePageId, setDeletePageId] = useState<string | null>(null)
+  const [deleteTyped, setDeleteTyped] = useState('')
   const [headerTitleDraft, setHeaderTitleDraft] = useState('')
   const contentSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dataRef = useRef<CourseNotebookStore | null>(null)
@@ -170,11 +175,10 @@ export default function CourseNotebookPage() {
     [persistStore],
   )
 
-  const onDeletePage = useCallback(
+  const runDeletePage = useCallback(
     (pageId: string) => {
       const cur = dataRef.current
       if (!cur || cur.pages.length <= 1) return
-      if (!window.confirm('Delete this page and everything nested under it?')) return
       setData((d) => {
         if (!d) return d
         const pages = deleteNotebookPage(d.pages, pageId)
@@ -189,6 +193,14 @@ export default function CourseNotebookPage() {
     },
     [persistStore],
   )
+
+  const onDeletePage = useCallback((pageId: string) => {
+    const cur = dataRef.current
+    if (!cur || cur.pages.length <= 1) return
+    setDeletePageId(pageId)
+    setDeleteTyped('')
+    setDeleteConfirmOpen(true)
+  }, [])
 
   const onEditorChange = useCallback(
     (markdown: string) => {
@@ -232,6 +244,7 @@ export default function CourseNotebookPage() {
     <LmsPage
       title={pageTitle}
       description="Private pages and notes for this course. Stored on this device for your account."
+      actions={<ReadingFocusToggle />}
     >
       {loadError && (
         <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
@@ -273,7 +286,7 @@ export default function CourseNotebookPage() {
                     placeholder="Untitled page"
                   />
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5">
+                <div className="mx-auto min-h-0 w-full max-w-[72ch] flex-1 overflow-y-auto px-4 py-4 text-[1.0625rem] leading-relaxed md:px-6 md:py-5">
                   <MarkdownBodyEditor
                     key={activePage.id}
                     sectionId={activePage.id}
@@ -294,6 +307,28 @@ export default function CourseNotebookPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title="Delete notebook page?"
+        description="This removes the page and every nested page under it. This cannot be undone."
+        variant="danger"
+        requireTypedPhrase="DELETE"
+        typedPhrase={deleteTyped}
+        onTypedPhraseChange={setDeleteTyped}
+        confirmLabel="Delete pages"
+        onClose={() => {
+          setDeleteConfirmOpen(false)
+          setDeletePageId(null)
+          setDeleteTyped('')
+        }}
+        onConfirm={() => {
+          if (deletePageId) runDeletePage(deletePageId)
+          setDeleteConfirmOpen(false)
+          setDeletePageId(null)
+          setDeleteTyped('')
+        }}
+      />
     </LmsPage>
   )
 }

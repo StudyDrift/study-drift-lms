@@ -37,6 +37,7 @@ import { fetchCourse, type CoursePublic } from '../../lib/courses-api'
 import { getAccessToken, getJwtSubject } from '../../lib/auth'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { useCourseFeedUnread } from '../../context/use-course-feed-unread'
+import { formatAbsolute, formatRelativeCompact } from '../../lib/format-datetime'
 import { LmsPage } from './lms-page'
 
 function isCourseStaff(roles: string[] | undefined): boolean {
@@ -74,26 +75,6 @@ function displayInitials(label: string): string {
     return (a + b).toUpperCase() || '?'
   }
   return t.slice(0, 2).toUpperCase() || '?'
-}
-
-function formatFeedTime(iso: string): string {
-  const d = new Date(iso)
-  const diff = Date.now() - d.getTime()
-  if (Number.isNaN(diff) || diff < 0) return d.toLocaleDateString()
-  const sec = Math.floor(diff / 1000)
-  if (sec < 45) return 'Just now'
-  const min = Math.floor(sec / 60)
-  if (min < 60) return `${min}m`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}h`
-  const day = Math.floor(hr / 24)
-  if (day < 7) return `${day}d`
-  const sameYear = new Date().getFullYear() === d.getFullYear()
-  return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    ...(sameYear ? {} : { year: 'numeric' }),
-  })
 }
 
 function FeedAvatar({
@@ -1091,9 +1072,9 @@ function MessageBlock({
                 <time
                   className="shrink-0 text-xs font-medium text-slate-400 dark:text-neutral-500"
                   dateTime={m.createdAt}
-                  title={new Date(m.createdAt).toLocaleString()}
+                  title={formatAbsolute(m.createdAt)}
                 >
-                  {formatFeedTime(m.createdAt)}
+                  {formatRelativeCompact(m.createdAt)}
                 </time>
                 {m.editedAt && (
                   <span className="text-xs font-medium text-slate-400 dark:text-neutral-500">

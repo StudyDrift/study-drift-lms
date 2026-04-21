@@ -20,6 +20,7 @@ pub struct SearchCourseItem {
     pub srs_enabled: bool,
     #[serde(default)]
     pub diagnostic_assessments_enabled: bool,
+    pub hint_scaffolding_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]

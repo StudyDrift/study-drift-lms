@@ -5,21 +5,19 @@ import { LmsPage } from './lms-page'
 import { authorizedFetch } from '../../lib/api'
 import {
   fetchEnrollmentDiagnostic,
+  fetchLearnerRecommendations,
   postCourseContext,
   type CoursePublic,
+  type RecommendationItem,
 } from '../../lib/courses-api'
 import { readApiErrorMessage } from '../../lib/errors'
+import { formatAbsolute } from '../../lib/format-datetime'
 import { formatTimeAgoFromIso } from '../../lib/format-time-ago'
 import { getLastVisitedForCourse, hrefForLastVisited } from '../../lib/last-visited-module-item'
 import { heroImageObjectStyle } from '../../lib/hero-image-position'
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
-}
+import { getJwtSubject } from '../../lib/auth'
+import { hrefForRecommendationItem, surfaceLabel } from '../../lib/recommendation-nav'
+import { CourseVisibilityPill } from '../../components/ui/status-vocabulary'
 
 function formatIsoDurationHuman(iso: string | null | undefined): string {
   if (!iso?.trim()) return '—'
@@ -42,6 +40,7 @@ export default function CourseDetail() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [diagnosticPending, setDiagnosticPending] = useState(false)
+  const [courseRecs, setCourseRecs] = useState<RecommendationItem[]>([])
 
   useEffect(() => {
     if (!courseCode) return
@@ -88,6 +87,35 @@ export default function CourseDetail() {
       cancelled = true
     }
   }, [courseCode])
+
+  const viewerIsStudent =
+    course?.viewerEnrollmentRoles?.some((r) => r.trim().toLowerCase() === 'student') ?? false
+
+  useEffect(() => {
+    const uid = getJwtSubject()
+    if (!uid || !course?.id || !viewerIsStudent) {
+      setCourseRecs([])
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const [a, b] = await Promise.all([
+          fetchLearnerRecommendations(uid, course.id, 'continue', { limit: 3 }),
+          fetchLearnerRecommendations(uid, course.id, 'strengthen', { limit: 3 }),
+        ])
+        if (cancelled) return
+        const merged = [...a.recommendations, ...b.recommendations]
+        merged.sort((x, y) => y.score - x.score)
+        setCourseRecs(merged.slice(0, 5))
+      } catch {
+        if (!cancelled) setCourseRecs([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [course?.id, viewerIsStudent])
 
   if (!courseCode) {
     return (
@@ -142,6 +170,33 @@ export default function CourseDetail() {
               >
                 Open placement
               </Link>
+            </section>
+          ) : null}
+          {viewerIsStudent && courseRecs.length > 0 && courseCode ? (
+            <section aria-label="Suggestions for this course" className="mt-8">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                Suggested next steps
+              </h2>
+              <ul className="mt-3 space-y-2">
+                {courseRecs.map((r, i) => (
+                  <li
+                    key={`${r.itemId}-${r.surface}-${i}`}
+                    role="article"
+                    aria-label={`${surfaceLabel(r.surface)}: ${r.title}`}
+                  >
+                    <Link
+                      to={hrefForRecommendationItem(courseCode, r)}
+                      className="block rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50/40 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/30"
+                    >
+                      <span className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">
+                        {surfaceLabel(r.surface)}
+                      </span>
+                      <p className="mt-1 font-medium text-slate-900 dark:text-neutral-50">{r.title}</p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">{r.reason}</p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </section>
           ) : null}
           {lastVisited ? (
@@ -213,20 +268,25 @@ export default function CourseDetail() {
                 <div>
                   <dt className="font-medium text-slate-500">Starts / ends</dt>
                   <dd className="mt-1 text-slate-900">
-                    {formatDate(course.startsAt)} — {formatDate(course.endsAt)}
+                    {formatAbsolute(course.startsAt)} — {formatAbsolute(course.endsAt)}
                   </dd>
                 </div>
                 <div>
                   <dt className="font-medium text-slate-500">Visible / hidden window</dt>
                   <dd className="mt-1 text-slate-900">
-                    {formatDate(course.visibleFrom)} — {formatDate(course.hiddenAt)}
+                    {formatAbsolute(course.visibleFrom)} — {formatAbsolute(course.hiddenAt)}
                   </dd>
                 </div>
               </>
             )}
             <div>
               <dt className="font-medium text-slate-500">Published</dt>
-              <dd className="mt-1 text-slate-900">{course.published ? 'Yes' : 'No'}</dd>
+              <dd className="mt-1 flex flex-wrap items-center gap-2 text-slate-900 dark:text-neutral-100">
+                <CourseVisibilityPill published={course.published} size="md" />
+                <span className="text-sm text-slate-600 dark:text-neutral-400">
+                  {course.published ? 'Visible in catalog when dates allow' : 'Staff-only until published'}
+                </span>
+              </dd>
             </div>
           </dl>
         </>

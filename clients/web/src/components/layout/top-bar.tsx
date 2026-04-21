@@ -22,6 +22,7 @@ import {
 } from './top-bar-utils'
 import { useShellNav } from './shell-nav-context'
 import { TopBarBreadcrumbs } from './top-bar-breadcrumbs'
+import { NotificationsDrawer, NotificationsDrawerTrigger } from './notifications-drawer'
 
 function UserMenu() {
   const navigate = useNavigate()
@@ -252,6 +253,7 @@ export function TopBar() {
   const { open } = useCommandPalette()
   const { openSheet } = useKeyboardShortcutsSheet()
   const { mobileNavOpen, setMobileNavOpen } = useShellNav()
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   const searchAnchorRef = useRef<HTMLDivElement>(null)
   const [showShortcutTip, setShowShortcutTip] = useState(
@@ -329,7 +331,7 @@ export function TopBar() {
       : null
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-2 shadow-sm shadow-slate-900/5 sm:gap-3 sm:px-4 md:gap-4 md:px-6 dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-black/20">
+    <header className="lms-chrome flex h-14 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-2 shadow-sm shadow-slate-900/5 print:hidden sm:gap-3 sm:px-4 md:gap-4 md:px-6 dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-black/20">
       <button
         type="button"
         className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 md:hidden dark:text-neutral-300 dark:hover:bg-neutral-800"
@@ -362,9 +364,11 @@ export function TopBar() {
         </div>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
+        <NotificationsDrawerTrigger open={notificationsOpen} onOpen={() => setNotificationsOpen(true)} />
         <CourseEnrollmentViewDropdown />
         <UserMenu />
       </div>
+      <NotificationsDrawer open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
       {shortcutTipPortal}
     </header>
   )

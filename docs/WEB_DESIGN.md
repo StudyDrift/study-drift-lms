@@ -65,22 +65,6 @@ Companion docs:
 
 Ordered by **impact on user-friendliness / intuitiveness / perceived polish**, most valuable first. Each item notes the affected surface and what "done" looks like.
 
-### P1 — High-value polish
-
-5. **Modules tree density & iconography.** Distinguish item types (assignment/quiz/page/link) with a leading colored icon, due-date state (late/done/missing), and a progress indicator for students. The current list reads as a uniform stack.
-6. **Feed & inbox unification of notifications.** Today unread counts live in two separate providers. Add a **Notifications drawer** from the top bar that merges feed mentions, inbox messages, graded assignments, and announcements into one reverse-chronological list, filterable by type.
-7. **Breadcrumbed command palette results.** When a result is "Quiz: Midterm," show its parent course/module beneath. Cuts ambiguity on common names.
-
-### P2 — Consistency & trust
-
-9. **Toast system.** Replace ad-hoc inline success/error alerts with a single toast queue (top-right, auto-dismiss, stacks, `role="status"`). Consistent feedback after every mutation (save, delete, publish, grade).
-10. **Destructive-action confirmation pattern.** Standardize a `<ConfirmDialog>` with typed confirmation for truly destructive ops (delete course, delete question with history, purge attempts). Today some destructive paths use native `confirm()` and some use bespoke modals.
-11. **Accessibility parity sweep.** Gradebook and inbox are strong; question bank, course-create, and some settings forms lack explicit label-to-input associations, error-message IDs via `aria-describedby`, and focus management on modal open/close. Ship a lint rule (`jsx-a11y`) at `error` level for the LMS scope and fix regressions.
-12. **Color-blind–safe status vocabulary.** Draft/Active/Retired, Published/Unpublished, Late/Missing, correct/incorrect all rely on hue today. Add a shape/icon or text suffix so hue isn't load-bearing.
-13. **Unify date/time display.** Inbox does smart dates; modules use short dates; gradebook uses absolute timestamps. Adopt one helper (`formatRelative`, `formatAbsolute`, `formatRange`) and use it everywhere, with tooltips for the alternate form.
-14. **Reduce chrome on read-heavy pages.** Syllabus, content pages, and student notebook views would benefit from a **reading width** (~72ch), larger body type, and an optional "focus" toggle that hides the side nav.
-15. **Printable / exportable views.** Gradebook, student grade report, quiz review, and syllabus should have a clean print stylesheet (no nav, no controls, breakable tables). LMS users print and PDF constantly.
-
 ### P3 — Next-level intuitive
 
 16. **Global fuzzy "go to"** in the command palette: typing a student name jumps to their gradebook row; typing a question ID opens it in the bank; typing a date opens calendar to that day.

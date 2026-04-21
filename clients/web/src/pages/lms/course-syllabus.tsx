@@ -19,6 +19,9 @@ import {
   resolveMarkdownTheme,
 } from '../../lib/markdown-theme'
 import { useLmsDarkMode } from '../../hooks/use-lms-dark-mode'
+import { ReadingFocusToggle } from '../../components/layout/reading-focus-toggle'
+import { formatAbsolute } from '../../lib/format-datetime'
+import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { permCourseItemCreate } from '../../lib/rbac-api'
 import { LmsPage } from './lms-page'
 
@@ -134,8 +137,11 @@ export default function CourseSyllabus() {
       setEditing(false)
       setDraft([])
       void loadMarkups()
+      toastSaveOk('Syllabus saved')
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Could not save the syllabus.')
+      const msg = e instanceof Error ? e.message : 'Could not save the syllabus.'
+      setSaveError(msg)
+      toastMutationError(msg)
     } finally {
       setSaving(false)
     }
@@ -149,13 +155,7 @@ export default function CourseSyllabus() {
     )
   }
 
-  const description =
-    updatedAt == null
-      ? ''
-      : `Updated ${new Date(updatedAt).toLocaleString(undefined, {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        })}`
+  const description = updatedAt == null ? '' : `Updated ${formatAbsolute(updatedAt)}`
 
   return (
     <LmsPage
@@ -164,6 +164,7 @@ export default function CourseSyllabus() {
       actions={
         editing ? (
           <div className="flex flex-wrap items-center gap-2">
+            <ReadingFocusToggle />
             <button
               type="button"
               onClick={cancelEdit}
@@ -182,16 +183,21 @@ export default function CourseSyllabus() {
             </button>
           </div>
         ) : canEdit ? (
-          <button
-            type="button"
-            onClick={beginEdit}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Pencil className="h-4 w-4" aria-hidden />
-            Edit
-          </button>
-        ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            <ReadingFocusToggle />
+            <button
+              type="button"
+              onClick={beginEdit}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Pencil className="h-4 w-4" aria-hidden />
+              Edit
+            </button>
+          </div>
+        ) : (
+          <ReadingFocusToggle />
+        )
       }
     >
       {loadError && (
@@ -202,7 +208,7 @@ export default function CourseSyllabus() {
       {loading && <p className="mt-8 text-sm text-slate-500">Loading syllabus…</p>}
 
       {!loading && !loadError && !editing && (
-        <div className="mx-auto mt-8 w-full max-w-4xl min-w-0 space-y-6">
+        <div className="mx-auto mt-8 w-full max-w-[72ch] min-w-0 space-y-6 text-[1.0625rem] leading-relaxed">
           {sections.length === 0 && !permLoading && (
             <p className="text-sm text-slate-500">
               {canEdit ? (

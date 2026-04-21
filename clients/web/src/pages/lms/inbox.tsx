@@ -21,37 +21,7 @@ import {
   type MailboxMessage,
 } from '../../lib/communication-api'
 
-function formatListDate(iso: string) {
-  const d = new Date(iso)
-  const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfMsg = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const diffDays = Math.floor(
-    (startOfToday.getTime() - startOfMsg.getTime()) / (24 * 60 * 60 * 1000),
-  )
-  if (diffDays === 0) {
-    return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(d)
-  }
-  if (diffDays < 7) {
-    return new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(d)
-  }
-  if (d.getFullYear() === now.getFullYear()) {
-    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(d)
-  }
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(d)
-}
-
-function formatDetailDate(iso: string) {
-  const d = new Date(iso)
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(d)
-}
+import { formatAbsolute, formatRelative } from '../../lib/format-datetime'
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/)
@@ -387,9 +357,13 @@ export default function Inbox() {
                                   ? `To: ${m.to}`
                                   : m.from.name}
                               </span>
-                              <span className="shrink-0 text-xs text-slate-500">
-                                {formatListDate(m.sent_at)}
-                              </span>
+                              <time
+                                className="shrink-0 text-xs text-slate-500"
+                                dateTime={m.sent_at}
+                                title={formatAbsolute(m.sent_at)}
+                              >
+                                {formatRelative(m.sent_at)}
+                              </time>
                             </span>
                             <span
                               className={`mt-0.5 line-clamp-1 text-sm ${!m.read ? 'font-medium text-slate-900' : 'text-slate-700'}`}
@@ -495,7 +469,13 @@ export default function Inbox() {
                         <div className="font-medium text-slate-900">{selected.from.name}</div>
                         <div className="text-slate-500">&lt;{selected.from.email}&gt;</div>
                         <div className="mt-1 text-xs text-slate-500">
-                          To: {selected.to} · {formatDetailDate(selected.sent_at)}
+                          To: {selected.to} ·{' '}
+                          <time
+                            dateTime={selected.sent_at}
+                            title={formatRelative(selected.sent_at)}
+                          >
+                            {formatAbsolute(selected.sent_at)}
+                          </time>
                         </div>
                       </div>
                       {selected.has_attachment && (

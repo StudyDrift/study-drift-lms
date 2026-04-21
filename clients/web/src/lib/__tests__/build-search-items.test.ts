@@ -58,6 +58,7 @@ describe('buildSearchItems', () => {
 
     const emailOnly = items.find((i) => i.id === 'person:u2:CS-101')
     expect(emailOnly?.title).toBe('b@x.com')
+    expect(person?.subtitle).toBe('Intro · CS-101 · student')
   })
 
   it('URL-encodes course codes in paths', () => {
@@ -101,13 +102,22 @@ describe('buildSearchItems', () => {
   it('adds per-course page shortcuts and enrollment actions', () => {
     const allowsRosterX = (p: string) => p === courseEnrollmentsReadPermission('X')
     const items = buildSearchItems([{ courseCode: 'X', title: 'Y' }], [], allowsRosterX)
+    const syllabus = items.find((i) => i.path === '/courses/X/syllabus')
+    expect(syllabus).toMatchObject({
+      title: 'Syllabus',
+      subtitle: 'Y · X',
+    })
     expect(items.some((i) => i.path === '/courses/X/syllabus')).toBe(true)
     expect(items.some((i) => i.path === '/courses/X/feed')).toBe(true)
     expect(items.some((i) => i.path === '/courses/X/notebook')).toBe(true)
     expect(items.some((i) => i.path === '/courses/X/my-grades')).toBe(true)
     const add = items.find((i) => i.id === 'action:/courses/X/enrollments:add')
-    expect(add?.group).toBe('action')
-    expect(add?.path).toBe('/courses/X/enrollments')
+    expect(add).toMatchObject({
+      group: 'action',
+      path: '/courses/X/enrollments',
+      title: 'Add people',
+      subtitle: 'Y · X',
+    })
   })
 
   it('omits gradebook page without per-course gradebook permission', () => {

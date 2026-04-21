@@ -26,6 +26,9 @@ import {
 } from '../../lib/markdown-theme'
 import { useLmsDarkMode } from '../../hooks/use-lms-dark-mode'
 import { recordLastVisitedModuleItem } from '../../lib/last-visited-module-item'
+import { ReadingFocusToggle } from '../../components/layout/reading-focus-toggle'
+import { formatAbsolute } from '../../lib/format-datetime'
+import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { permCourseItemCreate } from '../../lib/rbac-api'
 import { LmsPage } from './lms-page'
 
@@ -208,8 +211,11 @@ export default function CourseModuleContentPage() {
       setEditing(false)
       setDraft([])
       void loadMarkups()
+      toastSaveOk('Page saved')
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Could not save.')
+      const msg = e instanceof Error ? e.message : 'Could not save.'
+      setSaveError(msg)
+      toastMutationError(msg)
     } finally {
       setSaving(false)
     }
@@ -223,13 +229,7 @@ export default function CourseModuleContentPage() {
     )
   }
 
-  const description =
-    updatedAt == null
-      ? ''
-      : `Updated ${new Date(updatedAt).toLocaleString(undefined, {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        })}`
+  const description = updatedAt == null ? '' : `Updated ${formatAbsolute(updatedAt)}`
 
   const backTo = `/courses/${encodeURIComponent(courseCode)}/modules`
 
@@ -240,6 +240,7 @@ export default function CourseModuleContentPage() {
       actions={
         editing ? (
           <div className="flex flex-wrap items-center gap-2">
+            <ReadingFocusToggle />
             <button
               type="button"
               onClick={cancelEdit}
@@ -258,16 +259,21 @@ export default function CourseModuleContentPage() {
             </button>
           </div>
         ) : canEdit ? (
-          <button
-            type="button"
-            onClick={beginEdit}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Pencil className="h-4 w-4" aria-hidden />
-            Edit
-          </button>
-        ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            <ReadingFocusToggle />
+            <button
+              type="button"
+              onClick={beginEdit}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Pencil className="h-4 w-4" aria-hidden />
+              Edit
+            </button>
+          </div>
+        ) : (
+          <ReadingFocusToggle />
+        )
       }
     >
       <p className="mt-2 text-left text-sm">
@@ -276,7 +282,7 @@ export default function CourseModuleContentPage() {
         </Link>
       </p>
 
-      <div className="mx-auto w-full max-w-4xl min-w-0">
+      <div className="mx-auto w-full max-w-[72ch] min-w-0">
         {loadError && (
           <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             {loadError}
@@ -285,7 +291,7 @@ export default function CourseModuleContentPage() {
         {loading && <p className="mt-8 text-sm text-slate-500">Loading…</p>}
 
         {!loading && !loadError && !editing && (
-          <div className="mt-8 space-y-6">
+          <div className="mt-8 space-y-6 text-[1.0625rem] leading-relaxed">
             <ContentPageReader
               markdown={markdown}
               theme={mdTheme}

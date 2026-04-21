@@ -18,6 +18,8 @@ import {
   type CreateBankQuestionBody,
   type UpdateBankQuestionBody,
 } from '../../lib/courses-api'
+import { QuestionBankStatusChip } from '../../components/ui/status-vocabulary'
+import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { LmsPage } from './lms-page'
 
 type QuestionDraft = {
@@ -137,6 +139,7 @@ function draftFromDetail(detail: BankQuestionDetail): QuestionDraft {
 export function CourseQuestionBankPage() {
   const { courseCode = '' } = useParams<{ courseCode: string }>()
   const searchId = useId()
+  const stemFieldId = `${searchId}-stem`
   const { allows, loading: permLoading } = usePermissions()
   const canEdit = !permLoading && allows(courseItemsCreatePermission(courseCode))
 
@@ -210,8 +213,11 @@ export function CourseQuestionBankPage() {
       setCreateOpen(false)
       setDraft(defaultDraft())
       await load()
+      toastSaveOk('Question created')
     } catch (e) {
-      setModalError(e instanceof Error ? e.message : 'Could not create question.')
+      const msg = e instanceof Error ? e.message : 'Could not create question.'
+      setModalError(msg)
+      toastMutationError(msg)
     } finally {
       setBusy(false)
     }
@@ -226,8 +232,11 @@ export function CourseQuestionBankPage() {
       setPreviewQuestion(updated)
       setEditId(null)
       await load()
+      toastSaveOk('Question updated')
     } catch (e) {
-      setModalError(e instanceof Error ? e.message : 'Could not update question.')
+      const msg = e instanceof Error ? e.message : 'Could not update question.'
+      setModalError(msg)
+      toastMutationError(msg)
     } finally {
       setBusy(false)
     }
@@ -260,8 +269,11 @@ export function CourseQuestionBankPage() {
         await restoreCourseQuestionVersion(courseCode, historyId, versionNumber)
         await openHistory(historyId)
         await load()
+        toastSaveOk('Version restored')
       } catch (e) {
-        setModalError(e instanceof Error ? e.message : 'Could not restore version.')
+        const msg = e instanceof Error ? e.message : 'Could not restore version.'
+        setModalError(msg)
+        toastMutationError(msg)
       } finally {
         setBusy(false)
       }
@@ -409,7 +421,9 @@ export function CourseQuestionBankPage() {
                         {r.stem}
                       </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-neutral-300">{r.questionType}</td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-neutral-300">{r.status}</td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-neutral-300">
+                        <QuestionBankStatusChip status={r.status} />
+                      </td>
                       <td className="px-4 py-3 tabular-nums text-slate-600 dark:text-neutral-300">{r.points}</td>
                       <td className="px-4 py-3 tabular-nums text-slate-600 dark:text-neutral-300">
                         {r.versionNumber}
@@ -464,15 +478,16 @@ export function CourseQuestionBankPage() {
               {editId ? 'Edit question' : 'New question'}
             </h2>
             <div className="mt-4 space-y-3">
-              <label className="block text-xs font-medium text-slate-700 dark:text-neutral-200">
+              <label htmlFor={stemFieldId} className="block text-xs font-medium text-slate-700 dark:text-neutral-200">
                 Stem
-                <textarea
-                  value={draft.stem}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, stem: e.target.value }))}
-                  rows={4}
-                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
-                />
               </label>
+              <textarea
+                id={stemFieldId}
+                value={draft.stem}
+                onChange={(e) => setDraft((prev) => ({ ...prev, stem: e.target.value }))}
+                rows={4}
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+              />
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block text-xs font-medium text-slate-700 dark:text-neutral-200">
                   Type

@@ -35,6 +35,8 @@ import { authorizedFetch } from '../../lib/api'
 import { putCourseCatalogOrder, type CoursePublic } from '../../lib/courses-api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { heroImageObjectStyle } from '../../lib/hero-image-position'
+import { formatRelativeCompact } from '../../lib/format-datetime'
+import { CourseCatalogStatusPill } from '../../components/ui/status-vocabulary'
 import { PERM_COURSE_CREATE } from '../../lib/rbac-api'
 
 export type { CoursePublic } from '../../lib/courses-api'
@@ -42,15 +44,7 @@ export type { CoursePublic } from '../../lib/courses-api'
 const COURSE_GRID_SORT_ID = 'course-catalog-grid'
 
 function formatEditedAgo(iso: string): string {
-  const d = new Date(iso)
-  const diffMs = Date.now() - d.getTime()
-  const mins = Math.floor(diffMs / 60000)
-  if (mins < 1) return 'Edited just now'
-  if (mins < 60) return `Edited ${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `Edited ${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  return `Edited ${days}d ago`
+  return `Edited ${formatRelativeCompact(iso)}`
 }
 
 /** Catalog pill: draft vs published schedule window (uses real `published`, `startsAt`, `endsAt`). */
@@ -121,8 +115,8 @@ function CourseCard({
           className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"
           aria-hidden
         />
-        <span className="absolute left-3 top-3 rounded-full bg-slate-900/70 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
-          {badgeLabel}
+        <span className="absolute left-3 top-3">
+          <CourseCatalogStatusPill label={badgeLabel} />
         </span>
         <div className="absolute inset-x-0 bottom-0 p-4 pt-10">
           <h2 className="text-lg font-semibold leading-snug tracking-tight text-white drop-shadow-sm line-clamp-2">

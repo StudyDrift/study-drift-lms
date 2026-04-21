@@ -89,7 +89,6 @@ function AssignmentHoverPortal({ open }: { open: CalendarAssignmentHoverOpen | n
 
   useLayoutEffect(() => {
     if (!open) {
-      setPos(null)
       return
     }
     const { anchor } = open
@@ -98,7 +97,7 @@ function AssignmentHoverPortal({ open }: { open: CalendarAssignmentHoverOpen | n
       const el = popRef.current
       const margin = 8
       const width = Math.min(320, window.innerWidth - 2 * margin)
-      let left = Math.max(margin, Math.min(r.left, window.innerWidth - width - margin))
+      const left = Math.max(margin, Math.min(r.left, window.innerWidth - width - margin))
       const popH = el?.offsetHeight ?? 168
       let top = r.bottom + margin
       if (top + popH > window.innerHeight - margin) {

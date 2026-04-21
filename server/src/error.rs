@@ -25,6 +25,8 @@ pub enum ErrorCode {
     QuestionAlreadyLocked,
     AttemptTimeExpired,
     MaxAttemptsReached,
+    /// Quiz delivery disables hints (lockdown); see accommodations override.
+    HintsDisabled,
     Internal,
 }
 
@@ -61,6 +63,8 @@ pub enum AppError {
     AttemptTimeExpired,
     #[error("max quiz attempts reached")]
     MaxAttemptsReached,
+    #[error("hints disabled for this quiz")]
+    HintsDisabled,
     #[error(transparent)]
     Db(#[from] sqlx::Error),
     #[error(transparent)]
@@ -216,6 +220,15 @@ impl IntoResponse for AppError {
                     error: ErrorDetail {
                         code: ErrorCode::MaxAttemptsReached,
                         message: "No quiz attempts remaining for this quiz.".into(),
+                    },
+                });
+                (StatusCode::FORBIDDEN, body).into_response()
+            }
+            AppError::HintsDisabled => {
+                let body = Json(ErrorBody {
+                    error: ErrorDetail {
+                        code: ErrorCode::HintsDisabled,
+                        message: "hints_disabled".into(),
                     },
                 });
                 (StatusCode::FORBIDDEN, body).into_response()

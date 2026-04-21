@@ -27,6 +27,7 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::adaptive_paths::router())
         .merge(routes::diagnostic::router())
         .merge(routes::learners::router())
+        .merge(routes::recommendations::router())
         .merge(routes::concepts::router())
         .merge(routes::standards::router())
         .merge(routes::me::router())

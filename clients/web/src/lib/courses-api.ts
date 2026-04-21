@@ -28,10 +28,13 @@ import {
   generateQuizQuestionsResponseSchema,
   generatedSyllabusSectionMarkdownSchema,
   idResponseSchema,
+  learnerRecommendationsResponseSchema,
   parseApiResponse,
   pathConceptsResponseSchema,
   quizAdvanceResponseSchema,
   quizAttemptStartResponseSchema,
+  quizHintRevealResponseSchema,
+  quizWorkedExampleResponseSchema,
   quizAttemptsListPayloadSchema,
   quizCodeRunResponseSchema,
   quizCurrentQuestionPayloadSchema,
@@ -102,6 +105,8 @@ export type CoursePublic = {
   srsEnabled?: boolean
   /** Placement diagnostic (plan 1.7); requires `DIAGNOSTIC_ASSESSMENTS_ENABLED` on server. */
   diagnosticAssessmentsEnabled?: boolean
+  /** Progressive hints + worked examples (plan 1.9). */
+  hintScaffoldingEnabled?: boolean
   createdAt: string
   updatedAt: string
   /** Present on single-course GET: raw enrollment roles for the viewer (`teacher`, `student`, …). */
@@ -380,6 +385,20 @@ export type ReviewStatsPayload = {
   retentionEstimate: number
 }
 
+export type RecommendationItem = {
+  itemId: string
+  itemType: string
+  title: string
+  surface: string
+  reason: string
+  score: number
+}
+
+export type LearnerRecommendationsResponse = {
+  recommendations: RecommendationItem[]
+  degraded?: boolean
+}
+
 export type BankQuestionVersionSummary = {
   versionNumber: number
   changeNote?: string | null
@@ -499,6 +518,7 @@ export async function patchCourseFeatures(
     adaptivePathsEnabled?: boolean
     srsEnabled?: boolean
     diagnosticAssessmentsEnabled?: boolean
+    hintScaffoldingEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -516,6 +536,7 @@ export async function patchCourseFeatures(
         adaptivePathsEnabled: body.adaptivePathsEnabled,
         srsEnabled: body.srsEnabled,
         diagnosticAssessmentsEnabled: body.diagnosticAssessmentsEnabled,
+        hintScaffoldingEnabled: body.hintScaffoldingEnabled,
       }),
     },
   )
@@ -656,6 +677,42 @@ export async function postLearnerSrsReview(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as { nextReviewAt: string; intervalDays: number }
+}
+
+export async function fetchLearnerRecommendations(
+  userId: string,
+  courseId: string,
+  surface: 'continue' | 'strengthen' | 'challenge' | 'review',
+  opts?: { limit?: number },
+): Promise<LearnerRecommendationsResponse> {
+  const params = new URLSearchParams()
+  params.set('courseId', courseId)
+  params.set('surface', surface)
+  if (opts?.limit != null) params.set('limit', String(opts.limit))
+  const res = await authorizedFetch(
+    `/api/v1/learners/${encodeURIComponent(userId)}/recommendations?${params.toString()}`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('fetchLearnerRecommendations', learnerRecommendationsResponseSchema, raw)
+}
+
+export async function postRecommendationEvent(body: {
+  courseId: string
+  itemId?: string | null
+  surface: string
+  eventType: 'impression' | 'click' | 'dismiss'
+  rank?: number | null
+}): Promise<void> {
+  const res = await authorizedFetch('/api/v1/recommendations/event', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
+  }
 }
 
 export async function fetchStructurePathRules(
@@ -1662,6 +1719,8 @@ export type ModuleQuizPayload = {
   adaptiveDeliveryMode: AdaptiveDeliveryMode
   /** Course grading category; null when unset. */
   assignmentGroupId: string | null
+  /** Course feature: progressive hints + worked examples (plan 1.9). */
+  hintScaffoldingEnabled?: boolean
 }
 
 /** Editable advanced quiz options (editor draft); `quizAccessCode` is plain text for the form. */
@@ -1791,6 +1850,7 @@ export function normalizeModuleQuizPayload(raw: unknown): ModuleQuizPayload {
     adaptiveQuestionCount: typeof r.adaptiveQuestionCount === 'number' ? r.adaptiveQuestionCount : 5,
     adaptiveDeliveryMode: r.adaptiveDeliveryMode === 'cat' ? 'cat' : 'ai',
     assignmentGroupId: typeof r.assignmentGroupId === 'string' ? r.assignmentGroupId : null,
+    hintScaffoldingEnabled: Boolean(r.hintScaffoldingEnabled),
   }
 }
 
@@ -2018,6 +2078,7 @@ export type QuizAttemptStartResponse = {
   maxAttempts?: number | null
   /** Omitted when unlimited; tries left after this one. */
   remainingAttempts?: number | null
+  hintScaffoldingEnabled?: boolean
 }
 
 export async function postQuizStart(
@@ -2062,6 +2123,7 @@ export async function postQuizStart(
         : o.remainingAttempts === null
           ? null
           : undefined,
+    hintScaffoldingEnabled: Boolean(o.hintScaffoldingEnabled),
   })
 }
 
@@ -2172,6 +2234,52 @@ export async function postQuizAdvance(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseApiResponse('postQuizAdvance', quizAdvanceResponseSchema, raw)
+}
+
+export type QuizHintRevealPayload = {
+  level?: number | null
+  body?: string | null
+  mediaUrl?: string | null
+  noMoreHints?: boolean
+}
+
+export async function postQuizQuestionHint(
+  courseCode: string,
+  itemId: string,
+  attemptId: string,
+  questionId: string,
+): Promise<QuizHintRevealPayload> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/hint`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('postQuizQuestionHint', quizHintRevealResponseSchema, raw)
+}
+
+export type QuizWorkedExamplePayload = {
+  title?: string | null
+  body?: string | null
+  steps: { number: number; explanation: string; expression?: string | null }[]
+}
+
+export async function fetchQuizWorkedExample(
+  courseCode: string,
+  itemId: string,
+  attemptId: string,
+  questionId: string,
+): Promise<QuizWorkedExamplePayload> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/quizzes/${encodeURIComponent(itemId)}/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/worked-example`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('fetchQuizWorkedExample', quizWorkedExampleResponseSchema, raw)
 }
 
 export type QuizCodeRunResult = {

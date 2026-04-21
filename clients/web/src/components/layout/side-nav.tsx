@@ -64,13 +64,13 @@ export function SideNav() {
         <button
           type="button"
           aria-label="Close navigation menu"
-          className="fixed inset-0 z-30 bg-slate-900/45 backdrop-blur-[1px] md:hidden"
+          className="lms-chrome fixed inset-0 z-30 bg-slate-900/45 backdrop-blur-[1px] print:hidden md:hidden"
           onClick={closeMobileNav}
         />
       ) : null}
       <aside
         id="shell-nav"
-        className={`flex h-dvh min-h-0 w-[min(17.5rem,88vw)] max-w-[280px] flex-col border-r border-slate-200 bg-[#F8F9FA] text-slate-900 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 md:h-screen md:w-60 md:max-w-none md:shrink-0 md:translate-x-0 ${
+        className={`lms-chrome flex h-dvh min-h-0 w-[min(17.5rem,88vw)] max-w-[280px] flex-col border-r border-slate-200 bg-[#F8F9FA] text-slate-900 print:hidden dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 md:h-screen md:w-60 md:max-w-none md:shrink-0 md:translate-x-0 ${
           mobileNavOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'
         } max-md:fixed max-md:left-0 max-md:top-0 max-md:z-40 max-md:shadow-2xl max-md:transition-transform max-md:duration-200 max-md:ease-out max-md:pt-[env(safe-area-inset-top)] max-md:pb-[env(safe-area-inset-bottom)]`}
       >

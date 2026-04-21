@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
-    http::HeaderMap,
-    routing::{delete, get, post},
+    http::{HeaderMap, StatusCode},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use chrono::{DateTime, Utc};
@@ -12,14 +12,17 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::http_auth::{assert_permission, auth_user};
 use crate::models::question_bank::{
-    AddPoolMembersRequest, BulkImportQuestionsResponse,     CreateQuestionPoolRequest, CreateQuestionRequest, IccPoint,
-    QuestionBankRowResponse, QuestionIrtStatsResponse, QuestionPoolResponse, QuestionVersionSummaryResponse,
-    RestoreQuestionVersionRequest, SetQuizDeliveryRefsRequest, UpdateQuestionRequest,
+    AddPoolMembersRequest, BulkImportQuestionsResponse, CreateQuestionHintRequest, CreateQuestionPoolRequest,
+    CreateQuestionRequest, HintAnalyticsLevel, HintAnalyticsResponse, IccPoint, QuestionBankRowResponse,
+    QuestionHintAuthorResponse, QuestionIrtStatsResponse, QuestionPoolResponse, QuestionVersionSummaryResponse,
+    RestoreQuestionVersionRequest, SetQuizDeliveryRefsRequest, UpdateQuestionHintRequest, UpdateQuestionRequest,
+    UpsertWorkedExampleRequest,
 };
 use crate::repos::course;
 use crate::repos::course_grants;
 use crate::repos::course_module_quizzes;
 use crate::repos::enrollment;
+use crate::repos::hints as hints_repo;
 use crate::repos::question_bank as qb_repo;
 use crate::services::irt;
 use crate::services::question_bank;
@@ -44,6 +47,22 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/questions/{question_id}/irt-stats",
             get(get_question_irt_stats_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/questions/{question_id}/hints",
+            get(list_question_hints_handler).post(create_question_hint_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/questions/{question_id}/hints/{hint_id}",
+            put(update_question_hint_handler).delete(delete_question_hint_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/questions/{question_id}/worked-example",
+            put(upsert_worked_example_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/questions/{question_id}/hint-analytics",
+            get(question_hint_analytics_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/questions/{question_id}/versions",
@@ -817,6 +836,245 @@ async fn bulk_import_questions_handler(
     }
     tx.commit().await?;
     Ok(Json(BulkImportQuestionsResponse { imported_count: n }))
+}
+
+fn hint_row_to_api(h: hints_repo::QuestionHintRow) -> QuestionHintAuthorResponse {
+    QuestionHintAuthorResponse {
+        id: h.id,
+        question_id: h.question_id,
+        level: h.level as i32,
+        body: h.body,
+        media_url: h.media_url,
+        locale: h.locale,
+        penalty_pct: h.penalty_pct,
+        created_at: h.created_at,
+    }
+}
+
+async fn list_question_hints_handler(
+    State(state): State<AppState>,
+    Path((course_code, question_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<QuestionHintAuthorResponse>>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let ok = enrollment::user_has_access(&state.pool, &course_code, user.user_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    require_instructor(&state, &course_code, user.user_id).await?;
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    qb_repo::get_question(&state.pool, course_id, question_id)
+        .await
+        .map_err(AppError::Db)?
+        .ok_or(AppError::NotFound)?;
+    let rows = hints_repo::list_hints_for_question_locale(&state.pool, question_id, "en")
+        .await
+        .map_err(AppError::Db)?;
+    Ok(Json(rows.into_iter().map(hint_row_to_api).collect()))
+}
+
+async fn create_question_hint_handler(
+    State(state): State<AppState>,
+    Path((course_code, question_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<CreateQuestionHintRequest>,
+) -> Result<Json<QuestionHintAuthorResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let ok = enrollment::user_has_access(&state.pool, &course_code, user.user_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    require_instructor(&state, &course_code, user.user_id).await?;
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    qb_repo::get_question(&state.pool, course_id, question_id)
+        .await
+        .map_err(AppError::Db)?
+        .ok_or(AppError::NotFound)?;
+    let level = req.level;
+    if !(1..=5).contains(&level) {
+        return Err(AppError::invalid_input("level must be between 1 and 5."));
+    }
+    let body = req.body.trim();
+    if body.is_empty() {
+        return Err(AppError::invalid_input("body is required."));
+    }
+    let locale = req.locale.as_deref().unwrap_or("en").trim();
+    if locale.is_empty() {
+        return Err(AppError::invalid_input("locale is invalid."));
+    }
+    let penalty = req.penalty_pct.unwrap_or(0.0).clamp(0.0, 100.0);
+    let row = hints_repo::insert_hint(
+        &state.pool,
+        question_id,
+        level as i16,
+        body,
+        req.media_url.as_deref(),
+        locale,
+        penalty,
+    )
+    .await
+    .map_err(|e| {
+        if let sqlx::Error::Database(ref db) = e {
+            if db.code().as_deref() == Some("23505") {
+                return AppError::invalid_input(
+                    "A hint already exists for this level and locale on this question.",
+                );
+            }
+        }
+        AppError::Db(e)
+    })?;
+    Ok(Json(hint_row_to_api(row)))
+}
+
+async fn update_question_hint_handler(
+    State(state): State<AppState>,
+    Path((course_code, question_id, hint_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<UpdateQuestionHintRequest>,
+) -> Result<Json<QuestionHintAuthorResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let ok = enrollment::user_has_access(&state.pool, &course_code, user.user_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    require_instructor(&state, &course_code, user.user_id).await?;
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    qb_repo::get_question(&state.pool, course_id, question_id)
+        .await
+        .map_err(AppError::Db)?
+        .ok_or(AppError::NotFound)?;
+    let level = req.level;
+    if !(1..=5).contains(&level) {
+        return Err(AppError::invalid_input("level must be between 1 and 5."));
+    }
+    let body = req.body.trim();
+    if body.is_empty() {
+        return Err(AppError::invalid_input("body is required."));
+    }
+    let locale = req.locale.as_deref().unwrap_or("en").trim();
+    let penalty = req.penalty_pct.unwrap_or(0.0).clamp(0.0, 100.0);
+    let row = hints_repo::update_hint(
+        &state.pool,
+        hint_id,
+        question_id,
+        level as i16,
+        body,
+        req.media_url.as_deref(),
+        locale,
+        penalty,
+    )
+    .await
+    .map_err(AppError::Db)?
+    .ok_or(AppError::NotFound)?;
+    Ok(Json(hint_row_to_api(row)))
+}
+
+async fn delete_question_hint_handler(
+    State(state): State<AppState>,
+    Path((course_code, question_id, hint_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let ok = enrollment::user_has_access(&state.pool, &course_code, user.user_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    require_instructor(&state, &course_code, user.user_id).await?;
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    qb_repo::get_question(&state.pool, course_id, question_id)
+        .await
+        .map_err(AppError::Db)?
+        .ok_or(AppError::NotFound)?;
+    let deleted = hints_repo::delete_hint(&state.pool, hint_id, question_id)
+        .await
+        .map_err(AppError::Db)?;
+    if !deleted {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn upsert_worked_example_handler(
+    State(state): State<AppState>,
+    Path((course_code, question_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<UpsertWorkedExampleRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let ok = enrollment::user_has_access(&state.pool, &course_code, user.user_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    require_instructor(&state, &course_code, user.user_id).await?;
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    qb_repo::get_question(&state.pool, course_id, question_id)
+        .await
+        .map_err(AppError::Db)?
+        .ok_or(AppError::NotFound)?;
+    let steps = serde_json::Value::Array(req.steps);
+    hints_repo::upsert_worked_example(
+        &state.pool,
+        question_id,
+        req.title.as_deref(),
+        req.body.as_deref(),
+        &steps,
+    )
+    .await
+    .map_err(AppError::Db)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn question_hint_analytics_handler(
+    State(state): State<AppState>,
+    Path((course_code, question_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<HintAnalyticsResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    let ok = enrollment::user_has_access(&state.pool, &course_code, user.user_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    require_instructor(&state, &course_code, user.user_id).await?;
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    qb_repo::get_question(&state.pool, course_id, question_id)
+        .await
+        .map_err(AppError::Db)?
+        .ok_or(AppError::NotFound)?;
+    let qid = question_id.to_string();
+    let total = hints_repo::hint_distinct_students_for_question(&state.pool, &qid)
+        .await
+        .map_err(AppError::Db)?;
+    let rows = hints_repo::hint_analytics_for_question(&state.pool, &qid)
+        .await
+        .map_err(AppError::Db)?;
+    let levels: Vec<HintAnalyticsLevel> = rows
+        .into_iter()
+        .map(|r| {
+            let pct = if total > 0 {
+                (100.0 * r.distinct_students as f64 / total as f64).clamp(0.0, 100.0)
+            } else {
+                0.0
+            };
+            HintAnalyticsLevel {
+                level: r.level as i32,
+                request_count: r.request_count,
+                pct_users: pct,
+            }
+        })
+        .collect();
+    Ok(Json(HintAnalyticsResponse { levels }))
 }
 
 async fn set_quiz_delivery_handler(

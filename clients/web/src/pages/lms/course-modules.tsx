@@ -20,6 +20,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
+  AlertCircle,
+  Check,
   ChevronDown,
   ChevronRight,
   CircleHelp,
@@ -54,17 +56,21 @@ import {
   deleteStructurePathRule,
   fetchCourse,
   fetchCourseConceptsForPath,
+  fetchCourseMyGrades,
   fetchCourseStructure,
   fetchStructurePathRules,
   patchCourseModule,
   patchCourseStructureItem,
   reorderCourseStructure,
+  viewerShouldShowMyGradesNav,
+  type CourseGradebookGridColumn,
   type CoursePublic,
   type CourseStructureItem,
   type PathConceptOption,
   type StructurePathRule,
 } from '../../lib/courses-api'
 import { useCourseViewAs } from '../../lib/course-view-as'
+import { useViewerEnrollmentRoles } from '../../lib/use-viewer-enrollment-roles'
 import { permCourseItemCreate } from '../../lib/rbac-api'
 import { formatDueShort } from '../../lib/course-calendar-utils'
 
@@ -121,6 +127,41 @@ function formatPtsLabel(n: number): string {
   return n === 1 ? '1 pt' : `${n} pts`
 }
 
+function parseEarnedPoints(raw: string | undefined): number {
+  const t = (raw ?? '').trim()
+  if (!t) return 0
+  const n = Number.parseFloat(t.replace(/,/g, ''))
+  return Number.isFinite(n) ? n : 0
+}
+
+type ModuleChildStudentMetrics = {
+  earned: number
+  max: number | null
+  hasRecordedGrade: boolean
+}
+
+function getStudentMetricsForStructureItem(
+  child: CourseStructureItem,
+  ctx: { columns: CourseGradebookGridColumn[]; grades: Record<string, string> } | null,
+): ModuleChildStudentMetrics | null {
+  if (!ctx) return null
+  if (child.kind !== 'assignment' && child.kind !== 'quiz') return null
+  const col = ctx.columns.find((c) => c.id === child.id)
+  if (!col) return null
+  const raw = ctx.grades[child.id]
+  return {
+    earned: parseEarnedPoints(raw),
+    max: col.maxPoints ?? null,
+    hasRecordedGrade: (raw ?? '').trim() !== '',
+  }
+}
+
+function isDueInPast(dueAt: string | null): boolean {
+  if (!dueAt) return false
+  const t = new Date(dueAt).getTime()
+  return Number.isFinite(t) && Date.now() > t
+}
+
 /** Gradebook points if set; otherwise traditional quiz question total. */
 function structureItemPointsLabel(child: CourseStructureItem): string | null {
   if (typeof child.pointsWorth === 'number') {
@@ -149,8 +190,113 @@ function moduleChildItemMetaLine(child: CourseStructureItem): string | null {
   return parts.join(' · ')
 }
 
-function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; courseCode: string }) {
+function ModuleChildStudentStatusRow({
+  child,
+  studentMetrics,
+}: {
+  child: CourseStructureItem
+  studentMetrics: ModuleChildStudentMetrics | null
+}) {
+  const gradable = child.kind === 'assignment' || child.kind === 'quiz'
+  const duePast = isDueInPast(child.dueAt)
+  const pct =
+    studentMetrics &&
+    studentMetrics.max != null &&
+    studentMetrics.max > 0
+      ? Math.min(100, (studentMetrics.earned / studentMetrics.max) * 100)
+      : null
+
+  const chips: ReactNode[] = []
+  if (gradable && studentMetrics) {
+    if (duePast && !studentMetrics.hasRecordedGrade) {
+      chips.push(
+        <span
+          key="missing"
+          className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-900 dark:bg-rose-950/70 dark:text-rose-100"
+        >
+          <AlertCircle className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
+          Missing
+        </span>,
+      )
+    } else if (studentMetrics.hasRecordedGrade) {
+      chips.push(
+        <span
+          key="done"
+          className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-100"
+        >
+          <Check className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
+          Done
+        </span>,
+      )
+    }
+  } else if (duePast && (child.kind === 'content_page' || child.kind === 'heading')) {
+    chips.push(
+      <span
+        key="past"
+        className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-950 dark:bg-amber-950/55 dark:text-amber-100"
+      >
+        Past due
+      </span>,
+    )
+  }
+
+  const showBar = Boolean(
+    gradable && studentMetrics && studentMetrics.max != null && studentMetrics.max > 0,
+  )
+
+  if (chips.length === 0 && !showBar) return null
+
+  return (
+    <div className="mt-2 space-y-2">
+      {chips.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5" aria-live="polite">
+          {chips}
+        </div>
+      ) : null}
+      {showBar && studentMetrics && studentMetrics.max != null ? (
+        <div className="max-w-xs">
+          <div
+            className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200/90 dark:bg-neutral-600/80"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={studentMetrics.max}
+            aria-valuenow={Math.round(studentMetrics.earned * 10) / 10}
+            aria-label={`Score ${studentMetrics.earned} of ${studentMetrics.max} points`}
+          >
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-[width] dark:bg-emerald-400"
+              style={{ width: `${pct ?? 0}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[11px] font-medium tabular-nums text-slate-500 dark:text-neutral-400">
+            {studentMetrics.hasRecordedGrade
+              ? `${studentMetrics.earned}/${studentMetrics.max} pts`
+              : `Not graded · ${studentMetrics.max} pts max`}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ChildRowContent({
+  child,
+  courseCode,
+  studentGradeContext,
+}: {
+  child: CourseStructureItem
+  courseCode: string
+  /** When set, learners see due/progress chips for their gradebook-linked work. */
+  studentGradeContext: { columns: CourseGradebookGridColumn[]; grades: Record<string, string> } | null
+}) {
   const meta = moduleChildItemMetaLine(child)
+  const studentMetrics = studentGradeContext
+    ? getStudentMetricsForStructureItem(child, studentGradeContext)
+    : null
+  const studentFooter =
+    studentGradeContext ? (
+      <ModuleChildStudentStatusRow child={child} studentMetrics={studentMetrics} />
+    ) : null
   return (
     <>
       {child.kind === 'content_page' ? (
@@ -169,6 +315,7 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
               {child.title}
             </Link>
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
+            {studentFooter}
           </div>
         </div>
       ) : child.kind === 'assignment' ? (
@@ -187,6 +334,7 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
               {child.title}
             </Link>
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
+            {studentFooter}
           </div>
         </div>
       ) : child.kind === 'quiz' ? (
@@ -223,12 +371,13 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
               ) : null}
             </div>
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
+            {studentFooter}
           </div>
         </div>
       ) : child.kind === 'external_link' ? (
         <div className="flex items-start gap-3">
           <span
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/90 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200"
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sky-200/90 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-950/55 dark:text-sky-200"
             aria-hidden
           >
             <ExternalLink className="h-4 w-4" strokeWidth={2} />
@@ -252,6 +401,7 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
               </Link>
             )}
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
+            {studentFooter}
           </div>
         </div>
       ) : (
@@ -260,6 +410,7 @@ function ChildRowContent({ child, courseCode }: { child: CourseStructureItem; co
             {child.title}
           </p>
           {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
+          {studentFooter}
         </div>
       )}
     </>
@@ -378,6 +529,7 @@ type SortableChildRowProps = {
   onChildTogglePublished: (child: CourseStructureItem) => void
   onOpenEditChildTitle: (child: CourseStructureItem) => void
   onArchiveChild: (child: CourseStructureItem) => void
+  studentGradeContext: { columns: CourseGradebookGridColumn[]; grades: Record<string, string> } | null
 }
 
 function SortableChildRow({
@@ -391,6 +543,7 @@ function SortableChildRow({
   onChildTogglePublished,
   onOpenEditChildTitle,
   onArchiveChild,
+  studentGradeContext,
 }: SortableChildRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: child.id,
@@ -428,7 +581,11 @@ function SortableChildRow({
           <div
             className={`min-w-0 flex-1 ${child.archived ? 'opacity-70' : ''}`}
           >
-            <ChildRowContent child={child} courseCode={courseCode} />
+            <ChildRowContent
+              child={child}
+              courseCode={courseCode}
+              studentGradeContext={studentGradeContext}
+            />
             {child.archived ? (
               <p className="mt-1 text-xs font-medium text-slate-500 dark:text-neutral-400">Archived</p>
             ) : null}
@@ -453,11 +610,23 @@ function SortableChildRow({
   )
 }
 
-function StaticChildRow({ child, courseCode }: { child: CourseStructureItem; courseCode: string }) {
+function StaticChildRow({
+  child,
+  courseCode,
+  studentGradeContext,
+}: {
+  child: CourseStructureItem
+  courseCode: string
+  studentGradeContext: { columns: CourseGradebookGridColumn[]; grades: Record<string, string> } | null
+}) {
   return (
     <li className="py-3 first:pt-0">
       <div className="min-w-0">
-        <ChildRowContent child={child} courseCode={courseCode} />
+        <ChildRowContent
+          child={child}
+          courseCode={courseCode}
+          studentGradeContext={studentGradeContext}
+        />
       </div>
     </li>
   )
@@ -798,6 +967,7 @@ type SortableModuleCardProps = {
   onOpenEditChildTitle: (child: CourseStructureItem) => void
   onArchiveChild: (child: CourseStructureItem) => void
   courseAdaptivePathsEnabled: boolean
+  studentGradeContext: { columns: CourseGradebookGridColumn[]; grades: Record<string, string> } | null
 }
 
 function SortableModuleCard({
@@ -819,6 +989,7 @@ function SortableModuleCard({
   onOpenEditChildTitle,
   onArchiveChild,
   courseAdaptivePathsEnabled,
+  studentGradeContext,
 }: SortableModuleCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -860,6 +1031,7 @@ function SortableModuleCard({
               onChildTogglePublished={onChildTogglePublished}
               onOpenEditChildTitle={onOpenEditChildTitle}
               onArchiveChild={onArchiveChild}
+              studentGradeContext={studentGradeContext}
             />
           ))}
         </ul>
@@ -912,10 +1084,12 @@ function StaticModuleCard({
   item,
   courseCode,
   moduleChildrenById,
+  studentGradeContext,
 }: {
   item: CourseStructureItem
   courseCode: string
   moduleChildrenById: Map<string, CourseStructureItem[]>
+  studentGradeContext: { columns: CourseGradebookGridColumn[]; grades: Record<string, string> } | null
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const children = moduleChildrenById.get(item.id) ?? []
@@ -926,7 +1100,12 @@ function StaticModuleCard({
         className="mt-4 divide-y divide-slate-200/55 border-t border-slate-200/55 pt-4 dark:divide-neutral-700/80 dark:border-neutral-700/80"
       >
         {children.map((child) => (
-          <StaticChildRow key={child.id} child={child} courseCode={courseCode} />
+          <StaticChildRow
+            key={child.id}
+            child={child}
+            courseCode={courseCode}
+            studentGradeContext={studentGradeContext}
+          />
         ))}
       </ul>
     ) : null
@@ -956,7 +1135,12 @@ export default function CourseModules() {
   const { courseCode } = useParams<{ courseCode: string }>()
   const archiveDialogTitleId = useId()
   const { allows, loading: permissionsLoading, error: permissionsError } = usePermissions()
+  const viewerEnrollmentRoles = useViewerEnrollmentRoles(courseCode)
   const [items, setItems] = useState<CourseStructureItem[]>([])
+  const [studentGradeContext, setStudentGradeContext] = useState<{
+    columns: CourseGradebookGridColumn[]
+    grades: Record<string, string>
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [reorderError, setReorderError] = useState<string | null>(null)
@@ -1040,6 +1224,14 @@ export default function CourseModules() {
     courseCode && !permissionsLoading && !permissionsError && !allows(itemCreatePerm),
   )
 
+  const canLoadStudentGrades = Boolean(
+    courseCode &&
+      !permissionsLoading &&
+      !permissionsError &&
+      viewerShouldShowMyGradesNav(viewerEnrollmentRoles, courseViewMode) &&
+      !canEditModules,
+  )
+
   const blockingUi =
     moduleSaving ||
     moduleModalOpen ||
@@ -1073,15 +1265,26 @@ export default function CourseModules() {
     setLoadError(null)
     setModuleActionError(null)
     try {
-      const list = await fetchCourseStructure(courseCode)
+      const [list, myGrades] = await Promise.all([
+        fetchCourseStructure(courseCode),
+        canLoadStudentGrades
+          ? fetchCourseMyGrades(courseCode).catch(() => null)
+          : Promise.resolve(null),
+      ])
       setItems(list)
+      if (myGrades) {
+        setStudentGradeContext({ columns: myGrades.columns, grades: myGrades.grades })
+      } else {
+        setStudentGradeContext(null)
+      }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load course structure.')
       setItems([])
+      setStudentGradeContext(null)
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [courseCode])
+  }, [courseCode, canLoadStudentGrades])
 
   useEffect(() => {
     void load()
@@ -1631,6 +1834,7 @@ export default function CourseModules() {
                     onOpenEditChildTitle={openEditChildTitle}
                     onArchiveChild={requestArchiveChild}
                     courseAdaptivePathsEnabled={courseMeta?.adaptivePathsEnabled === true}
+                    studentGradeContext={studentGradeContext}
                   />
                 ))}
             </ul>
@@ -1683,6 +1887,7 @@ export default function CourseModules() {
                   item={item}
                   courseCode={courseCode!}
                   moduleChildrenById={moduleChildrenById}
+                  studentGradeContext={studentGradeContext}
                 />
               ))}
           </ul>

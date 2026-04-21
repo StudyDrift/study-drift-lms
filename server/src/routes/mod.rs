@@ -12,6 +12,7 @@ pub mod health;
 pub mod learners;
 pub mod me;
 pub mod question_bank;
+pub mod recommendations;
 pub mod rbac;
 pub mod reports;
 pub mod search;

@@ -66,6 +66,7 @@ pub async fn sweep_expired_attempts(
                         id,
                         &resolved.questions,
                         &responses,
+                        course_row.hint_scaffolding_enabled,
                     )
                     .await
                     .map_err(|e| anyhow::anyhow!(e))?;

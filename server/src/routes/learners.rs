@@ -20,9 +20,11 @@ use crate::services::learner_state::{
     LearnerConceptsBatchResponse, LearnerConceptsListResponse, LearnerStateService,
     DEFAULT_LEARNER_STATE_SERVICE,
 };
+use crate::services::recommendations::{self as rec_service, RecommendationsResponse};
 use crate::services::srs::{
     get_review_queue, get_review_stats, submit_review, SubmitSrsReviewBody,
 };
+use crate::repos::enrollment;
 use crate::state::AppState;
 
 const MAX_BATCH_USER_IDS: usize = 200;
@@ -53,6 +55,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/learners/{user_id}/review",
             post(post_review_handler),
+        )
+        .route(
+            "/api/v1/learners/{user_id}/recommendations",
+            get(get_learner_recommendations),
         )
 }
 
@@ -171,6 +177,57 @@ pub struct LearnerConceptsBatchRequest {
     pub user_ids: Vec<Uuid>,
     #[serde(default)]
     pub concept_ids: Option<Vec<Uuid>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecommendationsQuery {
+    course_id: Uuid,
+    #[serde(default = "default_surface")]
+    surface: String,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+fn default_surface() -> String {
+    "continue".into()
+}
+
+async fn get_learner_recommendations(
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+    Query(q): Query<RecommendationsQuery>,
+    headers: HeaderMap,
+) -> Result<Json<RecommendationsResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    assert_can_read_learner_state(&state.pool, user.user_id, user_id).await?;
+
+    let surface = q.surface.trim();
+    if !matches!(
+        surface,
+        "continue" | "strengthen" | "challenge" | "review"
+    ) {
+        return Err(AppError::invalid_input(
+            "surface must be continue, strengthen, challenge, or review.",
+        ));
+    }
+
+    let ok = enrollment::user_has_access_by_course_id(&state.pool, q.course_id, user_id).await?;
+    if !ok {
+        return Err(AppError::Forbidden);
+    }
+
+    let limit = q.limit.unwrap_or(10).clamp(1, 10);
+    let mut body = rec_service::get_recommendations_for_learner_course(
+        &state.pool,
+        user_id,
+        q.course_id,
+        surface,
+    )
+    .await
+    .unwrap_or_else(|_| RecommendationsResponse::degraded_empty());
+    body.recommendations.truncate(limit);
+    Ok(Json(body))
 }
 
 async fn batch_learner_concepts(

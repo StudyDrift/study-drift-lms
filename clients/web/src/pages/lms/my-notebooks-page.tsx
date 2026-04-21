@@ -11,6 +11,7 @@ import {
   listStudentCourseNotebooks,
   subscribeStudentNotebooks,
 } from '../../lib/student-notebook-storage'
+import { ReadingFocusToggle } from '../../components/layout/reading-focus-toggle'
 import { LmsPage } from './lms-page'
 
 function snippet(text: string, max = 140): string {
@@ -165,6 +166,7 @@ export default function MyNotebooksPage() {
     <LmsPage
       title="My Notebooks"
       description="Your private notes from each course, on this device."
+      actions={<ReadingFocusToggle />}
     >
       {coursesError && (
         <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200">
@@ -177,7 +179,7 @@ export default function MyNotebooksPage() {
       )}
 
       {coursesReady && (
-        <div className="mt-6 max-w-4xl space-y-5">
+        <div className="mt-6 max-w-[72ch] space-y-5 text-[1.0625rem] leading-relaxed">
           <div>
             <label htmlFor="notebook-search" className="sr-only">
               Search my notes

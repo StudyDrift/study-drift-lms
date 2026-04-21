@@ -5,6 +5,7 @@ import { LmsPage } from './lms-page'
 import { usePermissions } from '../../context/use-permissions'
 import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
+import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { courseItemCreatePermission, patchCourseMarkdownTheme } from '../../lib/courses-api'
 import type { CoursePublic } from './courses'
 import {
@@ -294,7 +295,9 @@ export default function CourseSettings() {
       const raw: unknown = await res.json().catch(() => ({}))
       if (!res.ok) {
         setSaveStatus('error')
-        setSaveMessage(readApiErrorMessage(raw))
+        const msg = readApiErrorMessage(raw)
+        setSaveMessage(msg)
+        toastMutationError(msg)
         void loadCourse()
         return
       }
@@ -304,9 +307,11 @@ export default function CourseSettings() {
       applyScheduleStateFromCourse(updated)
       setSaveStatus('saved')
       setSaveMessage('Saved.')
+      toastSaveOk('Course settings saved')
     } catch {
       setSaveStatus('error')
       setSaveMessage('Could not save.')
+      toastMutationError('Could not save course settings.')
       void loadCourse()
     }
   }

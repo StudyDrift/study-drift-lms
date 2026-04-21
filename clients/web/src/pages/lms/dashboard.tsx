@@ -25,16 +25,20 @@ import {
   fetchCourseGradebookGrid,
   fetchCourseMyGrades,
   fetchCourseStructure,
+  fetchLearnerRecommendations,
   fetchLearnerReviewStats,
+  postRecommendationEvent,
   viewerIsCourseStaffEnrollment,
   viewerShouldShowMyGradesNav,
   type CourseGradebookGridResponse,
   type CourseMyGradesResponse,
   type CoursePublic,
   type CourseStructureItem,
+  type RecommendationItem,
   type ReviewStatsPayload,
 } from '../../lib/courses-api'
 import { getMostRecentLastVisited, hrefForLastVisited } from '../../lib/last-visited-module-item'
+import { hrefForRecommendationItem, surfaceLabel } from '../../lib/recommendation-nav'
 import { formatTimeAgoFromIso } from '../../lib/format-time-ago'
 import { useInboxUnreadCount } from '../../context/use-inbox-unread'
 import { useCourseFeedUnread } from '../../context/use-course-feed-unread'
@@ -215,6 +219,19 @@ export default function Dashboard() {
   >([])
 
   const [reviewStats, setReviewStats] = useState<ReviewStatsPayload | null>(null)
+  const [whatsNextRaw, setWhatsNextRaw] = useState<{
+    course: CoursePublic
+    primary: RecommendationItem | null
+    chips: RecommendationItem[]
+    degraded: boolean
+  } | null>(null)
+
+  const whatsNext = useMemo(() => {
+    const uid = getJwtSubject()
+    const top = studentRows[0]?.course
+    if (!uid || !top || !whatsNextRaw) return null
+    return whatsNextRaw.course.id === top.id ? whatsNextRaw : null
+  }, [whatsNextRaw, studentRows])
 
   const detailGenRef = useRef(0)
 
@@ -392,6 +409,48 @@ export default function Dashboard() {
     })()
   }, [catalog, permLoading, allows])
 
+  useEffect(() => {
+    const uid = getJwtSubject()
+    if (!uid || studentRows.length === 0) {
+      return
+    }
+    const { course } = studentRows[0]
+    let cancelled = false
+    void (async () => {
+      try {
+        const surfaces = ['continue', 'review', 'strengthen', 'challenge'] as const
+        const results = await Promise.all(
+          surfaces.map((s) => fetchLearnerRecommendations(uid, course.id, s, { limit: 4 })),
+        )
+        if (cancelled) return
+        const merged: RecommendationItem[] = []
+        let degraded = false
+        for (const r of results) {
+          merged.push(...r.recommendations)
+          if (r.degraded) degraded = true
+        }
+        merged.sort((a, b) => b.score - a.score)
+        const primary = merged[0] ?? null
+        const chips = merged.slice(1, 4)
+        setWhatsNextRaw({ course, primary, chips, degraded })
+        if (primary) {
+          void postRecommendationEvent({
+            courseId: course.id,
+            itemId: primary.itemId,
+            surface: primary.surface,
+            eventType: 'impression',
+            rank: 0,
+          }).catch(() => {})
+        }
+      } catch {
+        if (!cancelled) setWhatsNextRaw(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [studentRows])
+
   const weekStart = useMemo(() => startOfWeekMonday(), [])
   const weekEnd = useMemo(() => endOfWeekSunday(weekStart), [weekStart])
   const weekFrac = useMemo(() => weekProgressFraction(), [])
@@ -485,6 +544,83 @@ export default function Dashboard() {
               )}
             </div>
           </section>
+
+          {whatsNext && anyStudentExperience && (
+            <section aria-label="Recommended next step">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                What&apos;s next
+              </h2>
+              {whatsNext.primary ? (
+                <article
+                  role="article"
+                  aria-label={`Recommended: ${whatsNext.primary.title} (${surfaceLabel(whatsNext.primary.surface)})`}
+                  className="mt-3 rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/90 to-white p-5 shadow-sm dark:border-violet-900/40 dark:from-violet-950/30 dark:to-neutral-900"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-violet-800 dark:text-violet-200">
+                    <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
+                    <span>{whatsNext.course.title}</span>
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-violet-900 dark:bg-violet-900/50 dark:text-violet-100">
+                      {surfaceLabel(whatsNext.primary.surface)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-lg font-semibold tracking-tight text-slate-900 dark:text-neutral-50">
+                    {whatsNext.primary.title}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-neutral-400">{whatsNext.primary.reason}</p>
+                  {whatsNext.degraded ? (
+                    <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">
+                      Suggestions may be briefly out of date while we refresh them.
+                    </p>
+                  ) : null}
+                  <Link
+                    to={hrefForRecommendationItem(whatsNext.course.courseCode, whatsNext.primary)}
+                    onClick={() => {
+                      const p = whatsNext.primary
+                      if (p == null) return
+                      void postRecommendationEvent({
+                        courseId: whatsNext.course.id,
+                        itemId: p.itemId,
+                        surface: p.surface,
+                        eventType: 'click',
+                        rank: 0,
+                      }).catch(() => {})
+                    }}
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-500"
+                  >
+                    Go
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                  </Link>
+                  {whatsNext.chips.length > 0 ? (
+                    <div className="mt-4 flex flex-wrap gap-2 border-t border-violet-100 pt-4 dark:border-violet-900/40">
+                      {whatsNext.chips.map((c, idx) => (
+                        <Link
+                          key={`${c.itemId}-${c.surface}-${idx}`}
+                          to={hrefForRecommendationItem(whatsNext.course.courseCode, c)}
+                          onClick={() => {
+                            void postRecommendationEvent({
+                              courseId: whatsNext.course.id,
+                              itemId: c.itemId,
+                              surface: c.surface,
+                              eventType: 'click',
+                              rank: idx + 1,
+                            }).catch(() => {})
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2.5 py-1 text-xs font-medium text-violet-900 shadow-sm hover:bg-violet-50 dark:border-violet-800 dark:bg-neutral-900 dark:text-violet-100 dark:hover:bg-violet-950/40"
+                        >
+                          <span className="text-violet-600 dark:text-violet-300">{surfaceLabel(c.surface)}</span>
+                          <span className="max-w-[10rem] truncate">{c.title}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                </article>
+              ) : (
+                <p className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm text-slate-700 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-neutral-200">
+                  You&apos;re all caught up in {whatsNext.course.title}. Check back after your next activity.
+                </p>
+              )}
+            </section>
+          )}
 
           {reviewStats != null && (
             <section aria-label="Spaced repetition review">
