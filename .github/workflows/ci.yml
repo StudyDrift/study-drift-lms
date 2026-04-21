@@ -49,7 +49,7 @@ jobs:
           key: ${{ runner.os }}-cargo-bins-audit-deny-v1
 
       - name: Install cargo-audit and cargo-deny
-        run: cargo install cargo-audit cargo-deny --locked
+        run: cargo install cargo-audit cargo-deny --locked --force
 
       - name: cargo audit
         run: cargo audit
