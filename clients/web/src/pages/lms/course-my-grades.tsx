@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import {
   fetchCourseMyGrades,
+  fetchMyGradeItemHistory,
   type AssignmentGroup,
   type CourseGradebookGridColumn,
+  type GradeHistoryEvent,
   viewerShouldShowMyGradesNav,
 } from '../../lib/courses-api'
 import { useCourseViewAs } from '../../lib/course-view-as'
@@ -14,6 +16,7 @@ import {
   type AssignmentGroupWeight,
   type GradebookColumnForFinal,
 } from './gradebook/compute-course-final-percent'
+import { GradeHistoryPanel } from '../../components/grading/grade-history-panel'
 import { LmsPage } from './lms-page'
 
 function parseEarned(raw: string | undefined): number {
@@ -40,6 +43,13 @@ export default function CourseMyGrades() {
   const [assignmentGroups, setAssignmentGroups] = useState<AssignmentGroup[]>([])
   const [heldGradeItemIds, setHeldGradeItemIds] = useState<string[]>([])
   const [droppedGrades, setDroppedGrades] = useState<Record<string, boolean>>({})
+  const [historyItem, setHistoryItem] = useState<{
+    id: string
+    title: string
+  } | null>(null)
+  const [historyLoad, setHistoryLoad] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
+  const [historyErr, setHistoryErr] = useState<string | null>(null)
+  const [historyEvents, setHistoryEvents] = useState<GradeHistoryEvent[] | null>(null)
 
   const canView = useMemo(() => {
     if (!courseCode) return false
@@ -77,6 +87,40 @@ export default function CourseMyGrades() {
       cancelled = true
     }
   }, [courseCode, canView, load])
+
+  useEffect(() => {
+    if (!courseCode || !historyItem) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const d = await fetchMyGradeItemHistory(courseCode, historyItem.id)
+        if (cancelled) return
+        setHistoryEvents(d.events)
+        setHistoryLoad('ok')
+      } catch (e: unknown) {
+        if (cancelled) return
+        setHistoryErr(e instanceof Error ? e.message : 'Could not load history')
+        setHistoryLoad('error')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [courseCode, historyItem])
+
+  const openGradeHistory = useCallback((id: string, title: string) => {
+    setHistoryErr(null)
+    setHistoryEvents(null)
+    setHistoryLoad('loading')
+    setHistoryItem({ id, title })
+  }, [])
+
+  const closeGradeHistory = useCallback(() => {
+    setHistoryItem(null)
+    setHistoryLoad('idle')
+    setHistoryErr(null)
+    setHistoryEvents(null)
+  }, [])
 
   const heldSet = useMemo(() => new Set(heldGradeItemIds), [heldGradeItemIds])
 
@@ -174,6 +218,7 @@ export default function CourseMyGrades() {
                       Item %
                     </th>
                     <th className="px-4 py-3 font-semibold text-slate-900 dark:text-neutral-100">Policy</th>
+                    <th className="px-4 py-3 font-semibold text-slate-900 dark:text-neutral-100">History</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-neutral-700">
@@ -242,6 +287,15 @@ export default function CourseMyGrades() {
                             '—'
                           )}
                         </td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            className="text-sm text-indigo-600 hover:underline dark:text-indigo-400"
+                            onClick={() => openGradeHistory(col.id, col.title)}
+                          >
+                            View
+                          </button>
+                        </td>
                       </tr>
                     )
                   })}
@@ -250,6 +304,48 @@ export default function CourseMyGrades() {
             </div>
           )}
         </>
+      )}
+      {historyItem && courseCode && (
+        <div
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Close"
+            onClick={() => closeGradeHistory()}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative z-[1] w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="absolute right-3 top-3 rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-neutral-800"
+              onClick={() => closeGradeHistory()}
+            >
+              <span className="sr-only">Close</span>✕
+            </button>
+            <GradeHistoryPanel
+              title={historyItem.title}
+              events={historyEvents}
+              loading={historyLoad === 'loading'}
+              error={historyErr}
+            />
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 hover:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-800"
+                onClick={() => closeGradeHistory()}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </LmsPage>
   )

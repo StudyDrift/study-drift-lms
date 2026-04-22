@@ -25,6 +25,7 @@ import {
   courseGradebookGridResponseSchema,
   courseGradingSchemeEnvelopeSchema,
   courseMyGradesRawSchema,
+  gradeHistoryResponseSchema,
   enrollmentGroupsTreeResponseSchema,
   enrollmentNextResponseSchema,
   generateQuizQuestionsResponseSchema,
@@ -1368,12 +1369,68 @@ export async function fetchCourseMyGrades(courseCode: string): Promise<CourseMyG
   }
 }
 
+/** Grade change audit entry (3.10). */
+export type GradeHistoryEvent = {
+  id: string
+  action: string
+  previousScore?: number | null
+  newScore?: number | null
+  previousStatus?: string | null
+  newStatus?: string | null
+  reason?: string | null
+  changedAt: string
+  changedBy?: string | null
+}
+
+export type GradeHistoryResponse = { events: GradeHistoryEvent[] }
+
+/** GET grade history for one cell (instructor) or self as student. */
+export async function fetchGradeCellHistory(
+  courseCode: string,
+  itemId: string,
+  studentId: string,
+): Promise<GradeHistoryResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/grades/${encodeURIComponent(studentId)}/history`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('gradeCellHistory', gradeHistoryResponseSchema, raw)
+}
+
+/** Self-service: current student’s history for one gradebook item. */
+export async function fetchMyGradeItemHistory(
+  courseCode: string,
+  itemId: string,
+): Promise<GradeHistoryResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/my-grades/${encodeURIComponent(itemId)}/history`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('myGradeItemHistory', gradeHistoryResponseSchema, raw)
+}
+
+/** All audit events in the course for one student (instructor, gradebook view). */
+export async function fetchStudentGradeHistoryInCourse(
+  courseCode: string,
+  studentId: string,
+): Promise<GradeHistoryResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/students/${encodeURIComponent(studentId)}/grade-history`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('studentGradeHistory', gradeHistoryResponseSchema, raw)
+}
+
 /** PUT `/gradebook/grades` — bulk upsert/clear cells (`course:<code>:item:create`). */
 export async function putCourseGradebookGrades(
   courseCode: string,
   body: {
     grades: Record<string, Record<string, string>>
     rubricScores?: Record<string, Record<string, Record<string, number>>>
+    changeReason?: string
   },
 ): Promise<void> {
   const res = await authorizedFetch(
@@ -1385,6 +1442,9 @@ export async function putCourseGradebookGrades(
         grades: body.grades,
         ...(body.rubricScores && Object.keys(body.rubricScores).length > 0
           ? { rubricScores: body.rubricScores }
+          : {}),
+        ...(body.changeReason != null && String(body.changeReason).trim() !== ''
+          ? { changeReason: String(body.changeReason).trim() }
           : {}),
       }),
     },

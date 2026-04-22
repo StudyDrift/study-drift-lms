@@ -61,6 +61,8 @@ type GradebookGridProps = {
   onGradesChange?: (grades: Record<string, Record<string, string>>) => void
   /** Open rubric scoring for a student/column (assignment columns with a rubric). */
   onRubricClick?: (studentId: string, columnId: string) => void
+  /** Open grade change history (3.10) for this cell. */
+  onOpenGradeHistory?: (studentId: string, columnId: string) => void
   /** Used for empty-state links back to modules or enrollments. */
   courseCode?: string
   /** Highlights and scrolls a learner row (e.g. from command palette `?student=`). */
@@ -242,6 +244,7 @@ export function GradebookGrid({
   readOnly = false,
   onGradesChange,
   onRubricClick,
+  onOpenGradeHistory,
   courseCode,
   highlightStudentId = null,
   gradingScheme = null,
@@ -1512,18 +1515,33 @@ export function GradebookGrid({
                               {val || '—'}
                             </span>
                           </span>
-                          {!readOnly && col.rubric && onRubricClick ? (
-                            <button
-                              type="button"
-                              className="text-[11px] font-medium text-indigo-600 hover:underline dark:text-indigo-400"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onRubricClick(student.id, col.id)
-                              }}
-                            >
-                              Rubric
-                            </button>
-                          ) : null}
+                          <span className="inline-flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5">
+                            {!readOnly && col.rubric && onRubricClick ? (
+                              <button
+                                type="button"
+                                className="text-[11px] font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onRubricClick(student.id, col.id)
+                                }}
+                              >
+                                Rubric
+                              </button>
+                            ) : null}
+                            {onOpenGradeHistory &&
+                            (col.kind === 'assignment' || col.kind === 'quiz' || col.kind === 'quiz_comprehensive') ? (
+                              <button
+                                type="button"
+                                className="text-[11px] font-medium text-slate-600 hover:underline dark:text-neutral-400"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onOpenGradeHistory(student.id, col.id)
+                                }}
+                              >
+                                History
+                              </button>
+                            ) : null}
+                          </span>
                         </div>
                       )}
                       {showFillKnob && activeSelectionBounds != null && (

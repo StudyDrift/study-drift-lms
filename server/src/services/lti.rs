@@ -43,6 +43,8 @@ pub async fn apply_inbound_ags_score(
         pool,
         link.course_id,
         &[(student_user_id, link.structure_item_id, Some(points), None)],
+        None,
+        Some("LTI 1.3 AGS line-item score passback"),
     )
     .await?;
     tracing::info!(

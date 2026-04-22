@@ -47,6 +47,9 @@ pub struct PutCourseGradebookGradesRequest {
     /// Optional rubric breakdown per student and assignment item (criterion id → points).
     #[serde(default)]
     pub rubric_scores: HashMap<Uuid, HashMap<Uuid, HashMap<Uuid, f64>>>,
+    /// Free-text reason for the batch (3.10 audit); stored on each cell update.
+    #[serde(default)]
+    pub change_reason: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -107,4 +110,31 @@ pub struct CourseMyGradesResponse {
     /// Plan 3.9 — item id → score excluded by group drop policy (student view).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub dropped_grades: HashMap<Uuid, bool>,
+}
+
+/// One row in the grade change audit (3.10), JSON for API.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GradeHistoryEventOut {
+    pub id: Uuid,
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    pub changed_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub changed_by: Option<Uuid>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GradeHistoryResponse {
+    pub events: Vec<GradeHistoryEventOut>,
 }

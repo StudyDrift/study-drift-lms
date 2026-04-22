@@ -19,7 +19,8 @@ use crate::models::course_export::{
 };
 use crate::models::course_gradebook::{
     CourseGradebookGridColumn, CourseGradebookGridResponse, CourseGradebookGridStudent,
-    CourseMyGradesResponse, GradingSchemeSummary, PutCourseGradebookGradesRequest,
+    CourseMyGradesResponse, GradeHistoryEventOut, GradeHistoryResponse, GradingSchemeSummary,
+    PutCourseGradebookGradesRequest,
 };
 use crate::models::grading_scheme::{
     CourseGradingSchemeEnvelope, GradingSchemeResponse, PutGradingSchemeRequest,
@@ -84,6 +85,7 @@ use crate::repos::content_page_markups;
 use crate::repos::course;
 use crate::repos::course_files;
 use crate::repos::course_grades;
+use crate::repos::grade_audit_events;
 use crate::repos::course_grading;
 use crate::repos::course_grading::PutError;
 use crate::repos::grading_schemes;
@@ -149,6 +151,7 @@ use axum::{
     Json, Router,
 };
 use chrono::{DateTime, Utc};
+use rust_decimal::prelude::ToPrimitive;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -480,6 +483,18 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/my-grades",
             get(my_grades_get_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/my-grades/{item_id}/history",
+            get(my_grade_item_history_get_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/assignments/{item_id}/grades/{student_id}/history",
+            get(grade_cell_history_get_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/students/{student_id}/grade-history",
+            get(course_student_grade_history_get_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/gradebook/grades",
@@ -4323,6 +4338,141 @@ fn ensure_points_within_max(points: f64, max_points: Option<i32>) -> Result<(), 
     Ok(())
 }
 
+fn map_grade_audit_out(
+    e: grade_audit_events::GradeAuditEventRow,
+) -> GradeHistoryEventOut {
+    let grade_audit_events::GradeAuditEventRow {
+        id,
+        action,
+        previous_score,
+        new_score,
+        previous_status,
+        new_status,
+        reason,
+        changed_at,
+        changed_by,
+    } = e;
+    GradeHistoryEventOut {
+        id,
+        action,
+        previous_score: previous_score.and_then(|d| d.to_f64()),
+        new_score: new_score.and_then(|d| d.to_f64()),
+        previous_status,
+        new_status,
+        reason,
+        changed_at,
+        changed_by,
+    }
+}
+
+/// Per-cell grade change history. Instructor (gradebook) or the student (self) only.
+async fn grade_cell_history_get_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, student_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<GradeHistoryResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let (course_id, students, columns, _types, _posting) =
+        gradebook_students_and_columns(&state.pool, &course_code).await?;
+    if !columns.iter().any(|c| c.id == item_id) {
+        return Err(AppError::NotFound);
+    }
+    if !students.iter().any(|s| s.user_id == student_id) {
+        return Err(AppError::NotFound);
+    }
+
+    let self_view = user.user_id == student_id;
+    if self_view {
+        if !students.iter().any(|s| s.user_id == user.user_id) {
+            return Err(AppError::Forbidden);
+        }
+    } else {
+        let required = course_grants::course_gradebook_view_permission(&course_code);
+        assert_permission(&state.pool, user.user_id, &required).await?;
+    }
+
+    let rows = grade_audit_events::list_for_cell(&state.pool, course_id, item_id, student_id)
+        .await
+        .map_err(AppError::from)?;
+    let posted = grade_audit_events::posted_at_for_cell(
+        &state.pool,
+        course_id,
+        item_id,
+        student_id,
+    )
+    .await
+    .map_err(AppError::from)?;
+    let mut events: Vec<GradeHistoryEventOut> = rows.into_iter().map(map_grade_audit_out).collect();
+    if self_view && posted.is_none() {
+        for e in &mut events {
+            e.changed_by = None;
+        }
+    }
+    Ok(Json(GradeHistoryResponse { events }))
+}
+
+/// Self-service grade history for one item (3.10); student enrollment only, same privacy as `grade_cell_history_get_handler` for self.
+async fn my_grade_item_history_get_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<GradeHistoryResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let (course_id, students, columns, _types, _posting) =
+        gradebook_students_and_columns(&state.pool, &course_code).await?;
+    if !columns.iter().any(|c| c.id == item_id) {
+        return Err(AppError::NotFound);
+    }
+    if !students.iter().any(|s| s.user_id == user.user_id) {
+        return Err(AppError::Forbidden);
+    }
+    let student_id = user.user_id;
+    let rows = grade_audit_events::list_for_cell(&state.pool, course_id, item_id, student_id)
+        .await
+        .map_err(AppError::from)?;
+    let posted = grade_audit_events::posted_at_for_cell(
+        &state.pool,
+        course_id,
+        item_id,
+        student_id,
+    )
+    .await
+    .map_err(AppError::from)?;
+    let mut events: Vec<GradeHistoryEventOut> = rows.into_iter().map(map_grade_audit_out).collect();
+    if posted.is_none() {
+        for e in &mut events {
+            e.changed_by = None;
+        }
+    }
+    Ok(Json(GradeHistoryResponse { events }))
+}
+
+/// All grade change events in the course for one learner (instructor only).
+async fn course_student_grade_history_get_handler(
+    State(state): State<AppState>,
+    Path((course_code, student_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<GradeHistoryResponse>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let required = course_grants::course_gradebook_view_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let (course_id, students, _columns, _types, _posting) =
+        gradebook_students_and_columns(&state.pool, &course_code).await?;
+    if !students.iter().any(|s| s.user_id == student_id) {
+        return Err(AppError::NotFound);
+    }
+    let rows = grade_audit_events::list_for_student_in_course(&state.pool, course_id, student_id)
+        .await
+        .map_err(AppError::from)?;
+    let events: Vec<GradeHistoryEventOut> = rows.into_iter().map(map_grade_audit_out).collect();
+    Ok(Json(GradeHistoryResponse { events }))
+}
+
 async fn gradebook_grid_get_handler(
     State(state): State<AppState>,
     Path(course_code): Path<String>,
@@ -4636,7 +4786,19 @@ async fn gradebook_grades_put_handler(
         }
     }
 
-    course_grades::upsert_and_delete(&state.pool, course_id, &ops).await?;
+    let reason = req
+        .change_reason
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    course_grades::upsert_and_delete(
+        &state.pool,
+        course_id,
+        &ops,
+        Some(user.user_id),
+        reason,
+    )
+    .await?;
     if let Some(c) = course::get_by_id(&state.pool, course_id).await? {
         if c.sbg_enabled {
             let students: std::collections::HashSet<Uuid> =

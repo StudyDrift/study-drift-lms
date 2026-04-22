@@ -36,7 +36,7 @@ pub mod module_assignment_submissions;
 pub mod originality_platform_config;
 pub mod originality_reports;
 pub mod provisional_grades;
-pub mod grade_change_audit;
+pub mod grade_audit_events;
 pub mod grading_schemes;
 pub mod password_reset;
 pub mod qti_import;

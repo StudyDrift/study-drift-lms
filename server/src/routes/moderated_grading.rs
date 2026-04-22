@@ -17,7 +17,6 @@ use crate::repos::course;
 use crate::repos::course_grades;
 use crate::repos::course_module_assignments;
 use crate::repos::enrollment;
-use crate::repos::grade_change_audit;
 use crate::repos::moderated_grading as mod_repo;
 use crate::repos::module_assignment_submissions;
 use crate::repos::provisional_grades;
@@ -179,21 +178,6 @@ async fn post_provisional_grade_handler(
         user.user_id,
         body.score,
         None,
-    )
-    .await?;
-
-    grade_change_audit::insert(
-        &state.pool,
-        course_id,
-        item_id,
-        sub.submitted_by,
-        Some(user.user_id),
-        "provisional_grade",
-        &json!({
-            "submissionId": submission_id,
-            "graderId": user.user_id,
-            "score": body.score,
-        }),
     )
     .await?;
 
@@ -442,6 +426,10 @@ async fn post_reconcile_handler(
     };
 
     let now = Utc::now();
+    let audit_note = format!(
+        "Moderated grade reconciliation: action={} source={} submissionId={}.",
+        body.action, source, submission_id
+    );
     course_grades::upsert_reconciled_final(
         &state.pool,
         course_id,
@@ -453,6 +441,7 @@ async fn post_reconcile_handler(
         picked_grader,
         user.user_id,
         now,
+        &audit_note,
     )
     .await?;
     if let Some(c) = course::get_by_id(&state.pool, course_id).await? {
@@ -466,23 +455,6 @@ async fn post_reconcile_handler(
             .await;
         }
     }
-
-    grade_change_audit::insert(
-        &state.pool,
-        course_id,
-        item_id,
-        sub.submitted_by,
-        Some(user.user_id),
-        "reconciliation",
-        &json!({
-            "submissionId": submission_id,
-            "source": source,
-            "graderId": picked_grader,
-            "points": points,
-            "action": body.action,
-        }),
-    )
-    .await?;
 
     tracing::info!(
         target: "moderated_grading",

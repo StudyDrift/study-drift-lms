@@ -4,11 +4,13 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value as JsonValue};
+use sqlx::postgres::PgConnection;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::schema;
 use crate::repos::course_module_assignments;
+use crate::repos::grade_audit_events;
 
 /// All stored grades for a course: point cells, optional rubric scores, and per-cell `posted_at` (3.8).
 pub async fn list_for_course(
@@ -171,6 +173,14 @@ fn format_points_for_cell(pts: f64) -> String {
     s
 }
 
+fn posting_status_label(posted_at: Option<DateTime<Utc>>) -> &'static str {
+    if posted_at.is_some() {
+        "posted"
+    } else {
+        "unposted"
+    }
+}
+
 /// Apply grade updates: `None` removes a stored grade; `Some` inserts or updates.
 /// `rubric_scores`: `None` leaves rubric column unchanged when updating points only (not used — we always pass explicit).
 /// For each op: when `points` is `None`, row is deleted. When `Some`, rubric map is stored (empty map clears rubric scores).
@@ -178,6 +188,8 @@ pub async fn upsert_and_delete(
     pool: &PgPool,
     course_id: Uuid,
     ops: &[(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)],
+    changed_by: Option<Uuid>,
+    change_reason: Option<&str>,
 ) -> Result<(), sqlx::Error> {
     let item_ids: Vec<Uuid> = {
         let mut s: Vec<Uuid> = ops.iter().map(|(_, i, _, _)| *i).collect();
@@ -192,17 +204,28 @@ pub async fn upsert_and_delete(
     )
     .await?;
 
-    let need_existing: Vec<(Uuid, Uuid)> = ops
-        .iter()
-        .filter_map(|(u, i, p, _)| p.map(|_| (*u, *i)))
-        .collect();
-    let mut prior_posted: HashMap<(Uuid, Uuid), Option<DateTime<Utc>>> = HashMap::new();
-    if !need_existing.is_empty() {
-        let uids: Vec<Uuid> = need_existing.iter().map(|(a, _)| *a).collect();
-        let iids: Vec<Uuid> = need_existing.iter().map(|(_, b)| *b).collect();
-        let rows: Vec<(Uuid, Uuid, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
+    let all_keys: Vec<(Uuid, Uuid)> = {
+        let mut s: Vec<_> = ops.iter().map(|(u, i, _, _)| (*u, *i)).collect();
+        s.sort();
+        s.dedup();
+        s
+    };
+    let mut prior_cells: HashMap<
+        (Uuid, Uuid),
+        (f64, Option<DateTime<Utc>>, Option<serde_json::Value>),
+    > = HashMap::new();
+    if !all_keys.is_empty() {
+        let uids: Vec<Uuid> = all_keys.iter().map(|(a, _)| *a).collect();
+        let iids: Vec<Uuid> = all_keys.iter().map(|(_, b)| *b).collect();
+        let rows: Vec<(
+            Uuid,
+            Uuid,
+            f64,
+            Option<DateTime<Utc>>,
+            Option<serde_json::Value>,
+        )> = sqlx::query_as(&format!(
             r#"
-            SELECT student_user_id, module_item_id, posted_at
+            SELECT student_user_id, module_item_id, points_earned, posted_at, rubric_scores_json
             FROM {}
             WHERE course_id = $1
               AND (student_user_id, module_item_id) IN (
@@ -216,9 +239,13 @@ pub async fn upsert_and_delete(
         .bind(&iids)
         .fetch_all(pool)
         .await?;
-        for (su, mi, pa) in rows {
-            prior_posted.insert((su, mi), pa);
+        for (su, mi, pe, pa, rj) in rows {
+            prior_cells.insert((su, mi), (pe, pa, rj));
         }
+    }
+    let mut prior_posted: HashMap<(Uuid, Uuid), Option<DateTime<Utc>>> = HashMap::new();
+    for (k, (_, posted_at, _)) in &prior_cells {
+        prior_posted.insert(*k, *posted_at);
     }
 
     let now = Utc::now();
@@ -229,7 +256,7 @@ pub async fn upsert_and_delete(
             .is_some_and(|(p, _)| p == "manual");
         match pts {
             None => {
-                sqlx::query(&format!(
+                let n = sqlx::query(&format!(
                     r#"
                     DELETE FROM {}
                     WHERE course_id = $1 AND student_user_id = $2 AND module_item_id = $3
@@ -240,7 +267,27 @@ pub async fn upsert_and_delete(
                 .bind(user_id)
                 .bind(item_id)
                 .execute(&mut *tx)
-                .await?;
+                .await?
+                .rows_affected();
+                if n == 0 {
+                    continue;
+                }
+                if let Some((p, posted_at, _)) = prior_cells.get(&(*user_id, *item_id)).cloned() {
+                    grade_audit_events::insert(
+                        &mut *tx,
+                        course_id,
+                        *item_id,
+                        *user_id,
+                        changed_by,
+                        "deleted",
+                        Some(p),
+                        None,
+                        Some(posting_status_label(posted_at)),
+                        None,
+                        change_reason,
+                    )
+                    .await?;
+                }
             }
             Some(p) => {
                 let rubric_json: Option<JsonValue> = match rubric_scores {
@@ -248,6 +295,8 @@ pub async fn upsert_and_delete(
                     Some(m) if m.is_empty() => None,
                     Some(m) => Some(json!(m)),
                 };
+                let rubric_for_compare = rubric_json.clone();
+                let prior = prior_cells.get(&(*user_id, *item_id)).cloned();
                 let posted_at = if is_manual {
                     prior_posted
                         .get(&(*user_id, *item_id))
@@ -256,6 +305,7 @@ pub async fn upsert_and_delete(
                 } else {
                     Some(now)
                 };
+                let new_status = posting_status_label(posted_at);
                 sqlx::query(&format!(
                     r#"
                     INSERT INTO {} AS cg (course_id, student_user_id, module_item_id, points_earned, rubric_scores_json, posted_at)
@@ -284,6 +334,51 @@ pub async fn upsert_and_delete(
                 .bind(posted_at)
                 .execute(&mut *tx)
                 .await?;
+
+                if let Some((old_pts, old_posted_at, prev_rj)) = prior {
+                    let old_lbl = posting_status_label(old_posted_at);
+                    let new_lbl = new_status;
+                    let rubric_changed = prev_rj != rubric_for_compare;
+                    let points_changed = (old_pts - p).abs() > 1e-9;
+                    let status_changed = old_lbl != new_lbl;
+                    let default_reason: Option<String> = if !points_changed && !status_changed && rubric_changed {
+                        Some("Rubric update".into())
+                    } else {
+                        None
+                    };
+                    let reason = change_reason
+                        .map(String::from)
+                        .or(default_reason);
+                    grade_audit_events::insert(
+                        &mut *tx,
+                        course_id,
+                        *item_id,
+                        *user_id,
+                        changed_by,
+                        "updated",
+                        Some(old_pts),
+                        Some(*p),
+                        Some(old_lbl),
+                        Some(new_lbl),
+                        reason.as_deref(),
+                    )
+                    .await?;
+                } else {
+                    grade_audit_events::insert(
+                        &mut *tx,
+                        course_id,
+                        *item_id,
+                        *user_id,
+                        changed_by,
+                        "created",
+                        None,
+                        Some(*p),
+                        None,
+                        Some(new_status),
+                        change_reason,
+                    )
+                    .await?;
+                }
             }
         }
     }
@@ -291,7 +386,7 @@ pub async fn upsert_and_delete(
     Ok(())
 }
 
-/// Single-cell upsert for automated quiz scoring (clears rubric scores).
+/// Single-cell upsert for automated quiz scoring (clears rubric scores). System-originated (`changed_by` None).
 pub async fn upsert_points(
     pool: &PgPool,
     course_id: Uuid,
@@ -299,6 +394,20 @@ pub async fn upsert_points(
     module_item_id: Uuid,
     points: f64,
 ) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let prior: Option<(f64, Option<DateTime<Utc>>)> = sqlx::query_as(&format!(
+        r#"
+        SELECT points_earned, posted_at
+        FROM {}
+        WHERE course_id = $1 AND student_user_id = $2 AND module_item_id = $3
+        "#,
+        schema::COURSE_GRADES
+    ))
+    .bind(course_id)
+    .bind(student_user_id)
+    .bind(module_item_id)
+    .fetch_optional(&mut *tx)
+    .await?;
     sqlx::query(&format!(
         r#"
         INSERT INTO {} AS cg (course_id, student_user_id, module_item_id, points_earned, rubric_scores_json, posted_at)
@@ -323,13 +432,50 @@ pub async fn upsert_points(
     .bind(student_user_id)
     .bind(module_item_id)
     .bind(points)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+    // Quizzes are automatic posting; the row ends with `posted_at` set to NOW.
+    let new_s = "posted";
+    if prior.is_none() {
+        grade_audit_events::insert(
+            &mut *tx,
+            course_id,
+            module_item_id,
+            student_user_id,
+            None,
+            "created",
+            None,
+            Some(points),
+            None,
+            Some(new_s),
+            Some("Quiz / auto-score"),
+        )
+        .await?;
+    } else {
+        let (op, opa) = prior.expect("prior");
+        let old_s = posting_status_label(opa);
+        grade_audit_events::insert(
+            &mut *tx,
+            course_id,
+            module_item_id,
+            student_user_id,
+            None,
+            "updated",
+            Some(op),
+            Some(points),
+            Some(old_s),
+            Some(new_s),
+            Some("Quiz / auto-score"),
+        )
+        .await?;
+    }
+    tx.commit().await?;
     Ok(())
 }
 
 /// Writes the visible gradebook cell and reconciliation metadata (plan 3.4).
 /// Plan 3.8: initial reconciled row is held when posting policy is manual.
+/// `audit_reason` is stored on the grade audit (e.g. moderator action + context).
 pub async fn upsert_reconciled_final(
     pool: &PgPool,
     course_id: Uuid,
@@ -341,6 +487,7 @@ pub async fn upsert_reconciled_final(
     reconciled_grader_id: Option<Uuid>,
     reconciled_by: Uuid,
     reconciled_at: DateTime<Utc>,
+    audit_reason: &str,
 ) -> Result<(), sqlx::Error> {
     let pol = course_module_assignments::posting_settings_for_structure_items(
         pool,
@@ -352,15 +499,26 @@ pub async fn upsert_reconciled_final(
         .get(&module_item_id)
         .is_some_and(|(p, _)| p == "manual");
     let now = Utc::now();
-    let prior_posted: Option<Option<DateTime<Utc>>> = sqlx::query_scalar(&format!(
-        r#"SELECT posted_at FROM {} WHERE course_id = $1 AND student_user_id = $2 AND module_item_id = $3"#,
-        schema::COURSE_GRADES
-    ))
+    let mut tx = pool.begin().await?;
+    let prior: Option<(f64, Option<DateTime<Utc>>, Option<serde_json::Value>)> = sqlx::query_as(
+        &format!(
+            r#"
+            SELECT points_earned, posted_at, rubric_scores_json
+            FROM {}
+            WHERE course_id = $1 AND student_user_id = $2 AND module_item_id = $3
+            "#,
+            schema::COURSE_GRADES
+        ),
+    )
     .bind(course_id)
     .bind(student_user_id)
     .bind(module_item_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?;
+    // `prior` is reused for audit: clone `posted_at` without moving `prior`.
+    let prior_posted: Option<Option<DateTime<Utc>>> =
+        prior.as_ref()
+            .map(|(_, p_at, _)| p_at.clone());
     let posted_at: Option<DateTime<Utc>> = if is_manual {
         match prior_posted {
             None => None,
@@ -410,31 +568,71 @@ pub async fn upsert_reconciled_final(
     .bind(reconciled_at)
     .bind(posted_at)
     .bind(is_manual)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+    let new_l = posting_status_label(posted_at);
+    let r = if audit_reason.is_empty() {
+        None
+    } else {
+        Some(audit_reason)
+    };
+    if prior.is_none() {
+        grade_audit_events::insert(
+            &mut *tx,
+            course_id,
+            module_item_id,
+            student_user_id,
+            Some(reconciled_by),
+            "created",
+            None,
+            Some(points),
+            None,
+            Some(new_l),
+            r,
+        )
+        .await?;
+    } else {
+        let (old_p, old_pa, _) = prior.expect("prior");
+        let old_l = posting_status_label(old_pa);
+        grade_audit_events::insert(
+            &mut *tx,
+            course_id,
+            module_item_id,
+            student_user_id,
+            Some(reconciled_by),
+            "updated",
+            Some(old_p),
+            Some(points),
+            Some(old_l),
+            Some(new_l),
+            r,
+        )
+        .await?;
+    }
+    tx.commit().await?;
     Ok(())
 }
 
-/// Set `posted_at` on held cells for an assignment. Returns affected `student_user_id` values.
+/// Set `posted_at` on held cells for an assignment. Returns affected students and their points.
 pub async fn mark_posted(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     course_id: Uuid,
     module_item_id: Uuid,
     at: DateTime<Utc>,
     only_students: Option<&[Uuid]>,
-) -> Result<Vec<Uuid>, sqlx::Error> {
-    let out: Vec<Uuid> = if let Some(sids) = only_students {
+) -> Result<Vec<(Uuid, f64)>, sqlx::Error> {
+    let out: Vec<(Uuid, f64)> = if let Some(sids) = only_students {
         if sids.is_empty() {
             return Ok(Vec::new());
         }
-        let rows: Vec<(Uuid,)> = sqlx::query_as(&format!(
+        let rows: Vec<(Uuid, f64)> = sqlx::query_as(&format!(
             r#"
             UPDATE {}
             SET posted_at = $4, updated_at = NOW()
             WHERE course_id = $1 AND module_item_id = $2
               AND posted_at IS NULL
               AND student_user_id = ANY($3)
-            RETURNING student_user_id
+            RETURNING student_user_id, points_earned
             "#,
             schema::COURSE_GRADES
         ))
@@ -442,74 +640,74 @@ pub async fn mark_posted(
         .bind(module_item_id)
         .bind(sids)
         .bind(at)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?;
-        rows.into_iter().map(|(u,)| u).collect()
+        rows
     } else {
-        let rows: Vec<(Uuid,)> = sqlx::query_as(&format!(
+        let rows: Vec<(Uuid, f64)> = sqlx::query_as(&format!(
             r#"
             UPDATE {}
             SET posted_at = $3, updated_at = NOW()
             WHERE course_id = $1 AND module_item_id = $2
               AND posted_at IS NULL
-            RETURNING student_user_id
+            RETURNING student_user_id, points_earned
             "#,
             schema::COURSE_GRADES
         ))
         .bind(course_id)
         .bind(module_item_id)
         .bind(at)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?;
-        rows.into_iter().map(|(u,)| u).collect()
+        rows
     };
     Ok(out)
 }
 
-/// Retract posted grades (3.8); returns affected `student_user_id` values.
+/// Retract posted grades (3.8); returns affected students and their points.
 pub async fn mark_unposted(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     course_id: Uuid,
     module_item_id: Uuid,
     only_students: Option<&[Uuid]>,
-) -> Result<Vec<Uuid>, sqlx::Error> {
-    let out: Vec<Uuid> = if let Some(sids) = only_students {
+) -> Result<Vec<(Uuid, f64)>, sqlx::Error> {
+    let out: Vec<(Uuid, f64)> = if let Some(sids) = only_students {
         if sids.is_empty() {
             return Ok(Vec::new());
         }
-        let rows: Vec<(Uuid,)> = sqlx::query_as(&format!(
+        let rows: Vec<(Uuid, f64)> = sqlx::query_as(&format!(
             r#"
             UPDATE {}
             SET posted_at = NULL, updated_at = NOW()
             WHERE course_id = $1 AND module_item_id = $2
               AND posted_at IS NOT NULL
               AND student_user_id = ANY($3)
-            RETURNING student_user_id
+            RETURNING student_user_id, points_earned
             "#,
             schema::COURSE_GRADES
         ))
         .bind(course_id)
         .bind(module_item_id)
         .bind(sids)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?;
-        rows.into_iter().map(|(u,)| u).collect()
+        rows
     } else {
-        let rows: Vec<(Uuid,)> = sqlx::query_as(&format!(
+        let rows: Vec<(Uuid, f64)> = sqlx::query_as(&format!(
             r#"
             UPDATE {}
             SET posted_at = NULL, updated_at = NOW()
             WHERE course_id = $1 AND module_item_id = $2
               AND posted_at IS NOT NULL
-            RETURNING student_user_id
+            RETURNING student_user_id, points_earned
             "#,
             schema::COURSE_GRADES
         ))
         .bind(course_id)
         .bind(module_item_id)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?;
-        rows.into_iter().map(|(u,)| u).collect()
+        rows
     };
     Ok(out)
 }

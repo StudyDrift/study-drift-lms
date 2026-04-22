@@ -6,6 +6,8 @@ import {
   courseItemCreatePermission,
   fetchCourseGradebookGrid,
   fetchCourseGradingSettings,
+  fetchGradeCellHistory,
+  type GradeHistoryEvent,
   postCourseAssignmentGrades,
   putCourseGradebookGrades,
   type AssignmentGroup,
@@ -23,6 +25,7 @@ import { formatAbsolute, formatAbsoluteShort } from '../../lib/format-datetime'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { TabPresenceHint } from '../../components/presence/tab-presence-hint'
 import { FeatureHelpTrigger } from '../../components/feature-help/feature-help-trigger'
+import { GradeHistoryPanel } from '../../components/grading/grade-history-panel'
 import { LmsPage } from './lms-page'
 
 function buildEmptyGrades(students: GradebookStudent[], columns: GradebookColumn[]): Record<string, Record<string, string>> {
@@ -312,6 +315,15 @@ export default function CourseGradebook() {
   const [gradeHeld, setGradeHeld] = useState<Record<string, Record<string, boolean>> | undefined>(undefined)
   const [droppedGrades, setDroppedGrades] = useState<Record<string, Record<string, boolean>> | undefined>(undefined)
   const [postGradesPending, setPostGradesPending] = useState<string | null>(null)
+  const [gradeChangeReason, setGradeChangeReason] = useState('')
+  const [gradeHistoryOpen, setGradeHistoryOpen] = useState<{
+    studentId: string
+    columnId: string
+    title: string
+  } | null>(null)
+  const [gradeHistoryLoading, setGradeHistoryLoading] = useState(false)
+  const [gradeHistoryError, setGradeHistoryError] = useState<string | null>(null)
+  const [gradeHistoryEvents, setGradeHistoryEvents] = useState<GradeHistoryEvent[] | null>(null)
 
   const gridStudents: GradebookStudent[] = useMemo(
     () => students.map((s) => ({ id: s.userId, name: s.displayName })),
@@ -457,11 +469,14 @@ export default function CourseGradebook() {
         gridStudents,
         gridColumns,
       )
+      const cr = gradeChangeReason.trim()
       await putCourseGradebookGrades(courseCode, {
         grades: gradePayload,
         rubricScores: rubricPayload,
+        ...(cr !== '' ? { changeReason: cr } : {}),
       })
       await loadGrid()
+      setGradeChangeReason('')
       toastSaveOk('Gradebook saved')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Could not save grades.'
@@ -470,7 +485,7 @@ export default function CourseGradebook() {
     } finally {
       setSaving(false)
     }
-  }, [courseCode, savedGrades, gridStudents, gridColumns, loadGrid])
+  }, [courseCode, savedGrades, gridStudents, gridColumns, loadGrid, gradeChangeReason])
 
   const openRubricModal = useCallback((studentId: string, columnId: string) => {
     const col = columns.find((c) => c.id === columnId)
@@ -484,6 +499,50 @@ export default function CourseGradebook() {
       rubric: col.rubric,
     })
   }, [columns, students])
+
+  const openGradeHistory = useCallback(
+    (studentId: string, columnId: string) => {
+      if (!courseCode) return
+      const col = columns.find((c) => c.id === columnId)
+      const st = students.find((s) => s.userId === studentId)
+      if (!col || !st) return
+      setGradeHistoryError(null)
+      setGradeHistoryEvents(null)
+      setGradeHistoryOpen({
+        studentId,
+        columnId,
+        title: `${st.displayName} — ${col.title}`,
+      })
+    },
+    [courseCode, columns, students],
+  )
+
+  useEffect(() => {
+    if (!gradeHistoryOpen || !courseCode) return
+    let cancelled = false
+    setGradeHistoryLoading(true)
+    setGradeHistoryError(null)
+    setGradeHistoryEvents(null)
+    void (async () => {
+      try {
+        const d = await fetchGradeCellHistory(
+          courseCode,
+          gradeHistoryOpen.columnId,
+          gradeHistoryOpen.studentId,
+        )
+        if (cancelled) return
+        setGradeHistoryEvents(d.events)
+      } catch (e: unknown) {
+        if (cancelled) return
+        setGradeHistoryError(e instanceof Error ? e.message : 'Could not load history')
+      } finally {
+        if (!cancelled) setGradeHistoryLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [gradeHistoryOpen, courseCode])
 
   const modalInitialScores = useMemo(() => {
     if (!rubricModal) return {}
@@ -619,6 +678,25 @@ export default function CourseGradebook() {
               <TabPresenceHint channelKey={courseCode} />
             </div>
           ) : null}
+          {canEditGrades && gradesDirty ? (
+            <div className="mt-3 max-w-xl">
+              <label
+                className="block text-xs font-medium text-slate-600 dark:text-neutral-400"
+                htmlFor="gradebook-change-reason"
+              >
+                Note for grade change log (optional, stored with this save)
+              </label>
+              <input
+                id="gradebook-change-reason"
+                type="text"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                placeholder="e.g. late policy applied"
+                value={gradeChangeReason}
+                onChange={(e) => setGradeChangeReason(e.target.value)}
+                maxLength={2000}
+              />
+            </div>
+          ) : null}
           <GradebookGrid
             key={`${courseCode}:${gridNonce}:${gridStudents.map((s) => s.id).join(',')}:${gridColumns.map((c) => c.id).join(',')}:${assignmentGroups.map((g) => g.id).join(',')}`}
             courseCode={courseCode}
@@ -629,6 +707,7 @@ export default function CourseGradebook() {
             readOnly={!canEditGrades}
             onGradesChange={handleGradesChange}
             onRubricClick={canEditGrades ? openRubricModal : undefined}
+            onOpenGradeHistory={openGradeHistory}
             highlightStudentId={highlightStudentId}
             gradingScheme={gradingScheme}
             gradeHeld={gradeHeld}
@@ -651,6 +730,56 @@ export default function CourseGradebook() {
             onClose={() => setRubricModal(null)}
             onSave={handleRubricModalSave}
           />
+          {gradeHistoryOpen ? (
+            <div
+              className="fixed inset-0 z-[90] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+              role="presentation"
+            >
+              <button
+                type="button"
+                className="absolute inset-0 cursor-default"
+                aria-label="Close"
+                onClick={() => {
+                  setGradeHistoryOpen(null)
+                }}
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="grade-history-dlg-title"
+                className="relative z-[1] w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <h2 className="sr-only" id="grade-history-dlg-title">
+                    Grade change history
+                  </h2>
+                  <button
+                    type="button"
+                    className="absolute right-3 top-3 rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                    onClick={() => setGradeHistoryOpen(null)}
+                  >
+                    <span className="sr-only">Close</span>✕
+                  </button>
+                </div>
+                <GradeHistoryPanel
+                  title={gradeHistoryOpen.title}
+                  events={gradeHistoryEvents}
+                  loading={gradeHistoryLoading}
+                  error={gradeHistoryError}
+                />
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 hover:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700/80"
+                    onClick={() => setGradeHistoryOpen(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </>
       )}
     </LmsPage>

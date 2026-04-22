@@ -351,6 +351,24 @@ export const courseMyGradesRawSchema = z.object({
     .optional(),
 })
 
+export const gradeHistoryEventSchema = z
+  .object({
+    id: z.string(),
+    action: z.string(),
+    previousScore: z.number().nullish(),
+    newScore: z.number().nullish(),
+    previousStatus: z.string().nullish(),
+    newStatus: z.string().nullish(),
+    reason: z.string().nullish(),
+    changedAt: z.string(),
+    changedBy: z.string().nullish(),
+  })
+  .strict()
+
+export const gradeHistoryResponseSchema = z.object({
+  events: z.array(gradeHistoryEventSchema),
+})
+
 export const courseGradingSchemeEnvelopeSchema = z.object({
   scheme: z
     .object({
