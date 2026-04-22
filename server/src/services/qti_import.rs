@@ -7,8 +7,8 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::repos::question_bank as qb_repo;
 use crate::repos::qti_import as import_repo;
+use crate::repos::question_bank as qb_repo;
 use crate::services::common_cartridge;
 use crate::services::qti_parser::{self, ParsedQtiItem};
 use crate::services::zip_import::extract_zip_from_bytes;
@@ -33,7 +33,10 @@ fn manifest_paths(extract_root: &Path) -> Vec<std::path::PathBuf> {
     cands.into_iter().filter(|p| p.is_file()).collect()
 }
 
-fn resolve_item_paths(import_type: &str, extract_root: &Path) -> Result<Vec<std::path::PathBuf>, String> {
+fn resolve_item_paths(
+    import_type: &str,
+    extract_root: &Path,
+) -> Result<Vec<std::path::PathBuf>, String> {
     let manifests = manifest_paths(extract_root);
     if import_type == "common_cartridge" || !manifests.is_empty() {
         for m in manifests {
@@ -259,7 +262,16 @@ pub async fn run_import_job(
             }
         };
         let item_label = parsed.identifier.clone();
-        match import_one_item(&pool, course_id, job_id, user_id, &original_filename, parsed).await {
+        match import_one_item(
+            &pool,
+            course_id,
+            job_id,
+            user_id,
+            &original_filename,
+            parsed,
+        )
+        .await
+        {
             Ok(ImportRowOutcome::Imported) => {
                 imported += 1;
             }

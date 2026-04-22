@@ -159,7 +159,11 @@ pub async fn mark_job_done(pool: &PgPool, job_id: Uuid) -> Result<(), sqlx::Erro
     Ok(())
 }
 
-pub async fn mark_job_failed(pool: &PgPool, job_id: Uuid, message: &str) -> Result<(), sqlx::Error> {
+pub async fn mark_job_failed(
+    pool: &PgPool,
+    job_id: Uuid,
+    message: &str,
+) -> Result<(), sqlx::Error> {
     let entry = serde_json::json!({
         "item_id": null,
         "reason": message,

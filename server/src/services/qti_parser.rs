@@ -39,12 +39,15 @@ fn text_descendants(n: Node<'_, '_>) -> String {
             }
         }
     }
-    parts.join(" ").split_whitespace().collect::<Vec<_>>().join(" ")
+    parts
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn find_first_item_body<'a>(root: Node<'a, '_>) -> Option<Node<'a, 'a>> {
-    root.descendants()
-        .find(|n| local_name(*n) == "itemBody")
+    root.descendants().find(|n| local_name(*n) == "itemBody")
 }
 
 fn response_correct_map(root: Node<'_, '_>) -> std::collections::HashMap<String, Vec<String>> {
@@ -79,9 +82,7 @@ fn parse_choice_interaction(
     ix: Node<'_, '_>,
     correct_map: &std::collections::HashMap<String, Vec<String>>,
 ) -> ParsedQtiItem {
-    let identifier = attr(root, "identifier")
-        .unwrap_or("unknown")
-        .to_string();
+    let identifier = attr(root, "identifier").unwrap_or("unknown").to_string();
     let title = attr(root, "title").map(|s| s.to_string());
     let response_id = attr(ix, "responseIdentifier")
         .unwrap_or("RESPONSE")
@@ -172,9 +173,7 @@ fn parse_choice_interaction(
 }
 
 fn parse_text_entry(root: Node<'_, '_>, _ix: Node<'_, '_>) -> ParsedQtiItem {
-    let identifier = attr(root, "identifier")
-        .unwrap_or("unknown")
-        .to_string();
+    let identifier = attr(root, "identifier").unwrap_or("unknown").to_string();
     let title = attr(root, "title").map(|s| s.to_string());
     let body = find_first_item_body(root);
     let stem = body
@@ -198,9 +197,7 @@ fn parse_text_entry(root: Node<'_, '_>, _ix: Node<'_, '_>) -> ParsedQtiItem {
 }
 
 fn parse_numeric(root: Node<'_, '_>, _ix: Node<'_, '_>) -> ParsedQtiItem {
-    let identifier = attr(root, "identifier")
-        .unwrap_or("unknown")
-        .to_string();
+    let identifier = attr(root, "identifier").unwrap_or("unknown").to_string();
     let title = attr(root, "title").map(|s| s.to_string());
     let body = find_first_item_body(root);
     let stem = body
@@ -217,18 +214,14 @@ fn parse_numeric(root: Node<'_, '_>, _ix: Node<'_, '_>) -> ParsedQtiItem {
         points: 1.0,
         shuffle_choices_override: None,
         status: "needs_review",
-        needs_review_note: Some("Imported numeric interaction; set correct value and tolerance.".into()),
+        needs_review_note: Some(
+            "Imported numeric interaction; set correct value and tolerance.".into(),
+        ),
     }
 }
 
-fn parse_stub_needs_review(
-    root: Node<'_, '_>,
-    question_type: &str,
-    note: &str,
-) -> ParsedQtiItem {
-    let identifier = attr(root, "identifier")
-        .unwrap_or("unknown")
-        .to_string();
+fn parse_stub_needs_review(root: Node<'_, '_>, question_type: &str, note: &str) -> ParsedQtiItem {
+    let identifier = attr(root, "identifier").unwrap_or("unknown").to_string();
     let title = attr(root, "title").map(|s| s.to_string());
     let body = find_first_item_body(root);
     let stem = body

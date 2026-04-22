@@ -21,7 +21,10 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/imports/qti", post(start_qti_import_handler))
-        .route("/api/v1/imports/{job_id}/status", get(import_status_handler))
+        .route(
+            "/api/v1/imports/{job_id}/status",
+            get(import_status_handler),
+        )
         .route("/api/v1/imports", get(list_imports_handler))
 }
 
@@ -53,9 +56,11 @@ async fn start_qti_import_handler(
     let mut file_name: Option<String> = None;
     let mut file_bytes: Option<Vec<u8>> = None;
 
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        AppError::invalid_input(format!("multipart error: {e}"))
-    })? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::invalid_input(format!("multipart error: {e}")))?
+    {
         let name = field.name().unwrap_or("").to_string();
         if name == "course_id" {
             let s = field
@@ -63,7 +68,8 @@ async fn start_qti_import_handler(
                 .await
                 .map_err(|e| AppError::invalid_input(format!("course_id: {e}")))?;
             course_id = Some(
-                Uuid::parse_str(s.trim()).map_err(|_| AppError::invalid_input("course_id must be a UUID."))?,
+                Uuid::parse_str(s.trim())
+                    .map_err(|_| AppError::invalid_input("course_id must be a UUID."))?,
             );
         } else if name == "file" {
             file_name = field.file_name().map(|s| s.to_string());
@@ -143,10 +149,7 @@ async fn start_qti_import_handler(
         .await;
     });
 
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(json!({ "jobId": job_id })),
-    ))
+    Ok((StatusCode::ACCEPTED, Json(json!({ "jobId": job_id }))))
 }
 
 #[derive(Debug, Deserialize)]
@@ -189,8 +192,9 @@ async fn list_imports_handler(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = auth_user(&state, &headers)?;
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
-    let rows = import_repo::list_import_jobs_for_user(&state.pool, user.user_id, q.course_id, limit)
-        .await?;
+    let rows =
+        import_repo::list_import_jobs_for_user(&state.pool, user.user_id, q.course_id, limit)
+            .await?;
     let imports: Vec<serde_json::Value> = rows
         .into_iter()
         .map(|r| {

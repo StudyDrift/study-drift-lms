@@ -26,7 +26,10 @@ impl std::fmt::Display for ZipImportError {
                 "ZIP entry '{name}' has excessive compression ratio ({ratio}:1)."
             ),
             ZipImportError::ZipBombTotalSize { extracted } => {
-                write!(f, "ZIP would extract to {extracted} bytes (limit {MAX_EXTRACTED_BYTES}).")
+                write!(
+                    f,
+                    "ZIP would extract to {extracted} bytes (limit {MAX_EXTRACTED_BYTES})."
+                )
             }
             ZipImportError::Io(s) => write!(f, "{s}"),
             ZipImportError::Zip(s) => write!(f, "{s}"),
@@ -40,9 +43,7 @@ impl std::error::Error for ZipImportError {}
 pub fn user_visible_message(e: &ZipImportError) -> String {
     match e {
         ZipImportError::ZipBombTotalSize { .. } => "File too large when extracted.".into(),
-        ZipImportError::ZipBombCompression { .. } => {
-            "ZIP compression ratio is not allowed.".into()
-        }
+        ZipImportError::ZipBombCompression { .. } => "ZIP compression ratio is not allowed.".into(),
         ZipImportError::PathTraversal(p) => format!("ZIP contains unsafe paths: {p}"),
         ZipImportError::Io(s) | ZipImportError::Zip(s) => s.clone(),
     }
@@ -130,8 +131,7 @@ mod tests {
     fn rejects_parent_dir() {
         let cursor = std::io::Cursor::new(Vec::<u8>::new());
         let mut zip = ZipWriter::new(cursor);
-        zip
-            .start_file("../evil.txt", SimpleFileOptions::default())
+        zip.start_file("../evil.txt", SimpleFileOptions::default())
             .unwrap();
         zip.write_all(b"x").unwrap();
         let cursor = zip.finish().unwrap();

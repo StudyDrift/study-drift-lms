@@ -18,7 +18,10 @@ fn is_qti_resource(resource_type: Option<&str>, href: &str) -> bool {
 }
 
 /// Returns QTI XML paths referenced by `imsmanifest.xml`, rooted at `extract_root`.
-pub fn qti_xml_paths_from_manifest(manifest_xml: &str, extract_root: &Path) -> Result<Vec<PathBuf>, String> {
+pub fn qti_xml_paths_from_manifest(
+    manifest_xml: &str,
+    extract_root: &Path,
+) -> Result<Vec<PathBuf>, String> {
     let doc = Document::parse(manifest_xml).map_err(|e| e.to_string())?;
     let mut out = Vec::new();
     for n in doc.descendants() {
