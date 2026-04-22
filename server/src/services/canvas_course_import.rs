@@ -1174,6 +1174,9 @@ pub async fn build_export_from_canvas(
                 sort_order: sort_order_ag,
                 name,
                 weight_percent: weight,
+                drop_lowest: 0,
+                drop_highest: 0,
+                replace_lowest_with_final: false,
             });
         }
         if assignment_groups.is_empty() {
@@ -1183,6 +1186,9 @@ pub async fn build_export_from_canvas(
                 sort_order: 1,
                 name: "Imported".into(),
                 weight_percent: 100.0,
+                drop_lowest: 0,
+                drop_highest: 0,
+                replace_lowest_with_final: false,
             });
         }
     }
@@ -1190,6 +1196,9 @@ pub async fn build_export_from_canvas(
     let grading = CourseGradingSettingsResponse {
         grading_scale: "percent".into(),
         assignment_groups,
+        sbg_enabled: false,
+        sbg_proficiency_scale_json: None,
+        sbg_aggregation_rule: "most_recent".into(),
     };
 
     let mut modules_sorted: Vec<Value> = Vec::new();

@@ -98,6 +98,12 @@ pub struct CoursePublic {
     pub course_type: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Plan 3.7 — opt-in standards-based grading for this course.
+    pub sbg_enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sbg_proficiency_scale_json: Option<JsonValue>,
+    /// `most_recent` | `highest` | `mean` | `decaying_average`
+    pub sbg_aggregation_rule: String,
 }
 
 #[derive(Debug, Serialize)]

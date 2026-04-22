@@ -67,6 +67,17 @@ pub struct ModuleContentPageResponse {
     /// Plan 3.6 — assignment display override when set (omit = inherit course scheme).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grading_type: Option<String>,
+    /// Plan 3.8 — `automatic` or `manual` (hold until posted).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub posting_policy: Option<String>,
+    /// Plan 3.8 — optional automatic post time for manual mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_at: Option<DateTime<Utc>>,
+    /// Plan 3.9
+    #[serde(default)]
+    pub never_drop: bool,
+    #[serde(default)]
+    pub replace_with_final: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -144,4 +155,15 @@ pub struct UpdateModuleContentPageRequest {
     /// Plan 3.6 — omit unchanged; JSON `null` clears override (inherit course scheme).
     #[serde(default)]
     pub grading_type: Option<Option<String>>,
+    /// Plan 3.8 — `automatic` or `manual`. Omit to leave unchanged.
+    #[serde(default)]
+    pub posting_policy: Option<String>,
+    /// Plan 3.8 — omit to leave; JSON `null` clears scheduled release.
+    #[serde(default)]
+    pub release_at: Option<Option<DateTime<Utc>>>,
+    /// Plan 3.9
+    #[serde(default)]
+    pub never_drop: Option<bool>,
+    #[serde(default)]
+    pub replace_with_final: Option<bool>,
 }

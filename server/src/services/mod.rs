@@ -30,6 +30,7 @@ pub mod irt;
 pub mod irt_calibration_job;
 pub mod irt_theta;
 pub mod learner_state;
+pub mod mastery_transcript_pdf;
 pub mod lti;
 pub mod lti_jwt;
 pub mod mail;

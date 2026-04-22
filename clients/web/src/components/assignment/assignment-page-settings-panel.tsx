@@ -68,6 +68,16 @@ export type AssignmentPageSettingsPanelProps = {
   /** Plan 3.6 — optional; when set, shows grade display override for this assignment. */
   gradingDisplayType?: string
   onGradingDisplayTypeChange?: (value: string) => void
+  /** Plan 3.8 */
+  postingPolicy?: 'automatic' | 'manual'
+  onPostingPolicyChange?: (value: 'automatic' | 'manual') => void
+  releaseAtLocal?: string
+  onReleaseAtLocalChange?: (value: string) => void
+  /** Plan 3.9 — per-item drop policy when the course uses assignment-group drop rules. */
+  neverDrop?: boolean
+  onNeverDropChange?: (value: boolean) => void
+  replaceWithFinal?: boolean
+  onReplaceWithFinalChange?: (value: boolean) => void
 }
 
 const inputClass =
@@ -210,6 +220,14 @@ export function AssignmentPageSettingsPanel({
   onOriginalityStudentVisibilityChange,
   gradingDisplayType = '',
   onGradingDisplayTypeChange,
+  postingPolicy = 'automatic',
+  onPostingPolicyChange,
+  releaseAtLocal = '',
+  onReleaseAtLocalChange,
+  neverDrop = false,
+  onNeverDropChange,
+  replaceWithFinal = false,
+  onReplaceWithFinalChange,
 }: AssignmentPageSettingsPanelProps) {
   const submissionCount =
     Number(submissionAllowText) + Number(submissionAllowFileUpload) + Number(submissionAllowUrl)
@@ -387,6 +405,57 @@ export function AssignmentPageSettingsPanel({
           </div>
         </SettingsAccordion>
 
+        {onPostingPolicyChange ? (
+          <SettingsAccordion title="Grade posting">
+            <div className="space-y-3 pt-1">
+              <p className="text-[11px] leading-snug text-slate-400 dark:text-neutral-500">
+                Manual: entered grades stay hidden from students until you post from the course gradebook (or
+                the scheduled time below). Automatic: students see scores as you enter them.
+              </p>
+              <div className="space-y-2">
+                <label className="flex cursor-pointer items-start gap-2 text-[13px]">
+                  <input
+                    type="radio"
+                    name="posting-policy"
+                    className="mt-0.5"
+                    checked={postingPolicy === 'automatic'}
+                    disabled={disabled}
+                    onChange={() => onPostingPolicyChange('automatic')}
+                  />
+                  <span>Automatic — show grades as entered</span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-2 text-[13px]">
+                  <input
+                    type="radio"
+                    name="posting-policy"
+                    className="mt-0.5"
+                    checked={postingPolicy === 'manual'}
+                    disabled={disabled}
+                    onChange={() => onPostingPolicyChange('manual')}
+                  />
+                  <span>Manual — hold until posted in gradebook or schedule</span>
+                </label>
+              </div>
+              {onReleaseAtLocalChange && postingPolicy === 'manual' ? (
+                <Field
+                  label="Release grades at (optional)"
+                  htmlFor="assignment-posting-release"
+                  hint="If set, held grades are posted at this time without opening the gradebook. Clear to use only the Post button."
+                >
+                  <input
+                    id="assignment-posting-release"
+                    type="datetime-local"
+                    value={releaseAtLocal}
+                    onChange={(e) => onReleaseAtLocalChange(e.target.value)}
+                    disabled={disabled}
+                    className={inputClass}
+                  />
+                </Field>
+              ) : null}
+            </div>
+          </SettingsAccordion>
+        ) : null}
+
         <SettingsAccordion title="Grading">
           <div className="space-y-3 pt-1">
             <ToggleRow
@@ -539,6 +608,32 @@ export function AssignmentPageSettingsPanel({
               <p className="text-[11px] leading-snug text-slate-400 dark:text-neutral-500">
                 Add groups under Course Settings → Assignment groups & weights.
               </p>
+            ) : null}
+            {onNeverDropChange && onReplaceWithFinalChange ? (
+              <div className="divide-y divide-slate-100/90 dark:divide-neutral-800/80">
+                <ToggleRow
+                  id="assignment-never-drop"
+                  label="Never drop this score"
+                  description="When the assignment group drops lowest or highest scores, this item is always kept in the average."
+                  checked={neverDrop}
+                  onChange={(next) => {
+                    onNeverDropChange(next)
+                    if (!next && replaceWithFinal) onReplaceWithFinalChange(false)
+                  }}
+                  disabled={disabled}
+                />
+                <ToggleRow
+                  id="assignment-replace-with-final"
+                  label="Use as final for replace-lowest"
+                  description="If the group uses “replace lowest with final,” this score is the replacement when it beats the student’s lowest eligible item."
+                  checked={replaceWithFinal}
+                  onChange={(next) => {
+                    onReplaceWithFinalChange(next)
+                    if (next) onNeverDropChange(true)
+                  }}
+                  disabled={disabled}
+                />
+              </div>
             ) : null}
             {onGradingDisplayTypeChange ? (
               <Field

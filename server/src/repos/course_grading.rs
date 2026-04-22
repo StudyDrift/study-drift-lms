@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::db::schema;
 use crate::models::course_grading::{
-    AssignmentGroupInput, AssignmentGroupPublic, CourseGradingSettingsResponse,
+    AssignmentGroupInput, AssignmentGroupPublic, CourseGradingSettingsResponse, PutSbgConfig,
 };
 use crate::repos::course;
 
@@ -13,15 +13,18 @@ struct AssignmentGroupRow {
     sort_order: i32,
     name: String,
     weight_percent: f64,
+    drop_lowest: i32,
+    drop_highest: i32,
+    replace_lowest_with_final: bool,
 }
 
 pub async fn get_settings_for_course_code(
     pool: &PgPool,
     course_code: &str,
 ) -> Result<Option<CourseGradingSettingsResponse>, sqlx::Error> {
-    let row = sqlx::query_as::<_, (String,)>(&format!(
+    let row = sqlx::query_as::<_, (String, bool, Option<serde_json::Value>, String)>(&format!(
         r#"
-        SELECT grading_scale
+        SELECT grading_scale, sbg_enabled, sbg_proficiency_scale_json, sbg_aggregation_rule
         FROM {}
         WHERE course_code = $1
         "#,
@@ -31,7 +34,8 @@ pub async fn get_settings_for_course_code(
     .fetch_optional(pool)
     .await?;
 
-    let Some((grading_scale,)) = row else {
+    let Some((grading_scale, sbg_enabled, sbg_proficiency_scale_json, sbg_aggregation_rule)) = row
+    else {
         return Ok(None);
     };
 
@@ -44,6 +48,9 @@ pub async fn get_settings_for_course_code(
     Ok(Some(CourseGradingSettingsResponse {
         grading_scale,
         assignment_groups: groups,
+        sbg_enabled,
+        sbg_proficiency_scale_json,
+        sbg_aggregation_rule,
     }))
 }
 
@@ -53,7 +60,8 @@ pub async fn list_assignment_groups(
 ) -> Result<Vec<AssignmentGroupPublic>, sqlx::Error> {
     let rows = sqlx::query_as::<_, AssignmentGroupRow>(&format!(
         r#"
-        SELECT id, sort_order, name, weight_percent
+        SELECT id, sort_order, name, weight_percent,
+               drop_lowest, drop_highest, replace_lowest_with_final
         FROM {}
         WHERE course_id = $1
         ORDER BY sort_order ASC, name ASC
@@ -70,6 +78,9 @@ pub async fn list_assignment_groups(
             sort_order: r.sort_order,
             name: r.name,
             weight_percent: r.weight_percent,
+            drop_lowest: r.drop_lowest,
+            drop_highest: r.drop_highest,
+            replace_lowest_with_final: r.replace_lowest_with_final,
         })
         .collect())
 }
@@ -80,6 +91,7 @@ pub async fn put_settings(
     course_code: &str,
     grading_scale: &str,
     groups: &[AssignmentGroupInput],
+    sbg: Option<PutSbgConfig>,
 ) -> Result<Option<CourseGradingSettingsResponse>, PutError> {
     let Some(course_id) = course::get_id_by_course_code(pool, course_code)
         .await
@@ -112,12 +124,17 @@ pub async fn put_settings(
             continue;
         }
         let w = g.weight_percent.clamp(0.0, 100.0);
+        let d_l = g.drop_lowest.map(|d| d.max(0)).unwrap_or(0);
+        let d_h = g.drop_highest.map(|d| d.max(0)).unwrap_or(0);
+        let rpf = g.replace_lowest_with_final.unwrap_or(false);
 
         if let Some(id) = g.id {
             let n = sqlx::query(&format!(
                 r#"
                 UPDATE {}
-                SET sort_order = $2, name = $3, weight_percent = $4, updated_at = NOW()
+                SET sort_order = $2, name = $3, weight_percent = $4,
+                    drop_lowest = $6, drop_highest = $7, replace_lowest_with_final = $8,
+                    updated_at = NOW()
                 WHERE id = $1 AND course_id = $5
                 "#,
                 schema::ASSIGNMENT_GROUPS
@@ -127,6 +144,9 @@ pub async fn put_settings(
             .bind(name)
             .bind(w)
             .bind(course_id)
+            .bind(d_l)
+            .bind(d_h)
+            .bind(rpf)
             .execute(&mut *tx)
             .await
             .map_err(PutError::Db)?
@@ -138,8 +158,8 @@ pub async fn put_settings(
         } else {
             let new_id: Uuid = sqlx::query_scalar(&format!(
                 r#"
-                INSERT INTO {} (course_id, sort_order, name, weight_percent)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO {} (course_id, sort_order, name, weight_percent, drop_lowest, drop_highest, replace_lowest_with_final)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 RETURNING id
                 "#,
                 schema::ASSIGNMENT_GROUPS
@@ -148,6 +168,9 @@ pub async fn put_settings(
             .bind(g.sort_order)
             .bind(name)
             .bind(w)
+            .bind(d_l)
+            .bind(d_h)
+            .bind(rpf)
             .fetch_one(&mut *tx)
             .await
             .map_err(PutError::Db)?;
@@ -177,6 +200,52 @@ pub async fn put_settings(
         .execute(&mut *tx)
         .await
         .map_err(PutError::Db)?;
+    }
+
+    if let Some(c) = sbg {
+        if c.enabled.is_some() || c.scale_json.is_some() || c.aggregation_rule.is_some() {
+            if let Some(e) = c.enabled {
+                sqlx::query(&format!(
+                    r#"UPDATE {} SET sbg_enabled = $1, updated_at = NOW() WHERE course_code = $2"#,
+                    schema::COURSES
+                ))
+                .bind(e)
+                .bind(course_code)
+                .execute(&mut *tx)
+                .await
+                .map_err(PutError::Db)?;
+            }
+            if let Some(maybe) = c.scale_json {
+                sqlx::query(&format!(
+                    r#"
+                    UPDATE {}
+                    SET sbg_proficiency_scale_json = $1, updated_at = NOW()
+                    WHERE course_code = $2
+                    "#,
+                    schema::COURSES
+                ))
+                .bind(maybe)
+                .bind(course_code)
+                .execute(&mut *tx)
+                .await
+                .map_err(PutError::Db)?;
+            }
+            if let Some(ref r) = c.aggregation_rule {
+                sqlx::query(&format!(
+                    r#"
+                    UPDATE {}
+                    SET sbg_aggregation_rule = $1, updated_at = NOW()
+                    WHERE course_code = $2
+                    "#,
+                    schema::COURSES
+                ))
+                .bind(r)
+                .bind(course_code)
+                .execute(&mut *tx)
+                .await
+                .map_err(PutError::Db)?;
+            }
+        }
     }
 
     tx.commit().await.map_err(PutError::Db)?;
@@ -267,10 +336,13 @@ pub async fn replace_assignment_groups_for_import(
         }
         let w = g.weight_percent.clamp(0.0, 100.0);
         let sort_order = (i + 1) as i32;
+        let d_l = g.drop_lowest.max(0);
+        let d_h = g.drop_highest.max(0);
+        let rpf = g.replace_lowest_with_final;
         sqlx::query(&format!(
             r#"
-            INSERT INTO {} (id, course_id, sort_order, name, weight_percent)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO {} (id, course_id, sort_order, name, weight_percent, drop_lowest, drop_highest, replace_lowest_with_final)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
             schema::ASSIGNMENT_GROUPS
         ))
@@ -279,6 +351,9 @@ pub async fn replace_assignment_groups_for_import(
         .bind(sort_order)
         .bind(name)
         .bind(w)
+        .bind(d_l)
+        .bind(d_h)
+        .bind(rpf)
         .execute(&mut *tx)
         .await?;
     }
@@ -297,8 +372,8 @@ pub async fn insert_assignment_group_if_missing(
 ) -> Result<bool, sqlx::Error> {
     let inserted = sqlx::query_scalar::<_, Uuid>(&format!(
         r#"
-        INSERT INTO {} (id, course_id, sort_order, name, weight_percent)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO {} (id, course_id, sort_order, name, weight_percent, drop_lowest, drop_highest, replace_lowest_with_final)
+        VALUES ($1, $2, $3, $4, $5, 0, 0, false)
         ON CONFLICT (id) DO NOTHING
         RETURNING id
         "#,

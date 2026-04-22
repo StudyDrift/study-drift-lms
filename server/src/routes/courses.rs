@@ -26,6 +26,7 @@ use crate::models::grading_scheme::{
 };
 use crate::models::course_grading::{
     CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
+    PutSbgConfig,
 };
 use crate::models::course_module_assignment::{
     validate_assignment_delivery_settings, validate_assignment_late_settings,
@@ -102,10 +103,12 @@ use crate::repos::lti as lti_repo;
 use crate::repos::misconceptions as misconception_repo;
 use crate::repos::question_bank as qb_repo;
 use crate::repos::quiz_attempts;
+use crate::services::grading::assignment_groups::{item_drops_for_learner, GroupDropPolicy};
 use crate::services::grading::conversion::{
     normalize_scheme_type_for_storage, parse_gradebook_cell, parse_scale, resolve_effective,
     to_display_grade, validate_scale_json, DisplayGradingKind, ParsedScale,
 };
+use crate::services::grading::standards as sbg_grading;
 use crate::repos::rbac;
 use crate::repos::syllabus_acceptance;
 use crate::repos::syllabus_markups;
@@ -512,7 +515,7 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-async fn require_course_access(
+pub(crate) async fn require_course_access(
     state: &AppState,
     course_code: &str,
     user_id: uuid::Uuid,
@@ -668,6 +671,10 @@ fn module_assignment_response_for_api(
         originality_detection: Some(row.originality_detection.clone()),
         originality_student_visibility: Some(row.originality_student_visibility.clone()),
         grading_type: row.grading_type.clone(),
+        posting_policy: Some(row.posting_policy.clone()),
+        release_at: row.release_at,
+        never_drop: row.never_drop,
+        replace_with_final: row.replace_with_final,
     }
 }
 
@@ -786,6 +793,24 @@ fn merge_assignment_body_write(
             return Err(AppError::invalid_input("Invalid grading_type."));
         }
     }
+    let posting_policy = match &req.posting_policy {
+        None => cur.posting_policy.clone(),
+        Some(s) => {
+            let t = s.trim();
+            if t != "automatic" && t != "manual" {
+                return Err(AppError::invalid_input(
+                    "postingPolicy must be automatic or manual.",
+                ));
+            }
+            t.to_string()
+        }
+    };
+    let release_at = match &req.release_at {
+        None => cur.release_at,
+        Some(v) => *v,
+    };
+    let never_drop = req.never_drop.unwrap_or(cur.never_drop);
+    let replace_with_final = req.replace_with_final.unwrap_or(cur.replace_with_final);
     Ok(course_module_assignments::AssignmentBodyWrite {
         markdown,
         points_worth,
@@ -807,6 +832,10 @@ fn merge_assignment_body_write(
         originality_detection,
         originality_student_visibility,
         grading_type,
+        posting_policy,
+        release_at,
+        never_drop,
+        replace_with_final,
     })
 }
 
@@ -941,6 +970,8 @@ fn module_quiz_response_for_api(
         assignment_group_id: row.assignment_group_id,
         hint_scaffolding_enabled,
         misconception_detection_enabled,
+        never_drop: row.never_drop,
+        replace_with_final: row.replace_with_final,
     }
 }
 
@@ -2219,6 +2250,10 @@ async fn module_content_page_get_handler(
         originality_detection: None,
         originality_student_visibility: None,
         grading_type: None,
+        posting_policy: None,
+        release_at: None,
+        never_drop: false,
+        replace_with_final: false,
     }))
 }
 
@@ -2297,6 +2332,10 @@ async fn module_content_page_patch_handler(
         originality_detection: None,
         originality_student_visibility: None,
         grading_type: None,
+        posting_policy: None,
+        release_at: None,
+        never_drop: false,
+        replace_with_final: false,
     }))
 }
 
@@ -3106,6 +3145,28 @@ async fn module_quiz_patch_handler(
             if updated.is_none() {
                 return Err(AppError::NotFound);
             }
+        }
+    }
+
+    if req.never_drop.is_some() || req.replace_with_final.is_some() {
+        let Some(qcur) =
+            course_module_quizzes::get_for_course_item(&state.pool, course_id, item_id).await?
+        else {
+            return Err(AppError::NotFound);
+        };
+        let never_drop = req.never_drop.unwrap_or(qcur.never_drop);
+        let replace_with_final = req.replace_with_final.unwrap_or(qcur.replace_with_final);
+        if course_module_quizzes::update_quiz_drop_flags(
+            &state.pool,
+            course_id,
+            item_id,
+            never_drop,
+            replace_with_final,
+        )
+        .await?
+        .is_none()
+        {
+            return Err(AppError::NotFound);
         }
     }
 
@@ -4014,6 +4075,7 @@ async fn gradebook_students_and_columns(
         Vec<CourseGradebookGridStudent>,
         Vec<CourseGradebookGridColumn>,
         HashMap<Uuid, Option<String>>,
+        HashMap<Uuid, (String, Option<DateTime<Utc>>)>,
     ),
     AppError,
 > {
@@ -4067,6 +4129,10 @@ async fn gradebook_students_and_columns(
                 rubric,
                 assignment_grading_type: None,
                 effective_display_type: "points".to_string(),
+                posting_policy: None,
+                release_at: None,
+                never_drop: false,
+                replace_with_final: false,
             }
         })
         .collect();
@@ -4074,14 +4140,21 @@ async fn gradebook_students_and_columns(
     let grading_type_by_item =
         course_module_assignments::grading_types_for_structure_items(pool, course_id, &assignment_ids)
             .await?;
+    let posting_by_item = course_module_assignments::posting_settings_for_structure_items(
+        pool,
+        course_id,
+        &assignment_ids,
+    )
+    .await?;
 
-    Ok((course_id, students, columns, grading_type_by_item))
+    Ok((course_id, students, columns, grading_type_by_item, posting_by_item))
 }
 
 fn enrich_gradebook_columns(
     columns: Vec<CourseGradebookGridColumn>,
     types_map: &HashMap<Uuid, Option<String>>,
     course_kind: Option<DisplayGradingKind>,
+    posting_by_item: &HashMap<Uuid, (String, Option<DateTime<Utc>>)>,
 ) -> Vec<CourseGradebookGridColumn> {
     columns
         .into_iter()
@@ -4090,6 +4163,15 @@ fn enrich_gradebook_columns(
                 types_map.get(&c.id).cloned().flatten()
             } else {
                 None
+            };
+            let (posting_policy, release_at) = if c.kind == "assignment" {
+                if let Some((p, t)) = posting_by_item.get(&c.id) {
+                    (Some(p.clone()), *t)
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
             };
             let eff = resolve_effective(course_kind, ov.as_deref());
             CourseGradebookGridColumn {
@@ -4101,6 +4183,10 @@ fn enrich_gradebook_columns(
                 rubric: c.rubric,
                 assignment_grading_type: ov,
                 effective_display_type: eff.as_str().to_string(),
+                posting_policy,
+                release_at,
+                never_drop: c.never_drop,
+                replace_with_final: c.replace_with_final,
             }
         })
         .collect()
@@ -4151,6 +4237,80 @@ fn grid_display_grades(
     out
 }
 
+fn group_drop_policy_map(
+    groups: &[crate::models::course_grading::AssignmentGroupPublic],
+) -> HashMap<Uuid, GroupDropPolicy> {
+    groups
+        .iter()
+        .map(|g| {
+            (
+                g.id,
+                GroupDropPolicy {
+                    drop_lowest: g.drop_lowest.max(0),
+                    drop_highest: g.drop_highest.max(0),
+                    replace_lowest_with_final: g.replace_lowest_with_final,
+                },
+            )
+        })
+        .collect()
+}
+
+fn parse_gradebook_points(s: &str) -> f64 {
+    let t = s.trim().replace(',', "");
+    t.parse::<f64>()
+        .ok()
+        .filter(|f| f.is_finite() && *f >= 0.0)
+        .unwrap_or(0.0)
+}
+
+fn enrich_columns_with_drop_flags(
+    mut columns: Vec<CourseGradebookGridColumn>,
+    flags: &HashMap<Uuid, (bool, bool)>,
+) -> Vec<CourseGradebookGridColumn> {
+    for c in &mut columns {
+        if let Some((n, r)) = flags.get(&c.id) {
+            c.never_drop = *n;
+            c.replace_with_final = *r;
+        }
+    }
+    columns
+}
+
+fn dropped_by_student_for_grid(
+    students: &[CourseGradebookGridStudent],
+    columns: &[CourseGradebookGridColumn],
+    group_policies: &HashMap<Uuid, GroupDropPolicy>,
+    grades: &HashMap<Uuid, HashMap<Uuid, String>>,
+) -> HashMap<Uuid, HashMap<Uuid, bool>> {
+    let col_meta: Vec<(Uuid, Option<Uuid>, f64, bool, bool)> = columns
+        .iter()
+        .filter_map(|c| {
+            let m = c.max_points?;
+            let mf = m as f64;
+            if mf <= 0.0 {
+                return None;
+            }
+            Some((c.id, c.assignment_group_id, mf, c.never_drop, c.replace_with_final))
+        })
+        .collect();
+    let mut out: HashMap<Uuid, HashMap<Uuid, bool>> = HashMap::new();
+    for s in students {
+        let row = grades.get(&s.user_id);
+        let earned: HashMap<Uuid, f64> = if let Some(r) = row {
+            r.iter()
+                .map(|(i, t)| (*i, parse_gradebook_points(t)))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+        out.insert(
+            s.user_id,
+            item_drops_for_learner(group_policies, &col_meta, &earned),
+        );
+    }
+    out
+}
+
 fn ensure_points_within_max(points: f64, max_points: Option<i32>) -> Result<(), AppError> {
     if let Some(m) = max_points {
         if m > 0 && points > m as f64 + 1e-6 {
@@ -4174,9 +4334,9 @@ async fn gradebook_grid_get_handler(
     let required = course_grants::course_gradebook_view_permission(&course_code);
     assert_permission(&state.pool, user.user_id, &required).await?;
 
-    let (course_id, students, columns, types_map) =
+    let (course_id, students, columns, types_map, posting) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
-    let (grades, rubric_scores) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (grades, rubric_scores, posted_at) = course_grades::list_for_course(&state.pool, course_id).await?;
 
     let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
     let course_kind = scheme_row
@@ -4187,9 +4347,34 @@ async fn gradebook_grid_get_handler(
         .map(parsed_scale_from_row)
         .transpose()?;
 
-    let columns = enrich_gradebook_columns(columns, &types_map, course_kind);
+    let columns = enrich_gradebook_columns(columns, &types_map, course_kind, &posting);
+    let drop_flags = course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
+    let columns = enrich_columns_with_drop_flags(columns, &drop_flags);
+    let group_rows = course_grading::list_assignment_groups(&state.pool, course_id).await?;
+    let gpol = group_drop_policy_map(&group_rows);
+    let dropped_grades = dropped_by_student_for_grid(&students, &columns, &gpol, &grades);
     let grading_scheme = scheme_row.as_ref().map(scheme_summary_from_row);
     let display_grades = grid_display_grades(&grades, &columns, parsed_scale.as_ref());
+
+    let mut grade_held: HashMap<Uuid, HashMap<Uuid, bool>> = HashMap::new();
+    for (uid, by_item) in &grades {
+        for item_id in by_item.keys() {
+            let is_manual = columns
+                .iter()
+                .find(|c| c.id == *item_id)
+                .is_some_and(|c| c.posting_policy.as_deref() == Some("manual"));
+            if !is_manual {
+                continue;
+            }
+            let p = posted_at
+                .get(uid)
+                .and_then(|m| m.get(item_id))
+                .and_then(|x| *x);
+            if p.is_none() {
+                grade_held.entry(*uid).or_default().insert(*item_id, true);
+            }
+        }
+    }
 
     Ok(Json(CourseGradebookGridResponse {
         students,
@@ -4197,6 +4382,8 @@ async fn gradebook_grid_get_handler(
         grades,
         display_grades,
         rubric_scores,
+        grade_held,
+        dropped_grades,
         grading_scheme,
     }))
 }
@@ -4209,7 +4396,7 @@ async fn my_grades_get_handler(
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
-    let (course_id, students, columns, types_map) =
+    let (course_id, students, columns, types_map, posting) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
 
     let is_student = students.iter().any(|s| s.user_id == user.user_id);
@@ -4217,8 +4404,9 @@ async fn my_grades_get_handler(
         return Err(AppError::Forbidden);
     }
 
-    let (all_grades, _) = course_grades::list_for_course(&state.pool, course_id).await?;
-    let grades = all_grades.get(&user.user_id).cloned().unwrap_or_default();
+    let (all_grades, _, posted_at) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let all_row = all_grades.get(&user.user_id).cloned().unwrap_or_default();
+    let posted_for_me = posted_at.get(&user.user_id).cloned().unwrap_or_default();
 
     let assignment_groups = course_grading::get_settings_for_course_code(&state.pool, &course_code)
         .await?
@@ -4234,11 +4422,25 @@ async fn my_grades_get_handler(
         .map(parsed_scale_from_row)
         .transpose()?;
 
-    let columns = enrich_gradebook_columns(columns, &types_map, course_kind);
+    let columns = enrich_gradebook_columns(columns, &types_map, course_kind, &posting);
+    let drop_flags = course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
+    let columns = enrich_columns_with_drop_flags(columns, &drop_flags);
     let grading_scheme = scheme_row.as_ref().map(scheme_summary_from_row);
 
+    let mut held_grade_item_ids: Vec<Uuid> = Vec::new();
+    let mut grades: HashMap<Uuid, String> = HashMap::new();
     let mut display_grades: HashMap<Uuid, String> = HashMap::new();
-    for (item_id, pts_str) in &grades {
+    for (item_id, pts_str) in &all_row {
+        let is_assn_manual = columns
+            .iter()
+            .find(|c| c.id == *item_id)
+            .is_some_and(|c| c.posting_policy.as_deref() == Some("manual"));
+        let is_held = is_assn_manual && posted_for_me.get(item_id).copied().flatten().is_none();
+        if is_held {
+            held_grade_item_ids.push(*item_id);
+            continue;
+        }
+        grades.insert(*item_id, pts_str.clone());
         let Ok(pts) = pts_str.trim().replace(',', "").parse::<f64>() else {
             continue;
         };
@@ -4258,6 +4460,34 @@ async fn my_grades_get_handler(
         );
         display_grades.insert(*item_id, dg);
     }
+    held_grade_item_ids.sort();
+    held_grade_item_ids.dedup();
+
+    let held_set: HashSet<Uuid> = held_grade_item_ids.iter().copied().collect();
+    let col_meta: Vec<(Uuid, Option<Uuid>, f64, bool, bool)> = columns
+        .iter()
+        .filter(|c| !held_set.contains(&c.id))
+        .filter_map(|c| {
+            let m = c.max_points?;
+            let mf = m as f64;
+            if mf <= 0.0 {
+                return None;
+            }
+            Some((
+                c.id,
+                c.assignment_group_id,
+                mf,
+                c.never_drop,
+                c.replace_with_final,
+            ))
+        })
+        .collect();
+    let mut earned: HashMap<Uuid, f64> = HashMap::new();
+    for (id, s) in &grades {
+        earned.insert(*id, parse_gradebook_points(s));
+    }
+    let gpol = group_drop_policy_map(&assignment_groups);
+    let dropped_grades = item_drops_for_learner(&gpol, &col_meta, &earned);
 
     Ok(Json(CourseMyGradesResponse {
         columns,
@@ -4265,6 +4495,8 @@ async fn my_grades_get_handler(
         display_grades,
         assignment_groups,
         grading_scheme,
+        held_grade_item_ids,
+        dropped_grades,
     }))
 }
 
@@ -4280,7 +4512,7 @@ async fn gradebook_grades_put_handler(
     let required = course_grants::course_item_create_permission(&course_code);
     assert_permission(&state.pool, user.user_id, &required).await?;
 
-    let (course_id, students, columns, types_map) =
+    let (course_id, students, columns, types_map, posting) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
 
     let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
@@ -4291,6 +4523,7 @@ async fn gradebook_grades_put_handler(
         .as_ref()
         .map(parsed_scale_from_row)
         .transpose()?;
+    let columns = enrich_gradebook_columns(columns, &types_map, course_kind, &posting);
 
     let student_ok: HashSet<Uuid> = students.iter().map(|s| s.user_id).collect();
     let item_meta: HashMap<Uuid, Option<i32>> =
@@ -4404,6 +4637,21 @@ async fn gradebook_grades_put_handler(
     }
 
     course_grades::upsert_and_delete(&state.pool, course_id, &ops).await?;
+    if let Some(c) = course::get_by_id(&state.pool, course_id).await? {
+        if c.sbg_enabled {
+            let students: std::collections::HashSet<Uuid> =
+                ops.iter().map(|(uid, _, _, _)| *uid).collect();
+            for student_id in students {
+                let _ = sbg_grading::recompute_student_sbg(
+                    &state.pool,
+                    course_id,
+                    student_id,
+                    false,
+                )
+                .await;
+            }
+        }
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -4452,12 +4700,79 @@ async fn grading_put_handler(
                 "Weights must be between 0 and 100.",
             ));
         }
+        let dl = g.drop_lowest.unwrap_or(0);
+        let dh = g.drop_highest.unwrap_or(0);
+        if !(0..=500).contains(&dl) || !(0..=500).contains(&dh) {
+            return Err(AppError::invalid_input(
+                "dropLowest and dropHighest must be between 0 and 500.",
+            ));
+        }
     }
 
-    match course_grading::put_settings(&state.pool, &course_code, scale, &req.assignment_groups)
-        .await
+    if let Some(ref r) = req.sbg_aggregation_rule {
+        let t = r.trim();
+        if !t.is_empty()
+            && !matches!(
+                t,
+                "most_recent" | "highest" | "mean" | "decaying_average"
+            )
+        {
+            return Err(AppError::invalid_input(
+                "Invalid sbgAggregationRule (use most_recent, highest, mean, or decaying_average).",
+            ));
+        }
+    }
+
+    let sbg = if req.sbg_enabled.is_none()
+        && req.sbg_proficiency_scale_json.is_none()
+        && req.sbg_aggregation_rule.is_none()
     {
-        Ok(Some(row)) => Ok(Json(row)),
+        None
+    } else {
+        Some(PutSbgConfig {
+            enabled: req.sbg_enabled,
+            scale_json: req.sbg_proficiency_scale_json.clone(),
+            aggregation_rule: req.sbg_aggregation_rule.clone(),
+        })
+    };
+
+    let course_id_for_recompute = course::get_id_by_course_code(&state.pool, &course_code).await?;
+    match course_grading::put_settings(
+        &state.pool,
+        &course_code,
+        scale,
+        &req.assignment_groups,
+        sbg,
+    )
+    .await
+    {
+        Ok(Some(row)) => {
+            for g in &req.assignment_groups {
+                if g.id.is_some()
+                    && (g.drop_lowest.is_some()
+                        || g.drop_highest.is_some()
+                        || g.replace_lowest_with_final.is_some())
+                {
+                    let gid = g.id.expect("id with is_some");
+                    tracing::info!(
+                        event = "assignment_group_drop_policy_updated",
+                        group_id = %gid,
+                        drop_lowest = ?g.drop_lowest,
+                        drop_highest = ?g.drop_highest,
+                        replace_lowest_with_final = ?g.replace_lowest_with_final,
+                    );
+                }
+            }
+            if req.sbg_enabled.is_some()
+                || req.sbg_proficiency_scale_json.is_some()
+                || req.sbg_aggregation_rule.is_some()
+            {
+                if let Some(cid) = course_id_for_recompute {
+                    let _ = sbg_grading::recompute_course_sbg(&state.pool, cid, &course_code).await;
+                }
+            }
+            Ok(Json(row))
+        }
         Ok(None) => Err(AppError::NotFound),
         Err(PutError::UnknownGroupId(id)) => Err(AppError::invalid_input(format!(
             "Unknown assignment group id: {id}"

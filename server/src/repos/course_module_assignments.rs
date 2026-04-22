@@ -40,6 +40,11 @@ pub struct CourseItemAssignmentRow {
     pub originality_student_visibility: String,
     /// When set, overrides the course grading scheme display for this assignment.
     pub grading_type: Option<String>,
+    /// `automatic` (default) or `manual` (hold until posted); plan 3.8.
+    pub posting_policy: String,
+    pub release_at: Option<DateTime<Utc>>,
+    pub never_drop: bool,
+    pub replace_with_final: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +70,11 @@ pub struct AssignmentBodyWrite {
     pub originality_detection: String,
     pub originality_student_visibility: String,
     pub grading_type: Option<String>,
+    /// Plan 3.8
+    pub posting_policy: String,
+    pub release_at: Option<DateTime<Utc>>,
+    pub never_drop: bool,
+    pub replace_with_final: bool,
 }
 
 pub async fn insert_empty_for_item(
@@ -177,6 +187,90 @@ pub async fn grading_types_for_structure_items(
     Ok(rows.into_iter().map(|r| (r.id, r.grading_type)).collect())
 }
 
+/// `posting_policy` and `release_at` for assignments (plan 3.8).
+pub async fn posting_settings_for_structure_items(
+    pool: &PgPool,
+    course_id: Uuid,
+    structure_item_ids: &[Uuid],
+) -> Result<HashMap<Uuid, (String, Option<DateTime<Utc>>)>, sqlx::Error> {
+    if structure_item_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    #[derive(Debug, Clone, FromRow)]
+    struct Row {
+        id: Uuid,
+        posting_policy: String,
+        release_at: Option<DateTime<Utc>>,
+    }
+    let rows: Vec<Row> = sqlx::query_as(&format!(
+        r#"
+        SELECT c.id, m.posting_policy, m.release_at
+        FROM {} c
+        INNER JOIN {} m ON m.structure_item_id = c.id
+        WHERE c.course_id = $1 AND c.kind = 'assignment' AND c.id = ANY($2)
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS,
+        schema::MODULE_ASSIGNMENTS
+    ))
+    .bind(course_id)
+    .bind(structure_item_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.id, (r.posting_policy, r.release_at)))
+        .collect())
+}
+
+/// Course id + item id for assignments with `release_at` in the past (scheduled grade post; 3.8).
+pub async fn list_structures_with_past_due_release(
+    pool: &PgPool,
+    as_of: DateTime<Utc>,
+) -> Result<Vec<(Uuid, Uuid)>, sqlx::Error> {
+    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(&format!(
+        r#"
+        SELECT c.course_id, c.id
+        FROM {} m
+        INNER JOIN {} c ON c.id = m.structure_item_id
+        WHERE m.posting_policy = 'manual'
+          AND m.release_at IS NOT NULL
+          AND m.release_at <= $1
+        "#,
+        schema::MODULE_ASSIGNMENTS,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(as_of)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Clears `release_at` after a scheduled post runs (idempotent; 3.8).
+pub async fn clear_release_at(
+    pool: &PgPool,
+    course_id: Uuid,
+    item_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!(
+        r#"
+        UPDATE {} m
+        SET release_at = NULL, settings_version = m.settings_version + 1, updated_at = NOW()
+        FROM {} c
+        WHERE m.structure_item_id = c.id
+          AND c.id = $1
+          AND c.course_id = $2
+          AND c.kind = 'assignment'
+        "#,
+        schema::MODULE_ASSIGNMENTS,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(item_id)
+    .bind(course_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 #[derive(Debug, Clone, FromRow)]
 struct AssignmentJoinRow {
     title: String,
@@ -203,6 +297,10 @@ struct AssignmentJoinRow {
     originality_detection: String,
     originality_student_visibility: String,
     grading_type: Option<String>,
+    posting_policy: String,
+    release_at: Option<DateTime<Utc>>,
+    never_drop: bool,
+    replace_with_final: bool,
 }
 
 pub async fn get_for_course_item(
@@ -220,7 +318,8 @@ pub async fn get_for_course_item(
                m.moderated_grading, m.moderation_threshold_pct, m.moderator_user_id,
                m.provisional_grader_user_ids,
                m.originality_detection, m.originality_student_visibility,
-               m.grading_type
+               m.grading_type, m.posting_policy, m.release_at,
+               m.never_drop, m.replace_with_final
         FROM {} c
         INNER JOIN {} m ON m.structure_item_id = c.id
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
@@ -258,6 +357,10 @@ pub async fn get_for_course_item(
         originality_detection: r.originality_detection,
         originality_student_visibility: r.originality_student_visibility,
         grading_type: r.grading_type,
+        posting_policy: r.posting_policy,
+        release_at: r.release_at,
+        never_drop: r.never_drop,
+        replace_with_final: r.replace_with_final,
     }))
 }
 
@@ -290,6 +393,10 @@ pub async fn write_assignment_body(
             originality_detection = $20,
             originality_student_visibility = $21,
             grading_type = $22,
+            posting_policy = $23,
+            release_at = $24,
+            never_drop = $25,
+            replace_with_final = $26,
             settings_version = m.settings_version + 1,
             updated_at = NOW()
         FROM {} c
@@ -324,6 +431,10 @@ pub async fn write_assignment_body(
     .bind(&body.originality_detection)
     .bind(&body.originality_student_visibility)
     .bind(body.grading_type.as_deref())
+    .bind(&body.posting_policy)
+    .bind(body.release_at)
+    .bind(body.never_drop)
+    .bind(body.replace_with_final)
     .fetch_optional(pool)
     .await
 }
@@ -411,9 +522,9 @@ pub async fn upsert_import_body(
             submission_allow_text, submission_allow_file_upload, submission_allow_url,
             late_submission_policy, late_penalty_percent, rubric_json,
             originality_detection, originality_student_visibility,
-            blind_grading, grading_type, identities_revealed_at
+            blind_grading, grading_type, identities_revealed_at, posting_policy, release_at
         )
-        SELECT c.id, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NULL
+        SELECT c.id, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NULL, 'automatic', NULL
         FROM {} c
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
         ON CONFLICT (structure_item_id) DO UPDATE
@@ -459,4 +570,38 @@ pub async fn upsert_import_body(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Per structure item: `(never_drop, replace_with_final)` for gradebook drop policy (plan 3.9).
+pub async fn item_drop_flags_for_course(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<HashMap<Uuid, (bool, bool)>, sqlx::Error> {
+    #[derive(FromRow)]
+    struct DropFlagRow {
+        id: Uuid,
+        never_drop: bool,
+        replace_with_final: bool,
+    }
+    let rows: Vec<DropFlagRow> = sqlx::query_as(&format!(
+        r#"
+        SELECT c.id,
+               COALESCE(m.never_drop, q.never_drop, false) AS never_drop,
+               COALESCE(m.replace_with_final, q.replace_with_final, false) AS replace_with_final
+        FROM {} c
+        LEFT JOIN {} m ON m.structure_item_id = c.id AND c.kind = 'assignment'
+        LEFT JOIN {} q ON q.structure_item_id = c.id AND c.kind = 'quiz'
+        WHERE c.course_id = $1 AND c.kind IN ('assignment', 'quiz')
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS,
+        schema::MODULE_ASSIGNMENTS,
+        schema::MODULE_QUIZZES
+    ))
+    .bind(course_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.id, (r.never_drop, r.replace_with_final)))
+        .collect())
 }

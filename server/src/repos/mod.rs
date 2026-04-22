@@ -45,6 +45,7 @@ pub mod quiz_attempts;
 pub mod rbac;
 pub mod recommendations;
 pub mod reports;
+pub mod sbg;
 pub mod srs;
 pub mod standards;
 pub mod student_accommodations;

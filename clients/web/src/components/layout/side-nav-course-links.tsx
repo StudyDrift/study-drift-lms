@@ -42,6 +42,7 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
     calendarEnabled,
     questionBankEnabled,
     standardsAlignmentEnabled,
+    sbgEnabled,
   } = useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
   const courseViewPreview = useCourseViewAs(courseCode)
@@ -157,6 +158,15 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
         >
           <ClipboardList className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
           Gradebook
+        </NavLink>
+      )}
+      {sbgEnabled && canViewGradebook && (
+        <NavLink
+          to={`${base}/standards-gradebook`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <BookMarked className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Standards gradebook
         </NavLink>
       )}
       {standardsAlignmentEnabled && (canViewGradebook || canManageCourse) && (

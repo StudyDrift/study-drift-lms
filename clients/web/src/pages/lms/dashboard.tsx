@@ -776,14 +776,22 @@ export default function Dashboard() {
 
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 {studentRows.map((row) => {
-                  const cols: GradebookColumnForFinal[] = (row.myGrades?.columns ?? []).map((c) => ({
-                    id: c.id,
-                    maxPoints: c.maxPoints,
-                    assignmentGroupId: c.assignmentGroupId ?? null,
-                  }))
+                  const held = new Set(row.myGrades?.heldGradeItemIds ?? [])
+                  const cols: GradebookColumnForFinal[] = (row.myGrades?.columns ?? [])
+                    .filter((c) => !held.has(c.id))
+                    .map((c) => ({
+                      id: c.id,
+                      maxPoints: c.maxPoints,
+                      assignmentGroupId: c.assignmentGroupId ?? null,
+                      neverDrop: c.neverDrop === true,
+                      replaceWithFinal: c.replaceWithFinal === true,
+                    }))
                   const weights: AssignmentGroupWeight[] = (row.myGrades?.assignmentGroups ?? []).map((g) => ({
                     id: g.id,
                     weightPercent: g.weightPercent,
+                    dropLowest: g.dropLowest,
+                    dropHighest: g.dropHighest,
+                    replaceLowestWithFinal: g.replaceLowestWithFinal,
                   }))
                   const finalPct = computeCourseFinalPercent(cols, row.myGrades?.grades ?? {}, weights)
                   const base = `/courses/${encodeURIComponent(row.course.courseCode)}`

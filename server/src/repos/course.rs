@@ -67,7 +67,10 @@ pub async fn list_for_enrolled_user(
             c.misconception_detection_enabled,
             c.course_type,
             c.created_at,
-            c.updated_at
+            c.updated_at,
+            c.sbg_enabled,
+            c.sbg_proficiency_scale_json,
+            c.sbg_aggregation_rule
         FROM {} c
         LEFT JOIN {} o ON o.user_id = $1 AND o.course_id = c.id
         WHERE c.id IN (SELECT e.course_id FROM {} e WHERE e.user_id = $1)
@@ -251,7 +254,10 @@ pub async fn get_by_course_code(
             misconception_detection_enabled,
             course_type,
             created_at,
-            updated_at
+            updated_at,
+            sbg_enabled,
+            sbg_proficiency_scale_json,
+            sbg_aggregation_rule
         FROM {}
         WHERE course_code = $1
         "#,
@@ -301,7 +307,10 @@ pub async fn get_by_id(
             misconception_detection_enabled,
             course_type,
             created_at,
-            updated_at
+            updated_at,
+            sbg_enabled,
+            sbg_proficiency_scale_json,
+            sbg_aggregation_rule
         FROM {}
         WHERE id = $1
         "#,
@@ -405,7 +414,10 @@ pub async fn update_course(
             misconception_detection_enabled,
             course_type,
             created_at,
-            updated_at
+            updated_at,
+            sbg_enabled,
+            sbg_proficiency_scale_json,
+            sbg_aggregation_rule
         "#,
         schema::COURSES
     ))
@@ -490,7 +502,10 @@ pub async fn patch_course_features(
             misconception_detection_enabled,
             course_type,
             created_at,
-            updated_at
+            updated_at,
+            sbg_enabled,
+            sbg_proficiency_scale_json,
+            sbg_aggregation_rule
         "#,
         schema::COURSES
     ))
@@ -578,7 +593,10 @@ pub async fn set_hero_image_fields(
             misconception_detection_enabled,
             course_type,
             created_at,
-            updated_at
+            updated_at,
+            sbg_enabled,
+            sbg_proficiency_scale_json,
+            sbg_aggregation_rule
         "#,
         schema::COURSES
     ))
@@ -639,7 +657,10 @@ pub async fn update_markdown_theme(
             misconception_detection_enabled,
             course_type,
             created_at,
-            updated_at
+            updated_at,
+            sbg_enabled,
+            sbg_proficiency_scale_json,
+            sbg_aggregation_rule
         "#,
         schema::COURSES
     ))
@@ -776,7 +797,10 @@ pub async fn set_course_archived(
             misconception_detection_enabled,
             course_type,
             created_at,
-            updated_at
+            updated_at,
+            sbg_enabled,
+            sbg_proficiency_scale_json,
+            sbg_aggregation_rule
         "#,
         schema::COURSES
     ))
@@ -883,6 +907,28 @@ pub async fn factory_reset_course(
     .await?;
 
     sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::STUDENT_STANDARD_PROFICIENCIES
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::STANDARD_SBG_ALIGNMENTS
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(&format!(
+        r#"DELETE FROM {} WHERE course_id = $1"#,
+        schema::COURSE_STANDARDS
+    ))
+    .bind(course_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(&format!(
         r#"
         INSERT INTO {} (course_id, sort_order, name, weight_percent)
         VALUES ($1, 0, 'Assignments', 100.0)
@@ -915,6 +961,9 @@ pub async fn factory_reset_course(
             diagnostic_assessments_enabled = false,
             hint_scaffolding_enabled = false,
             misconception_detection_enabled = false,
+            sbg_enabled = false,
+            sbg_proficiency_scale_json = NULL,
+            sbg_aggregation_rule = 'most_recent',
             updated_at = NOW()
         WHERE course_code = $1
         RETURNING
@@ -950,7 +999,10 @@ pub async fn factory_reset_course(
             misconception_detection_enabled,
             course_type,
             created_at,
-            updated_at
+            updated_at,
+            sbg_enabled,
+            sbg_proficiency_scale_json,
+            sbg_aggregation_rule
         "#,
         schema::COURSES
     ))

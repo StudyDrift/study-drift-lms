@@ -6,7 +6,9 @@ import {
   courseItemCreatePermission,
   fetchCourseGradebookGrid,
   fetchCourseGradingSettings,
+  postCourseAssignmentGrades,
   putCourseGradebookGrades,
+  type AssignmentGroup,
   type CourseGradebookGridColumn,
   type CourseGradebookGridStudent,
   type RubricDefinition,
@@ -16,7 +18,6 @@ import {
   type GradebookColumn,
   type GradebookStudent,
 } from './gradebook/gradebook-grid'
-import type { AssignmentGroupWeight } from './gradebook/compute-course-final-percent'
 import { GradebookLoadingSkeleton } from '../../components/ui/lms-content-skeletons'
 import { formatAbsolute, formatAbsoluteShort } from '../../lib/format-datetime'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
@@ -291,7 +292,7 @@ export default function CourseGradebook() {
   const { allows, loading } = usePermissions()
   const [students, setStudents] = useState<CourseGradebookGridStudent[]>([])
   const [columns, setColumns] = useState<CourseGradebookGridColumn[]>([])
-  const [assignmentGroups, setAssignmentGroups] = useState<AssignmentGroupWeight[]>([])
+  const [assignmentGroups, setAssignmentGroups] = useState<AssignmentGroup[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ok' | 'error'>('loading')
   const [savedGrades, setSavedGrades] = useState<Record<string, Record<string, string>> | null>(null)
@@ -308,6 +309,9 @@ export default function CourseGradebook() {
   const gradesRef = useRef<Record<string, Record<string, string>>>({})
   const rubricScoresRef = useRef<Record<string, Record<string, Record<string, number>>>>({})
   const [rubricModal, setRubricModal] = useState<RubricModalState | null>(null)
+  const [gradeHeld, setGradeHeld] = useState<Record<string, Record<string, boolean>> | undefined>(undefined)
+  const [droppedGrades, setDroppedGrades] = useState<Record<string, Record<string, boolean>> | undefined>(undefined)
+  const [postGradesPending, setPostGradesPending] = useState<string | null>(null)
 
   const gridStudents: GradebookStudent[] = useMemo(
     () => students.map((s) => ({ id: s.userId, name: s.displayName })),
@@ -317,11 +321,16 @@ export default function CourseGradebook() {
     () =>
       columns.map((c) => ({
         id: c.id,
+        kind: c.kind,
         title: c.title,
         maxPoints: c.maxPoints,
         assignmentGroupId: c.assignmentGroupId ?? null,
         rubric: c.rubric ?? null,
         effectiveDisplayType: c.effectiveDisplayType ?? 'points',
+        postingPolicy: c.postingPolicy ?? null,
+        releaseAt: c.releaseAt ?? null,
+        neverDrop: c.neverDrop === true,
+        replaceWithFinal: c.replaceWithFinal === true,
       })),
     [columns],
   )
@@ -359,15 +368,22 @@ export default function CourseGradebook() {
       const data = await fetchCourseGradebookGrid(courseCode)
       setStudents(data.students)
       setColumns(data.columns)
+      setGradeHeld(data.gradeHeld)
       const gridSt = data.students.map((s) => ({ id: s.userId, name: s.displayName }))
       const gridCols: GradebookColumn[] = data.columns.map((c) => ({
         id: c.id,
+        kind: c.kind,
         title: c.title,
         maxPoints: c.maxPoints,
         assignmentGroupId: c.assignmentGroupId ?? null,
         rubric: c.rubric ?? null,
         effectiveDisplayType: c.effectiveDisplayType ?? 'points',
+        postingPolicy: c.postingPolicy ?? null,
+        releaseAt: c.releaseAt ?? null,
+        neverDrop: c.neverDrop === true,
+        replaceWithFinal: c.replaceWithFinal === true,
       }))
+      setDroppedGrades(data.droppedGrades)
       setGradingScheme(data.gradingScheme ?? null)
       const merged = mergeGradesFromApi(gridSt, gridCols, data.grades, data.displayGrades)
       const mergedRubric = mergeRubricScoresFromApi(data.rubricScores)
@@ -380,9 +396,7 @@ export default function CourseGradebook() {
       setGridNonce((n) => n + 1)
       try {
         const grading = await fetchCourseGradingSettings(courseCode)
-        setAssignmentGroups(
-          grading.assignmentGroups.map((g) => ({ id: g.id, weightPercent: g.weightPercent })),
-        )
+        setAssignmentGroups(grading.assignmentGroups)
       } catch {
         setAssignmentGroups([])
       }
@@ -391,6 +405,8 @@ export default function CourseGradebook() {
     } catch (e: unknown) {
       setStudents([])
       setColumns([])
+      setGradeHeld(undefined)
+      setDroppedGrades(undefined)
       setGradingScheme(null)
       setAssignmentGroups([])
       setSavedGrades(null)
@@ -401,6 +417,23 @@ export default function CourseGradebook() {
       setLoadError(e instanceof Error ? e.message : 'Could not load gradebook.')
     }
   }, [courseCode])
+
+  const handlePostAssignmentGrades = useCallback(
+    async (itemId: string) => {
+      if (!courseCode) return
+      setPostGradesPending(itemId)
+      try {
+        await postCourseAssignmentGrades(courseCode, itemId)
+        toastSaveOk('Grades posted to students')
+        await loadGrid()
+      } catch (e: unknown) {
+        toastMutationError(e instanceof Error ? e.message : 'Could not post grades.')
+      } finally {
+        setPostGradesPending(null)
+      }
+    },
+    [courseCode, loadGrid],
+  )
 
   const handleDiscard = useCallback(() => {
     setSaveError(null)
@@ -598,6 +631,10 @@ export default function CourseGradebook() {
             onRubricClick={canEditGrades ? openRubricModal : undefined}
             highlightStudentId={highlightStudentId}
             gradingScheme={gradingScheme}
+            gradeHeld={gradeHeld}
+            droppedGrades={droppedGrades}
+            onPostAssignmentGrades={canEditGrades ? handlePostAssignmentGrades : undefined}
+            postGradesPending={postGradesPending}
             footerNote={
               gridStudents.length > 0 && gridColumns.length > 0
                 ? canEditGrades

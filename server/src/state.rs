@@ -89,4 +89,6 @@ pub struct AppState {
     pub originality_detection_enabled: bool,
     /// When true, external similarity completes immediately with placeholder scores (local QA).
     pub originality_stub_external: bool,
+    /// Plan 3.8 — grade hold/post and scheduled release.
+    pub grade_posting_policies_enabled: bool,
 }

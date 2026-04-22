@@ -104,6 +104,8 @@ export type CoursePublic = {
   lockdownModeEnabled?: boolean
   /** K-12 standards coverage UI and APIs (plan 1.3). */
   standardsAlignmentEnabled?: boolean
+  /** Plan 3.7 — standards-based grading (mastery / proficiency). */
+  sbgEnabled?: boolean
   /** Adaptive path rules (plan 1.4); requires platform env on server. */
   adaptivePathsEnabled?: boolean
   /** Spaced repetition review queue (plan 1.5); requires `SRS_PRACTICE_ENABLED` on server. */
@@ -207,11 +209,18 @@ export type AssignmentGroup = {
   sortOrder: number
   name: string
   weightPercent: number
+  /** Plan 3.9 */
+  dropLowest?: number
+  dropHighest?: number
+  replaceLowestWithFinal?: boolean
 }
 
 export type CourseGradingSettings = {
   gradingScale: string
   assignmentGroups: AssignmentGroup[]
+  sbgEnabled?: boolean
+  sbgProficiencyScaleJson?: unknown | null
+  sbgAggregationRule?: string
 }
 
 /** Normalizes GET/PUT `/grading` JSON (camelCase or snake_case) without throwing on odd shapes. */
@@ -260,10 +269,37 @@ function buildCourseGradingSettings(raw: unknown): CourseGradingSettings {
         weightPercent = Number.isFinite(n) ? n : 0
       }
       if (!id || !name) continue
-      assignmentGroups.push({ id, name, sortOrder, weightPercent })
+      const dlRaw = g.dropLowest ?? g.drop_lowest
+      const dhRaw = g.dropHighest ?? g.drop_highest
+      const rpf = g.replaceLowestWithFinal ?? g.replace_lowest_with_final
+      const dropLowest = typeof dlRaw === 'number' && Number.isFinite(dlRaw) ? Math.max(0, dlRaw) : 0
+      const dropHighest = typeof dhRaw === 'number' && Number.isFinite(dhRaw) ? Math.max(0, dhRaw) : 0
+      const replaceLowestWithFinal = rpf === true
+      assignmentGroups.push({
+        id,
+        name,
+        sortOrder,
+        weightPercent,
+        dropLowest,
+        dropHighest,
+        replaceLowestWithFinal,
+      })
     }
   }
-  return { gradingScale, assignmentGroups }
+  const sbgEnabled =
+    typeof o.sbgEnabled === 'boolean'
+      ? o.sbgEnabled
+      : typeof o.sbg_enabled === 'boolean'
+        ? o.sbg_enabled
+        : undefined
+  const sbgProficiencyScaleJson = o.sbgProficiencyScaleJson ?? o.sbg_proficiency_scale_json
+  const sbgAggregationRule =
+    typeof o.sbgAggregationRule === 'string'
+      ? o.sbgAggregationRule
+      : typeof o.sbg_aggregation_rule === 'string'
+        ? o.sbg_aggregation_rule
+        : undefined
+  return { gradingScale, assignmentGroups, sbgEnabled, sbgProficiencyScaleJson, sbgAggregationRule }
 }
 
 export async function fetchCourse(courseCode: string): Promise<CoursePublic> {
@@ -1264,6 +1300,11 @@ export type CourseGradebookGridColumn = {
   rubric?: RubricDefinition | null
   assignmentGradingType?: string | null
   effectiveDisplayType?: string
+  /** Plan 3.8 */
+  postingPolicy?: string | null
+  releaseAt?: string | null
+  neverDrop?: boolean
+  replaceWithFinal?: boolean
 }
 
 export type GradingSchemeSummary = {
@@ -1280,6 +1321,9 @@ export type CourseGradebookGridResponse = {
   displayGrades?: Record<string, Record<string, string>>
   /** Rubric criterion scores: student → item → criterion id → points. */
   rubricScores?: Record<string, Record<string, Record<string, string>>>
+  /** Plan 3.8 — unposted manual assignment cells. */
+  gradeHeld?: Record<string, Record<string, boolean>>
+  droppedGrades?: Record<string, Record<string, boolean>>
   gradingScheme?: GradingSchemeSummary | null
 }
 
@@ -1299,6 +1343,10 @@ export type CourseMyGradesResponse = {
   displayGrades: Record<string, string>
   assignmentGroups: AssignmentGroup[]
   gradingScheme?: GradingSchemeSummary | null
+  /** Plan 3.8 — has grade but not released. */
+  heldGradeItemIds?: string[]
+  /** Plan 3.9 */
+  droppedGrades?: Record<string, boolean>
 }
 
 export async function fetchCourseMyGrades(courseCode: string): Promise<CourseMyGradesResponse> {
@@ -1315,6 +1363,8 @@ export async function fetchCourseMyGrades(courseCode: string): Promise<CourseMyG
     displayGrades: body.displayGrades ?? {},
     assignmentGroups: parsed.assignmentGroups,
     gradingScheme: body.gradingScheme ?? null,
+    heldGradeItemIds: body.heldGradeItemIds ?? [],
+    droppedGrades: body.droppedGrades ?? {},
   }
 }
 
@@ -1338,6 +1388,48 @@ export async function putCourseGradebookGrades(
           : {}),
       }),
     },
+  )
+  if (res.ok) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+/** Plan 3.8 — post all held grades for an assignment. */
+export async function postCourseAssignmentGrades(courseCode: string, itemId: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/post-grades`,
+    { method: 'POST' },
+  )
+  if (res.ok) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+export async function postCourseAssignmentGradesForStudents(
+  courseCode: string,
+  itemId: string,
+  studentUserIds: string[],
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/post-grades/select`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentUserIds }),
+    },
+  )
+  if (res.ok) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+export async function retractCourseAssignmentGrades(
+  courseCode: string,
+  itemId: string,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/post-grades`,
+    { method: 'DELETE' },
   )
   if (res.ok) return
   const raw = await parseJson(res)
@@ -1527,6 +1619,12 @@ export type ModuleContentPagePayload = {
   originalityStudentVisibility: OriginalityStudentVisibility
   /** Plan 3.6 — assignment display override (omit = inherit course scheme). */
   gradingType?: string | null
+  /** Plan 3.8 */
+  postingPolicy?: 'automatic' | 'manual' | null
+  releaseAt?: string | null
+  /** Plan 3.9 */
+  neverDrop?: boolean
+  replaceWithFinal?: boolean
 }
 
 export type OriginalityDetectionMode = 'disabled' | 'plagiarism' | 'ai' | 'both'
@@ -1606,6 +1704,11 @@ function normalizeModuleContentPagePayload(raw: unknown): ModuleContentPagePaylo
       typeof r.gradingType === 'string' && r.gradingType.trim()
         ? r.gradingType.trim()
         : null,
+    postingPolicy:
+      r.postingPolicy === 'manual' ? 'manual' : r.postingPolicy === 'automatic' ? 'automatic' : 'automatic',
+    releaseAt: typeof r.releaseAt === 'string' ? r.releaseAt : null,
+    neverDrop: r.neverDrop === true || r.never_drop === true,
+    replaceWithFinal: r.replaceWithFinal === true || r.replace_with_final === true,
   }
 }
 
@@ -1921,6 +2024,9 @@ export type ModuleQuizPayload = {
   /** Course feature: progressive hints + worked examples (plan 1.9). */
   hintScaffoldingEnabled?: boolean
   misconceptionDetectionEnabled?: boolean
+  /** Plan 3.9 */
+  neverDrop?: boolean
+  replaceWithFinal?: boolean
 }
 
 /** Editable advanced quiz options (editor draft); `quizAccessCode` is plain text for the form. */
@@ -2052,6 +2158,8 @@ export function normalizeModuleQuizPayload(raw: unknown): ModuleQuizPayload {
     assignmentGroupId: typeof r.assignmentGroupId === 'string' ? r.assignmentGroupId : null,
     hintScaffoldingEnabled: Boolean(r.hintScaffoldingEnabled),
     misconceptionDetectionEnabled: Boolean(r.misconceptionDetectionEnabled),
+    neverDrop: r.neverDrop === true,
+    replaceWithFinal: r.replaceWithFinal === true,
   }
 }
 
@@ -2110,6 +2218,8 @@ export async function patchModuleQuiz(
     adaptiveSourceItemIds?: string[]
     adaptiveQuestionCount?: number
     adaptiveDeliveryMode?: AdaptiveDeliveryMode
+    neverDrop?: boolean
+    replaceWithFinal?: boolean
   },
 ): Promise<ModuleQuizPayload> {
   const res = await authorizedFetch(
@@ -3093,6 +3203,10 @@ export async function patchModuleAssignment(
     originalityStudentVisibility?: OriginalityStudentVisibility
     /** Plan 3.6 — set or clear (`null`) assignment display override. */
     gradingType?: string | null
+    postingPolicy?: 'automatic' | 'manual'
+    releaseAt?: string | null
+    neverDrop?: boolean
+    replaceWithFinal?: boolean
   },
 ): Promise<ModuleContentPagePayload> {
   const res = await authorizedFetch(
@@ -3475,7 +3589,18 @@ export async function putCourseGradingSettings(
   courseCode: string,
   body: {
     gradingScale: string
-    assignmentGroups: { id?: string; name: string; sortOrder: number; weightPercent: number }[]
+    assignmentGroups: {
+      id?: string
+      name: string
+      sortOrder: number
+      weightPercent: number
+      dropLowest?: number
+      dropHighest?: number
+      replaceLowestWithFinal?: boolean
+    }[]
+    sbgEnabled?: boolean
+    sbgProficiencyScaleJson?: unknown | null
+    sbgAggregationRule?: string
   },
 ): Promise<CourseGradingSettings> {
   const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/grading`, {
@@ -3484,11 +3609,85 @@ export async function putCourseGradingSettings(
     body: JSON.stringify({
       gradingScale: body.gradingScale,
       assignmentGroups: body.assignmentGroups,
+      ...(body.sbgEnabled !== undefined ? { sbgEnabled: body.sbgEnabled } : {}),
+      ...(body.sbgProficiencyScaleJson !== undefined
+        ? { sbgProficiencyScaleJson: body.sbgProficiencyScaleJson }
+        : {}),
+      ...(body.sbgAggregationRule !== undefined
+        ? { sbgAggregationRule: body.sbgAggregationRule }
+        : {}),
     }),
   })
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseCourseGradingSettings(raw)
+}
+
+/** Plan 3.7 — SBG matrix for instructors. */
+export type SbgStandardsGradebookResponse = {
+  standards: { id: string; externalId: string | null; description: string; position: number }[]
+  students: { userId: string; displayLabel: string }[]
+  proficiencies: { studentUserId: string; standardId: string; levelLabel: string }[]
+}
+
+export async function fetchSbgStandardsGradebook(
+  courseCode: string,
+): Promise<SbgStandardsGradebookResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/standards-gradebook`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as SbgStandardsGradebookResponse
+}
+
+export async function importSbgStandardsCsv(courseCode: string, csv: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/standards/import`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/csv' },
+      body: csv,
+    },
+  )
+  if (res.status === 204) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+export type SbgStandard = {
+  id: string
+  externalId: string | null
+  description: string
+  subject: string | null
+  gradeLevel: string | null
+  position: number
+}
+
+export async function fetchSbgStandardsList(courseCode: string): Promise<SbgStandard[]> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/standards`)
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { standards?: SbgStandard[] }
+  return o.standards ?? []
+}
+
+export async function putSbgItemAlignments(
+  courseCode: string,
+  itemId: string,
+  alignments: { standardId: string; alignableType: string; alignableId: string; weight?: number }[],
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/module-items/${encodeURIComponent(itemId)}/sbg-alignments`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alignments }),
+    },
+  )
+  if (res.status === 204) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
 }
 
 export type CourseGradingSchemeRecord = {

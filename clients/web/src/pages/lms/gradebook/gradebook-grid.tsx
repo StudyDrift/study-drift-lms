@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, LayoutGrid, Thermometer, Users } from 'lucide-react'
+import { ChevronDown, LayoutGrid, Lock, Thermometer, Users } from 'lucide-react'
 import { useUiDensity } from '../../../context/ui-density-context'
 import { EmptyState } from '../../../components/ui/empty-state'
 import {
@@ -25,16 +25,22 @@ import {
   formatFinalPercent,
   type AssignmentGroupWeight,
 } from './compute-course-final-percent'
-import type { RubricDefinition } from '../../../lib/courses-api'
+import type { AssignmentGroup, RubricDefinition } from '../../../lib/courses-api'
 
 export type GradebookColumn = {
   id: string
   title: string
   maxPoints: number | null
+  kind?: string
   assignmentGroupId?: string | null
   rubric?: RubricDefinition | null
   /** Plan 3.6 — resolved display mode for this column. */
   effectiveDisplayType?: string
+  /** Plan 3.8 */
+  postingPolicy?: string | null
+  releaseAt?: string | null
+  neverDrop?: boolean
+  replaceWithFinal?: boolean
 }
 
 export type GradebookStudent = {
@@ -46,8 +52,8 @@ type GradebookGridProps = {
   columns: GradebookColumn[]
   students: GradebookStudent[]
   initialGrades: Record<string, Record<string, string>>
-  /** Weights from course grading settings; empty uses straight points across the grid. */
-  assignmentGroups?: AssignmentGroupWeight[]
+  /** Weights and drop policy from course grading settings; empty uses straight points across the grid. */
+  assignmentGroups?: AssignmentGroup[] | AssignmentGroupWeight[]
   footerNote?: string
   /** When true, scores cannot be edited (view-only). */
   readOnly?: boolean
@@ -61,6 +67,13 @@ type GradebookGridProps = {
   highlightStudentId?: string | null
   /** Active course grading scheme (letter bands, pass threshold, etc.). */
   gradingScheme?: { type: string; scaleJson: unknown } | null
+  /** Plan 3.8 — held (unposted) manual cells; instructor still sees the score. */
+  gradeHeld?: Record<string, Record<string, boolean>>
+  /** Plan 3.9 — dropped for course total. */
+  droppedGrades?: Record<string, Record<string, boolean>>
+  /** When set, show “Post grades” in column header for manual assignment columns. */
+  onPostAssignmentGrades?: (itemId: string) => void
+  postGradesPending?: string | null
 }
 
 function gradingSelectOptions(
@@ -232,6 +245,10 @@ export function GradebookGrid({
   courseCode,
   highlightStudentId = null,
   gradingScheme = null,
+  gradeHeld = undefined,
+  droppedGrades = undefined,
+  onPostAssignmentGrades,
+  postGradesPending = null,
 }: GradebookGridProps) {
   const density = useUiDensity()
   const pad = density === 'compact' ? 'px-2 py-1.5 text-xs' : CELL_PAD
@@ -348,17 +365,29 @@ export function GradebookGrid({
         id: c.id,
         maxPoints: c.maxPoints,
         assignmentGroupId: c.assignmentGroupId ?? null,
+        neverDrop: c.neverDrop === true,
+        replaceWithFinal: c.replaceWithFinal === true,
       })),
     [columns],
   )
 
+  const groupsForFinal = useMemo((): AssignmentGroupWeight[] => {
+    return (assignmentGroups as AssignmentGroup[]).map((g) => ({
+      id: g.id,
+      weightPercent: g.weightPercent,
+      dropLowest: g.dropLowest,
+      dropHighest: g.dropHighest,
+      replaceLowestWithFinal: g.replaceLowestWithFinal,
+    }))
+  }, [assignmentGroups])
+
   const finalPercentByStudentId = useMemo(() => {
     const out: Record<string, number | null> = {}
     for (const s of students) {
-      out[s.id] = computeCourseFinalPercent(columnsForFinal, grades[s.id] ?? {}, assignmentGroups)
+      out[s.id] = computeCourseFinalPercent(columnsForFinal, grades[s.id] ?? {}, groupsForFinal)
     }
     return out
-  }, [students, columnsForFinal, grades, assignmentGroups])
+  }, [students, columnsForFinal, grades, groupsForFinal])
 
   const columnScoreBounds = useMemo(() => {
     return visibleColumns.map((col) => {
@@ -1186,6 +1215,24 @@ export function GradebookGrid({
                         <span className="text-[0.65rem] font-normal text-slate-500 dark:text-neutral-400">
                           {col.maxPoints != null ? `Out of ${col.maxPoints}` : 'Max points not set'}
                         </span>
+                        {col.kind === 'assignment' &&
+                        col.postingPolicy === 'manual' &&
+                        onPostAssignmentGrades &&
+                        !readOnly ? (
+                          <button
+                            type="button"
+                            className="mt-1 inline-flex max-w-full items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[0.65rem] font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                            aria-label={`Post grades for ${col.title}`}
+                            disabled={postGradesPending === col.id}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              onPostAssignmentGrades(col.id)
+                            }}
+                          >
+                            {postGradesPending === col.id ? 'Posting…' : 'Post grades'}
+                          </button>
+                        ) : null}
                       </span>
                       <ChevronDown className="size-3.5 shrink-0 self-start opacity-70" aria-hidden />
                     </button>
@@ -1281,6 +1328,8 @@ export function GradebookGrid({
                   const showEditor = editing != null && row === focusRow && colIndex === focusCol
                   const inEditBand = editing != null && inRect && !showEditor
                   const val = displayValue(row, colIndex)
+                  const cellHeld = Boolean(gradeHeld?.[student.id]?.[col.id])
+                  const cellDropped = Boolean(droppedGrades?.[student.id]?.[col.id])
                   const singleCellEdit =
                     editing != null &&
                     editing.rowMin === editing.rowMax &&
@@ -1312,6 +1361,7 @@ export function GradebookGrid({
                   const heatSurface =
                     heatT != null && !showEditor && !inFillDest ? heatMapCellClass(heatT) : null
 
+                  const droppedSurface = cellDropped ? 'opacity-65 dark:opacity-70' : ''
                   const cellSurface = showEditor
                     ? ringActive
                     : inEditBand
@@ -1348,7 +1398,17 @@ export function GradebookGrid({
                       aria-selected={
                         inRect || showEditor || (isFocusCell && !editing && selectionRect == null)
                       }
-                      className={`relative ${pad} min-w-[5.5rem] border-l border-slate-100 text-right tabular-nums outline-none transition dark:border-neutral-700/80 ${cellSurface} ${fillExtSurface}`}
+                      className={`relative ${pad} min-w-[5.5rem] border-l border-slate-100 text-right tabular-nums outline-none transition dark:border-neutral-700/80 ${cellSurface} ${fillExtSurface} ${droppedSurface}`}
+                      title={
+                        cellDropped
+                          ? 'This score is excluded from the course total by the group’s drop or replace policy.'
+                          : undefined
+                      }
+                      aria-label={
+                        cellDropped
+                          ? `${val || 'Empty'}, score dropped by group policy for ${col.title} — ${student.name}`
+                          : undefined
+                      }
                       onKeyDown={(e) => handleGradeCellKeyDown(e, row, colIndex)}
                       onPaste={(e) => {
                         if (readOnly) return
@@ -1436,12 +1496,21 @@ export function GradebookGrid({
                         )
                       ) : (
                         <div className="flex flex-col items-end gap-0.5">
-                          <span
-                            className={
-                              val ? 'text-slate-950 dark:text-neutral-100' : 'text-neutral-400 dark:text-neutral-500'
-                            }
-                          >
-                            {val || '—'}
+                          <span className="inline-flex max-w-full items-center justify-end gap-1">
+                            {cellHeld ? (
+                              <Lock
+                                className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                                aria-hidden
+                              />
+                            ) : null}
+                            <span
+                              className={
+                                val ? 'text-slate-950 dark:text-neutral-100' : 'text-neutral-400 dark:text-neutral-500'
+                              }
+                              aria-label={cellHeld ? 'Grade pending release' : undefined}
+                            >
+                              {val || '—'}
+                            </span>
                           </span>
                           {!readOnly && col.rubric && onRubricClick ? (
                             <button

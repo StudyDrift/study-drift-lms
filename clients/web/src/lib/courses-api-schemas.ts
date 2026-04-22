@@ -49,6 +49,9 @@ export const courseSchema = z
     questionBankEnabled: z.boolean().optional(),
     lockdownModeEnabled: z.boolean().optional(),
     standardsAlignmentEnabled: z.boolean().optional(),
+    sbgEnabled: z.boolean().optional(),
+    sbgProficiencyScaleJson: z.unknown().nullish().optional(),
+    sbgAggregationRule: z.string().optional(),
     adaptivePathsEnabled: z.boolean().optional(),
     srsEnabled: z.boolean().optional(),
     diagnosticAssessmentsEnabled: z.boolean().optional(),
@@ -68,6 +71,7 @@ export const courseSchema = z
     markdownThemeCustom: c.markdownThemeCustom ?? null,
     annotationsEnabled: c.annotationsEnabled ?? false,
     feedbackMediaEnabled: c.feedbackMediaEnabled ?? false,
+    sbgEnabled: c.sbgEnabled ?? false,
   }))
 
 export const assignmentGroupSchema = z.object({
@@ -75,11 +79,17 @@ export const assignmentGroupSchema = z.object({
   sortOrder: z.number(),
   name: z.string(),
   weightPercent: z.number(),
+  dropLowest: z.number().optional().default(0),
+  dropHighest: z.number().optional().default(0),
+  replaceLowestWithFinal: z.boolean().optional().default(false),
 })
 
 export const courseGradingSettingsResultSchema = z.object({
   gradingScale: z.string(),
   assignmentGroups: z.array(assignmentGroupSchema),
+  sbgEnabled: z.boolean().optional(),
+  sbgProficiencyScaleJson: z.unknown().nullish().optional(),
+  sbgAggregationRule: z.string().optional(),
 })
 
 export const bankQuestionRowSchema = z.object({
@@ -292,6 +302,10 @@ export const courseGradebookGridColumnSchema = z.object({
   rubric: rubricDefinitionSchema.nullable().optional(),
   assignmentGradingType: z.string().nullable().optional(),
   effectiveDisplayType: z.string().optional(),
+  postingPolicy: z.string().nullable().optional(),
+  releaseAt: z.string().nullable().optional(),
+  neverDrop: z.boolean().optional().default(false),
+  replaceWithFinal: z.boolean().optional().default(false),
 })
 
 export const courseGradebookGridResponseSchema = z.object({
@@ -307,6 +321,12 @@ export const courseGradebookGridResponseSchema = z.object({
   rubricScores: z
     .record(z.string(), z.record(z.string(), z.record(z.string(), z.string())))
     .optional(),
+  gradeHeld: z
+    .record(z.string(), z.record(z.string(), z.boolean()))
+    .optional(),
+  droppedGrades: z
+    .record(z.string(), z.record(z.string(), z.boolean()))
+    .optional(),
   gradingScheme: z
     .object({
       type: z.string(),
@@ -320,6 +340,8 @@ export const courseMyGradesRawSchema = z.object({
   columns: z.array(courseGradebookGridColumnSchema).optional(),
   grades: z.record(z.string(), z.string()).optional(),
   displayGrades: z.record(z.string(), z.string()).optional(),
+  heldGradeItemIds: z.array(z.string()).optional(),
+  droppedGrades: z.record(z.string(), z.boolean()).optional(),
   assignmentGroups: z.unknown().optional(),
   gradingScheme: z
     .object({

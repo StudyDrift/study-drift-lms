@@ -172,7 +172,15 @@ export default function CourseModuleAssignmentPage() {
   const [gradingGroups, setGradingGroups] = useState<{ id: string; name: string }[]>([])
   const [gradingType, setGradingType] = useState('')
   const [draftGradingType, setDraftGradingType] = useState('')
+  const [postingPolicy, setPostingPolicy] = useState<'automatic' | 'manual'>('automatic')
+  const [draftPostingPolicy, setDraftPostingPolicy] = useState<'automatic' | 'manual'>('automatic')
+  const [releaseAt, setReleaseAt] = useState<string | null>(null)
+  const [draftReleaseLocal, setDraftReleaseLocal] = useState('')
   const [assignmentGroupId, setAssignmentGroupId] = useState<string | null>(null)
+  const [neverDrop, setNeverDrop] = useState(false)
+  const [replaceWithFinal, setReplaceWithFinal] = useState(false)
+  const [draftNeverDrop, setDraftNeverDrop] = useState(false)
+  const [draftReplaceWithFinal, setDraftReplaceWithFinal] = useState(false)
   const [assignmentGroupPatching, setAssignmentGroupPatching] = useState(false)
   const [assignmentGroupPatchError, setAssignmentGroupPatchError] = useState<string | null>(null)
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
@@ -259,7 +267,18 @@ export default function CourseModuleAssignmentPage() {
       setDraftOriginalityStudentVisibility(data.originalityStudentVisibility)
       setGradingType(data.gradingType ?? '')
       setDraftGradingType(data.gradingType ?? '')
+      const pp = data.postingPolicy === 'manual' ? 'manual' : 'automatic'
+      setPostingPolicy(pp)
+      setDraftPostingPolicy(pp)
+      setReleaseAt(data.releaseAt ?? null)
+      setDraftReleaseLocal(isoToDatetimeLocalValue(data.releaseAt ?? null))
       setAssignmentGroupId(data.assignmentGroupId ?? null)
+      const nd = data.neverDrop === true
+      const rwf = data.replaceWithFinal === true
+      setNeverDrop(nd)
+      setReplaceWithFinal(rwf)
+      setDraftNeverDrop(nd)
+      setDraftReplaceWithFinal(rwf)
       setAssignmentGroupPatchError(null)
       try {
         const grading = await fetchCourseGradingSettings(courseCode)
@@ -303,6 +322,10 @@ export default function CourseModuleAssignmentPage() {
       setAvailableUntilAt(null)
       setGradingGroups([])
       setAssignmentGroupId(null)
+      setNeverDrop(false)
+      setReplaceWithFinal(false)
+      setDraftNeverDrop(false)
+      setDraftReplaceWithFinal(false)
       setRubric(null)
       setDraftRubric(null)
       setUpdatedAt(null)
@@ -357,6 +380,10 @@ export default function CourseModuleAssignmentPage() {
     setDraftOriginalityDetection(originalityDetection)
     setDraftOriginalityStudentVisibility(originalityStudentVisibility)
     setDraftGradingType(gradingType)
+    setDraftPostingPolicy(postingPolicy)
+    setDraftReleaseLocal(isoToDatetimeLocalValue(releaseAt))
+    setDraftNeverDrop(neverDrop)
+    setDraftReplaceWithFinal(replaceWithFinal)
   }
 
   function beginEdit() {
@@ -418,6 +445,10 @@ export default function CourseModuleAssignmentPage() {
         originalityDetection: draftOriginalityDetection,
         originalityStudentVisibility: draftOriginalityStudentVisibility,
         gradingType: draftGradingType.trim() === '' ? null : draftGradingType.trim(),
+        postingPolicy: draftPostingPolicy,
+        releaseAt: datetimeLocalValueToIso(draftReleaseLocal),
+        neverDrop: draftNeverDrop,
+        replaceWithFinal: draftReplaceWithFinal,
       })
       setMarkdown(data.markdown)
       setDueAt(data.dueAt)
@@ -449,9 +480,20 @@ export default function CourseModuleAssignmentPage() {
       setDraftOriginalityStudentVisibility(data.originalityStudentVisibility)
       setGradingType(data.gradingType ?? '')
       setDraftGradingType(data.gradingType ?? '')
+      const ppa = data.postingPolicy === 'manual' ? 'manual' : 'automatic'
+      setPostingPolicy(ppa)
+      setDraftPostingPolicy(ppa)
+      setReleaseAt(data.releaseAt ?? null)
+      setDraftReleaseLocal(isoToDatetimeLocalValue(data.releaseAt ?? null))
       setRequiresAssignmentAccessCode(data.requiresAssignmentAccessCode)
       setAssignmentAccessCode(data.assignmentAccessCode ?? '')
       setAssignmentGroupId(data.assignmentGroupId ?? null)
+      const savedNd = data.neverDrop === true
+      const savedRwf = data.replaceWithFinal === true
+      setNeverDrop(savedNd)
+      setReplaceWithFinal(savedRwf)
+      setDraftNeverDrop(savedNd)
+      setDraftReplaceWithFinal(savedRwf)
       setUpdatedAt(data.updatedAt)
       setEditing(false)
       setDraft([])
@@ -778,6 +820,14 @@ export default function CourseModuleAssignmentPage() {
                     onOriginalityStudentVisibilityChange={setDraftOriginalityStudentVisibility}
                     gradingDisplayType={draftGradingType}
                     onGradingDisplayTypeChange={setDraftGradingType}
+                    postingPolicy={draftPostingPolicy}
+                    onPostingPolicyChange={setDraftPostingPolicy}
+                    releaseAtLocal={draftReleaseLocal}
+                    onReleaseAtLocalChange={setDraftReleaseLocal}
+                    neverDrop={draftNeverDrop}
+                    onNeverDropChange={setDraftNeverDrop}
+                    replaceWithFinal={draftReplaceWithFinal}
+                    onReplaceWithFinalChange={setDraftReplaceWithFinal}
                   />
                 ) : null
               }

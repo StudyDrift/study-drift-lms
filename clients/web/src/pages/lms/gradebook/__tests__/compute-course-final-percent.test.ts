@@ -68,4 +68,18 @@ describe('computeCourseFinalPercent', () => {
     )
     expect(pct).toBeCloseTo(80, 5)
   })
+
+  it('applies drop lowest 1 in a 100% group (plan 3.9)', () => {
+    const pct = computeCourseFinalPercent(
+      [
+        { id: 'a', maxPoints: 100, assignmentGroupId: 'g', neverDrop: false, replaceWithFinal: false },
+        { id: 'b', maxPoints: 100, assignmentGroupId: 'g' },
+        { id: 'c', maxPoints: 100, assignmentGroupId: 'g' },
+        { id: 'd', maxPoints: 100, assignmentGroupId: 'g' },
+      ],
+      { a: '60', b: '70', c: '80', d: '90' },
+      [{ id: 'g', weightPercent: 100, dropLowest: 1, dropHighest: 0, replaceLowestWithFinal: false }],
+    )
+    expect(pct).toBeCloseTo(80, 5)
+  })
 })

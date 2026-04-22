@@ -21,6 +21,7 @@ use crate::repos::grade_change_audit;
 use crate::repos::moderated_grading as mod_repo;
 use crate::repos::module_assignment_submissions;
 use crate::repos::provisional_grades;
+use crate::services::grading::standards as sbg_grading;
 use crate::services::moderated_grading as mod_service;
 use crate::state::AppState;
 
@@ -258,7 +259,7 @@ async fn get_reconciliation_handler(
         by_sub.entry(r.submission_id).or_default().push(r);
     }
 
-    let (grades_map, _) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (grades_map, _, _) = course_grades::list_for_course(&state.pool, course_id).await?;
 
     let mut rows: Vec<ReconciliationRowOut> = Vec::new();
     for s in subs {
@@ -454,6 +455,17 @@ async fn post_reconcile_handler(
         now,
     )
     .await?;
+    if let Some(c) = course::get_by_id(&state.pool, course_id).await? {
+        if c.sbg_enabled {
+            let _ = sbg_grading::recompute_student_sbg(
+                &state.pool,
+                course_id,
+                sub.submitted_by,
+                false,
+            )
+            .await;
+        }
+    }
 
     grade_change_audit::insert(
         &state.pool,

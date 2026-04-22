@@ -149,6 +149,7 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         moderated_grading_enabled: config.moderated_grading_enabled,
         originality_detection_enabled: config.originality_detection_enabled,
         originality_stub_external: config.originality_stub_external,
+        grade_posting_policies_enabled: config.grade_posting_policies_enabled,
     })
 }
 
@@ -180,6 +181,23 @@ pub async fn run() -> anyhow::Result<()> {
                 Ok(n) if n > 0 => tracing::info!(count = n, "auto-submit sweep completed"),
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "auto-submit sweep failed"),
+            }
+        }
+    });
+    let post_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            if !post_state.grade_posting_policies_enabled {
+                continue;
+            }
+            let now = chrono::Utc::now();
+            if let Err(e) =
+                crate::services::grading::posting::sweep_scheduled_releases(&post_state.pool, now)
+                    .await
+            {
+                tracing::warn!(error = %e, "grade_posting.sweep failed");
             }
         }
     });

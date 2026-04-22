@@ -402,6 +402,11 @@ pub struct ModuleQuizResponse {
     /// Course feature: misconception tagging + remediation in results (plan 1.10).
     #[serde(default)]
     pub misconception_detection_enabled: bool,
+    /// Plan 3.9
+    #[serde(default)]
+    pub never_drop: bool,
+    #[serde(default)]
+    pub replace_with_final: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -499,6 +504,11 @@ pub struct UpdateModuleQuizRequest {
     pub adaptive_question_count: Option<i32>,
     #[serde(default)]
     pub adaptive_delivery_mode: Option<String>,
+    /// Plan 3.9
+    #[serde(default)]
+    pub never_drop: Option<bool>,
+    #[serde(default)]
+    pub replace_with_final: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

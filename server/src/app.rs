@@ -39,9 +39,11 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::me::router())
         .merge(routes::search::router())
         .merge(routes::courses::router())
+        .merge(routes::sbg_grading::router())
         .merge(routes::assignment_grading::router())
         .merge(routes::originality::router())
         .merge(routes::moderated_grading::router())
+        .merge(routes::grade_posting::router())
         .merge(routes::feedback_media::router())
         .merge(routes::question_bank::router())
         .merge(routes::imports::router())
@@ -91,6 +93,7 @@ mod tests {
             moderated_grading_enabled: false,
             originality_detection_enabled: false,
             originality_stub_external: false,
+            grade_posting_policies_enabled: true,
         }
     }
 

@@ -26,6 +26,7 @@ import CourseModules from './pages/lms/course-modules'
 import CourseNotebookPage from './pages/lms/course-notebook-page'
 import CourseSettings from './pages/lms/course-settings'
 import CourseStandardsCoveragePage from './pages/lms/course-standards-coverage-page'
+import CourseStandardsGradebook from './pages/lms/course-standards-gradebook'
 import CourseSyllabus from './pages/lms/course-syllabus'
 import Courses from './pages/lms/courses'
 import Dashboard from './pages/lms/dashboard'
@@ -104,6 +105,7 @@ export default function App() {
             <Route path="calendar" element={<CourseCalendarPage />} />
             <Route path="my-grades" element={<CourseMyGrades />} />
             <Route path="gradebook" element={<CourseGradebook />} />
+            <Route path="standards-gradebook" element={<CourseStandardsGradebook />} />
             <Route path="standards-coverage" element={<CourseStandardsCoveragePage />} />
             <Route path="enrollments" element={<CourseEnrollments />} />
             <Route index element={<CourseDetail />} />

@@ -1,5 +1,6 @@
 use crate::models::assignment_rubric::RubricDefinition;
 use crate::models::course_grading::AssignmentGroupPublic;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -18,6 +19,12 @@ pub struct CourseGradebookGridResponse {
     /// Per-criterion rubric scores: student → item → criterion id → points string.
     #[serde(default)]
     pub rubric_scores: HashMap<Uuid, HashMap<Uuid, HashMap<Uuid, String>>>,
+    /// Plan 3.8 — assignment + manual + unposted cells (instructor: lock in UI; score still in `grades`).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub grade_held: HashMap<Uuid, HashMap<Uuid, bool>>,
+    /// Plan 3.9 — student → item id → whether that score is dropped for course total.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub dropped_grades: HashMap<Uuid, HashMap<Uuid, bool>>,
     /// Active course grading scheme (omit when none — gradebook uses raw points).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grading_scheme: Option<GradingSchemeSummary>,
@@ -66,6 +73,18 @@ pub struct CourseGradebookGridColumn {
     pub assignment_grading_type: Option<String>,
     /// Resolved display mode for this column (`points`, `letter`, …).
     pub effective_display_type: String,
+    /// Plan 3.8 — for assignment columns: `automatic` or `manual`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub posting_policy: Option<String>,
+    /// Plan 3.8 — scheduled release.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub release_at: Option<DateTime<Utc>>,
+    /// Plan 3.9 — this score cannot be dropped in its assignment group.
+    #[serde(default)]
+    pub never_drop: bool,
+    /// Plan 3.9 — this item is the final used for replace-lowest policy.
+    #[serde(default)]
+    pub replace_with_final: bool,
 }
 
 /// Student-facing grades: one row per gradable item plus weights for final %.
@@ -82,4 +101,10 @@ pub struct CourseMyGradesResponse {
     pub assignment_groups: Vec<AssignmentGroupPublic>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grading_scheme: Option<GradingSchemeSummary>,
+    /// Plan 3.8 — has an entered grade that is not yet posted to students.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub held_grade_item_ids: Vec<Uuid>,
+    /// Plan 3.9 — item id → score excluded by group drop policy (student view).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub dropped_grades: HashMap<Uuid, bool>,
 }

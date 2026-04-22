@@ -51,6 +51,8 @@ pub struct CourseItemQuizRow {
     pub assignment_group_id: Option<Uuid>,
     pub lockdown_mode: String,
     pub focus_loss_threshold: Option<i32>,
+    pub never_drop: bool,
+    pub replace_with_final: bool,
 }
 
 /// Full quiz scheduling / behavior row for PATCH merge + UPDATE.
@@ -217,7 +219,9 @@ pub async fn get_for_course_item(
                m.adaptive_delivery_mode,
                c.assignment_group_id,
                m.lockdown_mode::text AS lockdown_mode,
-               m.focus_loss_threshold
+               m.focus_loss_threshold,
+               m.never_drop,
+               m.replace_with_final
         FROM {} c
         INNER JOIN {} m ON m.structure_item_id = c.id
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'quiz'
@@ -608,4 +612,35 @@ pub async fn upsert_import_body(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+pub async fn update_quiz_drop_flags(
+    pool: &PgPool,
+    course_id: Uuid,
+    item_id: Uuid,
+    never_drop: bool,
+    replace_with_final: bool,
+) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
+    sqlx::query_scalar(&format!(
+        r#"
+        UPDATE {} m
+        SET never_drop = $3,
+            replace_with_final = $4,
+            updated_at = NOW()
+        FROM {} c
+        WHERE m.structure_item_id = c.id
+          AND c.id = $1
+          AND c.course_id = $2
+          AND c.kind = 'quiz'
+        RETURNING m.updated_at
+        "#,
+        schema::MODULE_QUIZZES,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(item_id)
+    .bind(course_id)
+    .bind(never_drop)
+    .bind(replace_with_final)
+    .fetch_optional(pool)
+    .await
 }

@@ -48,6 +48,8 @@ pub struct Config {
     pub originality_detection_enabled: bool,
     /// Plan 3.5 — completes external similarity with stub data for local testing (`ORIGINALITY_STUB_EXTERNAL=1`).
     pub originality_stub_external: bool,
+    /// Plan 3.8 — hold/post grade routes and student visibility. Default on; `GRADE_POSTING_POLICIES_ENABLED=0` disables.
+    pub grade_posting_policies_enabled: bool,
 }
 
 const DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES: &[&str] = &["instructure.com"];
@@ -256,6 +258,18 @@ impl Config {
             Some("1") | Some("true") | Some("yes") | Some("on")
         );
 
+        let grade_posting_policies_enabled = match env::var("GRADE_POSTING_POLICIES_ENABLED") {
+            Err(_) => true,
+            Ok(v) => {
+                let t = v.trim().to_ascii_lowercase();
+                t.is_empty()
+                    || matches!(
+                        t.as_str(),
+                        "1" | "true" | "yes" | "on"
+                    )
+            }
+        };
+
         Ok(Self {
             database_url,
             jwt_secret,
@@ -279,6 +293,7 @@ impl Config {
             moderated_grading_enabled,
             originality_detection_enabled,
             originality_stub_external,
+            grade_posting_policies_enabled,
         })
     }
 }

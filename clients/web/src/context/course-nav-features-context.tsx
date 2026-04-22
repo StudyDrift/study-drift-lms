@@ -17,6 +17,8 @@ export type CourseNavFeatures = {
   calendarEnabled: boolean
   questionBankEnabled: boolean
   standardsAlignmentEnabled: boolean
+  /** Plan 3.7 — standards-based grading enabled for the course. */
+  sbgEnabled: boolean
   /** True while loading or re-fetching flags for the active course. */
   loading: boolean
   /** Re-load feature flags from the server (e.g. after saving settings). */
@@ -29,6 +31,7 @@ const defaultFeatures: CourseNavFeatures = {
   calendarEnabled: true,
   questionBankEnabled: false,
   standardsAlignmentEnabled: false,
+  sbgEnabled: false,
   loading: false,
   refresh: async () => {},
 }
@@ -46,6 +49,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
   const [calendarEnabled, setCalendarEnabled] = useState(true)
   const [questionBankEnabled, setQuestionBankEnabled] = useState(false)
   const [standardsAlignmentEnabled, setStandardsAlignmentEnabled] = useState(false)
+  const [sbgEnabled, setSbgEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -55,6 +59,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setCalendarEnabled(true)
       setQuestionBankEnabled(false)
       setStandardsAlignmentEnabled(false)
+      setSbgEnabled(false)
       return
     }
     setLoading(true)
@@ -65,12 +70,14 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setCalendarEnabled(c.calendarEnabled !== false)
       setQuestionBankEnabled(c.questionBankEnabled === true)
       setStandardsAlignmentEnabled(c.standardsAlignmentEnabled === true)
+      setSbgEnabled(c.sbgEnabled === true)
     } catch {
       setNotebookEnabled(true)
       setFeedEnabled(true)
       setCalendarEnabled(true)
       setQuestionBankEnabled(false)
       setStandardsAlignmentEnabled(false)
+      setSbgEnabled(false)
     } finally {
       setLoading(false)
     }
@@ -87,6 +94,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       calendarEnabled,
       questionBankEnabled,
       standardsAlignmentEnabled,
+      sbgEnabled,
       loading,
       refresh,
     }),
@@ -96,6 +104,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       calendarEnabled,
       questionBankEnabled,
       standardsAlignmentEnabled,
+      sbgEnabled,
       loading,
       refresh,
     ],

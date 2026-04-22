@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
+import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { usePermissions } from '../../context/use-permissions'
 import {
   courseItemCreatePermission,
@@ -22,10 +23,22 @@ type EditableGroup = {
   name: string
   sortOrder: number
   weightPercent: string
+  dropLowest: string
+  dropHighest: string
+  replaceLowestWithFinal: boolean
 }
 
 function newClientKey(): string {
   return `new-${crypto.randomUUID()}`
+}
+
+const DEFAULT_SBG_PROFICIENCY_JSON = {
+  levels: [
+    { level: 4, label: 'Exceeds', minScore: 3.5 },
+    { level: 3, label: 'Meets', minScore: 2.5 },
+    { level: 2, label: 'Approaching', minScore: 1.5 },
+    { level: 1, label: 'Not yet', minScore: 0 },
+  ],
 }
 
 function groupsToEditable(groups: AssignmentGroup[]): EditableGroup[] {
@@ -35,11 +48,15 @@ function groupsToEditable(groups: AssignmentGroup[]): EditableGroup[] {
     name: g.name,
     sortOrder: g.sortOrder,
     weightPercent: String(g.weightPercent),
+    dropLowest: String(g.dropLowest ?? 0),
+    dropHighest: String(g.dropHighest ?? 0),
+    replaceLowestWithFinal: g.replaceLowestWithFinal === true,
   }))
 }
 
 export function CourseGradingSettingsSection({ courseCode }: { courseCode: string }) {
   const { allows, loading: permLoading } = usePermissions()
+  const { refresh: refreshCourseNav } = useCourseNavFeatures()
   const canEdit = !permLoading && allows(courseItemCreatePermission(courseCode))
 
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -56,6 +73,9 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
   const [schemeMessage, setSchemeMessage] = useState<string | null>(null)
   const [passMinPct, setPassMinPct] = useState('60')
   const [completeMinPct, setCompleteMinPct] = useState('50')
+  const [sbgEnabled, setSbgEnabled] = useState(false)
+  const [sbgRule, setSbgRule] = useState('most_recent')
+  const [sbgScaleText, setSbgScaleText] = useState(() => JSON.stringify(DEFAULT_SBG_PROFICIENCY_JSON, null, 2))
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -76,6 +96,9 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                 name: 'Assignments',
                 sortOrder: 0,
                 weightPercent: '100',
+                dropLowest: '0',
+                dropHighest: '0',
+                replaceLowestWithFinal: false,
               },
             ],
       )
@@ -107,6 +130,17 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
       }
       setSchemeStatus('idle')
       setSchemeMessage(null)
+      setSbgEnabled(g.sbgEnabled === true)
+      setSbgRule(g.sbgAggregationRule?.trim() || 'most_recent')
+      try {
+        setSbgScaleText(
+          g.sbgProficiencyScaleJson != null
+            ? JSON.stringify(g.sbgProficiencyScaleJson, null, 2)
+            : JSON.stringify(DEFAULT_SBG_PROFICIENCY_JSON, null, 2),
+        )
+      } catch {
+        setSbgScaleText(JSON.stringify(DEFAULT_SBG_PROFICIENCY_JSON, null, 2))
+      }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load grading settings.')
     } finally {
@@ -156,22 +190,43 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
     setSaveStatus('saving')
     setSaveMessage(null)
     try {
+      let sbgProficiencyScaleJson: unknown = undefined
+      if (sbgEnabled) {
+        try {
+          sbgProficiencyScaleJson = JSON.parse(sbgScaleText || '{}')
+        } catch {
+          setSaveStatus('error')
+          setSaveMessage('SBG proficiency scale must be valid JSON.')
+          return
+        }
+      }
       const payload = await putCourseGradingSettings(courseCode, {
         gradingScale,
         assignmentGroups: groups.map((g, i) => {
           const w = Number.parseFloat(g.weightPercent)
+          const dL = Number.parseInt(g.dropLowest, 10)
+          const dH = Number.parseInt(g.dropHighest, 10)
           return {
             id: g.id,
             name: g.name.trim(),
             sortOrder: i,
             weightPercent: Number.isFinite(w) ? w : 0,
+            dropLowest: Number.isFinite(dL) ? Math.max(0, dL) : 0,
+            dropHighest: Number.isFinite(dH) ? Math.max(0, dH) : 0,
+            replaceLowestWithFinal: g.replaceLowestWithFinal,
           }
         }),
+        sbgEnabled,
+        sbgAggregationRule: sbgRule,
+        sbgProficiencyScaleJson: sbgEnabled ? sbgProficiencyScaleJson : null,
       })
       setGradingScale(payload.gradingScale)
       setGroups(groupsToEditable(payload.assignmentGroups))
+      if (payload.sbgEnabled != null) setSbgEnabled(payload.sbgEnabled)
+      if (payload.sbgAggregationRule) setSbgRule(payload.sbgAggregationRule)
       const items = await fetchCourseStructure(courseCode)
       setStructure(items)
+      void refreshCourseNav()
       setSaveStatus('saved')
       setSaveMessage('Grading settings saved.')
     } catch (e) {
@@ -228,6 +283,9 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
         name: '',
         sortOrder: prev.length,
         weightPercent: '0',
+        dropLowest: '0',
+        dropHighest: '0',
+        replaceLowestWithFinal: false,
       },
     ])
   }
@@ -398,6 +456,61 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-600 dark:bg-neutral-900 dark:shadow-none">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Standards-based grading (K–12)</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+            When enabled, you can import course standards, align rubric criteria and quiz questions, and use the
+            Standards gradebook. Traditional points and this view can coexist; the points gradebook is unchanged.
+          </p>
+          <div className="mt-4 space-y-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800 dark:text-neutral-200">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                disabled={!canEdit}
+                checked={sbgEnabled}
+                onChange={(e) => setSbgEnabled(e.target.checked)}
+              />
+              Enable standards-based grading for this course
+            </label>
+            {sbgEnabled && (
+              <>
+                <div>
+                  <label htmlFor="sbg-rule" className="text-xs font-medium text-slate-500 dark:text-neutral-400">
+                    Proficiency aggregation
+                  </label>
+                  <select
+                    id="sbg-rule"
+                    disabled={!canEdit}
+                    value={sbgRule}
+                    onChange={(e) => setSbgRule(e.target.value)}
+                    className="mt-1 w-full max-w-md rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-950"
+                  >
+                    <option value="most_recent">Most recent evidence</option>
+                    <option value="highest">Highest</option>
+                    <option value="mean">Mean</option>
+                    <option value="decaying_average">Decaying average (0.65)</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="sbg-scale" className="text-xs font-medium text-slate-500 dark:text-neutral-400">
+                    Proficiency scale (JSON: <code className="text-xs">levels</code> with level, label, minScore)
+                  </label>
+                  <textarea
+                    id="sbg-scale"
+                    disabled={!canEdit}
+                    value={sbgScaleText}
+                    onChange={(e) => setSbgScaleText(e.target.value)}
+                    rows={8}
+                    spellCheck={false}
+                    className="mt-1 w-full max-w-2xl rounded-lg border border-slate-200 bg-white px-2 py-2 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-950"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-600 dark:bg-neutral-900 dark:shadow-none">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Assignment groups & weights</h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
             Define categories (for example homework, exams, participation) and what percent of the
@@ -406,11 +519,18 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
           </p>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[28rem] text-left text-sm">
+            <table className="w-full min-w-[40rem] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-600 dark:border-neutral-600 dark:text-neutral-400">
                   <th className="pb-2 pr-3 font-medium">Group name</th>
                   <th className="w-28 pb-2 pr-3 font-medium">Weight (%)</th>
+                  <th className="w-20 pb-2 pr-2 font-medium" title="Drop this many lowest scores in the group">
+                    Drop low
+                  </th>
+                  <th className="w-20 pb-2 pr-2 font-medium" title="Drop this many highest scores">
+                    Drop high
+                  </th>
+                  <th className="w-28 pb-2 pr-2 font-medium">Replace low</th>
                   <th className="w-10 pb-2" aria-hidden />
                 </tr>
               </thead>
@@ -448,6 +568,58 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                         }
                         className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 tabular-nums text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-400 dark:disabled:bg-neutral-900"
                       />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={g.dropLowest}
+                        disabled={!canEdit}
+                        onChange={(e) =>
+                          setGroups((prev) =>
+                            prev.map((x) =>
+                              x.clientKey === g.clientKey ? { ...x, dropLowest: e.target.value } : x,
+                            ),
+                          )
+                        }
+                        className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 tabular-nums text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100"
+                      />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={g.dropHighest}
+                        disabled={!canEdit}
+                        onChange={(e) =>
+                          setGroups((prev) =>
+                            prev.map((x) =>
+                              x.clientKey === g.clientKey ? { ...x, dropHighest: e.target.value } : x,
+                            ),
+                          )
+                        }
+                        className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 tabular-nums text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100"
+                      />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
+                        <input
+                          type="checkbox"
+                          checked={g.replaceLowestWithFinal}
+                          disabled={!canEdit}
+                          onChange={(e) =>
+                            setGroups((prev) =>
+                              prev.map((x) =>
+                                x.clientKey === g.clientKey
+                                  ? { ...x, replaceLowestWithFinal: e.target.checked }
+                                  : x,
+                              ),
+                            )
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-500"
+                        />
+                        <span>Final can replace a low score</span>
+                      </label>
                     </td>
                     <td className="py-2">
                       {canEdit && groups.length > 1 && (

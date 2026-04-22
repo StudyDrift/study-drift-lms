@@ -46,6 +46,11 @@ export type QuizPageSettingsPanelProps = {
   onLockdownModeChange?: (mode: LockdownMode) => void
   focusLossThreshold?: number | null
   onFocusLossThresholdChange?: (value: number | null) => void
+  /** Plan 3.9 — per-item drop policy when the course uses assignment-group drop rules. */
+  neverDrop?: boolean
+  onNeverDropChange?: (value: boolean) => void
+  replaceWithFinal?: boolean
+  onReplaceWithFinalChange?: (value: boolean) => void
 }
 
 const inputClass =
@@ -169,6 +174,10 @@ export function QuizPageSettingsPanel({
   onLockdownModeChange,
   focusLossThreshold = null,
   onFocusLossThresholdChange,
+  neverDrop = false,
+  onNeverDropChange,
+  replaceWithFinal = false,
+  onReplaceWithFinalChange,
 }: QuizPageSettingsPanelProps) {
   function patch(p: Partial<QuizAdvancedSettings>) {
     onAdvancedChange({ ...advanced, ...p })
@@ -382,6 +391,32 @@ export function QuizPageSettingsPanel({
               <p className="text-[11px] leading-snug text-slate-400 dark:text-neutral-500">
                 Add groups under Course Settings → Assignment groups & weights.
               </p>
+            ) : null}
+            {onNeverDropChange && onReplaceWithFinalChange ? (
+              <div className="mt-2 divide-y divide-slate-100/90 border-t border-slate-100/90 pt-2 dark:divide-neutral-800/80 dark:border-neutral-800/80">
+                <ToggleRow
+                  id="quiz-never-drop"
+                  label="Never drop this score"
+                  description="When the assignment group drops lowest or highest scores, this quiz is always kept in the average."
+                  checked={neverDrop}
+                  onChange={(next) => {
+                    onNeverDropChange(next)
+                    if (!next && replaceWithFinal) onReplaceWithFinalChange(false)
+                  }}
+                  disabled={disabled}
+                />
+                <ToggleRow
+                  id="quiz-replace-with-final"
+                  label="Use as final for replace-lowest"
+                  description="If the group uses “replace lowest with final,” this score is the replacement when it beats the student’s lowest eligible item."
+                  checked={replaceWithFinal}
+                  onChange={(next) => {
+                    onReplaceWithFinalChange(next)
+                    if (next) onNeverDropChange(true)
+                  }}
+                  disabled={disabled}
+                />
+              </div>
             ) : null}
           </div>
         </SettingsAccordion>

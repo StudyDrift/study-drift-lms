@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import {
   fetchCourseMyGrades,
+  type AssignmentGroup,
   type CourseGradebookGridColumn,
   viewerShouldShowMyGradesNav,
 } from '../../lib/courses-api'
@@ -36,7 +37,9 @@ export default function CourseMyGrades() {
   const [columns, setColumns] = useState<CourseGradebookGridColumn[]>([])
   const [grades, setGrades] = useState<Record<string, string>>({})
   const [displayGrades, setDisplayGrades] = useState<Record<string, string>>({})
-  const [assignmentGroups, setAssignmentGroups] = useState<AssignmentGroupWeight[]>([])
+  const [assignmentGroups, setAssignmentGroups] = useState<AssignmentGroup[]>([])
+  const [heldGradeItemIds, setHeldGradeItemIds] = useState<string[]>([])
+  const [droppedGrades, setDroppedGrades] = useState<Record<string, boolean>>({})
 
   const canView = useMemo(() => {
     if (!courseCode) return false
@@ -53,9 +56,9 @@ export default function CourseMyGrades() {
       setColumns(data.columns)
       setGrades(data.grades)
       setDisplayGrades(data.displayGrades ?? {})
-      setAssignmentGroups(
-        data.assignmentGroups.map((g) => ({ id: g.id, weightPercent: g.weightPercent })),
-      )
+      setAssignmentGroups(data.assignmentGroups)
+      setHeldGradeItemIds(data.heldGradeItemIds ?? [])
+      setDroppedGrades(data.droppedGrades ?? {})
       setLoadState('ok')
     } catch (e: unknown) {
       setLoadState('error')
@@ -75,19 +78,37 @@ export default function CourseMyGrades() {
     }
   }, [courseCode, canView, load])
 
+  const heldSet = useMemo(() => new Set(heldGradeItemIds), [heldGradeItemIds])
+
   const finalCols: GradebookColumnForFinal[] = useMemo(
     () =>
-      columns.map((c) => ({
-        id: c.id,
-        maxPoints: c.maxPoints,
-        assignmentGroupId: c.assignmentGroupId ?? null,
+      columns
+        .filter((c) => !heldSet.has(c.id))
+        .map((c) => ({
+          id: c.id,
+          maxPoints: c.maxPoints,
+          assignmentGroupId: c.assignmentGroupId ?? null,
+          neverDrop: c.neverDrop === true,
+          replaceWithFinal: c.replaceWithFinal === true,
+        })),
+    [columns, heldSet],
+  )
+
+  const groupsForFinal: AssignmentGroupWeight[] = useMemo(
+    () =>
+      assignmentGroups.map((g) => ({
+        id: g.id,
+        weightPercent: g.weightPercent,
+        dropLowest: g.dropLowest,
+        dropHighest: g.dropHighest,
+        replaceLowestWithFinal: g.replaceLowestWithFinal,
       })),
-    [columns],
+    [assignmentGroups],
   )
 
   const finalPct = useMemo(
-    () => computeCourseFinalPercent(finalCols, grades, assignmentGroups),
-    [finalCols, grades, assignmentGroups],
+    () => computeCourseFinalPercent(finalCols, grades, groupsForFinal),
+    [finalCols, grades, groupsForFinal],
   )
 
   const base = `/courses/${encodeURIComponent(courseCode ?? '')}`
@@ -152,20 +173,26 @@ export default function CourseMyGrades() {
                     <th className="px-4 py-3 font-semibold text-slate-900 dark:text-neutral-100">
                       Item %
                     </th>
+                    <th className="px-4 py-3 font-semibold text-slate-900 dark:text-neutral-100">Policy</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-neutral-700">
                   {columns.map((col) => {
-                    const earned = grades[col.id]
-                    const display = displayGrades[col.id]
-                    const earnedNum = parseEarned(earned)
+                    const held = heldSet.has(col.id)
+                    const dropped = !held && droppedGrades[col.id] === true
+                    const earned = held ? undefined : grades[col.id]
+                    const display = held ? undefined : displayGrades[col.id]
+                    const earnedNum = held ? 0 : parseEarned(earned)
                     const max = col.maxPoints
                     const href =
                       col.kind === 'quiz'
                         ? `${base}/modules/quiz/${encodeURIComponent(col.id)}`
                         : `${base}/modules/assignment/${encodeURIComponent(col.id)}`
                     return (
-                      <tr key={col.id} className="hover:bg-slate-50/80 dark:hover:bg-neutral-800/80">
+                      <tr
+                        key={col.id}
+                        className={`hover:bg-slate-50/80 dark:hover:bg-neutral-800/80 ${dropped ? 'text-slate-500 dark:text-neutral-500' : ''}`}
+                      >
                         <td className="px-4 py-3 font-medium text-slate-900 dark:text-neutral-100">
                           <Link
                             to={href}
@@ -177,18 +204,43 @@ export default function CourseMyGrades() {
                         <td className="px-4 py-3 capitalize text-slate-600 dark:text-neutral-400">
                           {col.kind === 'quiz' ? 'Quiz' : 'Assignment'}
                         </td>
-                        <td className="px-4 py-3 text-slate-800 dark:text-neutral-200">
-                          {(display ?? '').trim()
-                            ? display
-                            : (earned ?? '').trim()
-                              ? earned
-                              : '—'}
+                        <td
+                          className={`px-4 py-3 text-slate-800 dark:text-neutral-200 ${dropped ? 'line-through decoration-slate-400' : ''}`}
+                          aria-label={
+                            dropped
+                              ? 'Score shown but dropped from course total by group policy'
+                              : undefined
+                          }
+                        >
+                          {held ? (
+                            <span className="text-amber-800 dark:text-amber-200/90" title="Grades not yet released">
+                              Grades pending
+                            </span>
+                          ) : (display ?? '').trim() ? (
+                            display
+                          ) : (earned ?? '').trim() ? (
+                            earned
+                          ) : (
+                            '—'
+                          )}
                         </td>
                         <td className="px-4 py-3 text-slate-800 dark:text-neutral-200">
                           {max != null && max > 0 ? String(max) : '—'}
                         </td>
                         <td className="px-4 py-3 text-slate-800 dark:text-neutral-200">
                           {formatRowPercent(earnedNum, max)}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">
+                          {dropped ? (
+                            <span
+                              className="inline-flex rounded-md border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/50 dark:text-amber-200"
+                              title="This score is excluded from your course total by the group’s drop rules."
+                            >
+                              Dropped
+                            </span>
+                          ) : (
+                            '—'
+                          )}
                         </td>
                       </tr>
                     )

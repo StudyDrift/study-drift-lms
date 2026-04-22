@@ -266,6 +266,10 @@ export default function CourseModuleQuizPage() {
   const [draftPointsWorth, setDraftPointsWorth] = useState<number | null>(null)
   const [gradingGroups, setGradingGroups] = useState<{ id: string; name: string }[]>([])
   const [assignmentGroupId, setAssignmentGroupId] = useState<string | null>(null)
+  const [neverDrop, setNeverDrop] = useState(false)
+  const [replaceWithFinal, setReplaceWithFinal] = useState(false)
+  const [draftNeverDrop, setDraftNeverDrop] = useState(false)
+  const [draftReplaceWithFinal, setDraftReplaceWithFinal] = useState(false)
   const [assignmentGroupPatching, setAssignmentGroupPatching] = useState(false)
   const [assignmentGroupPatchError, setAssignmentGroupPatchError] = useState<string | null>(null)
   const [quizAdvanced, setQuizAdvanced] = useState<QuizAdvancedSettings>(() => defaultQuizAdvancedSettings())
@@ -331,6 +335,12 @@ export default function CourseModuleQuizPage() {
     try {
       const [data, courseRow] = await Promise.all([fetchModuleQuiz(courseCode, itemId), fetchCourse(courseCode)])
       setAssignmentGroupId(data.assignmentGroupId ?? null)
+      const nd = data.neverDrop === true
+      const rwf = data.replaceWithFinal === true
+      setNeverDrop(nd)
+      setReplaceWithFinal(rwf)
+      setDraftNeverDrop(nd)
+      setDraftReplaceWithFinal(rwf)
       setAssignmentGroupPatchError(null)
       try {
         const grading = await fetchCourseGradingSettings(courseCode)
@@ -398,6 +408,10 @@ export default function CourseModuleQuizPage() {
       setAdaptiveQuestionCount(5)
       setGradingGroups([])
       setAssignmentGroupId(null)
+      setNeverDrop(false)
+      setReplaceWithFinal(false)
+      setDraftNeverDrop(false)
+      setDraftReplaceWithFinal(false)
       setMarkups([])
       setStudentQuizPayload(null)
       setCourseLockdownEnabled(false)
@@ -577,6 +591,8 @@ export default function CourseModuleQuizPage() {
     setDraftFocusLossThreshold(focusLossThreshold)
     setDraftPointsWorth(pointsWorth)
     setDraftQuizAdvanced(quizAdvanced)
+    setDraftNeverDrop(neverDrop)
+    setDraftReplaceWithFinal(replaceWithFinal)
     setEditingContent(true)
   }
 
@@ -595,6 +611,8 @@ export default function CourseModuleQuizPage() {
     setDraftFocusLossThreshold(focusLossThreshold)
     setDraftPointsWorth(pointsWorth)
     setDraftQuizAdvanced(quizAdvanced)
+    setDraftNeverDrop(neverDrop)
+    setDraftReplaceWithFinal(replaceWithFinal)
   }
 
   async function onQuizAssignmentGroupChange(next: string | null) {
@@ -675,6 +693,8 @@ export default function CourseModuleQuizPage() {
         adaptiveTopicBalance: draftQuizAdvanced.adaptiveTopicBalance,
         adaptiveStopRule: draftQuizAdvanced.adaptiveStopRule,
         randomQuestionPoolCount: draftQuizAdvanced.randomQuestionPoolCount,
+        neverDrop: draftNeverDrop,
+        replaceWithFinal: draftReplaceWithFinal,
       })
       setTitle(data.title)
       setMarkdown(data.markdown)
@@ -691,6 +711,12 @@ export default function CourseModuleQuizPage() {
       setPointsWorth(data.pointsWorth ?? null)
       setDraftPointsWorth(data.pointsWorth ?? null)
       setAssignmentGroupId(data.assignmentGroupId ?? null)
+      const savedNd = data.neverDrop === true
+      const savedRwf = data.replaceWithFinal === true
+      setNeverDrop(savedNd)
+      setReplaceWithFinal(savedRwf)
+      setDraftNeverDrop(savedNd)
+      setDraftReplaceWithFinal(savedRwf)
       const adv = quizAdvancedSettingsFromPayload(data)
       setQuizAdvanced(adv)
       setDraftQuizAdvanced(adv)
@@ -817,6 +843,14 @@ export default function CourseModuleQuizPage() {
         setPointsWorth(data.pointsWorth ?? null)
         setDraftPointsWorth(data.pointsWorth ?? null)
         setAssignmentGroupId(data.assignmentGroupId ?? null)
+        {
+          const a = data.neverDrop === true
+          const b = data.replaceWithFinal === true
+          setNeverDrop(a)
+          setReplaceWithFinal(b)
+          setDraftNeverDrop(a)
+          setDraftReplaceWithFinal(b)
+        }
         setUpdatedAt(data.updatedAt)
         setLastLocalAuthoringSave(new Date().toISOString())
       } else {
@@ -849,6 +883,14 @@ export default function CourseModuleQuizPage() {
         setPointsWorth(data.pointsWorth ?? null)
         setDraftPointsWorth(data.pointsWorth ?? null)
         setAssignmentGroupId(data.assignmentGroupId ?? null)
+        {
+          const a = data.neverDrop === true
+          const b = data.replaceWithFinal === true
+          setNeverDrop(a)
+          setReplaceWithFinal(b)
+          setDraftNeverDrop(a)
+          setDraftReplaceWithFinal(b)
+        }
         setUpdatedAt(data.updatedAt)
         setLastLocalAuthoringSave(new Date().toISOString())
       }
@@ -1358,6 +1400,10 @@ export default function CourseModuleQuizPage() {
                     }}
                     focusLossThreshold={draftFocusLossThreshold}
                     onFocusLossThresholdChange={setDraftFocusLossThreshold}
+                    neverDrop={draftNeverDrop}
+                    onNeverDropChange={setDraftNeverDrop}
+                    replaceWithFinal={draftReplaceWithFinal}
+                    onReplaceWithFinalChange={setDraftReplaceWithFinal}
                   />
                 ) : null
               }

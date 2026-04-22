@@ -23,6 +23,7 @@ use crate::services::misconception;
 use crate::services::question_bank;
 use crate::services::quiz_attempt_grading;
 use crate::services::quiz_lockdown;
+use crate::services::grading::standards as sbg_grading;
 use crate::services::srs;
 
 pub fn parse_code_test_cases(q: &QuizQuestion) -> Vec<CodeTestCase> {
@@ -279,6 +280,10 @@ pub async fn submit_module_quiz(
                 let gb = quiz_attempt_grading::points_for_gradebook(e, p, quiz_row.points_worth);
                 let gb = quiz_gradebook_points_with_late_policy(gb, quiz_row, due_effective, now);
                 course_grades::upsert_points(pool, course_id, user_id, item_id, gb).await?;
+                if course_row.sbg_enabled {
+                    let _ =
+                        sbg_grading::recompute_student_sbg(pool, course_id, user_id, false).await;
+                }
             }
         }
 
@@ -630,6 +635,9 @@ pub async fn submit_module_quiz(
             let gb = quiz_attempt_grading::points_for_gradebook(e, p, quiz_row.points_worth);
             let gb = quiz_gradebook_points_with_late_policy(gb, quiz_row, due_effective, now);
             course_grades::upsert_points(pool, course_id, user_id, item_id, gb).await?;
+            if course_row.sbg_enabled {
+                let _ = sbg_grading::recompute_student_sbg(pool, course_id, user_id, false).await;
+            }
         }
     }
 

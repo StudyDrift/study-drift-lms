@@ -254,6 +254,77 @@ pub async fn list_expired_in_progress_attempt_ids(
     .await
 }
 
+/// For SBG: one latest submitted attempt per (student, quiz item) in this course.
+pub async fn list_latest_submitted_attempts_for_course(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<
+    Vec<(
+        Uuid, /* student */
+        Uuid, /* structure_item_id */
+        Uuid, /* attempt_id */
+        DateTime<Utc>,
+    )>,
+    sqlx::Error,
+> {
+    let rows: Vec<(
+        Uuid,
+        Uuid,
+        Uuid,
+        DateTime<Utc>,
+    )> = sqlx::query_as(&format!(
+        r#"
+        SELECT DISTINCT ON (a.student_user_id, a.structure_item_id)
+            a.student_user_id, a.structure_item_id, a.id, a.submitted_at
+        FROM {}
+        a
+        WHERE a.course_id = $1
+          AND a.status = 'submitted'
+          AND a.submitted_at IS NOT NULL
+        ORDER BY a.student_user_id, a.structure_item_id, a.submitted_at DESC
+        "#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(course_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Latest submitted attempt per quiz item for one student (SBG).
+pub async fn list_latest_submitted_attempts_for_course_student(
+    pool: &PgPool,
+    course_id: Uuid,
+    student_user_id: Uuid,
+) -> Result<
+    Vec<(
+        Uuid, /* structure_item */
+        Uuid, /* attempt_id */
+        DateTime<Utc>,
+    )>,
+    sqlx::Error,
+> {
+    let rows: Vec<(Uuid, Uuid, DateTime<Utc>)> = sqlx::query_as(&format!(
+        r#"
+        SELECT DISTINCT ON (a.structure_item_id)
+            a.structure_item_id, a.id, a.submitted_at
+        FROM {}
+        a
+        WHERE a.course_id = $1
+          AND a.student_user_id = $2
+          AND a.status = 'submitted'
+          AND a.submitted_at IS NOT NULL
+        ORDER BY a.structure_item_id, a.submitted_at DESC
+        "#,
+        schema::QUIZ_ATTEMPTS
+    ))
+    .bind(course_id)
+    .bind(student_user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 pub async fn sum_response_points_for_attempt<'e, E>(
     executor: E,
     attempt_id: Uuid,
