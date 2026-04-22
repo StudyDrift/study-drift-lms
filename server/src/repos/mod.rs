@@ -32,6 +32,7 @@ pub mod lti;
 pub mod misconceptions;
 pub mod module_assignment_submissions;
 pub mod password_reset;
+pub mod qti_import;
 pub mod question_bank;
 pub mod quiz_attempts;
 pub mod rbac;
