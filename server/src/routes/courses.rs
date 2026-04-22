@@ -20,7 +20,7 @@ use crate::models::course_export::{
 use crate::models::course_gradebook::{
     CourseGradebookGridColumn, CourseGradebookGridResponse, CourseGradebookGridStudent,
     CourseMyGradesResponse, GradeHistoryEventOut, GradeHistoryResponse, GradingSchemeSummary,
-    PutCourseGradebookGradesRequest,
+    GradebookImportConfirmRequest, GradebookImportValidateResponse, PutCourseGradebookGradesRequest,
 };
 use crate::models::grading_scheme::{
     CourseGradingSchemeEnvelope, GradingSchemeResponse, PutGradingSchemeRequest,
@@ -110,6 +110,7 @@ use crate::services::grading::conversion::{
     normalize_scheme_type_for_storage, parse_gradebook_cell, parse_scale, resolve_effective,
     to_display_grade, validate_scale_json, DisplayGradingKind, ParsedScale,
 };
+use crate::services::grading::csv;
 use crate::services::grading::standards as sbg_grading;
 use crate::repos::rbac;
 use crate::repos::syllabus_acceptance;
@@ -141,11 +142,13 @@ use crate::services::standards as standards_service;
 use crate::services::syllabus_section_ai;
 use crate::state::AppState;
 use axum::{
+    body::Body,
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Path, Query, State,
     },
-    http::{HeaderMap, StatusCode},
+    http::header,
+    http::{HeaderMap, Response, StatusCode},
     response::IntoResponse,
     routing::{delete, get, patch, post, put},
     Json, Router,
@@ -499,6 +502,22 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/gradebook/grades",
             put(gradebook_grades_put_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/gradebook.csv",
+            get(gradebook_csv_get_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/gradebook/import/validate",
+            post(gradebook_import_validate_post_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/gradebook/import/confirm",
+            post(gradebook_import_confirm_post_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/gradebook/import/{token}",
+            delete(gradebook_import_delete_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/structure/items/{item_id}/assignment-group",
@@ -4535,6 +4554,7 @@ async fn gradebook_grid_get_handler(
         grade_held,
         dropped_grades,
         grading_scheme,
+        gradebook_csv_enabled: state.gradebook_csv_enabled,
     }))
 }
 
@@ -4811,6 +4831,369 @@ async fn gradebook_grades_put_handler(
                     false,
                 )
                 .await;
+            }
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn map_gradebook_csv_err(e: csv::CsvError) -> AppError {
+    match e {
+        csv::CsvError::Msg(m) => AppError::invalid_input(m),
+    }
+}
+
+fn sweep_gradebook_import_pending(state: &AppState) {
+    let now = Utc::now();
+    if let Ok(mut m) = state.gradebook_import_pending.lock() {
+        m.retain(|_, p| p.expires_at > now);
+    }
+}
+
+/// Blocks import when moderated grading + unreconciled flags, mirroring the gradebook save path.
+async fn assert_ops_pass_moderated(
+    state: &AppState,
+    course_code: &str,
+    course_id: Uuid,
+    user_id: Uuid,
+    ops: &[(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)],
+) -> Result<(), AppError> {
+    if !state.moderated_grading_enabled {
+        return Ok(());
+    }
+    let mut touched: HashSet<Uuid> = HashSet::new();
+    for (_, item_id, _, _) in ops {
+        touched.insert(*item_id);
+    }
+    for item_id in touched {
+        let Some(asn) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await? else {
+            continue;
+        };
+        if !asn.moderated_grading {
+            continue;
+        }
+        let is_creator = enrollment::user_is_course_creator(&state.pool, course_code, user_id)
+            .await?;
+        let is_mod = asn.moderator_user_id == Some(user_id);
+        if !is_creator && !is_mod {
+            return Err(AppError::Forbidden);
+        }
+        let n_flagged = moderated_grading_repo::count_flagged_unreconciled(
+            &state.pool,
+            course_id,
+            item_id,
+            asn.points_worth.unwrap_or(100).max(1),
+            asn.moderation_threshold_pct,
+        )
+        .await?;
+        if n_flagged > 0 {
+            return Err(AppError::UnprocessableEntity {
+                message: format!(
+                    "This assignment uses moderated grading. {n_flagged} flagged submission(s) still need moderator reconciliation before this import can be applied."
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+async fn gradebook_import_needs_blind_ack(
+    pool: &PgPool,
+    course_id: Uuid,
+    global_blind_enabled: bool,
+    ops: &[(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)],
+) -> Result<bool, sqlx::Error> {
+    if !global_blind_enabled {
+        return Ok(false);
+    }
+    for (_uid, item_id, _pts, _) in ops {
+        let Some(a) = course_module_assignments::get_for_course_item(pool, course_id, *item_id).await? else {
+            continue;
+        };
+        if a.posting_policy == "manual" && a.blind_grading && a.identities_revealed_at.is_none() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// GET /gradebook.csv — (3.11) Lextures format with header + id metadata row, UTF-8 BOM.
+async fn gradebook_csv_get_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response<Body>, AppError> {
+    if !state.gradebook_csv_enabled {
+        return Err(AppError::NotFound);
+    }
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let required = course_grants::course_gradebook_view_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let (course_id, _students, columns, types_map, posting) =
+        gradebook_students_and_columns(&state.pool, &course_code).await?;
+    let (grades, _, _posted) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
+    let course_kind = scheme_row
+        .as_ref()
+        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()));
+    let parsed_scale: Option<ParsedScale> = scheme_row
+        .as_ref()
+        .map(parsed_scale_from_row)
+        .transpose()?;
+    let columns = enrich_gradebook_columns(columns, &types_map, course_kind, &posting);
+    let drop_flags = course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
+    let columns = enrich_columns_with_drop_flags(columns, &drop_flags);
+    let assignment_groups = course_grading::list_assignment_groups(&state.pool, course_id).await?;
+
+    let roster = enrollment::list_students_for_gradebook_csv(&state.pool, &course_code).await?;
+    let bytes = csv::build_gradebook_export(
+        &roster,
+        &columns,
+        &grades,
+        &assignment_groups,
+        course_kind,
+        parsed_scale.as_ref(),
+        &types_map,
+    )
+    .map_err(map_gradebook_csv_err)?;
+
+    tracing::info!(
+        target: "gradebook_csv",
+        %course_id,
+        row_count = roster.len(),
+        "gradebook_export"
+    );
+    let disp = format!("attachment; filename=\"{}-gradebook.csv\"", course_code);
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/csv; charset=utf-8")
+        .header(
+            header::CACHE_CONTROL,
+            "no-store, no-cache, must-revalidate, private",
+        )
+        .header(header::CONTENT_DISPOSITION, disp)
+        .body(Body::from(bytes))
+        .map_err(|e| AppError::invalid_input(e.to_string()))
+}
+
+async fn gradebook_import_validate_post_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    body: String,
+) -> Result<Json<GradebookImportValidateResponse>, AppError> {
+    if !state.gradebook_csv_enabled {
+        return Err(AppError::NotFound);
+    }
+    if body.len() > 4_000_000 {
+        return Err(AppError::invalid_input("Upload is too large (max 4 MB)."));
+    }
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let (course_id, _grid_students, columns, types_map, posting) =
+        gradebook_students_and_columns(&state.pool, &course_code).await?;
+    let roster = enrollment::list_students_for_gradebook_csv(&state.pool, &course_code).await?;
+    let (grades, _, _posted) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
+    let course_kind = scheme_row
+        .as_ref()
+        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()));
+    let parsed_scale: Option<ParsedScale> = scheme_row
+        .as_ref()
+        .map(parsed_scale_from_row)
+        .transpose()?;
+    let mut columns = enrich_gradebook_columns(columns, &types_map, course_kind, &posting);
+    let drop_flags = course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
+    columns = enrich_columns_with_drop_flags(columns, &drop_flags);
+
+    let v = csv::validate_gradebook_import(
+        &body,
+        &roster,
+        &columns,
+        &grades,
+        course_kind,
+        parsed_scale.as_ref(),
+        &types_map,
+    )
+    .map_err(map_gradebook_csv_err)?;
+    if !v.has_blocking_errors {
+        assert_ops_pass_moderated(
+            &state,
+            &course_code,
+            course_id,
+            user.user_id,
+            &v.ops,
+        )
+        .await?;
+    }
+
+    let n_rows = v.rows.len() as f64;
+    if n_rows > 0.0 {
+        let err_p = (v.stats.errors as f64 / n_rows) * 100.0;
+        if err_p > 5.0 {
+            tracing::warn!(
+                target: "gradebook_csv",
+                %course_id,
+                error_rate_pct = err_p,
+                "gradebook_import_validate_high_error_rate"
+            );
+        }
+    }
+
+    let csv::ValidatedImport {
+        ops,
+        has_blocking_errors,
+        rows,
+        stats,
+    } = v;
+    let need_blind = if has_blocking_errors {
+        false
+    } else {
+        gradebook_import_needs_blind_ack(
+            &state.pool,
+            course_id,
+            state.blind_grading_enabled,
+            &ops,
+        )
+        .await?
+    };
+    let confirmable = !has_blocking_errors && !ops.is_empty();
+    let n_ops = ops.len();
+    let token = if confirmable {
+        sweep_gradebook_import_pending(&state);
+        let tok = Uuid::new_v4();
+        let expires = Utc::now() + chrono::Duration::minutes(30);
+        if let Ok(mut m) = state.gradebook_import_pending.lock() {
+            m.insert(
+                tok,
+                csv::GradebookImportPending {
+                    expires_at: expires,
+                    user_id: user.user_id,
+                    course_id,
+                    require_blind_ack: need_blind,
+                    ops,
+                },
+            );
+        }
+        tracing::info!(
+            target: "gradebook_csv",
+            %course_id,
+            op_count = n_ops,
+            "gradebook_import_validated"
+        );
+        Some(tok)
+    } else {
+        None
+    };
+    Ok(Json(GradebookImportValidateResponse {
+        token,
+        confirmable,
+        stats,
+        rows,
+        require_blind_manual_hold_ack: need_blind,
+    }))
+}
+
+async fn gradebook_import_confirm_post_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<GradebookImportConfirmRequest>,
+) -> Result<StatusCode, AppError> {
+    if !state.gradebook_csv_enabled {
+        return Err(AppError::NotFound);
+    }
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    sweep_gradebook_import_pending(&state);
+    let pending = {
+        let mut m = state.gradebook_import_pending.lock().map_err(|e| {
+            AppError::invalid_input(format!("Could not read import session: {e}"))
+        })?;
+        m.remove(&req.token)
+            .ok_or_else(|| AppError::invalid_input("Import session expired or unknown token."))?
+    };
+    if pending.user_id != user.user_id {
+        return Err(AppError::Forbidden);
+    }
+    if pending.expires_at < Utc::now() {
+        return Err(AppError::invalid_input("This import has expired. Validate the file again."));
+    }
+    if pending.require_blind_ack
+        && !req.acknowledge_blind_manual_hold.unwrap_or(false)
+    {
+        return Err(AppError::invalid_input(
+            "Confirm that you are importing to manual-hold, blind-graded work by checking the acknowledgement.",
+        ));
+    }
+    let Some(c_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+    if c_id != pending.course_id {
+        return Err(AppError::NotFound);
+    }
+    let ops: Vec<(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)> = pending.ops.clone();
+    if ops.is_empty() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    assert_ops_pass_moderated(&state, &course_code, c_id, user.user_id, &ops).await?;
+
+    course_grades::upsert_and_delete(
+        &state.pool,
+        c_id,
+        &ops,
+        Some(user.user_id),
+        Some("bulk_import"),
+    )
+    .await
+    .map_err(AppError::from)?;
+    if let Some(c) = course::get_by_id(&state.pool, c_id).await? {
+        if c.sbg_enabled {
+            let sids: HashSet<Uuid> = ops.iter().map(|(uid, _, _, _)| *uid).collect();
+            for student_id in sids {
+                let _ = sbg_grading::recompute_student_sbg(
+                    &state.pool,
+                    c_id,
+                    student_id,
+                    false,
+                )
+                .await;
+            }
+        }
+    }
+    tracing::info!(
+        target: "gradebook_csv",
+        course_id = %c_id,
+        op_count = ops.len(),
+        "gradebook_import_applied"
+    );
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn gradebook_import_delete_handler(
+    State(state): State<AppState>,
+    Path((course_code, token)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    if !state.gradebook_csv_enabled {
+        return Err(AppError::NotFound);
+    }
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let _required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &_required).await?;
+    if let Ok(mut m) = state.gradebook_import_pending.lock() {
+        if let Some(p) = m.get(&token) {
+            if p.user_id == user.user_id {
+                m.remove(&token);
             }
         }
     }

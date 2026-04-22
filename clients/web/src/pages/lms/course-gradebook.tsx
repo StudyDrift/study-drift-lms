@@ -4,6 +4,7 @@ import { usePermissions } from '../../context/use-permissions'
 import {
   courseGradebookViewPermission,
   courseItemCreatePermission,
+  downloadCourseGradebookCsv,
   fetchCourseGradebookGrid,
   fetchCourseGradingSettings,
   fetchGradeCellHistory,
@@ -26,6 +27,7 @@ import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { TabPresenceHint } from '../../components/presence/tab-presence-hint'
 import { FeatureHelpTrigger } from '../../components/feature-help/feature-help-trigger'
 import { GradeHistoryPanel } from '../../components/grading/grade-history-panel'
+import { GradebookImportModal } from '../../components/grading/gradebook-import-modal'
 import { LmsPage } from './lms-page'
 
 function buildEmptyGrades(students: GradebookStudent[], columns: GradebookColumn[]): Record<string, Record<string, string>> {
@@ -324,6 +326,8 @@ export default function CourseGradebook() {
   const [gradeHistoryLoading, setGradeHistoryLoading] = useState(false)
   const [gradeHistoryError, setGradeHistoryError] = useState<string | null>(null)
   const [gradeHistoryEvents, setGradeHistoryEvents] = useState<GradeHistoryEvent[] | null>(null)
+  const [gradebookCsvEnabled, setGradebookCsvEnabled] = useState(false)
+  const [importModalOpen, setImportModalOpen] = useState(false)
 
   const gridStudents: GradebookStudent[] = useMemo(
     () => students.map((s) => ({ id: s.userId, name: s.displayName })),
@@ -412,6 +416,7 @@ export default function CourseGradebook() {
       } catch {
         setAssignmentGroups([])
       }
+      setGradebookCsvEnabled(data.gradebookCsvEnabled === true)
       setLoadState('ok')
       setLastSavedAt(new Date())
     } catch (e: unknown) {
@@ -421,6 +426,7 @@ export default function CourseGradebook() {
       setDroppedGrades(undefined)
       setGradingScheme(null)
       setAssignmentGroups([])
+      setGradebookCsvEnabled(false)
       setSavedGrades(null)
       setSavedRubricScores({})
       setOptimisticGrades(null)
@@ -499,6 +505,16 @@ export default function CourseGradebook() {
       rubric: col.rubric,
     })
   }, [columns, students])
+
+  const handleExportCsv = useCallback(async () => {
+    if (!courseCode) return
+    try {
+      await downloadCourseGradebookCsv(courseCode)
+      toastSaveOk('Download started')
+    } catch (e: unknown) {
+      toastMutationError(e instanceof Error ? e.message : 'Could not download CSV.')
+    }
+  }, [courseCode])
 
   const openGradeHistory = useCallback(
     (studentId: string, columnId: string) => {
@@ -605,6 +621,26 @@ export default function CourseGradebook() {
       description="Spreadsheet-style grades for enrolled students and each course assignment or quiz. Use the arrows, Tab, Enter, and double-click to edit cells; assignment rubrics open from the Rubric link. Save writes your changes to the server."
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          {loadState === 'ok' && gradebookCsvEnabled ? (
+            <>
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700/80"
+                onClick={() => void handleExportCsv()}
+              >
+                Export CSV
+              </button>
+              {canEditGrades ? (
+                <button
+                  type="button"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700/80"
+                  onClick={() => setImportModalOpen(true)}
+                >
+                  Import CSV
+                </button>
+              ) : null}
+            </>
+          ) : null}
           <FeatureHelpTrigger topic="gradebook" />
         </div>
       }
@@ -779,6 +815,15 @@ export default function CourseGradebook() {
                 </div>
               </div>
             </div>
+          ) : null}
+          {courseCode && importModalOpen ? (
+            <GradebookImportModal
+              open={importModalOpen}
+              courseCode={courseCode}
+              columns={columns.map((c) => ({ id: c.id, title: c.title }))}
+              onClose={() => setImportModalOpen(false)}
+              onApplied={() => void loadGrid()}
+            />
           ) : null}
         </>
       )}

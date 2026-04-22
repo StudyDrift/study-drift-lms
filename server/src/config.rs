@@ -50,6 +50,8 @@ pub struct Config {
     pub originality_stub_external: bool,
     /// Plan 3.8 — hold/post grade routes and student visibility. Default on; `GRADE_POSTING_POLICIES_ENABLED=0` disables.
     pub grade_posting_policies_enabled: bool,
+    /// Plan 3.11 — bulk gradebook CSV. Default off; set `GRADEBOOK_CSV_ENABLED=1` to enable.
+    pub gradebook_csv_enabled: bool,
 }
 
 const DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES: &[&str] = &["instructure.com"];
@@ -270,6 +272,14 @@ impl Config {
             }
         };
 
+        let gradebook_csv_enabled = matches!(
+            env::var("GRADEBOOK_CSV_ENABLED")
+                .ok()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("1") | Some("true") | Some("yes") | Some("on")
+        );
+
         Ok(Self {
             database_url,
             jwt_secret,
@@ -294,6 +304,7 @@ impl Config {
             originality_detection_enabled,
             originality_stub_external,
             grade_posting_policies_enabled,
+            gradebook_csv_enabled,
         })
     }
 }

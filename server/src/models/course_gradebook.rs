@@ -28,6 +28,9 @@ pub struct CourseGradebookGridResponse {
     /// Active course grading scheme (omit when none — gradebook uses raw points).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grading_scheme: Option<GradingSchemeSummary>,
+    /// Plan 3.11 — bulk CSV import/export available when the server has `GRADEBOOK_CSV_ENABLED=1`.
+    #[serde(default)]
+    pub gradebook_csv_enabled: bool,
 }
 
 /// Minimal scheme payload for clients building selects (letter options, pass threshold, etc.).
@@ -137,4 +140,57 @@ pub struct GradeHistoryEventOut {
 #[serde(rename_all = "camelCase")]
 pub struct GradeHistoryResponse {
     pub events: Vec<GradeHistoryEventOut>,
+}
+
+// --- Plan 3.11 — bulk CSV import preview
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GradebookImportStats {
+    pub unchanged: u32,
+    pub updated: u32,
+    pub added: u32,
+    pub errors: u32,
+    pub warnings: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GradebookImportCellPreview {
+    pub item_id: Uuid,
+    pub previous_score: Option<String>,
+    pub new_score: String,
+    pub state: String,
+    pub out_of_range: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GradebookImportPreviewRow {
+    pub row_index: usize,
+    pub student_id: Option<Uuid>,
+    pub student_name: Option<String>,
+    pub error: Option<String>,
+    pub cells: Vec<GradebookImportCellPreview>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GradebookImportConfirmRequest {
+    pub token: Uuid,
+    /// Required when `requireBlindManualHoldAck` was true on validate.
+    #[serde(default)]
+    pub acknowledge_blind_manual_hold: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GradebookImportValidateResponse {
+    /// Present only when the import can be applied without blocking issues.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<Uuid>,
+    pub confirmable: bool,
+    pub stats: GradebookImportStats,
+    pub rows: Vec<GradebookImportPreviewRow>,
+    pub require_blind_manual_hold_ack: bool,
 }

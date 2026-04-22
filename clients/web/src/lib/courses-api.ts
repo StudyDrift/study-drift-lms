@@ -23,6 +23,7 @@ import {
   courseStandardsCoverageResponseSchema,
   courseSyllabusPayloadSchema,
   courseGradebookGridResponseSchema,
+  gradebookImportValidateResponseSchema,
   courseGradingSchemeEnvelopeSchema,
   courseMyGradesRawSchema,
   gradeHistoryResponseSchema,
@@ -1326,6 +1327,8 @@ export type CourseGradebookGridResponse = {
   gradeHeld?: Record<string, Record<string, boolean>>
   droppedGrades?: Record<string, Record<string, boolean>>
   gradingScheme?: GradingSchemeSummary | null
+  /** Plan 3.11 — server flag for CSV tools. */
+  gradebookCsvEnabled?: boolean
 }
 
 export async function fetchCourseGradebookGrid(courseCode: string): Promise<CourseGradebookGridResponse> {
@@ -1335,6 +1338,87 @@ export async function fetchCourseGradebookGrid(courseCode: string): Promise<Cour
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseApiResponse('fetchCourseGradebookGrid', courseGradebookGridResponseSchema, raw)
+}
+
+/** Plan 3.11 — download gradebook as CSV (UTF-8, BOM, metadata row for round-trips). */
+export async function downloadCourseGradebookCsv(courseCode: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook.csv`,
+  )
+  if (!res.ok) {
+    const raw = await parseJson(res)
+    throw new Error(readApiErrorMessage(raw))
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${courseCode}-gradebook.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export type GradebookImportValidateResponse = {
+  token: string | null
+  confirmable: boolean
+  stats: { unchanged: number; updated: number; added: number; errors: number; warnings: number }
+  rows: {
+    rowIndex: number
+    studentId?: string | null
+    studentName?: string | null
+    error?: string | null
+    cells: {
+      itemId: string
+      previousScore?: string | null
+      newScore: string
+      state: string
+      outOfRange: boolean
+    }[]
+  }[]
+  requireBlindManualHoldAck: boolean
+}
+
+export async function postGradebookImportValidate(
+  courseCode: string,
+  csvText: string,
+): Promise<GradebookImportValidateResponse> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook/import/validate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/csv; charset=utf-8' },
+      body: csvText,
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('postGradebookImportValidate', gradebookImportValidateResponseSchema, raw)
+}
+
+export async function postGradebookImportConfirm(
+  courseCode: string,
+  body: { token: string; acknowledgeBlindManualHold?: boolean },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook/import/confirm`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+}
+
+export async function deleteGradebookImportSession(courseCode: string, token: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook/import/${encodeURIComponent(token)}`,
+    { method: 'DELETE' },
+  )
+  if (res.status === 204) return
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
 }
 
 /** GET `/my-grades` — current user’s grades (enrolled as student only). */

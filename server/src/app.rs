@@ -65,6 +65,8 @@ mod tests {
     use crate::jwt::JwtSigner;
     use crate::state::AppState;
     use sqlx::PgPool;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
 
     fn dummy_state(pool: PgPool) -> AppState {
         let jwt = JwtSigner::new("test");
@@ -94,6 +96,8 @@ mod tests {
             originality_detection_enabled: false,
             originality_stub_external: false,
             grade_posting_policies_enabled: true,
+            gradebook_csv_enabled: false,
+            gradebook_import_pending: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 

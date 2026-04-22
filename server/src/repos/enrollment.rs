@@ -387,6 +387,39 @@ pub async fn list_student_users_for_course_code(
     Ok(out)
 }
 
+/// Student roster for gradebook CSV export: `(user_id, display_name, email)`.
+pub async fn list_students_for_gradebook_csv(
+    pool: &PgPool,
+    course_code: &str,
+) -> Result<Vec<(Uuid, String, String)>, sqlx::Error> {
+    let rows: Vec<(Uuid, String, String)> = sqlx::query_as(&format!(
+        r#"
+        SELECT ce.user_id,
+               COALESCE(NULLIF(TRIM(u.display_name), ''), u.email) AS name_for_csv,
+               u.email
+        FROM {} ce
+        INNER JOIN {} c ON c.id = ce.course_id
+        INNER JOIN {} u ON u.id = ce.user_id
+        WHERE c.course_code = $1 AND ce.role = 'student'
+        ORDER BY name_for_csv ASC, ce.user_id ASC
+        "#,
+        schema::COURSE_ENROLLMENTS,
+        schema::COURSES,
+        schema::USERS
+    ))
+    .bind(course_code)
+    .fetch_all(pool)
+    .await?;
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for (user_id, name, email) in rows {
+        if seen.insert(user_id) {
+            out.push((user_id, name, email));
+        }
+    }
+    Ok(out)
+}
+
 /// All enrollments in courses the requester is enrolled in (same visibility as enrollments API).
 /// Rows are capped for large rosters.
 pub async fn list_people_for_enrolled_courses(

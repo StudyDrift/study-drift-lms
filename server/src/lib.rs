@@ -150,6 +150,8 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         originality_detection_enabled: config.originality_detection_enabled,
         originality_stub_external: config.originality_stub_external,
         grade_posting_policies_enabled: config.grade_posting_policies_enabled,
+        gradebook_csv_enabled: config.gradebook_csv_enabled,
+        gradebook_import_pending: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
     })
 }
 

@@ -333,6 +333,41 @@ export const courseGradebookGridResponseSchema = z.object({
       scaleJson: z.unknown(),
     })
     .optional(),
+  gradebookCsvEnabled: z.boolean().optional().default(false),
+})
+
+export const gradebookImportCellPreviewSchema = z.object({
+  itemId: z.string(),
+  previousScore: z.string().nullable().optional(),
+  newScore: z.string(),
+  state: z.string(),
+  outOfRange: z.boolean(),
+})
+
+export const gradebookImportPreviewRowSchema = z.object({
+  rowIndex: z.number(),
+  studentId: z.string().nullish(),
+  studentName: z.string().nullish(),
+  error: z.string().nullish(),
+  cells: z.array(gradebookImportCellPreviewSchema),
+})
+
+export const gradebookImportValidateResponseSchema = z.object({
+  token: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((t) => t ?? null),
+  confirmable: z.boolean(),
+  stats: z.object({
+    unchanged: z.number(),
+    updated: z.number(),
+    added: z.number(),
+    errors: z.number(),
+    warnings: z.number(),
+  }),
+  rows: z.array(gradebookImportPreviewRowSchema),
+  requireBlindManualHoldAck: z.boolean(),
 })
 
 /** Raw `/my-grades` body before `assignmentGroups` is normalized via `parseCourseGradingSettings`. */

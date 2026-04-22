@@ -4,6 +4,8 @@ use std::collections::{HashMap, HashSet};
 
 use uuid::Uuid;
 
+use crate::models::course_grading::AssignmentGroupPublic;
+
 /// One gradable line item in a group for drop math.
 #[derive(Debug, Clone)]
 pub struct GroupScoreLine {
@@ -189,8 +191,174 @@ pub fn item_drops_for_learner(
     out
 }
 
+/// One gradable column (assignment/quiz) for final % math — mirrors `compute-course-final-percent` (web).
+#[derive(Debug, Clone)]
+pub struct GradebookColumnForFinal {
+    pub item_id: Uuid,
+    pub max_points: f64,
+    pub assignment_group_id: Option<Uuid>,
+    pub never_drop: bool,
+    pub replace_with_final: bool,
+}
+
+const UNGROUPED: &str = "__ungrouped__";
+
+/// Course final as a percentage 0–100, with assignment-group weights and drops (plan 3.9).
+/// Port of `computeCourseFinalPercent` in `compute-course-final-percent.ts`.
+pub fn compute_course_final_percent(
+    columns: &[GradebookColumnForFinal],
+    earned_by_item: &HashMap<Uuid, f64>,
+    assignment_groups: &[AssignmentGroupPublic],
+) -> Option<f64> {
+    let settings_ids: HashSet<Uuid> = assignment_groups.iter().map(|g| g.id).collect();
+    let gpol: HashMap<Uuid, GroupDropPolicy> = assignment_groups
+        .iter()
+        .map(|g| {
+            (
+                g.id,
+                GroupDropPolicy {
+                    drop_lowest: g.drop_lowest.max(0),
+                    drop_highest: g.drop_highest.max(0),
+                    replace_lowest_with_final: g.replace_lowest_with_final,
+                },
+            )
+        })
+        .collect();
+
+    let mut max_by_bucket: HashMap<String, f64> = HashMap::new();
+    let mut earned_by_bucket: HashMap<String, f64> = HashMap::new();
+    let mut by_group: HashMap<Uuid, Vec<GroupScoreLine>> = HashMap::new();
+
+    for col in columns {
+        if col.max_points <= 0.0 || !col.max_points.is_finite() {
+            continue;
+        }
+        let earned = earned_by_item
+            .get(&col.item_id)
+            .copied()
+            .filter(|e| e.is_finite())
+            .map(|e| e.max(0.0))
+            .unwrap_or(0.0);
+        match col.assignment_group_id {
+            Some(g) if settings_ids.contains(&g) => {
+                by_group.entry(g).or_default().push(GroupScoreLine {
+                    item_id: col.item_id,
+                    max_points: col.max_points,
+                    earned_points: earned,
+                    never_drop: col.never_drop,
+                    replace_with_final: col.replace_with_final,
+                });
+            }
+            _ => {
+                *max_by_bucket
+                    .entry(UNGROUPED.to_string())
+                    .or_insert(0.0) += col.max_points;
+                *earned_by_bucket
+                    .entry(UNGROUPED.to_string())
+                    .or_insert(0.0) += earned;
+            }
+        }
+    }
+
+    for (gid, lines) in by_group {
+        let pol = gpol.get(&gid).copied().unwrap_or(GroupDropPolicy {
+            drop_lowest: 0,
+            drop_highest: 0,
+            replace_lowest_with_final: false,
+        });
+        let r = compute_group_average_with_drops(&pol, &lines);
+        let b = gid.to_string();
+        *max_by_bucket.entry(b.clone()).or_insert(0.0) += r.effective_max;
+        *earned_by_bucket.entry(b).or_insert(0.0) += r.effective_earned;
+    }
+
+    let total_max_points: f64 = max_by_bucket.values().sum();
+    if total_max_points <= 0.0 {
+        return None;
+    }
+
+    let buckets_with_columns: HashSet<String> = max_by_bucket
+        .iter()
+        .filter(|(_, mx)| **mx > 0.0)
+        .map(|(k, _)| k.clone())
+        .collect();
+    if buckets_with_columns.is_empty() {
+        return None;
+    }
+
+    let configured_sum: f64 = assignment_groups
+        .iter()
+        .map(|g| {
+            if g.weight_percent.is_finite() && g.weight_percent > 0.0 {
+                g.weight_percent
+            } else {
+                0.0
+            }
+        })
+        .sum();
+    let remainder = (100.0 - configured_sum).max(0.0);
+
+    let mut lost_configured_weight = 0.0;
+    for g in assignment_groups {
+        let w = if g.weight_percent.is_finite() && g.weight_percent > 0.0 {
+            g.weight_percent
+        } else {
+            0.0
+        };
+        if w <= 0.0 {
+            continue;
+        }
+        if !buckets_with_columns.contains(&g.id.to_string()) {
+            lost_configured_weight += w;
+        }
+    }
+
+    let max_ungrouped = max_by_bucket.get(UNGROUPED).copied().unwrap_or(0.0);
+    let mut raw_weight: HashMap<String, f64> = HashMap::new();
+    for g in assignment_groups {
+        if !buckets_with_columns.contains(&g.id.to_string()) {
+            continue;
+        }
+        let w = if g.weight_percent.is_finite() && g.weight_percent > 0.0 {
+            g.weight_percent
+        } else {
+            0.0
+        };
+        if w > 0.0 {
+            *raw_weight.entry(g.id.to_string()).or_insert(0.0) += w;
+        }
+    }
+    if buckets_with_columns.contains(UNGROUPED) {
+        let mut wu = remainder + lost_configured_weight;
+        if wu <= 0.0 && max_ungrouped > 0.0 && total_max_points > 0.0 {
+            wu = (max_ungrouped / total_max_points) * 100.0;
+        }
+        *raw_weight.entry(UNGROUPED.to_string()).or_insert(0.0) += wu;
+    }
+
+    let weight_sum: f64 = raw_weight.values().sum();
+    if weight_sum <= 0.0 {
+        let earned_total: f64 = earned_by_bucket.values().sum();
+        return Some((earned_total / total_max_points) * 100.0);
+    }
+
+    let mut acc = 0.0;
+    for (bucket, rw) in &raw_weight {
+        if *rw <= 0.0 {
+            continue;
+        }
+        let max_b = max_by_bucket.get(bucket).copied().unwrap_or(0.0);
+        let earned_b = earned_by_bucket.get(bucket).copied().unwrap_or(0.0);
+        let ratio = if max_b > 0.0 { earned_b / max_b } else { 0.0 };
+        acc += ratio * (rw / weight_sum);
+    }
+    Some(acc * 100.0)
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     fn id(n: u128) -> Uuid {
@@ -282,5 +450,68 @@ mod tests {
         // Replace 50% with 90% on the 100-pt item => 90 + 70 + 90 = 250
         assert!((r.effective_earned - 250.0).abs() < 1e-6);
         assert!((r.effective_max - 300.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn final_percent_straight_points() {
+        let a = id(0xa);
+        let b = id(0xb);
+        let p = compute_course_final_percent(
+            &[
+                GradebookColumnForFinal {
+                    item_id: a,
+                    max_points: 100.0,
+                    assignment_group_id: None,
+                    never_drop: false,
+                    replace_with_final: false,
+                },
+                GradebookColumnForFinal {
+                    item_id: b,
+                    max_points: 50.0,
+                    assignment_group_id: None,
+                    never_drop: false,
+                    replace_with_final: false,
+                },
+            ],
+            &HashMap::from([(a, 80.0), (b, 40.0)]),
+            &[],
+        );
+        assert!((p.unwrap() - (120.0 / 150.0) * 100.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn final_percent_weighted_group() {
+        let g1 = id(0x1);
+        let a = id(0xa);
+        let b = id(0xb);
+        let p = compute_course_final_percent(
+            &[
+                GradebookColumnForFinal {
+                    item_id: a,
+                    max_points: 100.0,
+                    assignment_group_id: Some(g1),
+                    never_drop: false,
+                    replace_with_final: false,
+                },
+                GradebookColumnForFinal {
+                    item_id: b,
+                    max_points: 100.0,
+                    assignment_group_id: Some(g1),
+                    never_drop: false,
+                    replace_with_final: false,
+                },
+            ],
+            &HashMap::from([(a, 40.0), (b, 30.0)]),
+            &[AssignmentGroupPublic {
+                id: g1,
+                sort_order: 0,
+                name: "g".into(),
+                weight_percent: 100.0,
+                drop_lowest: 0,
+                drop_highest: 0,
+                replace_lowest_with_final: false,
+            }],
+        );
+        assert!((p.unwrap() - 35.0).abs() < 1e-4);
     }
 }

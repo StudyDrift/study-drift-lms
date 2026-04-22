@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -7,6 +8,7 @@ use uuid::Uuid;
 use crate::jwt::JwtSigner;
 use crate::lti_keys::LtiRuntime;
 use crate::services::ai::OpenRouterClient;
+use crate::services::grading::csv::GradebookImportPending;
 
 /// What triggered a [`FeedRealtimeScope::Messages`] event (for client UX such as unread badges).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,4 +93,8 @@ pub struct AppState {
     pub originality_stub_external: bool,
     /// Plan 3.8 — grade hold/post and scheduled release.
     pub grade_posting_policies_enabled: bool,
+    /// Plan 3.11 — bulk gradebook CSV; set `GRADEBOOK_CSV_ENABLED=1` to turn on.
+    pub gradebook_csv_enabled: bool,
+    /// Plan 3.11 — in-memory pending import batches; expire after 30 minutes.
+    pub gradebook_import_pending: Arc<Mutex<HashMap<Uuid, GradebookImportPending>>>,
 }
