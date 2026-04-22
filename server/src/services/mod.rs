@@ -22,6 +22,7 @@ pub mod course_export_import;
 pub mod course_image_upload;
 pub mod feedback_media;
 pub mod feedback_media_caption;
+pub mod grading;
 pub mod diagnostic;
 pub mod enrollments;
 pub mod hint_service;

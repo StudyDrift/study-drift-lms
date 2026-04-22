@@ -290,6 +290,8 @@ export const courseGradebookGridColumnSchema = z.object({
   maxPoints: z.number().nullable(),
   assignmentGroupId: z.string().nullable().optional(),
   rubric: rubricDefinitionSchema.nullable().optional(),
+  assignmentGradingType: z.string().nullable().optional(),
+  effectiveDisplayType: z.string().optional(),
 })
 
 export const courseGradebookGridResponseSchema = z.object({
@@ -301,8 +303,15 @@ export const courseGradebookGridResponseSchema = z.object({
   ),
   columns: z.array(courseGradebookGridColumnSchema),
   grades: z.record(z.string(), z.record(z.string(), z.string())).optional(),
+  displayGrades: z.record(z.string(), z.record(z.string(), z.string())).optional(),
   rubricScores: z
     .record(z.string(), z.record(z.string(), z.record(z.string(), z.string())))
+    .optional(),
+  gradingScheme: z
+    .object({
+      type: z.string(),
+      scaleJson: z.unknown(),
+    })
     .optional(),
 })
 
@@ -310,7 +319,26 @@ export const courseGradebookGridResponseSchema = z.object({
 export const courseMyGradesRawSchema = z.object({
   columns: z.array(courseGradebookGridColumnSchema).optional(),
   grades: z.record(z.string(), z.string()).optional(),
+  displayGrades: z.record(z.string(), z.string()).optional(),
   assignmentGroups: z.unknown().optional(),
+  gradingScheme: z
+    .object({
+      type: z.string(),
+      scaleJson: z.unknown(),
+    })
+    .optional(),
+})
+
+export const courseGradingSchemeEnvelopeSchema = z.object({
+  scheme: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      type: z.string(),
+      scaleJson: z.unknown(),
+    })
+    .nullable()
+    .optional(),
 })
 
 export const quizQuestionSchema = z.object({

@@ -904,6 +904,7 @@ async fn canvas_export_append_assignment_details(
             blind_grading: false,
             originality_detection: "disabled".into(),
             originality_student_visibility: "hide".into(),
+            grading_type: None,
         },
     );
     *sort_order += 1;

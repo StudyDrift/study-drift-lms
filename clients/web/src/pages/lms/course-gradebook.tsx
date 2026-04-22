@@ -40,17 +40,23 @@ function mergeGradesFromApi(
   students: GradebookStudent[],
   columns: GradebookColumn[],
   apiGrades: Record<string, Record<string, string>> | undefined,
+  apiDisplay?: Record<string, Record<string, string>> | undefined,
 ): Record<string, Record<string, string>> {
   const out = buildEmptyGrades(students, columns)
-  if (!apiGrades) return out
   for (const s of students) {
-    const row = apiGrades[s.id]
-    if (!row) continue
+    const row = apiGrades?.[s.id]
+    const drow = apiDisplay?.[s.id]
+    if (!row && !drow) continue
     for (const c of columns) {
-      const v = row[c.id]
-      if (v != null && String(v).trim() !== '') {
-        out[s.id][c.id] = String(v).trim()
-      }
+      const disp = drow?.[c.id]
+      const raw = row?.[c.id]
+      const v =
+        disp != null && String(disp).trim() !== ''
+          ? String(disp).trim()
+          : raw != null && String(raw).trim() !== ''
+            ? String(raw).trim()
+            : ''
+      if (v) out[s.id][c.id] = v
     }
   }
   return out
@@ -298,6 +304,7 @@ export default function CourseGradebook() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [gradingScheme, setGradingScheme] = useState<{ type: string; scaleJson: unknown } | null>(null)
   const gradesRef = useRef<Record<string, Record<string, string>>>({})
   const rubricScoresRef = useRef<Record<string, Record<string, Record<string, number>>>>({})
   const [rubricModal, setRubricModal] = useState<RubricModalState | null>(null)
@@ -314,6 +321,7 @@ export default function CourseGradebook() {
         maxPoints: c.maxPoints,
         assignmentGroupId: c.assignmentGroupId ?? null,
         rubric: c.rubric ?? null,
+        effectiveDisplayType: c.effectiveDisplayType ?? 'points',
       })),
     [columns],
   )
@@ -358,8 +366,10 @@ export default function CourseGradebook() {
         maxPoints: c.maxPoints,
         assignmentGroupId: c.assignmentGroupId ?? null,
         rubric: c.rubric ?? null,
+        effectiveDisplayType: c.effectiveDisplayType ?? 'points',
       }))
-      const merged = mergeGradesFromApi(gridSt, gridCols, data.grades)
+      setGradingScheme(data.gradingScheme ?? null)
+      const merged = mergeGradesFromApi(gridSt, gridCols, data.grades, data.displayGrades)
       const mergedRubric = mergeRubricScoresFromApi(data.rubricScores)
       setSavedGrades(merged)
       setSavedRubricScores(mergedRubric)
@@ -381,6 +391,7 @@ export default function CourseGradebook() {
     } catch (e: unknown) {
       setStudents([])
       setColumns([])
+      setGradingScheme(null)
       setAssignmentGroups([])
       setSavedGrades(null)
       setSavedRubricScores({})
@@ -586,6 +597,7 @@ export default function CourseGradebook() {
             onGradesChange={handleGradesChange}
             onRubricClick={canEditGrades ? openRubricModal : undefined}
             highlightStudentId={highlightStudentId}
+            gradingScheme={gradingScheme}
             footerNote={
               gridStudents.length > 0 && gridColumns.length > 0
                 ? canEditGrades

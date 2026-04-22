@@ -170,6 +170,8 @@ export default function CourseModuleAssignmentPage() {
   const [staffRoster, setStaffRoster] = useState<CourseEnrollmentRosterRow[] | null>(null)
 
   const [gradingGroups, setGradingGroups] = useState<{ id: string; name: string }[]>([])
+  const [gradingType, setGradingType] = useState('')
+  const [draftGradingType, setDraftGradingType] = useState('')
   const [assignmentGroupId, setAssignmentGroupId] = useState<string | null>(null)
   const [assignmentGroupPatching, setAssignmentGroupPatching] = useState(false)
   const [assignmentGroupPatchError, setAssignmentGroupPatchError] = useState<string | null>(null)
@@ -255,6 +257,8 @@ export default function CourseModuleAssignmentPage() {
       setDraftOriginalityDetection(data.originalityDetection)
       setOriginalityStudentVisibility(data.originalityStudentVisibility)
       setDraftOriginalityStudentVisibility(data.originalityStudentVisibility)
+      setGradingType(data.gradingType ?? '')
+      setDraftGradingType(data.gradingType ?? '')
       setAssignmentGroupId(data.assignmentGroupId ?? null)
       setAssignmentGroupPatchError(null)
       try {
@@ -321,6 +325,8 @@ export default function CourseModuleAssignmentPage() {
       setDraftOriginalityDetection('disabled')
       setOriginalityStudentVisibility('hide')
       setDraftOriginalityStudentVisibility('hide')
+      setGradingType('')
+      setDraftGradingType('')
       setStaffRoster(null)
     } finally {
       setLoading(false)
@@ -350,6 +356,7 @@ export default function CourseModuleAssignmentPage() {
     setDraftProvisionalGraderUserIds(provisionalGraderUserIds)
     setDraftOriginalityDetection(originalityDetection)
     setDraftOriginalityStudentVisibility(originalityStudentVisibility)
+    setDraftGradingType(gradingType)
   }
 
   function beginEdit() {
@@ -410,6 +417,7 @@ export default function CourseModuleAssignmentPage() {
         provisionalGraderUserIds: draftModeratedGrading ? draftProvisionalGraderUserIds : [],
         originalityDetection: draftOriginalityDetection,
         originalityStudentVisibility: draftOriginalityStudentVisibility,
+        gradingType: draftGradingType.trim() === '' ? null : draftGradingType.trim(),
       })
       setMarkdown(data.markdown)
       setDueAt(data.dueAt)
@@ -439,6 +447,8 @@ export default function CourseModuleAssignmentPage() {
       setDraftOriginalityDetection(data.originalityDetection)
       setOriginalityStudentVisibility(data.originalityStudentVisibility)
       setDraftOriginalityStudentVisibility(data.originalityStudentVisibility)
+      setGradingType(data.gradingType ?? '')
+      setDraftGradingType(data.gradingType ?? '')
       setRequiresAssignmentAccessCode(data.requiresAssignmentAccessCode)
       setAssignmentAccessCode(data.assignmentAccessCode ?? '')
       setAssignmentGroupId(data.assignmentGroupId ?? null)
@@ -766,6 +776,8 @@ export default function CourseModuleAssignmentPage() {
                     onOriginalityDetectionChange={setDraftOriginalityDetection}
                     originalityStudentVisibility={draftOriginalityStudentVisibility}
                     onOriginalityStudentVisibilityChange={setDraftOriginalityStudentVisibility}
+                    gradingDisplayType={draftGradingType}
+                    onGradingDisplayTypeChange={setDraftGradingType}
                   />
                 ) : null
               }

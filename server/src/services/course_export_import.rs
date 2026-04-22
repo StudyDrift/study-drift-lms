@@ -37,6 +37,16 @@ const MAX_EXPORT_ENROLLMENTS: usize = 5000;
 const MAX_ENROLLMENT_EMAIL_LEN: usize = 320;
 const MAX_ENROLLMENT_DISPLAY_NAME_LEN: usize = 256;
 
+fn sanitized_export_grading_type(body: &ExportedAssignmentBody) -> Option<&str> {
+    body.grading_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter(|s| {
+            crate::services::grading::conversion::DisplayGradingKind::from_str(s).is_some()
+        })
+}
+
 fn normalize_enrollment_email(raw: &str) -> String {
     raw.trim().to_lowercase()
 }
@@ -621,6 +631,7 @@ async fn apply_module_bodies(
                         body.originality_detection.as_str(),
                         body.originality_student_visibility.as_str(),
                         body.blind_grading,
+                        sanitized_export_grading_type(body),
                     )
                     .await?;
                     course_structure::set_assignment_due_at(pool, course_id, it.id, body.due_at)
@@ -740,6 +751,7 @@ async fn apply_module_bodies_for_new_items_only(
                         body.originality_detection.as_str(),
                         body.originality_student_visibility.as_str(),
                         body.blind_grading,
+                        sanitized_export_grading_type(body),
                     )
                     .await?;
                     course_structure::set_assignment_due_at(pool, course_id, it.id, body.due_at)
@@ -944,6 +956,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                             blind_grading: row.blind_grading,
                             originality_detection: row.originality_detection.clone(),
                             originality_student_visibility: row.originality_student_visibility.clone(),
+                            grading_type: row.grading_type.clone(),
                         },
                     );
                 }

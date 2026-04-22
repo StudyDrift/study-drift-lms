@@ -18,6 +18,7 @@ pub mod course_outcomes_api;
 pub mod course_structure;
 pub mod course_syllabus;
 pub mod enrollment;
+pub mod grading_scheme;
 pub mod enrollment_group;
 pub mod late_submission_policy;
 pub mod me;

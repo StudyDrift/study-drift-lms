@@ -38,6 +38,8 @@ pub struct CourseItemAssignmentRow {
     pub originality_detection: String,
     /// `show` | `hide` | `show_after_grading`
     pub originality_student_visibility: String,
+    /// When set, overrides the course grading scheme display for this assignment.
+    pub grading_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +64,7 @@ pub struct AssignmentBodyWrite {
     pub provisional_grader_user_ids: Vec<Uuid>,
     pub originality_detection: String,
     pub originality_student_visibility: String,
+    pub grading_type: Option<String>,
 }
 
 pub async fn insert_empty_for_item(
@@ -143,6 +146,37 @@ pub async fn rubrics_for_structure_items(
     Ok(rows.into_iter().map(|r| (r.id, r.rubric_json)).collect())
 }
 
+/// `grading_type` override for assignments (batch).
+pub async fn grading_types_for_structure_items(
+    pool: &PgPool,
+    course_id: Uuid,
+    structure_item_ids: &[Uuid],
+) -> Result<HashMap<Uuid, Option<String>>, sqlx::Error> {
+    if structure_item_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    #[derive(Debug, Clone, FromRow)]
+    struct Row {
+        id: Uuid,
+        grading_type: Option<String>,
+    }
+    let rows: Vec<Row> = sqlx::query_as(&format!(
+        r#"
+        SELECT c.id, m.grading_type
+        FROM {} c
+        INNER JOIN {} m ON m.structure_item_id = c.id
+        WHERE c.course_id = $1 AND c.kind = 'assignment' AND c.id = ANY($2)
+        "#,
+        schema::COURSE_STRUCTURE_ITEMS,
+        schema::MODULE_ASSIGNMENTS
+    ))
+    .bind(course_id)
+    .bind(structure_item_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.id, r.grading_type)).collect())
+}
+
 #[derive(Debug, Clone, FromRow)]
 struct AssignmentJoinRow {
     title: String,
@@ -168,6 +202,7 @@ struct AssignmentJoinRow {
     provisional_grader_user_ids: Vec<Uuid>,
     originality_detection: String,
     originality_student_visibility: String,
+    grading_type: Option<String>,
 }
 
 pub async fn get_for_course_item(
@@ -184,7 +219,8 @@ pub async fn get_for_course_item(
                m.blind_grading, m.identities_revealed_at,
                m.moderated_grading, m.moderation_threshold_pct, m.moderator_user_id,
                m.provisional_grader_user_ids,
-               m.originality_detection, m.originality_student_visibility
+               m.originality_detection, m.originality_student_visibility,
+               m.grading_type
         FROM {} c
         INNER JOIN {} m ON m.structure_item_id = c.id
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
@@ -221,6 +257,7 @@ pub async fn get_for_course_item(
         provisional_grader_user_ids: r.provisional_grader_user_ids,
         originality_detection: r.originality_detection,
         originality_student_visibility: r.originality_student_visibility,
+        grading_type: r.grading_type,
     }))
 }
 
@@ -252,6 +289,7 @@ pub async fn write_assignment_body(
             provisional_grader_user_ids = $19,
             originality_detection = $20,
             originality_student_visibility = $21,
+            grading_type = $22,
             settings_version = m.settings_version + 1,
             updated_at = NOW()
         FROM {} c
@@ -285,6 +323,7 @@ pub async fn write_assignment_body(
     .bind(&body.provisional_grader_user_ids)
     .bind(&body.originality_detection)
     .bind(&body.originality_student_visibility)
+    .bind(body.grading_type.as_deref())
     .fetch_optional(pool)
     .await
 }
@@ -362,6 +401,7 @@ pub async fn upsert_import_body(
     originality_detection: &str,
     originality_student_visibility: &str,
     blind_grading: bool,
+    grading_type: Option<&str>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"
@@ -371,9 +411,9 @@ pub async fn upsert_import_body(
             submission_allow_text, submission_allow_file_upload, submission_allow_url,
             late_submission_policy, late_penalty_percent, rubric_json,
             originality_detection, originality_student_visibility,
-            blind_grading, identities_revealed_at
+            blind_grading, grading_type, identities_revealed_at
         )
-        SELECT c.id, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULL
+        SELECT c.id, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NULL
         FROM {} c
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
         ON CONFLICT (structure_item_id) DO UPDATE
@@ -391,6 +431,7 @@ pub async fn upsert_import_body(
             originality_detection = EXCLUDED.originality_detection,
             originality_student_visibility = EXCLUDED.originality_student_visibility,
             blind_grading = EXCLUDED.blind_grading,
+            grading_type = EXCLUDED.grading_type,
             identities_revealed_at = NULL,
             settings_version = m.settings_version + 1,
             updated_at = NOW()
@@ -414,6 +455,7 @@ pub async fn upsert_import_body(
     .bind(originality_detection)
     .bind(originality_student_visibility)
     .bind(blind_grading)
+    .bind(grading_type)
     .execute(pool)
     .await?;
     Ok(())

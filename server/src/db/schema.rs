@@ -10,6 +10,7 @@ pub const USER_AI_SETTINGS: &str = r#""user".user_ai_settings"#;
 pub const USER_AUDIT: &str = r#""user".user_audit"#;
 pub const PASSWORD_RESET_TOKENS: &str = r#""user".password_reset_tokens"#;
 pub const COURSES: &str = "course.courses";
+pub const GRADING_SCHEMES: &str = "course.grading_schemes";
 pub const COURSE_ENROLLMENTS: &str = "course.course_enrollments";
 pub const COURSE_STRUCTURE_ITEMS: &str = "course.course_structure_items";
 pub const COURSE_GRADES: &str = "course.course_grades";

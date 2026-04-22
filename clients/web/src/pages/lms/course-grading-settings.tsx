@@ -3,10 +3,14 @@ import { Plus, Trash2 } from 'lucide-react'
 import { usePermissions } from '../../context/use-permissions'
 import {
   courseItemCreatePermission,
+  DEFAULT_LETTER_GRADE_SCALE_JSON,
+  fetchCourseGradingScheme,
   fetchCourseGradingSettings,
   fetchCourseStructure,
+  GRADING_SCHEME_DISPLAY_TYPES,
   GRADING_SCALE_OPTIONS,
   patchCourseStructureItemAssignmentGroup,
+  putCourseGradingScheme,
   putCourseGradingSettings,
   type AssignmentGroup,
   type CourseStructureItem,
@@ -46,14 +50,21 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [itemPatchingId, setItemPatchingId] = useState<string | null>(null)
+  const [schemeType, setSchemeType] = useState('points')
+  const [schemeJsonText, setSchemeJsonText] = useState('')
+  const [schemeStatus, setSchemeStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [schemeMessage, setSchemeMessage] = useState<string | null>(null)
+  const [passMinPct, setPassMinPct] = useState('60')
+  const [completeMinPct, setCompleteMinPct] = useState('50')
 
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const [g, items] = await Promise.all([
+      const [g, items, schemeEnvelope] = await Promise.all([
         fetchCourseGradingSettings(courseCode),
         fetchCourseStructure(courseCode),
+        fetchCourseGradingScheme(courseCode),
       ])
       setGradingScale(g.gradingScale)
       setGroups(
@@ -69,6 +80,33 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
             ],
       )
       setStructure(items)
+      const sch = schemeEnvelope.scheme
+      if (sch) {
+        setSchemeType(sch.type)
+        try {
+          setSchemeJsonText(JSON.stringify(sch.scaleJson ?? {}, null, 2))
+        } catch {
+          setSchemeJsonText('{}')
+        }
+        const sj = sch.scaleJson as Record<string, unknown> | null
+        if (sch.type === 'pass_fail' && sj && typeof sj.pass_min_pct === 'number') {
+          setPassMinPct(String(sj.pass_min_pct))
+        } else {
+          setPassMinPct('60')
+        }
+        if (sch.type === 'complete_incomplete' && sj && typeof sj.complete_min_pct === 'number') {
+          setCompleteMinPct(String(sj.complete_min_pct))
+        } else {
+          setCompleteMinPct('50')
+        }
+      } else {
+        setSchemeType('points')
+        setSchemeJsonText(JSON.stringify(DEFAULT_LETTER_GRADE_SCALE_JSON, null, 2))
+        setPassMinPct('60')
+        setCompleteMinPct('50')
+      }
+      setSchemeStatus('idle')
+      setSchemeMessage(null)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load grading settings.')
     } finally {
@@ -139,6 +177,31 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
     } catch (e) {
       setSaveStatus('error')
       setSaveMessage(e instanceof Error ? e.message : 'Could not save.')
+    }
+  }
+
+  async function onSaveGradingScheme(e: React.FormEvent) {
+    e.preventDefault()
+    if (!canEdit) return
+    setSchemeStatus('saving')
+    setSchemeMessage(null)
+    try {
+      let scaleJson: unknown = {}
+      if (schemeType === 'letter' || schemeType === 'gpa') {
+        scaleJson = JSON.parse(schemeJsonText || '[]')
+      } else if (schemeType === 'pass_fail') {
+        const n = Number.parseFloat(passMinPct)
+        scaleJson = { pass_min_pct: Number.isFinite(n) ? n : 60 }
+      } else if (schemeType === 'complete_incomplete') {
+        const n = Number.parseFloat(completeMinPct)
+        scaleJson = { complete_min_pct: Number.isFinite(n) ? n : 50 }
+      }
+      await putCourseGradingScheme(courseCode, { type: schemeType, scaleJson })
+      setSchemeStatus('saved')
+      setSchemeMessage('Grading scheme saved.')
+    } catch (err) {
+      setSchemeStatus('error')
+      setSchemeMessage(err instanceof Error ? err.message : 'Could not save grading scheme.')
     }
   }
 
@@ -235,6 +298,103 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
               </label>
             ))}
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-600 dark:bg-neutral-900 dark:shadow-none">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Grade display scheme</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+            Controls how gradebook and My Grades show scores (letters, pass/fail, etc.). Stored scores stay as
+            points; changing this only updates labels.
+          </p>
+          <form onSubmit={onSaveGradingScheme} className="mt-4 space-y-4">
+            <div>
+              <label htmlFor="grading-scheme-type" className="text-xs font-medium text-slate-500 dark:text-neutral-400">
+                Display as
+              </label>
+              <select
+                id="grading-scheme-type"
+                disabled={!canEdit}
+                value={schemeType}
+                onChange={(e) => setSchemeType(e.target.value)}
+                className="mt-1 w-full max-w-md rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-400"
+              >
+                {GRADING_SCHEME_DISPLAY_TYPES.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {(schemeType === 'letter' || schemeType === 'gpa') && (
+              <div>
+                <label htmlFor="grading-scheme-json" className="text-xs font-medium text-slate-500 dark:text-neutral-400">
+                  Letter bands (JSON array: label, min_pct, optional gpa)
+                </label>
+                <textarea
+                  id="grading-scheme-json"
+                  disabled={!canEdit}
+                  value={schemeJsonText}
+                  onChange={(e) => setSchemeJsonText(e.target.value)}
+                  rows={8}
+                  spellCheck={false}
+                  className="mt-1 w-full max-w-2xl rounded-lg border border-slate-200 bg-white px-2 py-2 font-mono text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-400"
+                />
+              </div>
+            )}
+            {schemeType === 'pass_fail' && (
+              <div>
+                <label htmlFor="pass-min-pct" className="text-xs font-medium text-slate-500 dark:text-neutral-400">
+                  Minimum percent to pass
+                </label>
+                <input
+                  id="pass-min-pct"
+                  type="text"
+                  inputMode="decimal"
+                  disabled={!canEdit}
+                  value={passMinPct}
+                  onChange={(e) => setPassMinPct(e.target.value)}
+                  className="mt-1 w-32 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-400"
+                />
+              </div>
+            )}
+            {schemeType === 'complete_incomplete' && (
+              <div>
+                <label htmlFor="complete-min-pct" className="text-xs font-medium text-slate-500 dark:text-neutral-400">
+                  Minimum percent for Complete
+                </label>
+                <input
+                  id="complete-min-pct"
+                  type="text"
+                  inputMode="decimal"
+                  disabled={!canEdit}
+                  value={completeMinPct}
+                  onChange={(e) => setCompleteMinPct(e.target.value)}
+                  className="mt-1 w-32 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-400"
+                />
+              </div>
+            )}
+            {schemeMessage && (
+              <p
+                className={
+                  schemeStatus === 'error'
+                    ? 'text-sm text-rose-700 dark:text-rose-400'
+                    : 'text-sm text-emerald-700 dark:text-emerald-400'
+                }
+                role="status"
+              >
+                {schemeMessage}
+              </p>
+            )}
+            {canEdit && (
+              <button
+                type="submit"
+                disabled={schemeStatus === 'saving'}
+                className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-200 dark:text-neutral-900 dark:hover:bg-white"
+              >
+                {schemeStatus === 'saving' ? 'Saving…' : 'Save grade display scheme'}
+              </button>
+            )}
+          </form>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-600 dark:bg-neutral-900 dark:shadow-none">

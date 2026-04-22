@@ -64,6 +64,9 @@ pub struct ModuleContentPageResponse {
     /// Plan 3.5 — learner visibility for scores: `show` | `hide` | `show_after_grading`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub originality_student_visibility: Option<String>,
+    /// Plan 3.6 — assignment display override when set (omit = inherit course scheme).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grading_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -138,4 +141,7 @@ pub struct UpdateModuleContentPageRequest {
     pub originality_detection: Option<String>,
     #[serde(default)]
     pub originality_student_visibility: Option<String>,
+    /// Plan 3.6 — omit unchanged; JSON `null` clears override (inherit course scheme).
+    #[serde(default)]
+    pub grading_type: Option<Option<String>>,
 }

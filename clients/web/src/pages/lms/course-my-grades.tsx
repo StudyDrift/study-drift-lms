@@ -35,6 +35,7 @@ export default function CourseMyGrades() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [columns, setColumns] = useState<CourseGradebookGridColumn[]>([])
   const [grades, setGrades] = useState<Record<string, string>>({})
+  const [displayGrades, setDisplayGrades] = useState<Record<string, string>>({})
   const [assignmentGroups, setAssignmentGroups] = useState<AssignmentGroupWeight[]>([])
 
   const canView = useMemo(() => {
@@ -51,6 +52,7 @@ export default function CourseMyGrades() {
       const data = await fetchCourseMyGrades(courseCode)
       setColumns(data.columns)
       setGrades(data.grades)
+      setDisplayGrades(data.displayGrades ?? {})
       setAssignmentGroups(
         data.assignmentGroups.map((g) => ({ id: g.id, weightPercent: g.weightPercent })),
       )
@@ -155,6 +157,7 @@ export default function CourseMyGrades() {
                 <tbody className="divide-y divide-slate-200 dark:divide-neutral-700">
                   {columns.map((col) => {
                     const earned = grades[col.id]
+                    const display = displayGrades[col.id]
                     const earnedNum = parseEarned(earned)
                     const max = col.maxPoints
                     const href =
@@ -175,7 +178,11 @@ export default function CourseMyGrades() {
                           {col.kind === 'quiz' ? 'Quiz' : 'Assignment'}
                         </td>
                         <td className="px-4 py-3 text-slate-800 dark:text-neutral-200">
-                          {(earned ?? '').trim() ? earned : '—'}
+                          {(display ?? '').trim()
+                            ? display
+                            : (earned ?? '').trim()
+                              ? earned
+                              : '—'}
                         </td>
                         <td className="px-4 py-3 text-slate-800 dark:text-neutral-200">
                           {max != null && max > 0 ? String(max) : '—'}

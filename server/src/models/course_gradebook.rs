@@ -12,9 +12,24 @@ pub struct CourseGradebookGridResponse {
     /// Saved points per student id and gradable module item id (empty cells omitted).
     #[serde(default)]
     pub grades: HashMap<Uuid, HashMap<Uuid, String>>,
+    /// Human-readable grade per cell (depends on course scheme and column display type).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub display_grades: HashMap<Uuid, HashMap<Uuid, String>>,
     /// Per-criterion rubric scores: student → item → criterion id → points string.
     #[serde(default)]
     pub rubric_scores: HashMap<Uuid, HashMap<Uuid, HashMap<Uuid, String>>>,
+    /// Active course grading scheme (omit when none — gradebook uses raw points).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grading_scheme: Option<GradingSchemeSummary>,
+}
+
+/// Minimal scheme payload for clients building selects (letter options, pass threshold, etc.).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GradingSchemeSummary {
+    #[serde(rename = "type")]
+    pub scheme_type: String,
+    pub scale_json: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +61,11 @@ pub struct CourseGradebookGridColumn {
     /// Present for assignment columns when a rubric is configured.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rubric: Option<RubricDefinition>,
+    /// Assignment-only: overrides course scheme when set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assignment_grading_type: Option<String>,
+    /// Resolved display mode for this column (`points`, `letter`, …).
+    pub effective_display_type: String,
 }
 
 /// Student-facing grades: one row per gradable item plus weights for final %.
@@ -56,5 +76,10 @@ pub struct CourseMyGradesResponse {
     /// Earned points per module item id (omitted when no grade entered).
     #[serde(default)]
     pub grades: HashMap<Uuid, String>,
+    /// Display string per item id (letter, pass/fail, etc.).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub display_grades: HashMap<Uuid, String>,
     pub assignment_groups: Vec<AssignmentGroupPublic>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grading_scheme: Option<GradingSchemeSummary>,
 }

@@ -120,6 +120,9 @@ pub struct ExportedAssignmentBody {
     /// Plan 3.5 — learner visibility for originality scores.
     #[serde(default = "default_originality_student_visibility")]
     pub originality_student_visibility: String,
+    /// Plan 3.6 — optional per-assignment display override.
+    #[serde(default)]
+    pub grading_type: Option<String>,
 }
 
 fn default_true() -> bool {

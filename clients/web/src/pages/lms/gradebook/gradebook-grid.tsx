@@ -33,6 +33,8 @@ export type GradebookColumn = {
   maxPoints: number | null
   assignmentGroupId?: string | null
   rubric?: RubricDefinition | null
+  /** Plan 3.6 — resolved display mode for this column. */
+  effectiveDisplayType?: string
 }
 
 export type GradebookStudent = {
@@ -57,6 +59,29 @@ type GradebookGridProps = {
   courseCode?: string
   /** Highlights and scrolls a learner row (e.g. from command palette `?student=`). */
   highlightStudentId?: string | null
+  /** Active course grading scheme (letter bands, pass threshold, etc.). */
+  gradingScheme?: { type: string; scaleJson: unknown } | null
+}
+
+function gradingSelectOptions(
+  col: GradebookColumn,
+  scheme: { type: string; scaleJson: unknown } | null | undefined,
+): string[] {
+  const eff = col.effectiveDisplayType ?? 'points'
+  if (col.rubric) return []
+  if (eff === 'pass_fail') return ['Pass', 'Fail']
+  if (eff === 'complete_incomplete') return ['Complete', 'Incomplete']
+  if (eff === 'letter' || eff === 'gpa') {
+    const raw = scheme?.scaleJson
+    if (!Array.isArray(raw)) return []
+    const labels = raw
+      .map((x) =>
+        x && typeof x === 'object' && 'label' in x ? String((x as { label: unknown }).label).trim() : '',
+      )
+      .filter(Boolean)
+    return [...new Set(labels)]
+  }
+  return []
 }
 
 const CELL_PAD = 'px-3 py-2 text-sm'
@@ -206,6 +231,7 @@ export function GradebookGrid({
   onRubricClick,
   courseCode,
   highlightStudentId = null,
+  gradingScheme = null,
 }: GradebookGridProps) {
   const density = useUiDensity()
   const pad = density === 'compact' ? 'px-2 py-1.5 text-xs' : CELL_PAD
@@ -232,6 +258,7 @@ export function GradebookGrid({
   const focusRowRef = useRef(0)
 
   const editInputRef = useRef<HTMLInputElement>(null)
+  const editSelectRef = useRef<HTMLSelectElement>(null)
   /** When true, the next input `blur` must not commit (Escape cancels). */
   const skipCommitOnBlurRef = useRef(false)
   /** Pointer-drag selection: mousedown cell; used when pointer enters another cell while button held. */
@@ -578,12 +605,21 @@ export function GradebookGrid({
 
   useLayoutEffect(() => {
     if (!editing) return
+    const single = editing.rowMin === editing.rowMax && editing.colMin === editing.colMax
+    const col = visibleColumns[editing.colMin]
+    const opts = single && col ? gradingSelectOptions(col, gradingScheme) : []
+    if (opts.length > 0 && !col?.rubric) {
+      const sel = editSelectRef.current
+      if (!sel) return
+      sel.focus()
+      return
+    }
     const el = editInputRef.current
     if (!el) return
     el.focus()
     const len = el.value.length
     el.setSelectionRange(len, len)
-  }, [editing])
+  }, [editing, visibleColumns, gradingScheme])
 
   const moveBy = useCallback(
     (deltaRow: number, deltaCol: number, opts?: { clearSelectionAnchor?: boolean }) => {
@@ -873,7 +909,7 @@ export function GradebookGrid({
   }, [commitEdit])
 
   const handleInputKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>) => {
+    (e: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault()
         commitEdit()
@@ -1245,6 +1281,13 @@ export function GradebookGrid({
                   const showEditor = editing != null && row === focusRow && colIndex === focusCol
                   const inEditBand = editing != null && inRect && !showEditor
                   const val = displayValue(row, colIndex)
+                  const singleCellEdit =
+                    editing != null &&
+                    editing.rowMin === editing.rowMax &&
+                    editing.colMin === editing.colMax
+                  const selectOpts =
+                    showEditor && singleCellEdit ? gradingSelectOptions(col, gradingScheme) : []
+                  const showSelectEditor = showEditor && selectOpts.length > 0
 
                   const ringActive =
                     'relative z-[1] bg-indigo-50 ring-2 ring-inset ring-indigo-500 dark:bg-indigo-950/50 dark:ring-indigo-400'
@@ -1352,26 +1395,45 @@ export function GradebookGrid({
                       onDoubleClick={() => beginEdit(row, colIndex, { range: 'single' })}
                     >
                       {showEditor ? (
-                        <input
-                          ref={editInputRef}
-                          type="text"
-                          inputMode="decimal"
-                          autoComplete="off"
-                          aria-label={`Grade for ${student.name}, ${col.title}`}
-                          className="m-0 w-full min-w-0 border-0 bg-transparent p-0 text-right text-sm tabular-nums text-slate-950 shadow-none outline-none ring-0 focus:ring-0 dark:text-neutral-100"
-                          value={draft}
-                          onChange={(e) => setDraft(e.target.value)}
-                          onPaste={(e) => {
-                            const text = e.clipboardData.getData('text/plain')
-                            if (!text.includes('\n') && !text.includes('\t')) return
-                            e.preventDefault()
-                            skipCommitOnBlurRef.current = true
-                            setEditing(null)
-                            applyBulkPaste(text, focusRow, focusCol)
-                          }}
-                          onKeyDown={handleInputKeyDown}
-                          onBlur={handleEditInputBlur}
-                        />
+                        showSelectEditor ? (
+                          <select
+                            ref={editSelectRef}
+                            aria-label={`Grade for ${student.name}, ${col.title}`}
+                            className="m-0 w-full min-w-0 border-0 bg-transparent p-0 text-right text-sm text-slate-950 shadow-none outline-none ring-0 focus:ring-0 dark:text-neutral-100"
+                            value={draft}
+                            onChange={(e) => setDraft(e.target.value)}
+                            onKeyDown={handleInputKeyDown}
+                            onBlur={handleEditInputBlur}
+                          >
+                            <option value="">—</option>
+                            {selectOpts.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            ref={editInputRef}
+                            type="text"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            aria-label={`Grade for ${student.name}, ${col.title}`}
+                            className="m-0 w-full min-w-0 border-0 bg-transparent p-0 text-right text-sm tabular-nums text-slate-950 shadow-none outline-none ring-0 focus:ring-0 dark:text-neutral-100"
+                            value={draft}
+                            onChange={(e) => setDraft(e.target.value)}
+                            onPaste={(e) => {
+                              const text = e.clipboardData.getData('text/plain')
+                              if (!text.includes('\n') && !text.includes('\t')) return
+                              e.preventDefault()
+                              skipCommitOnBlurRef.current = true
+                              setEditing(null)
+                              applyBulkPaste(text, focusRow, focusCol)
+                            }}
+                            onKeyDown={handleInputKeyDown}
+                            onBlur={handleEditInputBlur}
+                          />
+                        )
                       ) : (
                         <div className="flex flex-col items-end gap-0.5">
                           <span

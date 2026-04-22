@@ -19,7 +19,10 @@ use crate::models::course_export::{
 };
 use crate::models::course_gradebook::{
     CourseGradebookGridColumn, CourseGradebookGridResponse, CourseGradebookGridStudent,
-    CourseMyGradesResponse, PutCourseGradebookGradesRequest,
+    CourseMyGradesResponse, GradingSchemeSummary, PutCourseGradebookGradesRequest,
+};
+use crate::models::grading_scheme::{
+    CourseGradingSchemeEnvelope, GradingSchemeResponse, PutGradingSchemeRequest,
 };
 use crate::models::course_grading::{
     CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
@@ -82,6 +85,7 @@ use crate::repos::course_files;
 use crate::repos::course_grades;
 use crate::repos::course_grading;
 use crate::repos::course_grading::PutError;
+use crate::repos::grading_schemes;
 use crate::repos::course_grants;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
@@ -98,6 +102,10 @@ use crate::repos::lti as lti_repo;
 use crate::repos::misconceptions as misconception_repo;
 use crate::repos::question_bank as qb_repo;
 use crate::repos::quiz_attempts;
+use crate::services::grading::conversion::{
+    normalize_scheme_type_for_storage, parse_gradebook_cell, parse_scale, resolve_effective,
+    to_display_grade, validate_scale_json, DisplayGradingKind, ParsedScale,
+};
 use crate::repos::rbac;
 use crate::repos::syllabus_acceptance;
 use crate::repos::syllabus_markups;
@@ -439,6 +447,10 @@ pub fn router() -> Router<AppState> {
             get(grading_get_handler).put(grading_put_handler),
         )
         .route(
+            "/api/v1/courses/{course_code}/grading-scheme",
+            get(grading_scheme_get_handler).put(grading_scheme_put_handler),
+        )
+        .route(
             "/api/v1/courses/{course_code}/outcomes",
             get(course_outcomes_list_handler).post(course_outcomes_create_handler),
         )
@@ -655,6 +667,7 @@ fn module_assignment_response_for_api(
         },
         originality_detection: Some(row.originality_detection.clone()),
         originality_student_visibility: Some(row.originality_student_visibility.clone()),
+        grading_type: row.grading_type.clone(),
     }
 }
 
@@ -756,6 +769,23 @@ fn merge_assignment_body_write(
         None => cur.originality_student_visibility.clone(),
         Some(s) => originality_policy::normalize_student_visibility(s)?,
     };
+    let grading_type = match &req.grading_type {
+        None => cur.grading_type.clone(),
+        Some(None) => None,
+        Some(Some(s)) => {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
+        }
+    };
+    if let Some(ref gt) = grading_type {
+        if DisplayGradingKind::from_str(gt).is_none() {
+            return Err(AppError::invalid_input("Invalid grading_type."));
+        }
+    }
     Ok(course_module_assignments::AssignmentBodyWrite {
         markdown,
         points_worth,
@@ -776,6 +806,7 @@ fn merge_assignment_body_write(
         provisional_grader_user_ids,
         originality_detection,
         originality_student_visibility,
+        grading_type,
     })
 }
 
@@ -2187,6 +2218,7 @@ async fn module_content_page_get_handler(
         provisional_grader_user_ids: None,
         originality_detection: None,
         originality_student_visibility: None,
+        grading_type: None,
     }))
 }
 
@@ -2264,6 +2296,7 @@ async fn module_content_page_patch_handler(
         provisional_grader_user_ids: None,
         originality_detection: None,
         originality_student_visibility: None,
+        grading_type: None,
     }))
 }
 
@@ -3980,6 +4013,7 @@ async fn gradebook_students_and_columns(
         Uuid,
         Vec<CourseGradebookGridStudent>,
         Vec<CourseGradebookGridColumn>,
+        HashMap<Uuid, Option<String>>,
     ),
     AppError,
 > {
@@ -4011,10 +4045,10 @@ async fn gradebook_students_and_columns(
             .await?;
 
     let columns: Vec<CourseGradebookGridColumn> = items
-        .into_iter()
+        .iter()
         .filter(|it| it.kind == "assignment" || it.kind == "quiz")
         .map(|it| {
-            let max_points = gradebook_max_points(&it);
+            let max_points = gradebook_max_points(it);
             let rubric = if it.kind == "assignment" {
                 rubric_map
                     .get(&it.id)
@@ -4026,36 +4060,95 @@ async fn gradebook_students_and_columns(
             };
             CourseGradebookGridColumn {
                 id: it.id,
-                kind: it.kind,
-                title: it.title,
+                kind: it.kind.clone(),
+                title: it.title.clone(),
                 max_points,
                 assignment_group_id: it.assignment_group_id,
                 rubric,
+                assignment_grading_type: None,
+                effective_display_type: "points".to_string(),
             }
         })
         .collect();
 
-    Ok((course_id, students, columns))
+    let grading_type_by_item =
+        course_module_assignments::grading_types_for_structure_items(pool, course_id, &assignment_ids)
+            .await?;
+
+    Ok((course_id, students, columns, grading_type_by_item))
 }
 
-fn parse_gradebook_points_str(raw: &str) -> Result<Option<f64>, AppError> {
-    let t = raw.trim();
-    if t.is_empty() {
-        return Ok(None);
+fn enrich_gradebook_columns(
+    columns: Vec<CourseGradebookGridColumn>,
+    types_map: &HashMap<Uuid, Option<String>>,
+    course_kind: Option<DisplayGradingKind>,
+) -> Vec<CourseGradebookGridColumn> {
+    columns
+        .into_iter()
+        .map(|c| {
+            let ov = if c.kind == "assignment" {
+                types_map.get(&c.id).cloned().flatten()
+            } else {
+                None
+            };
+            let eff = resolve_effective(course_kind, ov.as_deref());
+            CourseGradebookGridColumn {
+                id: c.id,
+                kind: c.kind,
+                title: c.title,
+                max_points: c.max_points,
+                assignment_group_id: c.assignment_group_id,
+                rubric: c.rubric,
+                assignment_grading_type: ov,
+                effective_display_type: eff.as_str().to_string(),
+            }
+        })
+        .collect()
+}
+
+fn scheme_summary_from_row(row: &grading_schemes::GradingSchemeRow) -> GradingSchemeSummary {
+    GradingSchemeSummary {
+        scheme_type: row.grading_display_type.clone(),
+        scale_json: row
+            .scale_json
+            .as_ref()
+            .map(|j| j.0.clone())
+            .unwrap_or_else(|| json!({})),
     }
-    let cleaned: String = t
-        .chars()
-        .filter(|c| *c != ',' && !c.is_whitespace())
-        .collect();
-    let n: f64 = cleaned
-        .parse()
-        .map_err(|_| AppError::invalid_input("Each score must be a valid number."))?;
-    if !n.is_finite() || n < 0.0 {
-        return Err(AppError::invalid_input(
-            "Each score must be a non-negative number.",
-        ));
+}
+
+fn parsed_scale_from_row(row: &grading_schemes::GradingSchemeRow) -> Result<ParsedScale, AppError> {
+    let k = DisplayGradingKind::from_str(row.grading_display_type.trim()).ok_or_else(|| {
+        AppError::invalid_input("Stored grading scheme has an unknown display type.")
+    })?;
+    parse_scale(k, row.scale_json.as_ref().map(|j| &j.0)).map_err(AppError::invalid_input)
+}
+
+fn grid_display_grades(
+    grades: &HashMap<Uuid, HashMap<Uuid, String>>,
+    columns: &[CourseGradebookGridColumn],
+    parsed: Option<&ParsedScale>,
+) -> HashMap<Uuid, HashMap<Uuid, String>> {
+    let mut out: HashMap<Uuid, HashMap<Uuid, String>> = HashMap::new();
+    for (uid, row) in grades {
+        for (item_id, pts_str) in row {
+            let Ok(pts) = pts_str.trim().replace(',', "").parse::<f64>() else {
+                continue;
+            };
+            if !pts.is_finite() || pts < 0.0 {
+                continue;
+            }
+            let Some(col) = columns.iter().find(|c| c.id == *item_id) else {
+                continue;
+            };
+            let eff = DisplayGradingKind::from_str(col.effective_display_type.as_str())
+                .unwrap_or(DisplayGradingKind::Points);
+            let maxp = col.max_points.map(|m| m as f64);
+            let dg = to_display_grade(pts, maxp, parsed, eff);
+            out.entry(*uid).or_default().insert(*item_id, dg);
+        }
     }
-    Ok(Some(n))
+    out
 }
 
 fn ensure_points_within_max(points: f64, max_points: Option<i32>) -> Result<(), AppError> {
@@ -4081,15 +4174,30 @@ async fn gradebook_grid_get_handler(
     let required = course_grants::course_gradebook_view_permission(&course_code);
     assert_permission(&state.pool, user.user_id, &required).await?;
 
-    let (course_id, students, columns) =
+    let (course_id, students, columns, types_map) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
     let (grades, rubric_scores) = course_grades::list_for_course(&state.pool, course_id).await?;
+
+    let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
+    let course_kind = scheme_row
+        .as_ref()
+        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()));
+    let parsed_scale: Option<ParsedScale> = scheme_row
+        .as_ref()
+        .map(parsed_scale_from_row)
+        .transpose()?;
+
+    let columns = enrich_gradebook_columns(columns, &types_map, course_kind);
+    let grading_scheme = scheme_row.as_ref().map(scheme_summary_from_row);
+    let display_grades = grid_display_grades(&grades, &columns, parsed_scale.as_ref());
 
     Ok(Json(CourseGradebookGridResponse {
         students,
         columns,
         grades,
+        display_grades,
         rubric_scores,
+        grading_scheme,
     }))
 }
 
@@ -4101,7 +4209,7 @@ async fn my_grades_get_handler(
     let user = auth_user(&state, &headers)?;
     require_course_access(&state, &course_code, user.user_id).await?;
 
-    let (course_id, students, columns) =
+    let (course_id, students, columns, types_map) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
 
     let is_student = students.iter().any(|s| s.user_id == user.user_id);
@@ -4117,10 +4225,46 @@ async fn my_grades_get_handler(
         .map(|s| s.assignment_groups)
         .unwrap_or_default();
 
+    let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
+    let course_kind = scheme_row
+        .as_ref()
+        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()));
+    let parsed_scale: Option<ParsedScale> = scheme_row
+        .as_ref()
+        .map(parsed_scale_from_row)
+        .transpose()?;
+
+    let columns = enrich_gradebook_columns(columns, &types_map, course_kind);
+    let grading_scheme = scheme_row.as_ref().map(scheme_summary_from_row);
+
+    let mut display_grades: HashMap<Uuid, String> = HashMap::new();
+    for (item_id, pts_str) in &grades {
+        let Ok(pts) = pts_str.trim().replace(',', "").parse::<f64>() else {
+            continue;
+        };
+        if !pts.is_finite() || pts < 0.0 {
+            continue;
+        }
+        let Some(col) = columns.iter().find(|c| c.id == *item_id) else {
+            continue;
+        };
+        let eff = DisplayGradingKind::from_str(col.effective_display_type.as_str())
+            .unwrap_or(DisplayGradingKind::Points);
+        let dg = to_display_grade(
+            pts,
+            col.max_points.map(|m| m as f64),
+            parsed_scale.as_ref(),
+            eff,
+        );
+        display_grades.insert(*item_id, dg);
+    }
+
     Ok(Json(CourseMyGradesResponse {
         columns,
         grades,
+        display_grades,
         assignment_groups,
+        grading_scheme,
     }))
 }
 
@@ -4136,8 +4280,17 @@ async fn gradebook_grades_put_handler(
     let required = course_grants::course_item_create_permission(&course_code);
     assert_permission(&state.pool, user.user_id, &required).await?;
 
-    let (course_id, students, columns) =
+    let (course_id, students, columns, types_map) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
+
+    let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
+    let course_kind = scheme_row
+        .as_ref()
+        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()));
+    let parsed_scale: Option<ParsedScale> = scheme_row
+        .as_ref()
+        .map(parsed_scale_from_row)
+        .transpose()?;
 
     let student_ok: HashSet<Uuid> = students.iter().map(|s| s.user_id).collect();
     let item_meta: HashMap<Uuid, Option<i32>> =
@@ -4161,7 +4314,24 @@ async fn gradebook_grades_put_handler(
                     "Grades include a module item that is not part of this course gradebook.",
                 ));
             };
-            let parsed = parse_gradebook_points_str(&raw)?;
+            let col_kind = columns
+                .iter()
+                .find(|c| c.id == item_id)
+                .map(|c| c.kind.as_str())
+                .unwrap_or("");
+            let override_str = if col_kind == "assignment" {
+                types_map.get(&item_id).and_then(|o| o.as_deref())
+            } else {
+                None
+            };
+            let effective = resolve_effective(course_kind, override_str);
+            let parsed = parse_gradebook_cell(
+                &raw,
+                max_p.map(|v| v as f64),
+                parsed_scale.as_ref(),
+                effective,
+            )
+            .map_err(AppError::invalid_input)?;
             let rubric_scores_cell = req
                 .rubric_scores
                 .get(&user_id)
@@ -4294,6 +4464,98 @@ async fn grading_put_handler(
         ))),
         Err(PutError::Db(e)) => Err(e.into()),
     }
+}
+
+async fn grading_scheme_get_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<CourseGradingSchemeEnvelope>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_gradebook_view_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let scheme = grading_schemes::get_active_for_course(&state.pool, course_id)
+        .await?
+        .map(|r| GradingSchemeResponse {
+            id: r.id,
+            name: r.name,
+            scheme_type: r.grading_display_type.clone(),
+            scale_json: r
+                .scale_json
+                .as_ref()
+                .map(|j| j.0.clone())
+                .unwrap_or_else(|| json!({})),
+        });
+    Ok(Json(CourseGradingSchemeEnvelope { scheme }))
+}
+
+async fn grading_scheme_put_handler(
+    State(state): State<AppState>,
+    Path(course_code): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<PutGradingSchemeRequest>,
+) -> Result<Json<CourseGradingSchemeEnvelope>, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+
+    let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
+        return Err(AppError::NotFound);
+    };
+
+    let old_kind = grading_schemes::get_active_for_course(&state.pool, course_id)
+        .await?
+        .map(|r| r.grading_display_type.clone());
+
+    let kind = DisplayGradingKind::from_str(req.scheme_type.trim())
+        .ok_or_else(|| AppError::invalid_input("Invalid grading scheme type."))?;
+    let name = req.name.as_deref().unwrap_or("Default").trim();
+    if name.is_empty() {
+        return Err(AppError::invalid_input("Scheme name cannot be empty."));
+    }
+    let scale_stored = normalize_scheme_type_for_storage(kind, req.scale_json.clone());
+    validate_scale_json(kind, Some(&scale_stored)).map_err(AppError::invalid_input)?;
+
+    let row = grading_schemes::upsert_for_course(
+        &state.pool,
+        course_id,
+        name,
+        kind.as_str(),
+        scale_stored,
+    )
+    .await?;
+
+    tracing::info!(
+        target: "audit",
+        event = "grading_type_updated",
+        course_id = %course_id,
+        old_type = ?old_kind,
+        new_type = %row.grading_display_type,
+        "course grading scheme updated"
+    );
+
+    let scheme = GradingSchemeResponse {
+        id: row.id,
+        name: row.name,
+        scheme_type: row.grading_display_type.clone(),
+        scale_json: row
+            .scale_json
+            .as_ref()
+            .map(|j| j.0.clone())
+            .unwrap_or_else(|| json!({})),
+    };
+    Ok(Json(CourseGradingSchemeEnvelope {
+        scheme: Some(scheme),
+    }))
 }
 
 async fn require_course_outcomes_edit(

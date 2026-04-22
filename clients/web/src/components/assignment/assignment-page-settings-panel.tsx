@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, Loader2, Plus, Trash2 } from 'lucide-react'
 import {
   generateAssignmentRubric,
+  GRADING_SCHEME_DISPLAY_TYPES,
   type LateSubmissionPolicy,
   type OriginalityDetectionMode,
   type OriginalityStudentVisibility,
@@ -64,6 +65,9 @@ export type AssignmentPageSettingsPanelProps = {
   onOriginalityDetectionChange: (value: OriginalityDetectionMode) => void
   originalityStudentVisibility: OriginalityStudentVisibility
   onOriginalityStudentVisibilityChange: (value: OriginalityStudentVisibility) => void
+  /** Plan 3.6 — optional; when set, shows grade display override for this assignment. */
+  gradingDisplayType?: string
+  onGradingDisplayTypeChange?: (value: string) => void
 }
 
 const inputClass =
@@ -204,6 +208,8 @@ export function AssignmentPageSettingsPanel({
   onOriginalityDetectionChange,
   originalityStudentVisibility,
   onOriginalityStudentVisibilityChange,
+  gradingDisplayType = '',
+  onGradingDisplayTypeChange,
 }: AssignmentPageSettingsPanelProps) {
   const submissionCount =
     Number(submissionAllowText) + Number(submissionAllowFileUpload) + Number(submissionAllowUrl)
@@ -533,6 +539,28 @@ export function AssignmentPageSettingsPanel({
               <p className="text-[11px] leading-snug text-slate-400 dark:text-neutral-500">
                 Add groups under Course Settings → Assignment groups & weights.
               </p>
+            ) : null}
+            {onGradingDisplayTypeChange ? (
+              <Field
+                label="Grade display override"
+                htmlFor="assignment-grading-display-type"
+                hint="Leave as inherit to use the course grading scheme from Settings → Grading."
+              >
+                <select
+                  id="assignment-grading-display-type"
+                  value={gradingDisplayType}
+                  onChange={(e) => onGradingDisplayTypeChange(e.target.value)}
+                  disabled={disabled}
+                  className={inputClass}
+                >
+                  <option value="">Inherit from course</option>
+                  {GRADING_SCHEME_DISPLAY_TYPES.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             ) : null}
           </div>
         </SettingsAccordion>

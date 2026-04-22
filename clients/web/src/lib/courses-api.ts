@@ -23,6 +23,7 @@ import {
   courseStandardsCoverageResponseSchema,
   courseSyllabusPayloadSchema,
   courseGradebookGridResponseSchema,
+  courseGradingSchemeEnvelopeSchema,
   courseMyGradesRawSchema,
   enrollmentGroupsTreeResponseSchema,
   enrollmentNextResponseSchema,
@@ -181,6 +182,24 @@ export const GRADING_SCALE_OPTIONS: { id: string; label: string; description: st
   },
   { id: 'percent', label: 'Percent (0–100)', description: 'Numeric percentage only.' },
   { id: 'pass_fail', label: 'Pass / Fail', description: 'Pass or fail outcomes only.' },
+]
+
+/** Plan 3.6 — course scheme `type` / assignment `gradingType` (matches server). */
+export const GRADING_SCHEME_DISPLAY_TYPES: { id: string; label: string }[] = [
+  { id: 'points', label: 'Points (raw)' },
+  { id: 'percentage', label: 'Percentage' },
+  { id: 'letter', label: 'Letter grades' },
+  { id: 'gpa', label: 'GPA scale' },
+  { id: 'pass_fail', label: 'Pass / Fail' },
+  { id: 'complete_incomplete', label: 'Complete / Incomplete' },
+]
+
+export const DEFAULT_LETTER_GRADE_SCALE_JSON: unknown = [
+  { label: 'A', min_pct: 90, gpa: 4 },
+  { label: 'B', min_pct: 80, gpa: 3 },
+  { label: 'C', min_pct: 70, gpa: 2 },
+  { label: 'D', min_pct: 60, gpa: 1 },
+  { label: 'F', min_pct: 0, gpa: 0 },
 ]
 
 export type AssignmentGroup = {
@@ -1243,6 +1262,13 @@ export type CourseGradebookGridColumn = {
   maxPoints: number | null
   assignmentGroupId?: string | null
   rubric?: RubricDefinition | null
+  assignmentGradingType?: string | null
+  effectiveDisplayType?: string
+}
+
+export type GradingSchemeSummary = {
+  type: string
+  scaleJson: unknown
 }
 
 export type CourseGradebookGridResponse = {
@@ -1250,8 +1276,11 @@ export type CourseGradebookGridResponse = {
   columns: CourseGradebookGridColumn[]
   /** Saved scores keyed by student user id, then module item id. */
   grades?: Record<string, Record<string, string>>
+  /** Display strings per cell (letter, pass/fail, …). */
+  displayGrades?: Record<string, Record<string, string>>
   /** Rubric criterion scores: student → item → criterion id → points. */
   rubricScores?: Record<string, Record<string, Record<string, string>>>
+  gradingScheme?: GradingSchemeSummary | null
 }
 
 export async function fetchCourseGradebookGrid(courseCode: string): Promise<CourseGradebookGridResponse> {
@@ -1267,7 +1296,9 @@ export async function fetchCourseGradebookGrid(courseCode: string): Promise<Cour
 export type CourseMyGradesResponse = {
   columns: CourseGradebookGridColumn[]
   grades: Record<string, string>
+  displayGrades: Record<string, string>
   assignmentGroups: AssignmentGroup[]
+  gradingScheme?: GradingSchemeSummary | null
 }
 
 export async function fetchCourseMyGrades(courseCode: string): Promise<CourseMyGradesResponse> {
@@ -1281,7 +1312,9 @@ export async function fetchCourseMyGrades(courseCode: string): Promise<CourseMyG
   return {
     columns: body.columns ?? [],
     grades: body.grades ?? {},
+    displayGrades: body.displayGrades ?? {},
     assignmentGroups: parsed.assignmentGroups,
+    gradingScheme: body.gradingScheme ?? null,
   }
 }
 
@@ -1492,6 +1525,8 @@ export type ModuleContentPagePayload = {
   originalityDetection: OriginalityDetectionMode
   /** Plan 3.5 — learner visibility for scores */
   originalityStudentVisibility: OriginalityStudentVisibility
+  /** Plan 3.6 — assignment display override (omit = inherit course scheme). */
+  gradingType?: string | null
 }
 
 export type OriginalityDetectionMode = 'disabled' | 'plagiarism' | 'ai' | 'both'
@@ -1567,6 +1602,10 @@ function normalizeModuleContentPagePayload(raw: unknown): ModuleContentPagePaylo
       : null,
     originalityDetection: normalizeOriginalityDetection(r.originalityDetection),
     originalityStudentVisibility: normalizeOriginalityStudentVisibility(r.originalityStudentVisibility),
+    gradingType:
+      typeof r.gradingType === 'string' && r.gradingType.trim()
+        ? r.gradingType.trim()
+        : null,
   }
 }
 
@@ -3052,6 +3091,8 @@ export async function patchModuleAssignment(
     provisionalGraderUserIds?: string[]
     originalityDetection?: OriginalityDetectionMode
     originalityStudentVisibility?: OriginalityStudentVisibility
+    /** Plan 3.6 — set or clear (`null`) assignment display override. */
+    gradingType?: string | null
   },
 ): Promise<ModuleContentPagePayload> {
   const res = await authorizedFetch(
@@ -3448,6 +3489,47 @@ export async function putCourseGradingSettings(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseCourseGradingSettings(raw)
+}
+
+export type CourseGradingSchemeRecord = {
+  id: string
+  name: string
+  type: string
+  scaleJson: unknown
+}
+
+export async function fetchCourseGradingScheme(
+  courseCode: string,
+): Promise<{ scheme: CourseGradingSchemeRecord | null }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/grading-scheme`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const body = parseApiResponse('fetchCourseGradingScheme', courseGradingSchemeEnvelopeSchema, raw)
+  return { scheme: body.scheme ?? null }
+}
+
+export async function putCourseGradingScheme(
+  courseCode: string,
+  body: { name?: string; type: string; scaleJson?: unknown },
+): Promise<{ scheme: CourseGradingSchemeRecord | null }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/grading-scheme`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...(body.name != null ? { name: body.name } : {}),
+        type: body.type,
+        ...(body.scaleJson !== undefined ? { scaleJson: body.scaleJson } : {}),
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const out = parseApiResponse('putCourseGradingScheme', courseGradingSchemeEnvelopeSchema, raw)
+  return { scheme: out.scheme ?? null }
 }
 
 /** GET `/outcomes` — learning outcomes, evidence links, and class-level progress. */
