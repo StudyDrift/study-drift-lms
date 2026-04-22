@@ -35,6 +35,7 @@ pub mod mail;
 pub mod misconception;
 pub mod moderated_grading;
 pub mod outcomes;
+pub mod originality;
 pub mod qti_import;
 pub mod qti_parser;
 pub mod question_bank;

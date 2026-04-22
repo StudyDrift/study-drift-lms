@@ -33,6 +33,8 @@ pub mod lti;
 pub mod misconceptions;
 pub mod moderated_grading;
 pub mod module_assignment_submissions;
+pub mod originality_platform_config;
+pub mod originality_reports;
 pub mod provisional_grades;
 pub mod grade_change_audit;
 pub mod password_reset;

@@ -85,4 +85,8 @@ pub struct AppState {
     pub blind_grading_enabled: bool,
     /// Plan 3.4 — provisional graders + moderator reconciliation APIs.
     pub moderated_grading_enabled: bool,
+    /// Plan 3.5 — plagiarism / AI originality pipeline.
+    pub originality_detection_enabled: bool,
+    /// When true, external similarity completes immediately with placeholder scores (local QA).
+    pub originality_stub_external: bool,
 }

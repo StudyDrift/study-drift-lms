@@ -58,6 +58,12 @@ pub struct ModuleContentPageResponse {
     pub moderator_user_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provisional_grader_user_ids: Option<Vec<Uuid>>,
+    /// Plan 3.5 — `disabled` | `plagiarism` | `ai` | `both` (assignment items only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub originality_detection: Option<String>,
+    /// Plan 3.5 — learner visibility for scores: `show` | `hide` | `show_after_grading`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub originality_student_visibility: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -127,4 +133,9 @@ pub struct UpdateModuleContentPageRequest {
     /// Replace the full grader list when present.
     #[serde(default)]
     pub provisional_grader_user_ids: Option<Vec<Uuid>>,
+    /// Plan 3.5 — omit to leave unchanged.
+    #[serde(default)]
+    pub originality_detection: Option<String>,
+    #[serde(default)]
+    pub originality_student_visibility: Option<String>,
 }

@@ -1488,7 +1488,14 @@ export type ModuleContentPagePayload = {
   moderationThresholdPct: number | null
   moderatorUserId: string | null
   provisionalGraderUserIds: string[] | null
+  /** Plan 3.5 — disabled | plagiarism | ai | both */
+  originalityDetection: OriginalityDetectionMode
+  /** Plan 3.5 — learner visibility for scores */
+  originalityStudentVisibility: OriginalityStudentVisibility
 }
+
+export type OriginalityDetectionMode = 'disabled' | 'plagiarism' | 'ai' | 'both'
+export type OriginalityStudentVisibility = 'show' | 'hide' | 'show_after_grading'
 
 export function parseRubricDefinition(raw: unknown): RubricDefinition | null {
   if (raw == null || typeof raw !== 'object') return null
@@ -1558,7 +1565,21 @@ function normalizeModuleContentPagePayload(raw: unknown): ModuleContentPagePaylo
     provisionalGraderUserIds: Array.isArray(r.provisionalGraderUserIds)
       ? (r.provisionalGraderUserIds as unknown[]).filter((x): x is string => typeof x === 'string')
       : null,
+    originalityDetection: normalizeOriginalityDetection(r.originalityDetection),
+    originalityStudentVisibility: normalizeOriginalityStudentVisibility(r.originalityStudentVisibility),
   }
+}
+
+function normalizeOriginalityDetection(raw: unknown): OriginalityDetectionMode {
+  const s = typeof raw === 'string' ? raw.trim() : ''
+  if (s === 'plagiarism' || s === 'ai' || s === 'both') return s
+  return 'disabled'
+}
+
+function normalizeOriginalityStudentVisibility(raw: unknown): OriginalityStudentVisibility {
+  const s = typeof raw === 'string' ? raw.trim() : ''
+  if (s === 'show' || s === 'show_after_grading') return s
+  return 'hide'
 }
 
 export async function createModuleAssignment(
@@ -3029,6 +3050,8 @@ export async function patchModuleAssignment(
     moderationThresholdPct?: number
     moderatorUserId?: string | null
     provisionalGraderUserIds?: string[]
+    originalityDetection?: OriginalityDetectionMode
+    originalityStudentVisibility?: OriginalityStudentVisibility
   },
 ): Promise<ModuleContentPagePayload> {
   const res = await authorizedFetch(
@@ -3042,6 +3065,68 @@ export async function patchModuleAssignment(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return normalizeModuleContentPagePayload(raw)
+}
+
+/** Plan 3.5 — per-provider originality / AI signals for a submission. */
+export type OriginalityReportApi = {
+  provider: string
+  status: string
+  similarityPct: number | null
+  aiProbability: number | null
+  reportUrl: string | null
+  reportToken?: string | null
+  errorMessage?: string | null
+}
+
+function parseOriginalityReports(raw: unknown): OriginalityReportApi[] {
+  if (!raw || typeof raw !== 'object') return []
+  const reps = (raw as { reports?: unknown }).reports
+  if (!Array.isArray(reps)) return []
+  const out: OriginalityReportApi[] = []
+  for (const row of reps) {
+    if (!row || typeof row !== 'object') continue
+    const r = row as Record<string, unknown>
+    out.push({
+      provider: typeof r.provider === 'string' ? r.provider : '',
+      status: typeof r.status === 'string' ? r.status : '',
+      similarityPct: typeof r.similarityPct === 'number' && Number.isFinite(r.similarityPct) ? r.similarityPct : null,
+      aiProbability:
+        typeof r.aiProbability === 'number' && Number.isFinite(r.aiProbability) ? r.aiProbability : null,
+      reportUrl: typeof r.reportUrl === 'string' ? r.reportUrl : null,
+      reportToken: typeof r.reportToken === 'string' ? r.reportToken : null,
+      errorMessage: typeof r.errorMessage === 'string' ? r.errorMessage : null,
+    })
+  }
+  return out
+}
+
+export async function fetchSubmissionOriginality(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+): Promise<OriginalityReportApi[] | null> {
+  const url = `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/originality`
+  const res = await authorizedFetch(url)
+  if (res.status === 404) return null
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseOriginalityReports(raw)
+}
+
+export async function fetchSubmissionOriginalityEmbedUrl(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+): Promise<string> {
+  const url = `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/originality/embed-url`
+  const res = await authorizedFetch(url)
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const embedUrl = (raw as { embedUrl?: unknown }).embedUrl
+  if (typeof embedUrl !== 'string' || !embedUrl.trim()) {
+    throw new Error('No embed URL returned.')
+  }
+  return embedUrl.trim()
 }
 
 /** Plan 3.4 — roster for moderator / grader pickers (course staff only). */

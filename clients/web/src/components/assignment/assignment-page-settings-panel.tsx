@@ -4,6 +4,8 @@ import { ChevronDown, Loader2, Plus, Trash2 } from 'lucide-react'
 import {
   generateAssignmentRubric,
   type LateSubmissionPolicy,
+  type OriginalityDetectionMode,
+  type OriginalityStudentVisibility,
   type RubricDefinition,
   type RubricCriterion,
   type RubricLevel,
@@ -57,6 +59,11 @@ export type AssignmentPageSettingsPanelProps = {
   onProvisionalGraderUserIdsChange: (value: string[]) => void
   /** Course staff (teacher/instructor) for moderator and grader pickers. */
   staffDirectory: { userId: string; label: string }[]
+  /** Plan 3.5 — originality / AI detection after submit. */
+  originalityDetection: OriginalityDetectionMode
+  onOriginalityDetectionChange: (value: OriginalityDetectionMode) => void
+  originalityStudentVisibility: OriginalityStudentVisibility
+  onOriginalityStudentVisibilityChange: (value: OriginalityStudentVisibility) => void
 }
 
 const inputClass =
@@ -193,6 +200,10 @@ export function AssignmentPageSettingsPanel({
   provisionalGraderUserIds,
   onProvisionalGraderUserIdsChange,
   staffDirectory,
+  originalityDetection,
+  onOriginalityDetectionChange,
+  originalityStudentVisibility,
+  onOriginalityStudentVisibilityChange,
 }: AssignmentPageSettingsPanelProps) {
   const submissionCount =
     Number(submissionAllowText) + Number(submissionAllowFileUpload) + Number(submissionAllowUrl)
@@ -282,6 +293,52 @@ export function AssignmentPageSettingsPanel({
               }}
               disabled={disabled}
             />
+          </div>
+        </SettingsAccordion>
+
+        <SettingsAccordion title="Academic integrity">
+          <div className="space-y-3 pt-1">
+            <Field
+              label="Originality checks"
+              htmlFor="assignment-originality-mode"
+              hint="Runs after each submission. Plagiarism modes require institutional provider configuration (admin)."
+            >
+              <select
+                id="assignment-originality-mode"
+                value={originalityDetection}
+                onChange={(e) => onOriginalityDetectionChange(e.target.value as OriginalityDetectionMode)}
+                disabled={disabled}
+                className={inputClass}
+              >
+                <option value="disabled">Disabled</option>
+                <option value="plagiarism">External similarity only</option>
+                <option value="ai">Internal AI signal only</option>
+                <option value="both">Similarity and AI signal</option>
+              </select>
+            </Field>
+            <Field
+              label="Student score visibility"
+              htmlFor="assignment-originality-visibility"
+              hint="Whether learners can see similarity or AI probability for their own submission."
+            >
+              <select
+                id="assignment-originality-visibility"
+                value={originalityStudentVisibility}
+                onChange={(e) =>
+                  onOriginalityStudentVisibilityChange(e.target.value as OriginalityStudentVisibility)
+                }
+                disabled={disabled}
+                className={inputClass}
+              >
+                <option value="hide">Hide from students</option>
+                <option value="show">Show to students</option>
+                <option value="show_after_grading">Show after a grade is posted</option>
+              </select>
+            </Field>
+            <p className="text-[11px] leading-snug text-slate-400 dark:text-neutral-500">
+              Scores are advisory only and do not change grades automatically. Discuss unexpected results
+              with your instructor.
+            </p>
           </div>
         </SettingsAccordion>
 

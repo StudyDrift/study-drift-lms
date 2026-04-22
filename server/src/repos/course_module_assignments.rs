@@ -34,6 +34,10 @@ pub struct CourseItemAssignmentRow {
     pub moderation_threshold_pct: i32,
     pub moderator_user_id: Option<Uuid>,
     pub provisional_grader_user_ids: Vec<Uuid>,
+    /// `disabled` | `plagiarism` | `ai` | `both`
+    pub originality_detection: String,
+    /// `show` | `hide` | `show_after_grading`
+    pub originality_student_visibility: String,
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +60,8 @@ pub struct AssignmentBodyWrite {
     pub moderation_threshold_pct: i32,
     pub moderator_user_id: Option<Uuid>,
     pub provisional_grader_user_ids: Vec<Uuid>,
+    pub originality_detection: String,
+    pub originality_student_visibility: String,
 }
 
 pub async fn insert_empty_for_item(
@@ -160,6 +166,8 @@ struct AssignmentJoinRow {
     moderation_threshold_pct: i32,
     moderator_user_id: Option<Uuid>,
     provisional_grader_user_ids: Vec<Uuid>,
+    originality_detection: String,
+    originality_student_visibility: String,
 }
 
 pub async fn get_for_course_item(
@@ -175,7 +183,8 @@ pub async fn get_for_course_item(
                m.late_submission_policy, m.late_penalty_percent, m.rubric_json,
                m.blind_grading, m.identities_revealed_at,
                m.moderated_grading, m.moderation_threshold_pct, m.moderator_user_id,
-               m.provisional_grader_user_ids
+               m.provisional_grader_user_ids,
+               m.originality_detection, m.originality_student_visibility
         FROM {} c
         INNER JOIN {} m ON m.structure_item_id = c.id
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
@@ -210,6 +219,8 @@ pub async fn get_for_course_item(
         moderation_threshold_pct: r.moderation_threshold_pct,
         moderator_user_id: r.moderator_user_id,
         provisional_grader_user_ids: r.provisional_grader_user_ids,
+        originality_detection: r.originality_detection,
+        originality_student_visibility: r.originality_student_visibility,
     }))
 }
 
@@ -239,6 +250,8 @@ pub async fn write_assignment_body(
             moderation_threshold_pct = $17,
             moderator_user_id = $18,
             provisional_grader_user_ids = $19,
+            originality_detection = $20,
+            originality_student_visibility = $21,
             settings_version = m.settings_version + 1,
             updated_at = NOW()
         FROM {} c
@@ -270,6 +283,8 @@ pub async fn write_assignment_body(
     .bind(body.moderation_threshold_pct)
     .bind(body.moderator_user_id)
     .bind(&body.provisional_grader_user_ids)
+    .bind(&body.originality_detection)
+    .bind(&body.originality_student_visibility)
     .fetch_optional(pool)
     .await
 }
@@ -344,6 +359,8 @@ pub async fn upsert_import_body(
     late_submission_policy: &str,
     late_penalty_percent: Option<i32>,
     rubric_json: Option<&JsonValue>,
+    originality_detection: &str,
+    originality_student_visibility: &str,
     blind_grading: bool,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
@@ -353,9 +370,10 @@ pub async fn upsert_import_body(
             available_from, available_until, assignment_access_code,
             submission_allow_text, submission_allow_file_upload, submission_allow_url,
             late_submission_policy, late_penalty_percent, rubric_json,
+            originality_detection, originality_student_visibility,
             blind_grading, identities_revealed_at
         )
-        SELECT c.id, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULL
+        SELECT c.id, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULL
         FROM {} c
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
         ON CONFLICT (structure_item_id) DO UPDATE
@@ -370,6 +388,8 @@ pub async fn upsert_import_body(
             late_submission_policy = EXCLUDED.late_submission_policy,
             late_penalty_percent = EXCLUDED.late_penalty_percent,
             rubric_json = EXCLUDED.rubric_json,
+            originality_detection = EXCLUDED.originality_detection,
+            originality_student_visibility = EXCLUDED.originality_student_visibility,
             blind_grading = EXCLUDED.blind_grading,
             identities_revealed_at = NULL,
             settings_version = m.settings_version + 1,
@@ -391,6 +411,8 @@ pub async fn upsert_import_body(
     .bind(late_submission_policy)
     .bind(late_penalty_percent)
     .bind(rubric_json)
+    .bind(originality_detection)
+    .bind(originality_student_visibility)
     .bind(blind_grading)
     .execute(pool)
     .await?;

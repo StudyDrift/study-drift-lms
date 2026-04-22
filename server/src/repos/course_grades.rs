@@ -223,3 +223,26 @@ pub async fn upsert_reconciled_final(
     .await?;
     Ok(())
 }
+
+pub async fn row_exists(
+    pool: &PgPool,
+    course_id: Uuid,
+    student_user_id: Uuid,
+    module_item_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let v: bool = sqlx::query_scalar(&format!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM {}
+            WHERE course_id = $1 AND student_user_id = $2 AND module_item_id = $3
+        )
+        "#,
+        schema::COURSE_GRADES
+    ))
+    .bind(course_id)
+    .bind(student_user_id)
+    .bind(module_item_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(v)
+}

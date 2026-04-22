@@ -44,6 +44,10 @@ pub struct Config {
     pub blind_grading_enabled: bool,
     /// Plan 3.4 — moderated grading APIs + gradebook gating. Default off; set `MODERATED_GRADING_ENABLED=1` to enable.
     pub moderated_grading_enabled: bool,
+    /// Plan 3.5 — originality detection jobs + APIs. Default off; set `ORIGINALITY_DETECTION_ENABLED=1`.
+    pub originality_detection_enabled: bool,
+    /// Plan 3.5 — completes external similarity with stub data for local testing (`ORIGINALITY_STUB_EXTERNAL=1`).
+    pub originality_stub_external: bool,
 }
 
 const DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES: &[&str] = &["instructure.com"];
@@ -236,6 +240,22 @@ impl Config {
             Some("1") | Some("true") | Some("yes") | Some("on")
         );
 
+        let originality_detection_enabled = matches!(
+            env::var("ORIGINALITY_DETECTION_ENABLED")
+                .ok()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("1") | Some("true") | Some("yes") | Some("on")
+        );
+
+        let originality_stub_external = matches!(
+            env::var("ORIGINALITY_STUB_EXTERNAL")
+                .ok()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("1") | Some("true") | Some("yes") | Some("on")
+        );
+
         Ok(Self {
             database_url,
             jwt_secret,
@@ -257,6 +277,8 @@ impl Config {
             feedback_media_enabled,
             blind_grading_enabled,
             moderated_grading_enabled,
+            originality_detection_enabled,
+            originality_stub_external,
         })
     }
 }

@@ -116,6 +116,7 @@ use crate::services::course_export_import;
 use crate::services::enrollments as enrollments_service;
 use crate::services::hint_service;
 use crate::services::learner_state::{self, LearnerStateService, DEFAULT_LEARNER_STATE_SERVICE};
+use crate::services::originality::policy as originality_policy;
 use crate::services::outcomes as outcomes_service;
 use crate::services::question_bank;
 use crate::services::quiz_attempt_grading;
@@ -652,6 +653,8 @@ fn module_assignment_response_for_api(
         } else {
             None
         },
+        originality_detection: Some(row.originality_detection.clone()),
+        originality_student_visibility: Some(row.originality_student_visibility.clone()),
     }
 }
 
@@ -745,6 +748,14 @@ fn merge_assignment_body_write(
                 provisional_grader_user_ids,
             )
         };
+    let originality_detection = match &req.originality_detection {
+        None => cur.originality_detection.clone(),
+        Some(s) => originality_policy::normalize_detection_mode(s)?,
+    };
+    let originality_student_visibility = match &req.originality_student_visibility {
+        None => cur.originality_student_visibility.clone(),
+        Some(s) => originality_policy::normalize_student_visibility(s)?,
+    };
     Ok(course_module_assignments::AssignmentBodyWrite {
         markdown,
         points_worth,
@@ -763,6 +774,8 @@ fn merge_assignment_body_write(
         moderation_threshold_pct,
         moderator_user_id,
         provisional_grader_user_ids,
+        originality_detection,
+        originality_student_visibility,
     })
 }
 
@@ -2172,6 +2185,8 @@ async fn module_content_page_get_handler(
         moderation_threshold_pct: None,
         moderator_user_id: None,
         provisional_grader_user_ids: None,
+        originality_detection: None,
+        originality_student_visibility: None,
     }))
 }
 
@@ -2247,6 +2262,8 @@ async fn module_content_page_patch_handler(
         moderation_threshold_pct: None,
         moderator_user_id: None,
         provisional_grader_user_ids: None,
+        originality_detection: None,
+        originality_student_visibility: None,
     }))
 }
 
@@ -2652,6 +2669,16 @@ async fn module_assignment_patch_handler(
         &merged_write.late_submission_policy,
         merged_write.late_penalty_percent,
     )?;
+
+    originality_policy::ensure_feature_flag_allows_mode(
+        state.originality_detection_enabled,
+        merged_write.originality_detection.as_str(),
+    )?;
+    originality_policy::ensure_institutional_plagiarism_allowed(
+        &state.pool,
+        merged_write.originality_detection.as_str(),
+    )
+    .await?;
 
     if let Some(ref v) = merged_write.rubric_json {
         let r: RubricDefinition = serde_json::from_value(v.clone())

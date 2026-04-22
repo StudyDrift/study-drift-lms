@@ -17,6 +17,7 @@ pub mod learners;
 pub mod lti;
 pub mod me;
 pub mod misconceptions;
+pub mod originality;
 pub mod moderated_grading;
 pub mod question_bank;
 pub mod rbac;

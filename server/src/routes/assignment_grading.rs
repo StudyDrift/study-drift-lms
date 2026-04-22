@@ -27,6 +27,7 @@ use crate::services::course_image_upload::{
     course_file_content_path, ingest_multipart_submission_document_field,
     persist_course_submission_attachment,
 };
+use crate::services::originality::spawn_originality_detection_job;
 use crate::routes::blind_grading_redaction;
 use crate::services::submission_annotated_pdf;
 use crate::state::AppState;
@@ -436,6 +437,8 @@ async fn post_submission_json_handler(
     )
     .await?;
 
+    spawn_originality_detection_job(state.clone(), course_code.clone(), row.id);
+
     let redact = state.blind_grading_enabled
         && staff
         && blind_grading_redaction::should_redact_submission_pii_for_staff(
@@ -514,6 +517,8 @@ async fn post_submission_upload_handler(
         upload.id,
     )
     .await?;
+
+    spawn_originality_detection_job(state.clone(), course_code.clone(), row.id);
 
     let file_row = course_files::get_for_course(&state.pool, &course_code, upload.id)
         .await?

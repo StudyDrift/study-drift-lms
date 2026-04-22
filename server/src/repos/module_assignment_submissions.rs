@@ -36,6 +36,20 @@ pub async fn get_for_course_item_user(
     .await
 }
 
+pub async fn get_by_id(pool: &PgPool, submission_id: Uuid) -> Result<Option<SubmissionRow>, sqlx::Error> {
+    sqlx::query_as::<_, SubmissionRow>(&format!(
+        r#"
+        SELECT id, course_id, module_item_id, submitted_by, attachment_file_id, submitted_at, updated_at
+        FROM {}
+        WHERE id = $1
+        "#,
+        schema::MODULE_ASSIGNMENT_SUBMISSIONS
+    ))
+    .bind(submission_id)
+    .fetch_optional(pool)
+    .await
+}
+
 pub async fn get_by_id_for_course(
     pool: &PgPool,
     course_id: Uuid,

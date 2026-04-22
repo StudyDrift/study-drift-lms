@@ -114,10 +114,24 @@ pub struct ExportedAssignmentBody {
     /// Plan 3.3 — preserved on course export/import; `identities_revealed_at` is never exported.
     #[serde(default)]
     pub blind_grading: bool,
+    /// Plan 3.5 — `disabled` | `plagiarism` | `ai` | `both`.
+    #[serde(default = "default_originality_detection")]
+    pub originality_detection: String,
+    /// Plan 3.5 — learner visibility for originality scores.
+    #[serde(default = "default_originality_student_visibility")]
+    pub originality_student_visibility: String,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_originality_detection() -> String {
+    "disabled".into()
+}
+
+fn default_originality_student_visibility() -> String {
+    "hide".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -7,15 +7,20 @@ import {
   fetchProvisionalGrades,
   fetchSubmissionAnnotations,
   fetchSubmissionFeedbackMedia,
+  fetchSubmissionOriginality,
+  fetchSubmissionOriginalityEmbedUrl,
   postProvisionalGrade,
   postSubmissionAnnotation,
   revealModuleAssignmentIdentities,
   uploadModuleAssignmentSubmissionFile,
   type ModuleAssignmentSubmissionApi,
+  type OriginalityReportApi,
   type PostSubmissionAnnotationInput,
   type SubmissionAnnotationApi,
   type SubmissionFeedbackMediaApi,
 } from '../../lib/courses-api'
+import { OriginalityBadge } from '../grading/OriginalityBadge'
+import { OriginalityReportViewer } from '../grading/OriginalityReportViewer'
 import { getJwtSubject } from '../../lib/auth'
 import { AnnotationCommentPanel } from './annotation-comment-panel'
 import { AnnotationToolbar, type AnnotationTool } from './annotation-toolbar'
@@ -47,6 +52,8 @@ export type AssignmentAnnotationWorkbenchProps = {
   moderatedGradingActive?: boolean
   assignmentPointsWorth?: number | null
   provisionalGraderUserIds?: string[]
+  /** Plan 3.5 — from assignment settings; when not `disabled`, originality API is polled. */
+  originalityDetection?: 'disabled' | 'plagiarism' | 'ai' | 'both'
 }
 
 export function AssignmentAnnotationWorkbench({
@@ -62,6 +69,7 @@ export function AssignmentAnnotationWorkbench({
   moderatedGradingActive = false,
   assignmentPointsWorth = null,
   provisionalGraderUserIds = [],
+  originalityDetection = 'disabled',
 }: AssignmentAnnotationWorkbenchProps) {
   const annotationsActive = annotationsActiveProp ?? submissionAllowsFile
   const [panel, setPanel] = useState<'document' | 'media'>('document')
@@ -78,6 +86,11 @@ export function AssignmentAnnotationWorkbench({
   const [busy, setBusy] = useState(false)
   const [provisionalInput, setProvisionalInput] = useState('')
   const [provisionalBusy, setProvisionalBusy] = useState(false)
+  const [originalityReports, setOriginalityReports] = useState<OriginalityReportApi[] | null>(null)
+  const [originalityViewerOpen, setOriginalityViewerOpen] = useState(false)
+  const [originalityEmbedUrl, setOriginalityEmbedUrl] = useState<string | null>(null)
+
+  const originalityActive = originalityDetection !== 'disabled'
 
   const current: ModuleAssignmentSubmissionApi | null =
     mode === 'staff' ? (submissions[idx] ?? null) : mine
@@ -175,6 +188,29 @@ export function AssignmentAnnotationWorkbench({
   useEffect(() => {
     void reloadMedia()
   }, [reloadMedia])
+
+  const reloadOriginality = useCallback(async () => {
+    if (!originalityActive || !current?.id) {
+      setOriginalityReports(null)
+      return
+    }
+    try {
+      const reps = await fetchSubmissionOriginality(courseCode, itemId, current.id)
+      setOriginalityReports(reps ?? [])
+    } catch {
+      setOriginalityReports([])
+    }
+  }, [courseCode, itemId, current?.id, originalityActive])
+
+  useEffect(() => {
+    void reloadOriginality()
+  }, [reloadOriginality])
+
+  useEffect(() => {
+    if (!originalityActive || !current?.id) return
+    const t = window.setInterval(() => void reloadOriginality(), 8000)
+    return () => window.clearInterval(t)
+  }, [current?.id, originalityActive, reloadOriginality])
 
   useEffect(() => {
     if (annotationsActive && !feedbackMediaEnabled) setPanel('document')
@@ -305,6 +341,23 @@ export function AssignmentAnnotationWorkbench({
     }
   }
 
+  async function onOpenOriginalityReport() {
+    if (!current?.id) return
+    setBusy(true)
+    try {
+      let url = await fetchSubmissionOriginalityEmbedUrl(courseCode, itemId, current.id)
+      if (!/^https?:\/\//i.test(url)) {
+        url = `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`
+      }
+      setOriginalityEmbedUrl(url)
+      setOriginalityViewerOpen(true)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'No originality report is available yet.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function onDownloadAnnotated() {
     if (!current?.id) return
     setBusy(true)
@@ -331,9 +384,26 @@ export function AssignmentAnnotationWorkbench({
       className="mt-8 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-950"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-neutral-50">
-          {mode === 'staff' ? 'SpeedGrader' : 'Your submission'}
-        </h2>
+        <div className="min-w-0 space-y-2">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-neutral-50">
+            {mode === 'staff' ? 'SpeedGrader' : 'Your submission'}
+          </h2>
+          {originalityActive && originalityReports && originalityReports.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <OriginalityBadge reports={originalityReports} />
+              {mode === 'staff' ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onOpenOriginalityReport()}
+                  className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-slate-50 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-950 dark:text-indigo-300 dark:hover:bg-neutral-900"
+                >
+                  View report
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
         {mode === 'staff' ? (
           <div className="flex flex-wrap items-center gap-2">
             {canRevealIdentities ? (
@@ -369,6 +439,17 @@ export function AssignmentAnnotationWorkbench({
           </div>
         ) : null}
       </div>
+
+      {originalityEmbedUrl ? (
+        <OriginalityReportViewer
+          open={originalityViewerOpen}
+          onClose={() => {
+            setOriginalityViewerOpen(false)
+            setOriginalityEmbedUrl(null)
+          }}
+          embedUrl={originalityEmbedUrl}
+        />
+      ) : null}
 
       {mode === 'staff' && blindGradingActive ? (
         <p

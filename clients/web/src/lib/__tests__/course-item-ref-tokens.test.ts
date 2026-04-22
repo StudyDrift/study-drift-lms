@@ -55,6 +55,8 @@ describe('courseItemRefTokens', () => {
       moderationThresholdPct: null,
       moderatorUserId: null,
       provisionalGraderUserIds: null,
+      originalityDetection: 'disabled',
+      originalityStudentVisibility: 'hide',
     })
     const fetchAssign = vi.spyOn(coursesApi, 'fetchModuleAssignment').mockResolvedValue({
       itemId: '2',
@@ -81,6 +83,8 @@ describe('courseItemRefTokens', () => {
       moderationThresholdPct: null,
       moderatorUserId: null,
       provisionalGraderUserIds: null,
+      originalityDetection: 'disabled',
+      originalityStudentVisibility: 'hide',
     })
     const id1 = 'a1b2c3d4-e5f6-4789-a012-345678901234'
     const id2 = 'b2c3d4e5-f6a7-4890-b123-456789012345'

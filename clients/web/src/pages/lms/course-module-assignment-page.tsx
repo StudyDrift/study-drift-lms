@@ -16,6 +16,8 @@ import {
   type ContentPageMarkup,
   type CourseEnrollmentRosterRow,
   type LateSubmissionPolicy,
+  type OriginalityDetectionMode,
+  type OriginalityStudentVisibility,
   type RubricDefinition,
   type SyllabusSection,
 } from '../../lib/courses-api'
@@ -96,6 +98,19 @@ function formatLateSubmissionSummary(
   return penaltyPercent != null ? `Penalty: ${penaltyPercent}% off` : 'Penalty (percent required when saving)'
 }
 
+function formatOriginalityDetection(mode: OriginalityDetectionMode): string {
+  if (mode === 'plagiarism') return 'External similarity'
+  if (mode === 'ai') return 'Internal AI signal'
+  if (mode === 'both') return 'Similarity and AI signal'
+  return 'Off'
+}
+
+function formatOriginalityStudentVisibility(v: OriginalityStudentVisibility): string {
+  if (v === 'show') return 'Shown to students'
+  if (v === 'show_after_grading') return 'Shown after a grade is posted'
+  return 'Hidden from students'
+}
+
 function newLocalId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
@@ -145,6 +160,13 @@ export default function CourseModuleAssignmentPage() {
   const [draftModeratorUserId, setDraftModeratorUserId] = useState<string | null>(null)
   const [provisionalGraderUserIds, setProvisionalGraderUserIds] = useState<string[]>([])
   const [draftProvisionalGraderUserIds, setDraftProvisionalGraderUserIds] = useState<string[]>([])
+  const [originalityDetection, setOriginalityDetection] = useState<OriginalityDetectionMode>('disabled')
+  const [draftOriginalityDetection, setDraftOriginalityDetection] =
+    useState<OriginalityDetectionMode>('disabled')
+  const [originalityStudentVisibility, setOriginalityStudentVisibility] =
+    useState<OriginalityStudentVisibility>('hide')
+  const [draftOriginalityStudentVisibility, setDraftOriginalityStudentVisibility] =
+    useState<OriginalityStudentVisibility>('hide')
   const [staffRoster, setStaffRoster] = useState<CourseEnrollmentRosterRow[] | null>(null)
 
   const [gradingGroups, setGradingGroups] = useState<{ id: string; name: string }[]>([])
@@ -229,6 +251,10 @@ export default function CourseModuleAssignmentPage() {
       setDraftProvisionalGraderUserIds(data.provisionalGraderUserIds ?? [])
       setIdentitiesRevealedAt(data.identitiesRevealedAt)
       setViewerCanRevealIdentities(data.viewerCanRevealIdentities)
+      setOriginalityDetection(data.originalityDetection)
+      setDraftOriginalityDetection(data.originalityDetection)
+      setOriginalityStudentVisibility(data.originalityStudentVisibility)
+      setDraftOriginalityStudentVisibility(data.originalityStudentVisibility)
       setAssignmentGroupId(data.assignmentGroupId ?? null)
       setAssignmentGroupPatchError(null)
       try {
@@ -291,6 +317,10 @@ export default function CourseModuleAssignmentPage() {
       setDraftProvisionalGraderUserIds([])
       setIdentitiesRevealedAt(null)
       setViewerCanRevealIdentities(false)
+      setOriginalityDetection('disabled')
+      setDraftOriginalityDetection('disabled')
+      setOriginalityStudentVisibility('hide')
+      setDraftOriginalityStudentVisibility('hide')
       setStaffRoster(null)
     } finally {
       setLoading(false)
@@ -318,6 +348,8 @@ export default function CourseModuleAssignmentPage() {
     setDraftModerationThresholdPct(moderationThresholdPct)
     setDraftModeratorUserId(moderatorUserId)
     setDraftProvisionalGraderUserIds(provisionalGraderUserIds)
+    setDraftOriginalityDetection(originalityDetection)
+    setDraftOriginalityStudentVisibility(originalityStudentVisibility)
   }
 
   function beginEdit() {
@@ -376,6 +408,8 @@ export default function CourseModuleAssignmentPage() {
         moderationThresholdPct: draftModerationThresholdPct,
         moderatorUserId: draftModeratedGrading ? draftModeratorUserId : null,
         provisionalGraderUserIds: draftModeratedGrading ? draftProvisionalGraderUserIds : [],
+        originalityDetection: draftOriginalityDetection,
+        originalityStudentVisibility: draftOriginalityStudentVisibility,
       })
       setMarkdown(data.markdown)
       setDueAt(data.dueAt)
@@ -401,6 +435,10 @@ export default function CourseModuleAssignmentPage() {
       setDraftProvisionalGraderUserIds(data.provisionalGraderUserIds ?? [])
       setIdentitiesRevealedAt(data.identitiesRevealedAt)
       setViewerCanRevealIdentities(data.viewerCanRevealIdentities)
+      setOriginalityDetection(data.originalityDetection)
+      setDraftOriginalityDetection(data.originalityDetection)
+      setOriginalityStudentVisibility(data.originalityStudentVisibility)
+      setDraftOriginalityStudentVisibility(data.originalityStudentVisibility)
       setRequiresAssignmentAccessCode(data.requiresAssignmentAccessCode)
       setAssignmentAccessCode(data.assignmentAccessCode ?? '')
       setAssignmentGroupId(data.assignmentGroupId ?? null)
@@ -555,6 +593,22 @@ export default function CourseModuleAssignmentPage() {
                     </dd>
                   </div>
                 ) : null}
+                {originalityDetection !== 'disabled' ? (
+                  <>
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Originality checks</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                        {formatOriginalityDetection(originalityDetection)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Student score visibility</dt>
+                      <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                        {formatOriginalityStudentVisibility(originalityStudentVisibility)}
+                      </dd>
+                    </div>
+                  </>
+                ) : null}
                 <div className="flex justify-between gap-4">
                   <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Late submission</dt>
                   <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
@@ -638,6 +692,7 @@ export default function CourseModuleAssignmentPage() {
                 moderatedGradingActive={Boolean(moderatedGrading && viewerIsCourseStaff)}
                 assignmentPointsWorth={pointsWorth}
                 provisionalGraderUserIds={provisionalGraderUserIds}
+                originalityDetection={originalityDetection}
               />
             ) : null}
           </div>
@@ -707,6 +762,10 @@ export default function CourseModuleAssignmentPage() {
                     provisionalGraderUserIds={draftProvisionalGraderUserIds}
                     onProvisionalGraderUserIdsChange={setDraftProvisionalGraderUserIds}
                     staffDirectory={staffDirectory}
+                    originalityDetection={draftOriginalityDetection}
+                    onOriginalityDetectionChange={setDraftOriginalityDetection}
+                    originalityStudentVisibility={draftOriginalityStudentVisibility}
+                    onOriginalityStudentVisibilityChange={setDraftOriginalityStudentVisibility}
                   />
                 ) : null
               }

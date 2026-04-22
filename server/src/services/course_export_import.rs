@@ -618,6 +618,8 @@ async fn apply_module_bodies(
                         body.late_submission_policy.as_str(),
                         body.late_penalty_percent,
                         rubric_json.as_ref(),
+                        body.originality_detection.as_str(),
+                        body.originality_student_visibility.as_str(),
                         body.blind_grading,
                     )
                     .await?;
@@ -735,6 +737,8 @@ async fn apply_module_bodies_for_new_items_only(
                         body.late_submission_policy.as_str(),
                         body.late_penalty_percent,
                         rubric_json.as_ref(),
+                        body.originality_detection.as_str(),
+                        body.originality_student_visibility.as_str(),
                         body.blind_grading,
                     )
                     .await?;
@@ -938,6 +942,8 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                             late_penalty_percent: row.late_penalty_percent,
                             rubric: row.rubric_json.clone(),
                             blind_grading: row.blind_grading,
+                            originality_detection: row.originality_detection.clone(),
+                            originality_student_visibility: row.originality_student_visibility.clone(),
                         },
                     );
                 }

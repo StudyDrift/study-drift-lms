@@ -902,6 +902,8 @@ async fn canvas_export_append_assignment_details(
             late_penalty_percent: None,
             rubric: None,
             blind_grading: false,
+            originality_detection: "disabled".into(),
+            originality_student_visibility: "hide".into(),
         },
     );
     *sort_order += 1;
