@@ -1,4 +1,4 @@
-import { authorizedFetch } from './api'
+import { apiUrl, authorizedFetch } from './api'
 import { getAccessToken } from './auth'
 import { readApiErrorMessage } from './errors'
 import {
@@ -123,6 +123,8 @@ export type CoursePublic = {
   viewerStudentEnrollmentId?: string
   /** Server `ANNOTATION_ENABLED` — inline submission annotation / SpeedGrader surfaces. */
   annotationsEnabled?: boolean
+  /** Server `FEEDBACK_MEDIA_ENABLED` — instructor A/V feedback on submissions (plan 3.2). */
+  feedbackMediaEnabled?: boolean
 }
 
 export type StructurePathRule = {
@@ -1476,6 +1478,16 @@ export type ModuleContentPagePayload = {
   latePenaltyPercent: number | null
   /** Assignment rubric when configured. */
   rubric: RubricDefinition | null
+  /** Plan 3.3 — hide student identifiers from graders until revealed. */
+  blindGrading: boolean
+  identitiesRevealedAt: string | null
+  /** Course creator only; true when reveal API is available. */
+  viewerCanRevealIdentities: boolean
+  /** Plan 3.4 — staff-only detail; learners always see false. */
+  moderatedGrading: boolean
+  moderationThresholdPct: number | null
+  moderatorUserId: string | null
+  provisionalGraderUserIds: string[] | null
 }
 
 export function parseRubricDefinition(raw: unknown): RubricDefinition | null {
@@ -1535,6 +1547,17 @@ function normalizeModuleContentPagePayload(raw: unknown): ModuleContentPagePaylo
     lateSubmissionPolicy: (r.lateSubmissionPolicy as LateSubmissionPolicy) ?? 'allow',
     latePenaltyPercent: typeof r.latePenaltyPercent === 'number' ? r.latePenaltyPercent : null,
     rubric: parseRubricDefinition(r.rubric),
+    blindGrading: Boolean(r.blindGrading),
+    identitiesRevealedAt:
+      typeof r.identitiesRevealedAt === 'string' ? r.identitiesRevealedAt : null,
+    viewerCanRevealIdentities: Boolean(r.viewerCanRevealIdentities),
+    moderatedGrading: Boolean(r.moderatedGrading),
+    moderationThresholdPct:
+      typeof r.moderationThresholdPct === 'number' ? r.moderationThresholdPct : null,
+    moderatorUserId: typeof r.moderatorUserId === 'string' ? r.moderatorUserId : null,
+    provisionalGraderUserIds: Array.isArray(r.provisionalGraderUserIds)
+      ? (r.provisionalGraderUserIds as unknown[]).filter((x): x is string => typeof x === 'string')
+      : null,
   }
 }
 
@@ -3001,6 +3024,11 @@ export async function patchModuleAssignment(
     latePenaltyPercent?: number | null
     /** Set or clear assignment rubric (`null` removes). */
     rubric?: RubricDefinition | null
+    blindGrading?: boolean
+    moderatedGrading?: boolean
+    moderationThresholdPct?: number
+    moderatorUserId?: string | null
+    provisionalGraderUserIds?: string[]
   },
 ): Promise<ModuleContentPagePayload> {
   const res = await authorizedFetch(
@@ -3014,6 +3042,175 @@ export async function patchModuleAssignment(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return normalizeModuleContentPagePayload(raw)
+}
+
+/** Plan 3.4 — roster for moderator / grader pickers (course staff only). */
+export type CourseEnrollmentRosterRow = {
+  id: string
+  userId: string
+  displayName: string | null
+  role: string
+}
+
+export async function fetchCourseEnrollmentsList(
+  courseCode: string,
+): Promise<CourseEnrollmentRosterRow[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/enrollments`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const er = (raw as { enrollments?: unknown }).enrollments
+  if (!Array.isArray(er)) return []
+  const out: CourseEnrollmentRosterRow[] = []
+  for (const row of er) {
+    if (!row || typeof row !== 'object') continue
+    const o = row as Record<string, unknown>
+    const id = typeof o.id === 'string' ? o.id : null
+    const userId = typeof o.userId === 'string' ? o.userId : null
+    const role = typeof o.role === 'string' ? o.role : ''
+    if (!id || !userId) continue
+    const displayName = typeof o.displayName === 'string' ? o.displayName : null
+    out.push({ id, userId, displayName, role })
+  }
+  return out
+}
+
+export type ModerationProvisionalGrade = {
+  submissionId: string
+  graderId: string
+  score: number
+  submittedAt: string | null
+}
+
+export async function fetchProvisionalGrades(
+  courseCode: string,
+  itemId: string,
+): Promise<ModerationProvisionalGrade[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/provisional-grades`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const list = (raw as { provisionalGrades?: unknown }).provisionalGrades
+  if (!Array.isArray(list)) return []
+  const out: ModerationProvisionalGrade[] = []
+  for (const row of list) {
+    if (!row || typeof row !== 'object') continue
+    const o = row as Record<string, unknown>
+    const submissionId = typeof o.submissionId === 'string' ? o.submissionId : null
+    const graderId = typeof o.graderId === 'string' ? o.graderId : null
+    const score = typeof o.score === 'number' && Number.isFinite(o.score) ? o.score : NaN
+    if (!submissionId || !graderId || !Number.isFinite(score)) continue
+    const submittedAt = typeof o.submittedAt === 'string' ? o.submittedAt : null
+    out.push({ submissionId, graderId, score, submittedAt })
+  }
+  return out
+}
+
+export async function postProvisionalGrade(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+  body: { score: number },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/provisional-grades`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ score: body.score }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+}
+
+export type ModerationReconciliationRow = {
+  submissionId: string
+  studentUserId: string
+  provisional: ModerationProvisionalGrade[]
+  flagged: boolean
+  pointsWorth: number | null
+  finalScore: number | null
+  reconciliationSource: string | null
+}
+
+export async function fetchModerationReconciliation(
+  courseCode: string,
+  itemId: string,
+): Promise<{ rows: ModerationReconciliationRow[]; unreconciledFlaggedCount: number }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/reconciliation`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const rowsRaw = (raw as { rows?: unknown }).rows
+  const rows: ModerationReconciliationRow[] = []
+  if (Array.isArray(rowsRaw)) {
+    for (const row of rowsRaw) {
+      if (!row || typeof row !== 'object') continue
+      const o = row as Record<string, unknown>
+      const submissionId = typeof o.submissionId === 'string' ? o.submissionId : null
+      const studentUserId = typeof o.studentUserId === 'string' ? o.studentUserId : null
+      if (!submissionId || !studentUserId) continue
+      const provisional: ModerationProvisionalGrade[] = []
+      const pv = o.provisional
+      if (Array.isArray(pv)) {
+        for (const p of pv) {
+          if (!p || typeof p !== 'object') continue
+          const pr = p as Record<string, unknown>
+          const sid = typeof pr.submissionId === 'string' ? pr.submissionId : null
+          const gid = typeof pr.graderId === 'string' ? pr.graderId : null
+          const sc = typeof pr.score === 'number' && Number.isFinite(pr.score) ? pr.score : NaN
+          if (!sid || !gid || !Number.isFinite(sc)) continue
+          provisional.push({
+            submissionId: sid,
+            graderId: gid,
+            score: sc,
+            submittedAt: typeof pr.submittedAt === 'string' ? pr.submittedAt : null,
+          })
+        }
+      }
+      rows.push({
+        submissionId,
+        studentUserId,
+        provisional,
+        flagged: Boolean(o.flagged),
+        pointsWorth: typeof o.pointsWorth === 'number' ? o.pointsWorth : null,
+        finalScore: typeof o.finalScore === 'number' && Number.isFinite(o.finalScore) ? o.finalScore : null,
+        reconciliationSource:
+          typeof o.reconciliationSource === 'string' ? o.reconciliationSource : null,
+      })
+    }
+  }
+  const rawObj = raw as Record<string, unknown>
+  const ufc = rawObj.unreconciledFlaggedCount
+  const unreconciledFlaggedCount =
+    typeof ufc === 'number' && Number.isFinite(ufc) ? ufc : 0
+  return { rows, unreconciledFlaggedCount }
+}
+
+export async function postModerationReconcile(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+  body: {
+    action: 'accept_grader' | 'average' | 'override' | 'single'
+    graderId?: string
+    overrideScore?: number
+  },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/reconcile`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
 }
 
 /** POST `/assignments/:itemId/generate-rubric` — AI draft rubric (not persisted until assignment save). */
@@ -3533,7 +3730,10 @@ export async function postCourseImportCanvas(
 /** Row from `/assignments/:itemId/submissions` (plan 3.1). */
 export type ModuleAssignmentSubmissionApi = {
   id: string
-  submittedBy: string
+  /** Omitted when blind grading hides student identity (plan 3.3). */
+  submittedBy?: string
+  /** Set when blind grading is active (plan 3.3). */
+  blindLabel?: string
   attachmentFileId: string | null
   submittedAt: string
   updatedAt: string
@@ -3567,6 +3767,37 @@ export async function fetchModuleAssignmentMySubmission(
   const o = raw as { submission?: ModuleAssignmentSubmissionApi | null }
   if (o.submission == null || o.submission === undefined) return null
   return o.submission
+}
+
+/** POST `/assignments/:itemId/reveal-identities` — course creator only (plan 3.3). */
+export async function revealModuleAssignmentIdentities(
+  courseCode: string,
+  itemId: string,
+  opts?: { force?: boolean },
+): Promise<{ ok: boolean; identitiesRevealedAt: string; alreadyRevealed?: boolean }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/reveal-identities`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: opts?.force ?? false }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as {
+    ok?: boolean
+    identitiesRevealedAt?: string
+    alreadyRevealed?: boolean
+  }
+  if (!o.ok || typeof o.identitiesRevealedAt !== 'string') {
+    throw new Error('Unexpected response when revealing identities.')
+  }
+  return {
+    ok: true,
+    identitiesRevealedAt: o.identitiesRevealedAt,
+    alreadyRevealed: o.alreadyRevealed === true,
+  }
 }
 
 export async function fetchModuleAssignmentSubmissions(
@@ -3663,6 +3894,148 @@ export async function deleteSubmissionAnnotation(
     { method: 'DELETE' },
   )
   if (res.ok) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+/** Plan 3.2 — instructor/student feedback media on a submission. */
+export type SubmissionFeedbackMediaApi = {
+  id: string
+  mediaType: 'audio' | 'video'
+  mimeType: string
+  durationSecs?: number | null
+  captionStatus: string
+  contentPath: string
+  createdAt: string
+}
+
+export async function fetchSubmissionFeedbackMedia(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+): Promise<SubmissionFeedbackMediaApi[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/feedback-media`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { items?: unknown }
+  if (!Array.isArray(o.items)) return []
+  return o.items as SubmissionFeedbackMediaApi[]
+}
+
+export async function uploadSubmissionFeedbackMediaMultipart(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+  blob: Blob,
+  fileName: string,
+  durationSecs?: number,
+): Promise<{ media: SubmissionFeedbackMediaApi }> {
+  const fd = new FormData()
+  fd.set('file', blob, fileName)
+  if (durationSecs != null) fd.set('durationSecs', String(durationSecs))
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/feedback-media/upload`,
+    { method: 'POST', body: fd },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { media: SubmissionFeedbackMediaApi }
+}
+
+export async function initiateSubmissionFeedbackUpload(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+  body: { mimeType: string; mediaType: 'audio' | 'video'; byteSize: number },
+): Promise<{ mediaId: string; chunkSize: number; uploadPath: string }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/feedback-media/initiate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mimeType: body.mimeType,
+        mediaType: body.mediaType,
+        byteSize: body.byteSize,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { mediaId: string; chunkSize: number; uploadPath: string }
+}
+
+export async function putSubmissionFeedbackChunk(
+  uploadPath: string,
+  chunk: ArrayBuffer,
+  offset: number,
+  accessToken: string,
+): Promise<void> {
+  const r = await fetch(apiUrl(uploadPath), {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'X-Upload-Offset': String(offset),
+      'Content-Type': 'application/octet-stream',
+    },
+    body: chunk,
+  })
+  if (r.status === 204) return
+  const raw = await r.json().catch(() => ({}))
+  throw new Error(
+    raw && typeof raw === 'object' && 'message' in raw
+      ? String((raw as { message?: string }).message)
+      : `Upload failed (${r.status})`,
+  )
+}
+
+export async function completeSubmissionFeedbackUpload(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+  mediaId: string,
+  durationSecs?: number,
+): Promise<{ media: SubmissionFeedbackMediaApi }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/feedback-media/${encodeURIComponent(mediaId)}/complete`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ durationSecs }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { media: SubmissionFeedbackMediaApi }
+}
+
+export async function getSubmissionFeedbackPlaybackInfo(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+  mediaId: string,
+): Promise<{ contentPath: string; captionPath?: string; expiresAt: string }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/feedback-media/${encodeURIComponent(mediaId)}/url`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { contentPath: string; captionPath?: string; expiresAt: string }
+}
+
+export async function deleteSubmissionFeedbackMedia(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+  mediaId: string,
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/feedback-media/${encodeURIComponent(mediaId)}`,
+    { method: 'DELETE' },
+  )
+  if (res.status === 204) return
   const raw = await parseJson(res)
   throw new Error(readApiErrorMessage(raw))
 }

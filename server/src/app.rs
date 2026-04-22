@@ -40,6 +40,8 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::search::router())
         .merge(routes::courses::router())
         .merge(routes::assignment_grading::router())
+        .merge(routes::moderated_grading::router())
+        .merge(routes::feedback_media::router())
         .merge(routes::question_bank::router())
         .merge(routes::imports::router())
         .merge(routes::misconceptions::router())
@@ -83,6 +85,9 @@ mod tests {
             },
             lti: None,
             annotation_enabled: false,
+            feedback_media_enabled: false,
+            blind_grading_enabled: true,
+            moderated_grading_enabled: false,
         }
     }
 

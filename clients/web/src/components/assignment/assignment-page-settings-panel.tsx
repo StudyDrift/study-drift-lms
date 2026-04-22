@@ -43,6 +43,20 @@ export type AssignmentPageSettingsPanelProps = {
   assignmentItemId?: string
   /** Full assignment body (Markdown) sent with AI rubric requests — use the current editor draft. */
   assignmentMarkdown?: string
+  /** Plan 3.3 — graders see anonymised labels until identities are revealed. */
+  blindGrading: boolean
+  onBlindGradingChange: (value: boolean) => void
+  /** Plan 3.4 — multiple provisional graders + moderator. */
+  moderatedGrading: boolean
+  onModeratedGradingChange: (value: boolean) => void
+  moderationThresholdPct: number
+  onModerationThresholdPctChange: (value: number) => void
+  moderatorUserId: string | null
+  onModeratorUserIdChange: (value: string | null) => void
+  provisionalGraderUserIds: string[]
+  onProvisionalGraderUserIdsChange: (value: string[]) => void
+  /** Course staff (teacher/instructor) for moderator and grader pickers. */
+  staffDirectory: { userId: string; label: string }[]
 }
 
 const inputClass =
@@ -168,6 +182,17 @@ export function AssignmentPageSettingsPanel({
   courseCode,
   assignmentItemId,
   assignmentMarkdown,
+  blindGrading,
+  onBlindGradingChange,
+  moderatedGrading,
+  onModeratedGradingChange,
+  moderationThresholdPct,
+  onModerationThresholdPctChange,
+  moderatorUserId,
+  onModeratorUserIdChange,
+  provisionalGraderUserIds,
+  onProvisionalGraderUserIdsChange,
+  staffDirectory,
 }: AssignmentPageSettingsPanelProps) {
   const submissionCount =
     Number(submissionAllowText) + Number(submissionAllowFileUpload) + Number(submissionAllowUrl)
@@ -301,6 +326,103 @@ export function AssignmentPageSettingsPanel({
 
         <SettingsAccordion title="Grading">
           <div className="space-y-3 pt-1">
+            <ToggleRow
+              id="assignment-blind-grading"
+              label="Blind grading"
+              description="Hide student names and IDs from graders until you reveal identities. Reduces unconscious bias while scoring."
+              checked={blindGrading}
+              onChange={onBlindGradingChange}
+              disabled={disabled}
+            />
+            <ToggleRow
+              id="assignment-moderated-grading"
+              label="Moderated grading"
+              description="Assign provisional graders and a moderator. Graders only see their own scores; the moderator reconciles disagreements before gradebook saves."
+              checked={moderatedGrading}
+              onChange={onModeratedGradingChange}
+              disabled={disabled}
+            />
+            {moderatedGrading ? (
+              <div className="space-y-3 border-t border-slate-100 pt-3 dark:border-neutral-800">
+                <Field
+                  label="Agreement threshold (% of points)"
+                  htmlFor="assignment-moderation-threshold"
+                  hint="When two provisional scores differ by more than this percentage of the assignment points, the submission is flagged for moderator review."
+                >
+                  <input
+                    id="assignment-moderation-threshold"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={moderationThresholdPct}
+                    onChange={(e) => {
+                      const n = Math.floor(Number(e.target.value))
+                      if (!Number.isFinite(n)) return
+                      onModerationThresholdPctChange(Math.min(100, Math.max(0, n)))
+                    }}
+                    disabled={disabled}
+                    className={`max-w-[8rem] ${inputClass}`}
+                  />
+                </Field>
+                <Field label="Moderator" htmlFor="assignment-moderator">
+                  <select
+                    id="assignment-moderator"
+                    value={moderatorUserId ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      onModeratorUserIdChange(v === '' ? null : v)
+                    }}
+                    disabled={disabled}
+                    className={inputClass}
+                  >
+                    <option value="">— Select —</option>
+                    {staffDirectory.map((s) => (
+                      <option key={s.userId} value={s.userId}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <div>
+                  <p className="mb-2 text-[13px] font-medium text-slate-700 dark:text-neutral-200">
+                    Provisional graders
+                  </p>
+                  <p className="mb-2 text-[11px] leading-snug text-slate-400 dark:text-neutral-500">
+                    Up to ten course staff may submit provisional scores. The moderator cannot be a grader.
+                  </p>
+                  <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-neutral-700">
+                    {staffDirectory.map((s) => {
+                      const checked = provisionalGraderUserIds.includes(s.userId)
+                      const mod = moderatorUserId === s.userId
+                      return (
+                        <li key={s.userId} className="flex items-center gap-2 text-[13px]">
+                          <input
+                            id={`grader-${s.userId}`}
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled || mod}
+                            onChange={() => {
+                              if (mod) return
+                              if (checked) {
+                                onProvisionalGraderUserIdsChange(
+                                  provisionalGraderUserIds.filter((id) => id !== s.userId),
+                                )
+                              } else if (provisionalGraderUserIds.length < 10) {
+                                onProvisionalGraderUserIdsChange([...provisionalGraderUserIds, s.userId])
+                              }
+                            }}
+                            className="rounded border-slate-300 dark:border-neutral-600"
+                          />
+                          <label htmlFor={`grader-${s.userId}`} className="cursor-pointer select-none">
+                            {s.label}
+                          </label>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              </div>
+            ) : null}
             <Field
               label="Points worth"
               htmlFor="assignment-settings-points"

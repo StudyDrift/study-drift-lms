@@ -27,6 +27,7 @@ use crate::services::course_image_upload::{
     course_file_content_path, ingest_multipart_submission_document_field,
     persist_course_submission_attachment,
 };
+use crate::routes::blind_grading_redaction;
 use crate::services::submission_annotated_pdf;
 use crate::state::AppState;
 
@@ -77,8 +78,45 @@ fn can_write_annotations(staff: bool) -> bool {
     staff
 }
 
+/// When blind grading is active for staff, maps each submission id to its stable rank (1-based).
+async fn assignment_staff_blind_rank_map(
+    pool: &sqlx::PgPool,
+    course_id: Uuid,
+    item_id: Uuid,
+    staff: bool,
+    feature_enabled: bool,
+) -> Result<(bool, HashMap<Uuid, usize>), AppError> {
+    let Some(asn) =
+        course_module_assignments::get_for_course_item(pool, course_id, item_id).await?
+    else {
+        return Ok((false, HashMap::new()));
+    };
+    let redact = blind_grading_redaction::should_redact_submission_pii_for_staff(
+        feature_enabled,
+        asn.blind_grading,
+        asn.identities_revealed_at.is_some(),
+    ) && staff;
+    let ranks = if redact {
+        let all = module_assignment_submissions::list_for_assignment(
+            pool,
+            course_id,
+            item_id,
+            GradedFilter::All,
+        )
+        .await?;
+        blind_grading_redaction::submission_rank_by_id(&all)
+    } else {
+        HashMap::new()
+    };
+    Ok((redact, ranks))
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route(
+            "/api/v1/courses/{course_code}/assignments/{item_id}/reveal-identities",
+            post(reveal_identities_handler),
+        )
         .route(
             "/api/v1/courses/{course_code}/assignments/{item_id}/submissions",
             get(list_submissions_handler).post(post_submission_json_handler),
@@ -120,11 +158,94 @@ fn default_filter() -> String {
     "all".into()
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RevealIdentitiesBody {
+    #[serde(default)]
+    force: bool,
+}
+
+async fn reveal_identities_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(body): Json<RevealIdentitiesBody>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if !state.blind_grading_enabled {
+        return Err(AppError::NotFound);
+    }
+    let user = auth_user(&state, &headers)?;
+    let ok = enrollment::user_has_access(&state.pool, &course_code, user.user_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    if !enrollment::user_is_course_creator(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let course_id = resolve_course_id(&state, &course_code).await?;
+    let Some(asn) =
+        course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    if !asn.blind_grading {
+        return Err(AppError::invalid_input(
+            "Blind grading is not enabled for this assignment.",
+        ));
+    }
+    if let Some(prev) = asn.identities_revealed_at {
+        return Ok(Json(json!({
+            "ok": true,
+            "identitiesRevealedAt": prev,
+            "alreadyRevealed": true
+        })));
+    }
+
+    let ungraded =
+        module_assignment_submissions::count_ungraded_for_assignment(&state.pool, course_id, item_id)
+            .await?;
+    if ungraded > 0 && !body.force {
+        return Err(AppError::invalid_input(format!(
+            "{ungraded} submission(s) are still ungraded. Resubmit with {{ \"force\": true }} after confirming."
+        )));
+    }
+
+    let Some(at) = course_module_assignments::reveal_blind_grading_identities(
+        &state.pool,
+        course_id,
+        item_id,
+        user.user_id,
+    )
+    .await?
+    else {
+        return Err(AppError::invalid_input(
+            "Could not reveal identities (assignment may have changed).",
+        ));
+    };
+
+    tracing::info!(
+        target: "lextures.audit",
+        event = "blind_grading_revealed",
+        course_code = %course_code,
+        item_id = %item_id,
+        instructor_id = %user.user_id,
+        "blind grading identities revealed"
+    );
+
+    Ok(Json(
+        json!({ "ok": true, "identitiesRevealedAt": at, "alreadyRevealed": false }),
+    ))
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SubmissionResponse {
     id: Uuid,
-    submitted_by: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    submitted_by: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blind_label: Option<String>,
     attachment_file_id: Option<Uuid>,
     submitted_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -138,10 +259,23 @@ fn submission_to_response(
     course_code: &str,
     row: &SubmissionRow,
     file: Option<&crate::repos::course_files::CourseFileRow>,
+    redact_student_pii: bool,
+    blind_rank: Option<usize>,
 ) -> SubmissionResponse {
+    let blind_label = if redact_student_pii {
+        blind_rank.map(blind_grading_redaction::blind_student_label)
+    } else {
+        None
+    };
+    let submitted_by = if redact_student_pii {
+        None
+    } else {
+        Some(row.submitted_by)
+    };
     SubmissionResponse {
         id: row.id,
-        submitted_by: row.submitted_by,
+        submitted_by,
+        blind_label,
         attachment_file_id: row.attachment_file_id,
         submitted_at: row.submitted_at,
         updated_at: row.updated_at,
@@ -177,6 +311,15 @@ async fn list_submissions_handler(
         return Err(AppError::NotFound);
     }
 
+    let (redact, rank_map) = assignment_staff_blind_rank_map(
+        &state.pool,
+        course_id,
+        item_id,
+        staff,
+        state.blind_grading_enabled,
+    )
+    .await?;
+
     let filter = match q.graded.as_str() {
         "graded" => GradedFilter::Graded,
         "ungraded" => GradedFilter::Ungraded,
@@ -192,7 +335,14 @@ async fn list_submissions_handler(
         } else {
             None
         };
-        out.push(submission_to_response(&course_code, r, file.as_ref()));
+        let rank = rank_map.get(&r.id).copied();
+        out.push(submission_to_response(
+            &course_code,
+            r,
+            file.as_ref(),
+            redact,
+            rank,
+        ));
     }
 
     tracing::info!(
@@ -286,7 +436,28 @@ async fn post_submission_json_handler(
     )
     .await?;
 
-    let resp = submission_to_response(&course_code, &row, Some(&file_row));
+    let redact = state.blind_grading_enabled
+        && staff
+        && blind_grading_redaction::should_redact_submission_pii_for_staff(
+            state.blind_grading_enabled,
+            asn.blind_grading,
+            asn.identities_revealed_at.is_some(),
+        );
+    let rank = if redact {
+        let all = module_assignment_submissions::list_for_assignment(
+            &state.pool,
+            course_id,
+            item_id,
+            GradedFilter::All,
+        )
+        .await?;
+        blind_grading_redaction::submission_rank_by_id(&all)
+            .get(&row.id)
+            .copied()
+    } else {
+        None
+    };
+    let resp = submission_to_response(&course_code, &row, Some(&file_row), redact, rank);
     Ok(Json(json!({ "submission": resp })))
 }
 
@@ -348,7 +519,7 @@ async fn post_submission_upload_handler(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let resp = submission_to_response(&course_code, &row, Some(&file_row));
+    let resp = submission_to_response(&course_code, &row, Some(&file_row), false, None);
     Ok(Json(json!({ "submission": resp, "upload": upload })))
 }
 
@@ -387,7 +558,7 @@ async fn get_my_submission_handler(
     } else {
         None
     };
-    let resp = submission_to_response(&course_code, &r, file.as_ref());
+    let resp = submission_to_response(&course_code, &r, file.as_ref(), false, None);
     Ok(Json(json!({ "submission": resp })))
 }
 
@@ -418,12 +589,22 @@ async fn get_submission_handler(
         return Err(AppError::Forbidden);
     }
 
+    let (redact, rank_map) = assignment_staff_blind_rank_map(
+        &state.pool,
+        course_id,
+        item_id,
+        staff,
+        state.blind_grading_enabled,
+    )
+    .await?;
+    let rank = rank_map.get(&row.id).copied();
+
     let file = if let Some(fid) = row.attachment_file_id {
         course_files::get_for_course(&state.pool, &course_code, fid).await?
     } else {
         None
     };
-    let resp = submission_to_response(&course_code, &row, file.as_ref());
+    let resp = submission_to_response(&course_code, &row, file.as_ref(), redact, rank);
     Ok(Json(json!({ "submission": resp })))
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bell, ClipboardCheck, Inbox, Megaphone, MessageCircle, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -10,6 +10,24 @@ import {
 import { formatTimeAgoFromIso } from '../../lib/format-time-ago'
 import { useCourseFeedUnread } from '../../context/use-course-feed-unread'
 import { useInboxUnreadCount, useMailboxRevision } from '../../context/use-inbox-unread'
+
+/** Easing: strong deceleration (not linear) for panel + backdrop. */
+const NOTIF_DRAWER_EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
+const NOTIF_DRAWER_MS = 320
+
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const sync = () => setReduced(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+  return reduced
+}
 
 const FILTER_TABS: { id: 'all' | UnifiedNotificationKind; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -62,9 +80,13 @@ export function NotificationsDrawerTrigger({
 }
 
 export function NotificationsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const enterRafRef = useRef<{ outer: number | null; inner: number | null }>({ outer: null, inner: null })
   const closeBtnRef = useRef<HTMLButtonElement>(null)
   const titleId = useId()
   const descId = useId()
+  const reducedMotion = usePrefersReducedMotion()
+  const [portalVisible, setPortalVisible] = useState(open)
+  const [entered, setEntered] = useState(false)
   const [filter, setFilter] = useState<'all' | UnifiedNotificationKind>('all')
   const [items, setItems] = useState<UnifiedNotification[]>([])
   const [loading, setLoading] = useState(false)
@@ -104,34 +126,75 @@ export function NotificationsDrawer({ open, onClose }: { open: boolean; onClose:
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
+  useLayoutEffect(() => {
+    if (open) {
+      setPortalVisible(true)
+      if (reducedMotion) {
+        setEntered(true)
+        return
+      }
+      setEntered(false)
+      // Two rAFs so the browser paints translate-x-full before we animate to 0;
+      // a single rAF often runs in the same frame as the style flush → no transition.
+      enterRafRef.current.outer = requestAnimationFrame(() => {
+        enterRafRef.current.outer = null
+        enterRafRef.current.inner = requestAnimationFrame(() => {
+          enterRafRef.current.inner = null
+          setEntered(true)
+        })
+      })
+      return () => {
+        if (enterRafRef.current.outer != null) cancelAnimationFrame(enterRafRef.current.outer)
+        if (enterRafRef.current.inner != null) cancelAnimationFrame(enterRafRef.current.inner)
+        enterRafRef.current = { outer: null, inner: null }
+      }
+    }
+    setEntered(false)
+    if (reducedMotion) {
+      setPortalVisible(false)
+      return
+    }
+    const t = window.setTimeout(() => setPortalVisible(false), NOTIF_DRAWER_MS)
+    return () => window.clearTimeout(t)
+  }, [open, reducedMotion])
+
   useEffect(() => {
-    if (!open) return
+    if (!portalVisible) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = prev
     }
-  }, [open])
+  }, [portalVisible])
 
   useEffect(() => {
-    if (!open) return
+    if (!entered) return
     const t = window.setTimeout(() => closeBtnRef.current?.focus(), 0)
     return () => window.clearTimeout(t)
-  }, [open])
+  }, [entered])
 
   const filtered = useMemo(() => {
     if (filter === 'all') return items
     return items.filter((i) => i.kind === filter)
   }, [items, filter])
 
-  if (!open) return null
+  if (!open && !portalVisible) return null
+
+  const transitionStyle = { transitionTimingFunction: NOTIF_DRAWER_EASE } as const
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex justify-end">
       <button
         type="button"
         aria-label="Close notifications"
-        className="absolute inset-0 bg-slate-900/45 backdrop-blur-[1px]"
+        style={{
+          ...transitionStyle,
+          transitionProperty: 'opacity',
+          transitionDuration: reducedMotion ? '0.01ms' : `${Math.round(NOTIF_DRAWER_MS * 0.85)}ms`,
+        }}
+        className={`absolute inset-0 bg-slate-900/45 backdrop-blur-[1px] ${
+          entered ? 'opacity-100' : 'opacity-0'
+        }`}
         onClick={onClose}
       />
       <div
@@ -139,7 +202,14 @@ export function NotificationsDrawer({ open, onClose }: { open: boolean; onClose:
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="relative flex h-dvh w-[min(100%,22rem)] flex-col border-l border-slate-200 bg-white shadow-2xl shadow-slate-900/20 dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-black/50 sm:w-[26rem]"
+        style={{
+          ...transitionStyle,
+          transitionProperty: 'transform',
+          transitionDuration: reducedMotion ? '0.01ms' : `${NOTIF_DRAWER_MS}ms`,
+        }}
+        className={`relative flex h-dvh w-[min(100%,22rem)] flex-col border-l border-slate-200 bg-white shadow-2xl shadow-slate-900/20 will-change-transform dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-black/50 sm:w-[26rem] ${
+          entered ? 'translate-x-0' : 'translate-x-full'
+        }`}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-neutral-700">
           <div className="min-w-0">

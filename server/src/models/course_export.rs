@@ -111,6 +111,9 @@ pub struct ExportedAssignmentBody {
     pub late_penalty_percent: Option<i32>,
     #[serde(default)]
     pub rubric: Option<JsonValue>,
+    /// Plan 3.3 — preserved on course export/import; `identities_revealed_at` is never exported.
+    #[serde(default)]
+    pub blind_grading: bool,
 }
 
 fn default_true() -> bool {

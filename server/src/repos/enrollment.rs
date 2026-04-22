@@ -542,6 +542,25 @@ pub async fn get_enrollment_by_id(
     .map(|o| o.map(Into::into))
 }
 
+/// Users enrolled as `teacher` or `instructor` for this course (plan 3.4 moderated grader roster).
+pub async fn list_staff_user_ids_for_course(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar::<_, Uuid>(&format!(
+        r#"
+        SELECT user_id
+        FROM {}
+        WHERE course_id = $1 AND role IN ('teacher', 'instructor')
+        ORDER BY user_id
+        "#,
+        schema::COURSE_ENROLLMENTS
+    ))
+    .bind(course_id)
+    .fetch_all(pool)
+    .await
+}
+
 pub async fn insert_student_if_missing(
     pool: &PgPool,
     course_id: Uuid,

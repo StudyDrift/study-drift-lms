@@ -70,8 +70,8 @@ export function SideNavSettingsLinks() {
             <button
               type="button"
               onClick={() => setAiOpen((o) => !o)}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:bg-white hover:text-slate-900 hover:shadow-sm dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-50 ${
-                aiSectionActive ? sideNavActiveClass : 'text-slate-600'
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-white/80 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-800/90 dark:hover:text-neutral-50 ${
+                aiSectionActive ? sideNavActiveClass : 'text-slate-500'
               }`}
               aria-expanded={aiOpen}
             >

@@ -60,12 +60,14 @@ export const courseSchema = z
     viewerEnrollmentRoles: z.array(z.string()).optional(),
     viewerStudentEnrollmentId: z.string().optional(),
     annotationsEnabled: z.boolean().optional(),
+    feedbackMediaEnabled: z.boolean().optional(),
   })
   .passthrough()
   .transform((c) => ({
     ...c,
     markdownThemeCustom: c.markdownThemeCustom ?? null,
     annotationsEnabled: c.annotationsEnabled ?? false,
+    feedbackMediaEnabled: c.feedbackMediaEnabled ?? false,
   }))
 
 export const assignmentGroupSchema = z.object({

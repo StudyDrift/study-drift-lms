@@ -156,6 +156,46 @@ impl OpenRouterClient {
 
         Ok(image_url)
     }
+
+    /// Whisper transcription via OpenAI-compatible `POST /audio/transcriptions`.
+    /// Uses `openai/whisper-1` on OpenRouter; same key as chat completions.
+    pub async fn transcribe_audio(
+        &self,
+        file_bytes: &[u8],
+        filename: &str,
+    ) -> Result<String, OpenRouterError> {
+        use reqwest::multipart::{Form, Part};
+        let part = Part::bytes(file_bytes.to_vec())
+            .file_name(filename.to_string())
+            .mime_str("application/octet-stream")
+            .map_err(|e| OpenRouterError::ApiStatus(500, e.to_string()))?;
+        let form = Form::new()
+            .text("model", "openai/whisper-1")
+            .part("file", part);
+        let url = format!("{}/audio/transcriptions", self.base_url.trim_end_matches('/'));
+        let res = self
+            .http
+            .post(url)
+            .bearer_auth(&self.api_key)
+            .multipart(form)
+            .send()
+            .await?;
+        let status = res.status();
+        let text = res.text().await?;
+        if !status.is_success() {
+            return Err(OpenRouterError::ApiStatus(
+                status.as_u16(),
+                text.chars().take(2000).collect(),
+            ));
+        }
+        let v: Value = serde_json::from_str(&text)?;
+        let out = v
+            .get("text")
+            .and_then(|t| t.as_str())
+            .map(String::from)
+            .ok_or_else(|| OpenRouterError::ApiStatus(500, "no text in transcription response".into()))?;
+        Ok(out)
+    }
 }
 
 fn is_retryable_openrouter_status(e: &OpenRouterError) -> bool {

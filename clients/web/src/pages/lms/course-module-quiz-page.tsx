@@ -494,11 +494,14 @@ export default function CourseModuleQuizPage() {
   useLayoutEffect(() => {
     if (editingContent || loading || loadError) return
 
-    const aside = quizSummaryAsideRef.current
-    const actions = quizActionsRef.current
+    const asideEl = quizSummaryAsideRef.current
     const mq = window.matchMedia('(min-width: 1024px)')
+    let deferredRaf = 0
+    let mountRaf = 0
 
     function alignSummaryAside() {
+      const aside = quizSummaryAsideRef.current
+      const actions = quizActionsRef.current
       if (!aside || !actions) {
         if (aside) aside.style.marginTop = ''
         return
@@ -512,16 +515,31 @@ export default function CourseModuleQuizPage() {
       aside.style.marginTop = `${Math.round(delta)}px`
     }
 
-    alignSummaryAside()
-    const rafId = requestAnimationFrame(() => alignSummaryAside())
+    /** Header + flex row reflow after viewport changes is not always done in the same frame as `resize`. */
+    function scheduleAlignAfterLayout() {
+      cancelAnimationFrame(deferredRaf)
+      deferredRaf = requestAnimationFrame(() => {
+        deferredRaf = requestAnimationFrame(() => {
+          deferredRaf = 0
+          alignSummaryAside()
+        })
+      })
+    }
 
-    mq.addEventListener('change', alignSummaryAside)
-    window.addEventListener('resize', alignSummaryAside)
+    alignSummaryAside()
+    mountRaf = requestAnimationFrame(() => alignSummaryAside())
+
+    mq.addEventListener('change', scheduleAlignAfterLayout)
+    window.addEventListener('resize', scheduleAlignAfterLayout)
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', scheduleAlignAfterLayout)
     return () => {
-      cancelAnimationFrame(rafId)
-      mq.removeEventListener('change', alignSummaryAside)
-      window.removeEventListener('resize', alignSummaryAside)
-      if (aside) aside.style.marginTop = ''
+      cancelAnimationFrame(mountRaf)
+      cancelAnimationFrame(deferredRaf)
+      mq.removeEventListener('change', scheduleAlignAfterLayout)
+      window.removeEventListener('resize', scheduleAlignAfterLayout)
+      vv?.removeEventListener('resize', scheduleAlignAfterLayout)
+      if (asideEl) asideEl.style.marginTop = ''
     }
   }, [
     editingContent,

@@ -28,6 +28,12 @@ pub struct CourseItemAssignmentRow {
     pub late_submission_policy: String,
     pub late_penalty_percent: Option<i32>,
     pub rubric_json: Option<JsonValue>,
+    pub blind_grading: bool,
+    pub identities_revealed_at: Option<DateTime<Utc>>,
+    pub moderated_grading: bool,
+    pub moderation_threshold_pct: i32,
+    pub moderator_user_id: Option<Uuid>,
+    pub provisional_grader_user_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +50,12 @@ pub struct AssignmentBodyWrite {
     pub late_submission_policy: String,
     pub late_penalty_percent: Option<i32>,
     pub rubric_json: Option<JsonValue>,
+    pub blind_grading: bool,
+    pub identities_revealed_at: Option<DateTime<Utc>>,
+    pub moderated_grading: bool,
+    pub moderation_threshold_pct: i32,
+    pub moderator_user_id: Option<Uuid>,
+    pub provisional_grader_user_ids: Vec<Uuid>,
 }
 
 pub async fn insert_empty_for_item(
@@ -125,34 +137,45 @@ pub async fn rubrics_for_structure_items(
     Ok(rows.into_iter().map(|r| (r.id, r.rubric_json)).collect())
 }
 
+#[derive(Debug, Clone, FromRow)]
+struct AssignmentJoinRow {
+    title: String,
+    markdown: String,
+    due_at: Option<DateTime<Utc>>,
+    points_worth: Option<i32>,
+    assignment_group_id: Option<Uuid>,
+    updated_at: DateTime<Utc>,
+    available_from: Option<DateTime<Utc>>,
+    available_until: Option<DateTime<Utc>>,
+    assignment_access_code: Option<String>,
+    submission_allow_text: bool,
+    submission_allow_file_upload: bool,
+    submission_allow_url: bool,
+    late_submission_policy: String,
+    late_penalty_percent: Option<i32>,
+    rubric_json: Option<JsonValue>,
+    blind_grading: bool,
+    identities_revealed_at: Option<DateTime<Utc>>,
+    moderated_grading: bool,
+    moderation_threshold_pct: i32,
+    moderator_user_id: Option<Uuid>,
+    provisional_grader_user_ids: Vec<Uuid>,
+}
+
 pub async fn get_for_course_item(
     pool: &PgPool,
     course_id: Uuid,
     item_id: Uuid,
 ) -> Result<Option<CourseItemAssignmentRow>, sqlx::Error> {
-    type RowTuple = (
-        String,
-        String,
-        Option<DateTime<Utc>>,
-        Option<i32>,
-        Option<Uuid>,
-        DateTime<Utc>,
-        Option<DateTime<Utc>>,
-        Option<DateTime<Utc>>,
-        Option<String>,
-        bool,
-        bool,
-        bool,
-        String,
-        Option<i32>,
-        Option<JsonValue>,
-    );
-    let row: Option<RowTuple> = sqlx::query_as(&format!(
+    let row: Option<AssignmentJoinRow> = sqlx::query_as(&format!(
         r#"
         SELECT c.title, m.markdown, c.due_at, m.points_worth, c.assignment_group_id, m.updated_at,
                m.available_from, m.available_until, m.assignment_access_code,
                m.submission_allow_text, m.submission_allow_file_upload, m.submission_allow_url,
-               m.late_submission_policy, m.late_penalty_percent, m.rubric_json
+               m.late_submission_policy, m.late_penalty_percent, m.rubric_json,
+               m.blind_grading, m.identities_revealed_at,
+               m.moderated_grading, m.moderation_threshold_pct, m.moderator_user_id,
+               m.provisional_grader_user_ids
         FROM {} c
         INNER JOIN {} m ON m.structure_item_id = c.id
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
@@ -165,41 +188,29 @@ pub async fn get_for_course_item(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(
-        |(
-            title,
-            markdown,
-            due_at,
-            points_worth,
-            assignment_group_id,
-            updated_at,
-            available_from,
-            available_until,
-            assignment_access_code,
-            submission_allow_text,
-            submission_allow_file_upload,
-            submission_allow_url,
-            late_submission_policy,
-            late_penalty_percent,
-            rubric_json,
-        )| CourseItemAssignmentRow {
-            title,
-            markdown,
-            due_at,
-            points_worth,
-            assignment_group_id,
-            updated_at,
-            available_from,
-            available_until,
-            assignment_access_code,
-            submission_allow_text,
-            submission_allow_file_upload,
-            submission_allow_url,
-            late_submission_policy,
-            late_penalty_percent,
-            rubric_json,
-        },
-    ))
+    Ok(row.map(|r| CourseItemAssignmentRow {
+        title: r.title,
+        markdown: r.markdown,
+        due_at: r.due_at,
+        points_worth: r.points_worth,
+        assignment_group_id: r.assignment_group_id,
+        updated_at: r.updated_at,
+        available_from: r.available_from,
+        available_until: r.available_until,
+        assignment_access_code: r.assignment_access_code,
+        submission_allow_text: r.submission_allow_text,
+        submission_allow_file_upload: r.submission_allow_file_upload,
+        submission_allow_url: r.submission_allow_url,
+        late_submission_policy: r.late_submission_policy,
+        late_penalty_percent: r.late_penalty_percent,
+        rubric_json: r.rubric_json,
+        blind_grading: r.blind_grading,
+        identities_revealed_at: r.identities_revealed_at,
+        moderated_grading: r.moderated_grading,
+        moderation_threshold_pct: r.moderation_threshold_pct,
+        moderator_user_id: r.moderator_user_id,
+        provisional_grader_user_ids: r.provisional_grader_user_ids,
+    }))
 }
 
 pub async fn write_assignment_body(
@@ -222,6 +233,12 @@ pub async fn write_assignment_body(
             late_submission_policy = $11,
             late_penalty_percent = $12,
             rubric_json = $13,
+            blind_grading = $14,
+            identities_revealed_at = $15,
+            moderated_grading = $16,
+            moderation_threshold_pct = $17,
+            moderator_user_id = $18,
+            provisional_grader_user_ids = $19,
             settings_version = m.settings_version + 1,
             updated_at = NOW()
         FROM {} c
@@ -247,8 +264,69 @@ pub async fn write_assignment_body(
     .bind(&body.late_submission_policy)
     .bind(body.late_penalty_percent)
     .bind(&body.rubric_json)
+    .bind(body.blind_grading)
+    .bind(body.identities_revealed_at)
+    .bind(body.moderated_grading)
+    .bind(body.moderation_threshold_pct)
+    .bind(body.moderator_user_id)
+    .bind(&body.provisional_grader_user_ids)
     .fetch_optional(pool)
     .await
+}
+
+/// Sets `identities_revealed_at` and appends a FERPA-significant audit row. Returns the timestamp
+/// when the update applied, or `None` if the assignment is not in a blind-active state.
+pub async fn reveal_blind_grading_identities(
+    pool: &PgPool,
+    course_id: Uuid,
+    item_id: Uuid,
+    revealed_by_user_id: Uuid,
+) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let revealed_at: Option<DateTime<Utc>> = sqlx::query_scalar(&format!(
+        r#"
+        UPDATE {} m
+        SET identities_revealed_at = NOW(),
+            settings_version = m.settings_version + 1,
+            updated_at = NOW()
+        FROM {} c
+        WHERE m.structure_item_id = c.id
+          AND c.id = $1
+          AND c.course_id = $2
+          AND c.kind = 'assignment'
+          AND m.blind_grading = TRUE
+          AND m.identities_revealed_at IS NULL
+        RETURNING m.identities_revealed_at
+        "#,
+        schema::MODULE_ASSIGNMENTS,
+        schema::COURSE_STRUCTURE_ITEMS
+    ))
+    .bind(item_id)
+    .bind(course_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .flatten();
+
+    let Some(at) = revealed_at else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} (course_id, structure_item_id, revealed_by_user_id)
+        VALUES ($1, $2, $3)
+        "#,
+        schema::ASSIGNMENT_BLIND_GRADING_REVEAL_AUDIT
+    ))
+    .bind(course_id)
+    .bind(item_id)
+    .bind(revealed_by_user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(Some(at))
 }
 
 pub async fn upsert_import_body(
@@ -266,6 +344,7 @@ pub async fn upsert_import_body(
     late_submission_policy: &str,
     late_penalty_percent: Option<i32>,
     rubric_json: Option<&JsonValue>,
+    blind_grading: bool,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"
@@ -273,9 +352,10 @@ pub async fn upsert_import_body(
             structure_item_id, markdown, points_worth, updated_at,
             available_from, available_until, assignment_access_code,
             submission_allow_text, submission_allow_file_upload, submission_allow_url,
-            late_submission_policy, late_penalty_percent, rubric_json
+            late_submission_policy, late_penalty_percent, rubric_json,
+            blind_grading, identities_revealed_at
         )
-        SELECT c.id, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13
+        SELECT c.id, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULL
         FROM {} c
         WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'assignment'
         ON CONFLICT (structure_item_id) DO UPDATE
@@ -290,6 +370,8 @@ pub async fn upsert_import_body(
             late_submission_policy = EXCLUDED.late_submission_policy,
             late_penalty_percent = EXCLUDED.late_penalty_percent,
             rubric_json = EXCLUDED.rubric_json,
+            blind_grading = EXCLUDED.blind_grading,
+            identities_revealed_at = NULL,
             settings_version = m.settings_version + 1,
             updated_at = NOW()
         "#,
@@ -309,6 +391,7 @@ pub async fn upsert_import_body(
     .bind(late_submission_policy)
     .bind(late_penalty_percent)
     .bind(rubric_json)
+    .bind(blind_grading)
     .execute(pool)
     .await?;
     Ok(())

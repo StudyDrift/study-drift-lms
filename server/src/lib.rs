@@ -144,6 +144,9 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         },
         lti,
         annotation_enabled: config.annotation_enabled,
+        feedback_media_enabled: config.feedback_media_enabled,
+        blind_grading_enabled: config.blind_grading_enabled,
+        moderated_grading_enabled: config.moderated_grading_enabled,
     })
 }
 

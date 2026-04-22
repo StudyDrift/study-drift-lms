@@ -1,11 +1,10 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, LogOut, Menu, Search, User } from 'lucide-react'
+import { ChevronDown, LogOut, Menu, User } from 'lucide-react'
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { setCourseViewAs, useCourseViewAs } from '../../lib/course-view-as'
 import { authorizedFetch } from '../../lib/api'
 import { useViewerEnrollmentRoles } from '../../lib/use-viewer-enrollment-roles'
-import { useCommandPalette } from '../command-palette/use-command-palette'
 import { useKeyboardShortcutsSheet } from '../keyboard-shortcuts/keyboard-shortcuts-context'
 import {
   dismissSearchShortcutTip,
@@ -23,6 +22,7 @@ import {
 import { useShellNav } from './use-shell-nav'
 import { TopBarBreadcrumbs } from './top-bar-breadcrumbs'
 import { NotificationsDrawer, NotificationsDrawerTrigger } from './notifications-drawer'
+import { TopBarMobileCommandPaletteButton } from './side-nav-command-palette'
 
 function UserMenu() {
   const navigate = useNavigate()
@@ -250,12 +250,10 @@ function CourseEnrollmentViewDropdown() {
 }
 
 export function TopBar() {
-  const { open } = useCommandPalette()
   const { openSheet } = useKeyboardShortcutsSheet()
   const { mobileNavOpen, setMobileNavOpen } = useShellNav()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
 
-  const searchAnchorRef = useRef<HTMLDivElement>(null)
   const [showShortcutTip, setShowShortcutTip] = useState(
     () => isPostLoginShortcutTipPending() && !isSearchShortcutTipDismissedPermanently(),
   )
@@ -267,23 +265,32 @@ export function TopBar() {
       return () => cancelAnimationFrame(cancelId)
     }
     const measure = () => {
-      if (!searchAnchorRef.current) {
+      const wide = window.matchMedia('(min-width: 768px)').matches
+      const el = document.querySelector<HTMLElement>(
+        wide ? '[data-command-palette-anchor="sidebar"]' : '[data-command-palette-anchor="topbar"]',
+      )
+      if (!el) {
         setShortcutTipTop(null)
         return
       }
-      const r = searchAnchorRef.current.getBoundingClientRect()
+      const r = el.getBoundingClientRect()
       setShortcutTipTop(r.bottom + 10)
     }
     const frameId = requestAnimationFrame(measure)
-    const el = searchAnchorRef.current
     const scheduleMeasure = () => requestAnimationFrame(measure)
     window.addEventListener('resize', scheduleMeasure)
-    const ro = el ? new ResizeObserver(scheduleMeasure) : null
-    if (el && ro) ro.observe(el)
+    const mq = window.matchMedia('(min-width: 768px)')
+    mq.addEventListener('change', scheduleMeasure)
+    const ro = new ResizeObserver(scheduleMeasure)
+    const sidebar = document.querySelector<HTMLElement>('[data-command-palette-anchor="sidebar"]')
+    const topbar = document.querySelector<HTMLElement>('[data-command-palette-anchor="topbar"]')
+    if (sidebar) ro.observe(sidebar)
+    if (topbar) ro.observe(topbar)
     return () => {
       cancelAnimationFrame(frameId)
       window.removeEventListener('resize', scheduleMeasure)
-      ro?.disconnect()
+      mq.removeEventListener('change', scheduleMeasure)
+      ro.disconnect()
     }
   }, [showShortcutTip])
 
@@ -344,26 +351,8 @@ export function TopBar() {
       </button>
       <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
         <TopBarBreadcrumbs />
-        <div
-          ref={searchAnchorRef}
-          data-onboarding="command-palette"
-          className="relative min-w-0 w-[min(100%,11rem)] shrink-0 sm:w-52 md:min-w-[12rem] md:max-w-xl md:flex-1"
-        >
-          <button
-            type="button"
-            aria-label="Search courses, people, pages, and actions"
-            onClick={() => open()}
-            className="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-100 py-2 pl-3 pr-4 text-left text-sm text-slate-500 outline-none transition hover:border-slate-300 hover:bg-slate-50 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-500 dark:hover:bg-neutral-700 dark:focus:bg-neutral-800"
-          >
-            <Search className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" aria-hidden />
-            <span className="min-w-0 flex-1 truncate sm:hidden">Search…</span>
-            <span className="hidden min-w-0 flex-1 truncate sm:inline">Search courses, people, pages…</span>
-            <kbd className="pointer-events-none shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500 sm:px-2 sm:text-[11px] dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
-              {shortcutHint()}
-            </kbd>
-          </button>
-        </div>
       </div>
+      <TopBarMobileCommandPaletteButton />
       <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3">
         <NotificationsDrawerTrigger open={notificationsOpen} onOpen={() => setNotificationsOpen(true)} />
         <CourseEnrollmentViewDropdown />

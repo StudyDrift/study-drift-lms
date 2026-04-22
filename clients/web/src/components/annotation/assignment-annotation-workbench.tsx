@@ -4,16 +4,24 @@ import {
   downloadSubmissionAnnotatedPdf,
   fetchModuleAssignmentMySubmission,
   fetchModuleAssignmentSubmissions,
+  fetchProvisionalGrades,
   fetchSubmissionAnnotations,
+  fetchSubmissionFeedbackMedia,
+  postProvisionalGrade,
   postSubmissionAnnotation,
+  revealModuleAssignmentIdentities,
   uploadModuleAssignmentSubmissionFile,
   type ModuleAssignmentSubmissionApi,
   type PostSubmissionAnnotationInput,
   type SubmissionAnnotationApi,
+  type SubmissionFeedbackMediaApi,
 } from '../../lib/courses-api'
+import { getJwtSubject } from '../../lib/auth'
 import { AnnotationCommentPanel } from './annotation-comment-panel'
 import { AnnotationToolbar, type AnnotationTool } from './annotation-toolbar'
 import { AnnotationViewer } from './annotation-viewer'
+import { FeedbackMediaPlayerList } from './FeedbackMediaPlayer'
+import { FeedbackMediaRecorder } from './FeedbackMediaRecorder'
 import { SubmissionNavigator, type GradedFilter } from './submission-navigator'
 
 export type AssignmentAnnotationWorkbenchProps = {
@@ -22,6 +30,23 @@ export type AssignmentAnnotationWorkbenchProps = {
   /** `staff` uses roster navigation; `student` loads only the viewer’s submission. */
   mode: 'staff' | 'student'
   submissionAllowsFile: boolean
+  /**
+   * When true, show document annotation (requires file upload allowed). Default: same as
+   * `submissionAllowsFile` for backwards compatibility.
+   */
+  annotationsActive?: boolean
+  /** Server `FEEDBACK_MEDIA_ENABLED` — A/V feedback (plan 3.2). */
+  feedbackMediaEnabled?: boolean
+  /** Plan 3.3 — show blind grading banner and anonymised labels. */
+  blindGradingActive?: boolean
+  /** Course creator may reveal identities (from assignment GET). */
+  canRevealIdentities?: boolean
+  /** Refresh assignment metadata after reveal. */
+  onAfterRevealIdentities?: () => void
+  /** Plan 3.4 — show provisional score entry for listed graders. */
+  moderatedGradingActive?: boolean
+  assignmentPointsWorth?: number | null
+  provisionalGraderUserIds?: string[]
 }
 
 export function AssignmentAnnotationWorkbench({
@@ -29,7 +54,18 @@ export function AssignmentAnnotationWorkbench({
   itemId,
   mode,
   submissionAllowsFile,
+  annotationsActive: annotationsActiveProp,
+  feedbackMediaEnabled = false,
+  blindGradingActive = false,
+  canRevealIdentities = false,
+  onAfterRevealIdentities,
+  moderatedGradingActive = false,
+  assignmentPointsWorth = null,
+  provisionalGraderUserIds = [],
 }: AssignmentAnnotationWorkbenchProps) {
+  const annotationsActive = annotationsActiveProp ?? submissionAllowsFile
+  const [panel, setPanel] = useState<'document' | 'media'>('document')
+  const [mediaItems, setMediaItems] = useState<SubmissionFeedbackMediaApi[]>([])
   const [gradedFilter, setGradedFilter] = useState<GradedFilter>('all')
   const [submissions, setSubmissions] = useState<ModuleAssignmentSubmissionApi[]>([])
   const [idx, setIdx] = useState(0)
@@ -40,6 +76,8 @@ export function AssignmentAnnotationWorkbench({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [provisionalInput, setProvisionalInput] = useState('')
+  const [provisionalBusy, setProvisionalBusy] = useState(false)
 
   const current: ModuleAssignmentSubmissionApi | null =
     mode === 'staff' ? (submissions[idx] ?? null) : mine
@@ -76,8 +114,36 @@ export function AssignmentAnnotationWorkbench({
     else void reloadMine()
   }, [mode, reloadMine, reloadStaffList])
 
+  const myUid = getJwtSubject()
+  const isListedGrader = Boolean(
+    mode === 'staff' &&
+      moderatedGradingActive &&
+      myUid &&
+      provisionalGraderUserIds.includes(myUid),
+  )
+
+  useEffect(() => {
+    if (!isListedGrader || !current?.id) {
+      setProvisionalInput('')
+      return
+    }
+    let cancel = false
+    void (async () => {
+      try {
+        const rows = await fetchProvisionalGrades(courseCode, itemId)
+        const mine = rows.find((r) => r.submissionId === current.id && r.graderId === myUid)
+        if (!cancel) setProvisionalInput(mine ? String(mine.score) : '')
+      } catch {
+        if (!cancel) setProvisionalInput('')
+      }
+    })()
+    return () => {
+      cancel = true
+    }
+  }, [courseCode, itemId, current?.id, isListedGrader, myUid])
+
   const reloadAnnotations = useCallback(async () => {
-    if (!current?.id) {
+    if (!annotationsActive || !current?.id) {
       setAnnotations([])
       return
     }
@@ -87,11 +153,33 @@ export function AssignmentAnnotationWorkbench({
     } catch {
       setAnnotations([])
     }
-  }, [courseCode, itemId, current?.id])
+  }, [annotationsActive, courseCode, itemId, current?.id])
+
+  const reloadMedia = useCallback(async () => {
+    if (!feedbackMediaEnabled || !current?.id) {
+      setMediaItems([])
+      return
+    }
+    try {
+      const list = await fetchSubmissionFeedbackMedia(courseCode, itemId, current.id)
+      setMediaItems(list)
+    } catch {
+      setMediaItems([])
+    }
+  }, [courseCode, current?.id, feedbackMediaEnabled, itemId])
 
   useEffect(() => {
     void reloadAnnotations()
   }, [reloadAnnotations])
+
+  useEffect(() => {
+    void reloadMedia()
+  }, [reloadMedia])
+
+  useEffect(() => {
+    if (annotationsActive && !feedbackMediaEnabled) setPanel('document')
+    if (!annotationsActive && feedbackMediaEnabled) setPanel('media')
+  }, [annotationsActive, feedbackMediaEnabled])
 
   async function persistAnnotation(payload: PostSubmissionAnnotationInput) {
     if (!current?.id || readOnly) return
@@ -183,6 +271,40 @@ export function AssignmentAnnotationWorkbench({
     }
   }
 
+  async function onRevealIdentities() {
+    if (
+      !window.confirm(
+        'You are about to unmask student identities for this assignment. This cannot be undone. Continue?',
+      )
+    ) {
+      return
+    }
+    setBusy(true)
+    try {
+      try {
+        await revealModuleAssignmentIdentities(courseCode, itemId, { force: false })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : ''
+        if (
+          msg.toLowerCase().includes('ungraded') &&
+          window.confirm(
+            'Some submissions are still ungraded. Reveal identities anyway? This cannot be undone.',
+          )
+        ) {
+          await revealModuleAssignmentIdentities(courseCode, itemId, { force: true })
+        } else {
+          throw e
+        }
+      }
+      onAfterRevealIdentities?.()
+      if (mode === 'staff') void reloadStaffList()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not reveal identities.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function onDownloadAnnotated() {
     if (!current?.id) return
     setBusy(true)
@@ -195,7 +317,11 @@ export function AssignmentAnnotationWorkbench({
     }
   }
 
-  if (!submissionAllowsFile) {
+  const showDocPanel = annotationsActive
+  const showMediaPanel = feedbackMediaEnabled
+  const both = showDocPanel && showMediaPanel
+
+  if (!showDocPanel && !showMediaPanel) {
     return null
   }
 
@@ -209,19 +335,126 @@ export function AssignmentAnnotationWorkbench({
           {mode === 'staff' ? 'SpeedGrader' : 'Your submission'}
         </h2>
         {mode === 'staff' ? (
-          <SubmissionNavigator
-            submissions={submissions}
-            index={idx}
-            onIndexChange={setIdx}
-            gradedFilter={gradedFilter}
-            onGradedFilterChange={(f) => {
-              setGradedFilter(f)
-              setIdx(0)
-            }}
-            disabled={busy}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            {canRevealIdentities ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void onRevealIdentities()}
+                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-900/60"
+              >
+                Reveal identities
+              </button>
+            ) : null}
+            <SubmissionNavigator
+              submissions={submissions}
+              index={idx}
+              onIndexChange={setIdx}
+              gradedFilter={gradedFilter}
+              onGradedFilterChange={(f) => {
+                setGradedFilter(f)
+                setIdx(0)
+              }}
+              disabled={busy}
+              currentSubmissionDisplayLabel={
+                current?.blindLabel ??
+                (submissions.length > 0 ? `Submission ${idx + 1}` : undefined)
+              }
+              anonymisedAriaLabel={
+                current?.blindLabel
+                  ? `Anonymised student, label ${current.blindLabel}`
+                  : undefined
+              }
+            />
+          </div>
         ) : null}
       </div>
+
+      {mode === 'staff' && blindGradingActive ? (
+        <p
+          role="status"
+          className="rounded-lg border border-indigo-200 bg-indigo-50/90 px-3 py-2 text-sm text-indigo-950 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-100"
+        >
+          Blind grading is active — student identities are hidden. Use anonymised labels until you
+          reveal identities.
+        </p>
+      ) : null}
+
+      {isListedGrader && current ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 dark:border-neutral-600 dark:bg-neutral-900/60">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+            Provisional score
+          </p>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <label className="text-sm text-slate-700 dark:text-neutral-200" htmlFor="prov-score">
+              Points (0–{assignmentPointsWorth ?? '—'})
+            </label>
+            <input
+              id="prov-score"
+              type="number"
+              min={0}
+              max={assignmentPointsWorth ?? undefined}
+              value={provisionalInput}
+              onChange={(e) => setProvisionalInput(e.target.value)}
+              className="w-28 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-neutral-600 dark:bg-neutral-950"
+            />
+            <button
+              type="button"
+              disabled={provisionalBusy}
+              onClick={() => {
+                if (!current?.id) return
+                const n = Number(provisionalInput)
+                if (!Number.isFinite(n) || n < 0) return
+                setProvisionalBusy(true)
+                void (async () => {
+                  try {
+                    await postProvisionalGrade(courseCode, itemId, current.id, { score: n })
+                  } finally {
+                    setProvisionalBusy(false)
+                  }
+                })()
+              }}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {provisionalBusy ? 'Saving…' : 'Save provisional'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {both ? (
+        <div
+          className="flex flex-wrap gap-1 border-b border-slate-200 pb-1 dark:border-neutral-600"
+          role="tablist"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panel === 'document'}
+            className={`rounded-t-md px-3 py-1.5 text-sm font-medium ${
+              panel === 'document'
+                ? 'bg-slate-100 text-slate-900 dark:bg-neutral-800 dark:text-neutral-50'
+                : 'text-slate-600 hover:bg-slate-50 dark:text-neutral-400 dark:hover:bg-neutral-800/60'
+            }`}
+            onClick={() => setPanel('document')}
+          >
+            Annotations
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panel === 'media'}
+            className={`rounded-t-md px-3 py-1.5 text-sm font-medium ${
+              panel === 'media'
+                ? 'bg-slate-100 text-slate-900 dark:bg-neutral-800 dark:text-neutral-50'
+                : 'text-slate-600 hover:bg-slate-50 dark:text-neutral-400 dark:hover:bg-neutral-800/60'
+            }`}
+            onClick={() => setPanel('media')}
+          >
+            Media feedback
+          </button>
+        </div>
+      ) : null}
 
       {loadError ? (
         <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
@@ -229,7 +462,7 @@ export function AssignmentAnnotationWorkbench({
         </p>
       ) : null}
 
-      {mode === 'student' ? (
+      {showDocPanel && mode === 'student' && submissionAllowsFile ? (
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm font-medium text-slate-700 dark:text-neutral-200">
             <span className="mr-2">Upload file</span>
@@ -244,7 +477,7 @@ export function AssignmentAnnotationWorkbench({
         </div>
       ) : null}
 
-      {current?.attachmentMimeType === 'application/pdf' && current.id ? (
+      {showDocPanel && panel === 'document' && current?.attachmentMimeType === 'application/pdf' && current.id ? (
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -257,38 +490,63 @@ export function AssignmentAnnotationWorkbench({
         </div>
       ) : null}
 
-      <AnnotationToolbar
-        tool={tool}
-        onToolChange={setTool}
-        colour={colour}
-        onColourChange={setColour}
-        disabled={busy || !current?.attachmentFileId}
-        readOnly={readOnly}
-      />
-
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="min-w-0 flex-1">
-          <AnnotationViewer
-            filePath={current?.attachmentContentPath ?? null}
-            mimeType={current?.attachmentMimeType ?? null}
-            readOnly={readOnly}
+      {showDocPanel && panel === 'document' ? (
+        <>
+          <AnnotationToolbar
             tool={tool}
+            onToolChange={setTool}
             colour={colour}
-            annotations={annotations}
-            onHighlightComplete={readOnly ? undefined : onHighlightComplete}
-            onDrawComplete={readOnly ? undefined : onDrawComplete}
-            onPinComplete={readOnly ? undefined : onPinComplete}
-            onTextBoxComplete={readOnly ? undefined : onTextBoxComplete}
+            onColourChange={setColour}
+            disabled={busy || !current?.attachmentFileId}
+            readOnly={readOnly}
+          />
+
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+            <div className="min-w-0 flex-1">
+              <AnnotationViewer
+                filePath={current?.attachmentContentPath ?? null}
+                mimeType={current?.attachmentMimeType ?? null}
+                readOnly={readOnly}
+                tool={tool}
+                colour={colour}
+                annotations={annotations}
+                onHighlightComplete={readOnly ? undefined : onHighlightComplete}
+                onDrawComplete={readOnly ? undefined : onDrawComplete}
+                onPinComplete={readOnly ? undefined : onPinComplete}
+                onTextBoxComplete={readOnly ? undefined : onTextBoxComplete}
+              />
+            </div>
+            <AnnotationCommentPanel
+              annotations={annotations}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              readOnly={readOnly}
+              onDelete={readOnly ? undefined : onDeleteAnnotation}
+            />
+          </div>
+        </>
+      ) : null}
+
+      {showMediaPanel && (both ? panel === 'media' : true) && current?.id ? (
+        <div className="space-y-4" aria-label="Instructor media feedback">
+          {mode === 'staff' && current.id ? (
+            <FeedbackMediaRecorder
+              courseCode={courseCode}
+              itemId={itemId}
+              submissionId={current.id}
+              onComplete={() => void reloadMedia()}
+            />
+          ) : null}
+          <FeedbackMediaPlayerList
+            courseCode={courseCode}
+            itemId={itemId}
+            submissionId={current.id}
+            items={mediaItems}
+            readOnly={readOnly}
+            onChanged={() => void reloadMedia()}
           />
         </div>
-        <AnnotationCommentPanel
-          annotations={annotations}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          readOnly={readOnly}
-          onDelete={readOnly ? undefined : onDeleteAnnotation}
-        />
-      </div>
+      ) : null}
     </section>
   )
 }

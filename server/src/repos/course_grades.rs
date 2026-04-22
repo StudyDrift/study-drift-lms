@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use chrono::{DateTime, Utc};
 use serde_json::{json, Value as JsonValue};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -165,6 +166,59 @@ pub async fn upsert_points(
     .bind(student_user_id)
     .bind(module_item_id)
     .bind(points)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Writes the visible gradebook cell and reconciliation metadata (plan 3.4).
+pub async fn upsert_reconciled_final(
+    pool: &PgPool,
+    course_id: Uuid,
+    student_user_id: Uuid,
+    module_item_id: Uuid,
+    points: f64,
+    rubric_scores: Option<&HashMap<Uuid, f64>>,
+    reconciliation_source: &str,
+    reconciled_grader_id: Option<Uuid>,
+    reconciled_by: Uuid,
+    reconciled_at: DateTime<Utc>,
+) -> Result<(), sqlx::Error> {
+    let rubric_json: Option<JsonValue> = match rubric_scores {
+        None => None,
+        Some(m) if m.is_empty() => None,
+        Some(m) => Some(json!(m)),
+    };
+    sqlx::query(&format!(
+        r#"
+        INSERT INTO {} AS cg (
+            course_id, student_user_id, module_item_id, points_earned, rubric_scores_json,
+            reconciliation_source, reconciled_grader_id, reconciled_by, reconciled_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (student_user_id, module_item_id)
+        DO UPDATE SET
+            course_id = EXCLUDED.course_id,
+            points_earned = EXCLUDED.points_earned,
+            rubric_scores_json = EXCLUDED.rubric_scores_json,
+            reconciliation_source = EXCLUDED.reconciliation_source,
+            reconciled_grader_id = EXCLUDED.reconciled_grader_id,
+            reconciled_by = EXCLUDED.reconciled_by,
+            reconciled_at = EXCLUDED.reconciled_at,
+            settings_version = cg.settings_version + 1,
+            updated_at = NOW()
+        "#,
+        schema::COURSE_GRADES,
+    ))
+    .bind(course_id)
+    .bind(student_user_id)
+    .bind(module_item_id)
+    .bind(points)
+    .bind(rubric_json)
+    .bind(reconciliation_source)
+    .bind(reconciled_grader_id)
+    .bind(reconciled_by)
+    .bind(reconciled_at)
     .execute(pool)
     .await?;
     Ok(())

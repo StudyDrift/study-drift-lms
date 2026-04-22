@@ -7,12 +7,14 @@ import { markdownToSectionsForEditor, sectionsToMarkdown } from '../../component
 import { usePermissions } from '../../context/use-permissions'
 import {
   fetchCourse,
+  fetchCourseEnrollmentsList,
   fetchCourseGradingSettings,
   fetchModuleAssignment,
   fetchReaderMarkups,
   patchCourseStructureItemAssignmentGroup,
   patchModuleAssignment,
   type ContentPageMarkup,
+  type CourseEnrollmentRosterRow,
   type LateSubmissionPolicy,
   type RubricDefinition,
   type SyllabusSection,
@@ -24,6 +26,7 @@ import {
 } from '../../lib/markdown-theme'
 import { useLmsDarkMode } from '../../hooks/use-lms-dark-mode'
 import { recordLastVisitedModuleItem } from '../../lib/last-visited-module-item'
+import { getJwtSubject } from '../../lib/auth'
 import { permCourseItemCreate } from '../../lib/rbac-api'
 import { AssignmentPageSettingsPanel } from '../../components/assignment/assignment-page-settings-panel'
 import { AssignmentAnnotationWorkbench } from '../../components/annotation/assignment-annotation-workbench'
@@ -132,6 +135,17 @@ export default function CourseModuleAssignmentPage() {
   const [draftLatePenaltyPercent, setDraftLatePenaltyPercent] = useState<number | null>(null)
   const [rubric, setRubric] = useState<RubricDefinition | null>(null)
   const [draftRubric, setDraftRubric] = useState<RubricDefinition | null>(null)
+  const [draftBlindGrading, setDraftBlindGrading] = useState(false)
+
+  const [moderatedGrading, setModeratedGrading] = useState(false)
+  const [draftModeratedGrading, setDraftModeratedGrading] = useState(false)
+  const [moderationThresholdPct, setModerationThresholdPct] = useState(15)
+  const [draftModerationThresholdPct, setDraftModerationThresholdPct] = useState(15)
+  const [moderatorUserId, setModeratorUserId] = useState<string | null>(null)
+  const [draftModeratorUserId, setDraftModeratorUserId] = useState<string | null>(null)
+  const [provisionalGraderUserIds, setProvisionalGraderUserIds] = useState<string[]>([])
+  const [draftProvisionalGraderUserIds, setDraftProvisionalGraderUserIds] = useState<string[]>([])
+  const [staffRoster, setStaffRoster] = useState<CourseEnrollmentRosterRow[] | null>(null)
 
   const [gradingGroups, setGradingGroups] = useState<{ id: string; name: string }[]>([])
   const [assignmentGroupId, setAssignmentGroupId] = useState<string | null>(null)
@@ -143,6 +157,10 @@ export default function CourseModuleAssignmentPage() {
   const [markups, setMarkups] = useState<ContentPageMarkup[]>([])
   const [viewerEnrollmentRoles, setViewerEnrollmentRoles] = useState<string[]>([])
   const [annotationsEnabled, setAnnotationsEnabled] = useState(false)
+  const [feedbackMediaEnabled, setFeedbackMediaEnabled] = useState(false)
+  const [blindGrading, setBlindGrading] = useState(false)
+  const [identitiesRevealedAt, setIdentitiesRevealedAt] = useState<string | null>(null)
+  const [viewerCanRevealIdentities, setViewerCanRevealIdentities] = useState(false)
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<SyllabusSection[]>([])
@@ -199,6 +217,18 @@ export default function CourseModuleAssignmentPage() {
       setLatePenaltyPercent(data.latePenaltyPercent)
       setRubric(data.rubric)
       setDraftRubric(data.rubric)
+      setBlindGrading(data.blindGrading)
+      setDraftBlindGrading(data.blindGrading)
+      setModeratedGrading(Boolean(data.moderatedGrading))
+      setDraftModeratedGrading(Boolean(data.moderatedGrading))
+      setModerationThresholdPct(data.moderationThresholdPct ?? 15)
+      setDraftModerationThresholdPct(data.moderationThresholdPct ?? 15)
+      setModeratorUserId(data.moderatorUserId)
+      setDraftModeratorUserId(data.moderatorUserId)
+      setProvisionalGraderUserIds(data.provisionalGraderUserIds ?? [])
+      setDraftProvisionalGraderUserIds(data.provisionalGraderUserIds ?? [])
+      setIdentitiesRevealedAt(data.identitiesRevealedAt)
+      setViewerCanRevealIdentities(data.viewerCanRevealIdentities)
       setAssignmentGroupId(data.assignmentGroupId ?? null)
       setAssignmentGroupPatchError(null)
       try {
@@ -209,11 +239,24 @@ export default function CourseModuleAssignmentPage() {
       } catch {
         setGradingGroups([])
       }
+      if (allows(permCourseItemCreate(courseCode))) {
+        try {
+          const roster = await fetchCourseEnrollmentsList(courseCode)
+          setStaffRoster(
+            roster.filter((r) => r.role === 'Teacher' || r.role === 'Instructor'),
+          )
+        } catch {
+          setStaffRoster([])
+        }
+      } else {
+        setStaffRoster(null)
+      }
       setUpdatedAt(data.updatedAt)
       setMdPreset(courseRow.markdownThemePreset)
       setMdCustom(courseRow.markdownThemeCustom)
       setViewerEnrollmentRoles(courseRow.viewerEnrollmentRoles ?? [])
       setAnnotationsEnabled(Boolean(courseRow.annotationsEnabled))
+      setFeedbackMediaEnabled(Boolean(courseRow.feedbackMediaEnabled))
       recordLastVisitedModuleItem(courseCode, {
         itemId,
         kind: 'assignment',
@@ -236,10 +279,23 @@ export default function CourseModuleAssignmentPage() {
       setMarkups([])
       setViewerEnrollmentRoles([])
       setAnnotationsEnabled(false)
+      setBlindGrading(false)
+      setDraftBlindGrading(false)
+      setModeratedGrading(false)
+      setDraftModeratedGrading(false)
+      setModerationThresholdPct(15)
+      setDraftModerationThresholdPct(15)
+      setModeratorUserId(null)
+      setDraftModeratorUserId(null)
+      setProvisionalGraderUserIds([])
+      setDraftProvisionalGraderUserIds([])
+      setIdentitiesRevealedAt(null)
+      setViewerCanRevealIdentities(false)
+      setStaffRoster(null)
     } finally {
       setLoading(false)
     }
-  }, [courseCode, itemId, loadMarkups])
+  }, [allows, courseCode, itemId, loadMarkups])
 
   useEffect(() => {
     void load()
@@ -257,6 +313,11 @@ export default function CourseModuleAssignmentPage() {
     setDraftLateSubmissionPolicy(lateSubmissionPolicy)
     setDraftLatePenaltyPercent(latePenaltyPercent)
     setDraftRubric(rubric)
+    setDraftBlindGrading(blindGrading)
+    setDraftModeratedGrading(moderatedGrading)
+    setDraftModerationThresholdPct(moderationThresholdPct)
+    setDraftModeratorUserId(moderatorUserId)
+    setDraftProvisionalGraderUserIds(provisionalGraderUserIds)
   }
 
   function beginEdit() {
@@ -310,6 +371,11 @@ export default function CourseModuleAssignmentPage() {
         lateSubmissionPolicy: draftLateSubmissionPolicy,
         latePenaltyPercent: draftLatePenaltyPercent,
         rubric: draftRubric,
+        blindGrading: draftBlindGrading,
+        moderatedGrading: draftModeratedGrading,
+        moderationThresholdPct: draftModerationThresholdPct,
+        moderatorUserId: draftModeratedGrading ? draftModeratorUserId : null,
+        provisionalGraderUserIds: draftModeratedGrading ? draftProvisionalGraderUserIds : [],
       })
       setMarkdown(data.markdown)
       setDueAt(data.dueAt)
@@ -323,6 +389,18 @@ export default function CourseModuleAssignmentPage() {
       setLatePenaltyPercent(data.latePenaltyPercent)
       setRubric(data.rubric)
       setDraftRubric(data.rubric)
+      setBlindGrading(data.blindGrading)
+      setDraftBlindGrading(data.blindGrading)
+      setModeratedGrading(Boolean(data.moderatedGrading))
+      setDraftModeratedGrading(Boolean(data.moderatedGrading))
+      setModerationThresholdPct(data.moderationThresholdPct ?? 15)
+      setDraftModerationThresholdPct(data.moderationThresholdPct ?? 15)
+      setModeratorUserId(data.moderatorUserId)
+      setDraftModeratorUserId(data.moderatorUserId)
+      setProvisionalGraderUserIds(data.provisionalGraderUserIds ?? [])
+      setDraftProvisionalGraderUserIds(data.provisionalGraderUserIds ?? [])
+      setIdentitiesRevealedAt(data.identitiesRevealedAt)
+      setViewerCanRevealIdentities(data.viewerCanRevealIdentities)
       setRequiresAssignmentAccessCode(data.requiresAssignmentAccessCode)
       setAssignmentAccessCode(data.assignmentAccessCode ?? '')
       setAssignmentGroupId(data.assignmentGroupId ?? null)
@@ -336,6 +414,25 @@ export default function CourseModuleAssignmentPage() {
       setSaving(false)
     }
   }
+
+  const staffDirectory = useMemo(
+    () =>
+      (staffRoster ?? []).map((r) => ({
+        userId: r.userId,
+        label: r.displayName?.trim() ? r.displayName.trim() : `Staff ${r.userId.slice(0, 8)}…`,
+      })),
+    [staffRoster],
+  )
+
+  const myUserId = getJwtSubject()
+  const viewerCanModerate = Boolean(
+    viewerCanRevealIdentities || (moderatorUserId != null && moderatorUserId === myUserId),
+  )
+
+  const moderationDashboardPath =
+    courseCode && itemId
+      ? `/courses/${encodeURIComponent(courseCode)}/modules/assignment/${encodeURIComponent(itemId)}/moderation`
+      : ''
 
   if (!courseCode || !itemId) {
     return (
@@ -383,17 +480,29 @@ export default function CourseModuleAssignmentPage() {
               {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
-        ) : canEdit ? (
-          <button
-            type="button"
-            onClick={beginEdit}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Pencil className="h-4 w-4" aria-hidden />
-            Edit
-          </button>
-        ) : null
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={beginEdit}
+                disabled={loading}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Pencil className="h-4 w-4" aria-hidden />
+                Edit
+              </button>
+            ) : null}
+            {viewerCanModerate && moderatedGrading ? (
+              <Link
+                to={moderationDashboardPath}
+                className="inline-flex items-center rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-900 shadow-sm transition hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-100 dark:hover:bg-indigo-950"
+              >
+                Reconciliation
+              </Link>
+            ) : null}
+          </div>
+        )
       }
     >
       <p className="mt-2 text-left text-sm">
@@ -476,6 +585,24 @@ export default function CourseModuleAssignmentPage() {
                     </dd>
                   </div>
                 ) : null}
+                {blindGrading ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Blind grading</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      {identitiesRevealedAt
+                        ? `Identities revealed ${formatOptionalDateTime(identitiesRevealedAt)}`
+                        : 'Active (identities hidden)'}
+                    </dd>
+                  </div>
+                ) : null}
+                {viewerIsCourseStaff && moderatedGrading ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Moderated grading</dt>
+                    <dd className="min-w-0 text-right font-medium text-slate-900 dark:text-neutral-100">
+                      Enabled ({moderationThresholdPct}% threshold)
+                    </dd>
+                  </div>
+                ) : null}
                 {requiresAssignmentAccessCode ? (
                   <div className="flex justify-between gap-4">
                     <dt className="shrink-0 text-slate-500 dark:text-neutral-400">Access code</dt>
@@ -494,12 +621,23 @@ export default function CourseModuleAssignmentPage() {
               contentTitle={title || 'Assignment'}
               emptyMessage="No instructions yet. Select Edit to add Markdown."
             />
-            {annotationsEnabled && submissionAllowFileUpload && itemId ? (
+            {itemId &&
+            (feedbackMediaEnabled || (annotationsEnabled && submissionAllowFileUpload)) ? (
               <AssignmentAnnotationWorkbench
                 courseCode={courseCode}
                 itemId={itemId}
                 mode={viewerIsCourseStaff ? 'staff' : 'student'}
                 submissionAllowsFile={submissionAllowFileUpload}
+                annotationsActive={Boolean(annotationsEnabled && submissionAllowFileUpload)}
+                feedbackMediaEnabled={Boolean(feedbackMediaEnabled)}
+                blindGradingActive={
+                  Boolean(blindGrading && !identitiesRevealedAt && viewerIsCourseStaff)
+                }
+                canRevealIdentities={viewerCanRevealIdentities}
+                onAfterRevealIdentities={() => void load()}
+                moderatedGradingActive={Boolean(moderatedGrading && viewerIsCourseStaff)}
+                assignmentPointsWorth={pointsWorth}
+                provisionalGraderUserIds={provisionalGraderUserIds}
               />
             ) : null}
           </div>
@@ -558,6 +696,17 @@ export default function CourseModuleAssignmentPage() {
                     courseCode={courseCode}
                     assignmentItemId={itemId}
                     assignmentMarkdown={sectionsToMarkdown(draft)}
+                    blindGrading={draftBlindGrading}
+                    onBlindGradingChange={setDraftBlindGrading}
+                    moderatedGrading={draftModeratedGrading}
+                    onModeratedGradingChange={setDraftModeratedGrading}
+                    moderationThresholdPct={draftModerationThresholdPct}
+                    onModerationThresholdPctChange={setDraftModerationThresholdPct}
+                    moderatorUserId={draftModeratorUserId}
+                    onModeratorUserIdChange={setDraftModeratorUserId}
+                    provisionalGraderUserIds={draftProvisionalGraderUserIds}
+                    onProvisionalGraderUserIdsChange={setDraftProvisionalGraderUserIds}
+                    staffDirectory={staffDirectory}
                   />
                 ) : null
               }

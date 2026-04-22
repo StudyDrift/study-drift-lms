@@ -14,6 +14,7 @@ import CourseCreate from './pages/lms/course-create'
 import CourseDetail from './pages/lms/course-detail'
 import CourseLayout from './pages/lms/course-layout'
 import CourseModuleAssignmentPage from './pages/lms/course-module-assignment-page'
+import ModerationDashboard from './pages/lms/moderation-dashboard'
 import CourseModuleContentPage from './pages/lms/course-module-content-page'
 import CourseModuleExternalLinkPage from './pages/lms/course-module-external-link-page'
 import CourseModuleLtiPage from './pages/lms/course-module-lti-page'
@@ -88,6 +89,10 @@ export default function App() {
             <Route path="syllabus" element={<CourseSyllabus />} />
             <Route path="modules/content/:itemId" element={<CourseModuleContentPage />} />
             <Route path="modules/assignment/:itemId" element={<CourseModuleAssignmentPage />} />
+            <Route
+              path="modules/assignment/:itemId/moderation"
+              element={<ModerationDashboard />}
+            />
             <Route path="modules/quiz/:itemId" element={<CourseModuleQuizPage />} />
             <Route path="diagnostic" element={<CourseDiagnosticPage />} />
             <Route path="modules/external-link/:itemId" element={<CourseModuleExternalLinkPage />} />

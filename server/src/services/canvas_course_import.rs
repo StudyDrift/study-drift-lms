@@ -901,6 +901,7 @@ async fn canvas_export_append_assignment_details(
             late_submission_policy: "allow".into(),
             late_penalty_percent: None,
             rubric: None,
+            blind_grading: false,
         },
     );
     *sort_order += 1;

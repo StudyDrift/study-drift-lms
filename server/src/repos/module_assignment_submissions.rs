@@ -62,6 +62,30 @@ pub enum GradedFilter {
     Ungraded,
 }
 
+/// Submissions with no grade row for this assignment item.
+pub async fn count_ungraded_for_assignment(
+    pool: &PgPool,
+    course_id: Uuid,
+    module_item_id: Uuid,
+) -> Result<i64, sqlx::Error> {
+    let n: Option<i64> = sqlx::query_scalar(&format!(
+        r#"
+        SELECT COUNT(*)::bigint
+        FROM {tbl} s
+        LEFT JOIN {grades} g
+          ON g.module_item_id = s.module_item_id AND g.student_user_id = s.submitted_by
+        WHERE s.course_id = $1 AND s.module_item_id = $2 AND g.student_user_id IS NULL
+        "#,
+        tbl = schema::MODULE_ASSIGNMENT_SUBMISSIONS,
+        grades = schema::COURSE_GRADES,
+    ))
+    .bind(course_id)
+    .bind(module_item_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(n.unwrap_or(0))
+}
+
 pub async fn list_for_assignment(
     pool: &PgPool,
     course_id: Uuid,

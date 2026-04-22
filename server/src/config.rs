@@ -38,6 +38,12 @@ pub struct Config {
     pub lti_rsa_key_id: String,
     /// Inline submission annotation APIs + grader UI (plan 3.1). Default off for staged rollout.
     pub annotation_enabled: bool,
+    /// Instructor audio/video feedback on submissions (plan 3.2). Default off.
+    pub feedback_media_enabled: bool,
+    /// Plan 3.3 — blind grading redaction on submission APIs. Default on; set `BLIND_GRADING_ENABLED=0` to disable.
+    pub blind_grading_enabled: bool,
+    /// Plan 3.4 — moderated grading APIs + gradebook gating. Default off; set `MODERATED_GRADING_ENABLED=1` to enable.
+    pub moderated_grading_enabled: bool,
 }
 
 const DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES: &[&str] = &["instructure.com"];
@@ -202,6 +208,34 @@ impl Config {
             Some("1") | Some("true") | Some("yes") | Some("on")
         );
 
+        let feedback_media_enabled = matches!(
+            env::var("FEEDBACK_MEDIA_ENABLED")
+                .ok()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("1") | Some("true") | Some("yes") | Some("on")
+        );
+
+        let blind_grading_enabled = match env::var("BLIND_GRADING_ENABLED") {
+            Err(_) => true,
+            Ok(v) => {
+                let t = v.trim().to_ascii_lowercase();
+                t.is_empty()
+                    || matches!(
+                        t.as_str(),
+                        "1" | "true" | "yes" | "on"
+                    )
+            }
+        };
+
+        let moderated_grading_enabled = matches!(
+            env::var("MODERATED_GRADING_ENABLED")
+                .ok()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("1") | Some("true") | Some("yes") | Some("on")
+        );
+
         Ok(Self {
             database_url,
             jwt_secret,
@@ -220,6 +254,9 @@ impl Config {
             lti_rsa_private_key_pem,
             lti_rsa_key_id,
             annotation_enabled,
+            feedback_media_enabled,
+            blind_grading_enabled,
+            moderated_grading_enabled,
         })
     }
 }

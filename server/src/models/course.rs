@@ -38,6 +38,8 @@ pub struct CourseWithViewerResponse {
     pub viewer_student_enrollment_id: Option<Uuid>,
     /// Server feature flag `ANNOTATION_ENABLED` — SpeedGrader-style inline annotations (plan 3.1).
     pub annotations_enabled: bool,
+    /// Server `FEEDBACK_MEDIA_ENABLED` — instructor A/V feedback on submissions (plan 3.2).
+    pub feedback_media_enabled: bool,
 }
 
 #[derive(Debug, sqlx::FromRow, Serialize)]

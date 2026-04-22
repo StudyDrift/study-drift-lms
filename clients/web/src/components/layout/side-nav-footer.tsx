@@ -14,7 +14,7 @@ export function SideNavFooter() {
   const year = new Date().getFullYear()
 
   return (
-    <footer className="shrink-0 border-t border-slate-200 px-3 py-2.5 text-[11px] leading-snug text-slate-500 dark:border-neutral-800 dark:text-neutral-500">
+    <footer className="shrink-0 border-t border-slate-200/80 px-3 py-2.5 text-[11px] leading-snug text-slate-500 dark:border-neutral-800 dark:text-neutral-500">
       <p className="flex min-w-0 items-baseline justify-between gap-2 text-slate-600 dark:text-neutral-400">
         <span className="min-w-0 shrink">© {year} Lextures</span>
         <span className="shrink-0 text-slate-500 tabular-nums dark:text-neutral-500" title="App version">

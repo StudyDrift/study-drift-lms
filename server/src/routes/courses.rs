@@ -92,6 +92,7 @@ use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
 use crate::repos::enrollment_groups;
+use crate::repos::moderated_grading as moderated_grading_repo;
 use crate::repos::enrollment_quiz_overrides;
 use crate::repos::lti as lti_repo;
 use crate::repos::misconceptions as misconception_repo;
@@ -589,6 +590,8 @@ fn module_assignment_response_for_api(
     row: &course_module_assignments::CourseItemAssignmentRow,
     can_edit: bool,
     shift: Option<&relative_schedule::RelativeShiftContext>,
+    viewer_can_reveal_identities: bool,
+    show_moderation_detail: bool,
 ) -> ModuleContentPageResponse {
     let due_at = match shift {
         Some(ctx) => relative_schedule::shift_opt(ctx, row.due_at),
@@ -632,6 +635,23 @@ fn module_assignment_response_for_api(
             .rubric_json
             .as_ref()
             .and_then(|v| serde_json::from_value(v.clone()).ok()),
+        blind_grading: row.blind_grading,
+        identities_revealed_at: row.identities_revealed_at,
+        viewer_can_reveal_identities: viewer_can_reveal_identities
+            && row.blind_grading
+            && row.identities_revealed_at.is_none(),
+        moderated_grading: show_moderation_detail && row.moderated_grading,
+        moderation_threshold_pct: show_moderation_detail.then_some(row.moderation_threshold_pct),
+        moderator_user_id: if show_moderation_detail {
+            row.moderator_user_id
+        } else {
+            None
+        },
+        provisional_grader_user_ids: if show_moderation_detail {
+            Some(row.provisional_grader_user_ids.clone())
+        } else {
+            None
+        },
     }
 }
 
@@ -686,6 +706,45 @@ fn merge_assignment_body_write(
             Some(serde_json::to_value(r).map_err(|e| AppError::invalid_input(e.to_string()))?)
         }
     };
+    let blind_grading = req.blind_grading.unwrap_or(cur.blind_grading);
+    let identities_revealed_at = if !blind_grading {
+        None
+    } else if !cur.blind_grading && blind_grading {
+        None
+    } else {
+        cur.identities_revealed_at
+    };
+    let moderated_grading = req.moderated_grading.unwrap_or(cur.moderated_grading);
+    let moderation_threshold_pct = match req.moderation_threshold_pct {
+        None => cur.moderation_threshold_pct,
+        Some(t) => t.clamp(0, 100),
+    };
+    let moderator_user_id = match &req.moderator_user_id {
+        None => cur.moderator_user_id,
+        Some(inner) => *inner,
+    };
+    let mut provisional_grader_user_ids = match &req.provisional_grader_user_ids {
+        None => cur.provisional_grader_user_ids.clone(),
+        Some(v) => v.clone(),
+    };
+    provisional_grader_user_ids.sort();
+    provisional_grader_user_ids.dedup();
+    let (moderated_grading, moderation_threshold_pct, moderator_user_id, provisional_grader_user_ids) =
+        if !moderated_grading {
+            (
+                false,
+                moderation_threshold_pct,
+                None,
+                Vec::new(),
+            )
+        } else {
+            (
+                moderated_grading,
+                moderation_threshold_pct,
+                moderator_user_id,
+                provisional_grader_user_ids,
+            )
+        };
     Ok(course_module_assignments::AssignmentBodyWrite {
         markdown,
         points_worth,
@@ -698,7 +757,58 @@ fn merge_assignment_body_write(
         late_submission_policy,
         late_penalty_percent,
         rubric_json,
+        blind_grading,
+        identities_revealed_at,
+        moderated_grading,
+        moderation_threshold_pct,
+        moderator_user_id,
+        provisional_grader_user_ids,
     })
+}
+
+async fn validate_moderated_assignment_settings(
+    pool: &sqlx::PgPool,
+    course_id: Uuid,
+    row: &course_module_assignments::AssignmentBodyWrite,
+) -> Result<(), AppError> {
+    if !row.moderated_grading {
+        return Ok(());
+    }
+    let Some(mod_id) = row.moderator_user_id else {
+        return Err(AppError::invalid_input(
+            "Moderated grading requires a moderator.",
+        ));
+    };
+    if row.provisional_grader_user_ids.is_empty() {
+        return Err(AppError::invalid_input(
+            "Moderated grading requires at least one provisional grader.",
+        ));
+    }
+    if row.provisional_grader_user_ids.len() > 10 {
+        return Err(AppError::invalid_input(
+            "At most ten provisional graders are allowed.",
+        ));
+    }
+    if row.provisional_grader_user_ids.contains(&mod_id) {
+        return Err(AppError::invalid_input(
+            "The moderator cannot also be listed as a provisional grader.",
+        ));
+    }
+    let staff = enrollment::list_staff_user_ids_for_course(pool, course_id).await?;
+    let staff_set: HashSet<Uuid> = staff.into_iter().collect();
+    if !staff_set.contains(&mod_id) {
+        return Err(AppError::invalid_input(
+            "Moderator must be enrolled as course staff (teacher or instructor).",
+        ));
+    }
+    for g in &row.provisional_grader_user_ids {
+        if !staff_set.contains(g) {
+            return Err(AppError::invalid_input(
+                "Each provisional grader must be enrolled as course staff (teacher or instructor).",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn module_quiz_response_for_api(
@@ -2055,6 +2165,13 @@ async fn module_content_page_get_handler(
         late_submission_policy: None,
         late_penalty_percent: None,
         rubric: None,
+        blind_grading: false,
+        identities_revealed_at: None,
+        viewer_can_reveal_identities: false,
+        moderated_grading: false,
+        moderation_threshold_pct: None,
+        moderator_user_id: None,
+        provisional_grader_user_ids: None,
     }))
 }
 
@@ -2123,6 +2240,13 @@ async fn module_content_page_patch_handler(
         late_submission_policy: None,
         late_penalty_percent: None,
         rubric: None,
+        blind_grading: false,
+        identities_revealed_at: None,
+        viewer_can_reveal_identities: false,
+        moderated_grading: false,
+        moderation_threshold_pct: None,
+        moderator_user_id: None,
+        provisional_grader_user_ids: None,
     }))
 }
 
@@ -2471,11 +2595,19 @@ async fn module_assignment_get_handler(
         return Err(AppError::NotFound);
     };
 
+    let viewer_can_reveal =
+        enrollment::user_is_course_creator(&state.pool, &course_code, user.user_id).await?;
+
+    let show_moderation_detail = can_edit
+        || enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await?;
+
     Ok(Json(module_assignment_response_for_api(
         item_id,
         &row,
         can_edit,
         shift_ctx.as_ref(),
+        viewer_can_reveal,
+        show_moderation_detail,
     )))
 }
 
@@ -2506,6 +2638,7 @@ async fn module_assignment_patch_handler(
     };
 
     let merged_write = merge_assignment_body_write(&cur, &req)?;
+    validate_moderated_assignment_settings(&state.pool, course_id, &merged_write).await?;
     validate_item_points_worth(merged_write.points_worth)?;
     validate_assignment_delivery_settings(
         merged_write.available_from,
@@ -2554,8 +2687,16 @@ async fn module_assignment_patch_handler(
         return Err(AppError::NotFound);
     };
 
+    let viewer_can_reveal =
+        enrollment::user_is_course_creator(&state.pool, &course_code, user.user_id).await?;
+
     Ok(Json(module_assignment_response_for_api(
-        item_id, &row, true, None,
+        item_id,
+        &row,
+        true,
+        None,
+        viewer_can_reveal,
+        true,
     )))
 }
 
@@ -4028,6 +4169,43 @@ async fn gradebook_grades_put_handler(
         }
     }
 
+    if state.moderated_grading_enabled {
+        let touched_items: HashSet<Uuid> = ops.iter().map(|(_, item_id, _, _)| *item_id).collect();
+        for item_id in touched_items {
+            let Some(asn) =
+                course_module_assignments::get_for_course_item(&state.pool, course_id, item_id)
+                    .await?
+            else {
+                continue;
+            };
+            if !asn.moderated_grading {
+                continue;
+            }
+            let is_creator =
+                enrollment::user_is_course_creator(&state.pool, &course_code, user.user_id)
+                    .await?;
+            let is_mod = asn.moderator_user_id == Some(user.user_id);
+            if !is_creator && !is_mod {
+                return Err(AppError::Forbidden);
+            }
+            let n_flagged = moderated_grading_repo::count_flagged_unreconciled(
+                &state.pool,
+                course_id,
+                item_id,
+                asn.points_worth.unwrap_or(100).max(1),
+                asn.moderation_threshold_pct,
+            )
+            .await?;
+            if n_flagged > 0 {
+                return Err(AppError::UnprocessableEntity {
+                    message: format!(
+                        "This assignment uses moderated grading. {n_flagged} flagged submission(s) still need moderator reconciliation before gradebook changes can be saved."
+                    ),
+                });
+            }
+        }
+    }
+
     course_grades::upsert_and_delete(&state.pool, course_id, &ops).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -4646,6 +4824,7 @@ async fn get_handler(
         viewer_enrollment_roles,
         viewer_student_enrollment_id,
         annotations_enabled: state.annotation_enabled,
+        feedback_media_enabled: state.feedback_media_enabled,
     }))
 }
 

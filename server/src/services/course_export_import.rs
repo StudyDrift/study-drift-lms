@@ -618,6 +618,7 @@ async fn apply_module_bodies(
                         body.late_submission_policy.as_str(),
                         body.late_penalty_percent,
                         rubric_json.as_ref(),
+                        body.blind_grading,
                     )
                     .await?;
                     course_structure::set_assignment_due_at(pool, course_id, it.id, body.due_at)
@@ -734,6 +735,7 @@ async fn apply_module_bodies_for_new_items_only(
                         body.late_submission_policy.as_str(),
                         body.late_penalty_percent,
                         rubric_json.as_ref(),
+                        body.blind_grading,
                     )
                     .await?;
                     course_structure::set_assignment_due_at(pool, course_id, it.id, body.due_at)
@@ -935,6 +937,7 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                             late_submission_policy: row.late_submission_policy.clone(),
                             late_penalty_percent: row.late_penalty_percent,
                             rubric: row.rubric_json.clone(),
+                            blind_grading: row.blind_grading,
                         },
                     );
                 }

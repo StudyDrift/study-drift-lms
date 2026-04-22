@@ -41,6 +41,23 @@ pub struct ModuleContentPageResponse {
     /// Assignment only: optional rubric (criteria with point-band levels).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rubric: Option<RubricDefinition>,
+    /// Plan 3.3 — hide student identifiers from graders until identities are revealed.
+    #[serde(default)]
+    pub blind_grading: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identities_revealed_at: Option<DateTime<Utc>>,
+    /// True when the viewer may call `POST .../reveal-identities` (course creator only).
+    #[serde(default)]
+    pub viewer_can_reveal_identities: bool,
+    /// Plan 3.4 — multiple provisional graders (visible to course staff only).
+    #[serde(default)]
+    pub moderated_grading: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moderation_threshold_pct: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moderator_user_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provisional_grader_user_ids: Option<Vec<Uuid>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,4 +113,18 @@ pub struct UpdateModuleContentPageRequest {
     /// Assignment only: omit to leave unchanged; JSON `null` clears the rubric.
     #[serde(default)]
     pub rubric: Option<Option<RubricDefinition>>,
+    /// Plan 3.3 — omit to leave unchanged.
+    #[serde(default)]
+    pub blind_grading: Option<bool>,
+    /// Plan 3.4 — omit to leave unchanged.
+    #[serde(default)]
+    pub moderated_grading: Option<bool>,
+    #[serde(default)]
+    pub moderation_threshold_pct: Option<i32>,
+    /// JSON `null` clears moderator when moderated grading is off or explicitly cleared.
+    #[serde(default)]
+    pub moderator_user_id: Option<Option<Uuid>>,
+    /// Replace the full grader list when present.
+    #[serde(default)]
+    pub provisional_grader_user_ids: Option<Vec<Uuid>>,
 }

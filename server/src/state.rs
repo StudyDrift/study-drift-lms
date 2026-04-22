@@ -79,4 +79,10 @@ pub struct AppState {
     pub lti: Option<Arc<LtiRuntime>>,
     /// Plan 3.1 — inline PDF/image annotation APIs + grader surfaces.
     pub annotation_enabled: bool,
+    /// Plan 3.2 — instructor A/V feedback on assignment submissions.
+    pub feedback_media_enabled: bool,
+    /// Plan 3.3 — server-side PII redaction for blind grading.
+    pub blind_grading_enabled: bool,
+    /// Plan 3.4 — provisional graders + moderator reconciliation APIs.
+    pub moderated_grading_enabled: bool,
 }
