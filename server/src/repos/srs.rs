@@ -437,7 +437,7 @@ pub async fn avg_easiness_for_user(
     pool: &PgPool,
     user_id: Uuid,
 ) -> Result<Option<f64>, sqlx::Error> {
-    let v: Option<f64> = sqlx::query_scalar(&format!(
+    let v: Option<f64> = sqlx::query_scalar::<_, Option<f64>>(&format!(
         r#"
         SELECT AVG((s.easiness_factor)::float8)
         FROM {} s
@@ -450,7 +450,7 @@ pub async fn avg_easiness_for_user(
         schema::COURSES
     ))
     .bind(user_id)
-    .fetch_optional(pool)
+    .fetch_one(pool)
     .await?;
     Ok(v)
 }

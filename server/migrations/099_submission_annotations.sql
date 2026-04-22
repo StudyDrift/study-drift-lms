@@ -1,6 +1,6 @@
 -- Inline grader annotations (highlights, drawings, text, pins) keyed to assignment submissions.
 
-CREATE TABLE course.submission_annotations (
+CREATE TABLE IF NOT EXISTS course.submission_annotations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     submission_id UUID NOT NULL REFERENCES course.module_assignment_submissions (id) ON DELETE CASCADE,
     annotator_id UUID NOT NULL REFERENCES "user".users (id) ON DELETE CASCADE,
@@ -16,7 +16,7 @@ CREATE TABLE course.submission_annotations (
     CONSTRAINT submission_annotations_idem UNIQUE (submission_id, annotator_id, client_id)
 );
 
-CREATE INDEX idx_submission_annotations_submission
+CREATE INDEX IF NOT EXISTS idx_submission_annotations_submission
     ON course.submission_annotations (submission_id)
     WHERE deleted_at IS NULL;
 

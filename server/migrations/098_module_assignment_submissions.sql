@@ -1,6 +1,6 @@
 -- Student file/text submissions for module assignments (SpeedGrader / annotation substrate).
 
-CREATE TABLE course.module_assignment_submissions (
+CREATE TABLE IF NOT EXISTS course.module_assignment_submissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     course_id UUID NOT NULL REFERENCES course.courses (id) ON DELETE CASCADE,
     module_item_id UUID NOT NULL REFERENCES course.course_structure_items (id) ON DELETE CASCADE,
@@ -11,7 +11,7 @@ CREATE TABLE course.module_assignment_submissions (
     CONSTRAINT module_assignment_submissions_unique_student UNIQUE (module_item_id, submitted_by)
 );
 
-CREATE INDEX idx_module_assignment_submissions_course_item
+CREATE INDEX IF NOT EXISTS idx_module_assignment_submissions_course_item
     ON course.module_assignment_submissions (course_id, module_item_id, submitted_at DESC);
 
 COMMENT ON TABLE course.module_assignment_submissions IS
