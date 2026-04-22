@@ -10,6 +10,7 @@ pub mod course_files;
 pub mod courses;
 pub mod diagnostic;
 pub mod health;
+pub mod imports;
 pub mod learners;
 pub mod lti;
 pub mod me;

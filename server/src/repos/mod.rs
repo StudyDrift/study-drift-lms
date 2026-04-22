@@ -33,6 +33,7 @@ pub mod misconceptions;
 pub mod module_assignment_submissions;
 pub mod password_reset;
 pub mod question_bank;
+pub mod qti_import;
 pub mod quiz_attempts;
 pub mod rbac;
 pub mod recommendations;

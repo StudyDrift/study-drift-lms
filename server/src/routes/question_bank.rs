@@ -194,9 +194,9 @@ async fn list_questions_handler(
 fn normalize_create_status(s: Option<String>) -> Result<String, AppError> {
     let v = s.unwrap_or_else(|| "draft".into());
     let t = v.trim();
-    if !matches!(t, "draft" | "active" | "retired") {
+    if !matches!(t, "draft" | "active" | "retired" | "needs_review") {
         return Err(AppError::invalid_input(
-            "status must be draft, active, or retired.",
+            "status must be draft, active, retired, or needs_review.",
         ));
     }
     Ok(t.to_string())
@@ -421,7 +421,10 @@ async fn update_question_handler(
         .as_deref()
         .map(|s| s.trim().to_string())
         .unwrap_or(cur.status.clone());
-    if !matches!(status.as_str(), "draft" | "active" | "retired") {
+    if !matches!(
+        status.as_str(),
+        "draft" | "active" | "retired" | "needs_review"
+    ) {
         return Err(AppError::invalid_input("Invalid status."));
     }
     let shared = req.shared.unwrap_or(cur.shared);

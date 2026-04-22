@@ -41,6 +41,7 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::courses::router())
         .merge(routes::assignment_grading::router())
         .merge(routes::question_bank::router())
+        .merge(routes::imports::router())
         .merge(routes::misconceptions::router())
         .merge(routes::surveys::router())
         .merge(routes::course_feed::router())
