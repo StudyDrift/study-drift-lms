@@ -50,6 +50,7 @@ pub mod srs;
 pub mod standards;
 pub mod student_accommodations;
 pub mod submission_annotations;
+pub mod submission_versions;
 pub mod syllabus_acceptance;
 pub mod syllabus_markups;
 pub mod system_prompts;

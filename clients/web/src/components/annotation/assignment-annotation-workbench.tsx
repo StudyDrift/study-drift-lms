@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   deleteSubmissionAnnotation,
   downloadSubmissionAnnotatedPdf,
@@ -8,16 +8,20 @@ import {
   fetchSubmissionAnnotations,
   fetchSubmissionFeedbackMedia,
   fetchSubmissionOriginality,
-  fetchSubmissionOriginalityEmbedUrl,
+  fetchSubmissionOriginalityEmbed,
+  fetchSubmissionVersions,
   postProvisionalGrade,
+  postRequestAssignmentRevision,
   postSubmissionAnnotation,
   revealModuleAssignmentIdentities,
   uploadModuleAssignmentSubmissionFile,
   type ModuleAssignmentSubmissionApi,
   type OriginalityReportApi,
+  type OriginalityReportSummary,
   type PostSubmissionAnnotationInput,
   type SubmissionAnnotationApi,
   type SubmissionFeedbackMediaApi,
+  type SubmissionVersionApi,
 } from '../../lib/courses-api'
 import { OriginalityBadge } from '../grading/OriginalityBadge'
 import { OriginalityReportViewer } from '../grading/OriginalityReportViewer'
@@ -32,6 +36,8 @@ import { SubmissionNavigator, type GradedFilter } from './submission-navigator'
 export type AssignmentAnnotationWorkbenchProps = {
   courseCode: string
   itemId: string
+  /** Assignment title (in-app message / banners). */
+  assignmentTitle?: string
   /** `staff` uses roster navigation; `student` loads only the viewer’s submission. */
   mode: 'staff' | 'student'
   submissionAllowsFile: boolean
@@ -54,6 +60,8 @@ export type AssignmentAnnotationWorkbenchProps = {
   provisionalGraderUserIds?: string[]
   /** Plan 3.5 — from assignment settings; when not `disabled`, originality API is polled. */
   originalityDetection?: 'disabled' | 'plagiarism' | 'ai' | 'both'
+  /** Plan 3.13 — server `RESUBMISSION_WORKFLOW_ENABLED`. */
+  resubmissionWorkflowEnabled?: boolean
 }
 
 export function AssignmentAnnotationWorkbench({
@@ -70,6 +78,8 @@ export function AssignmentAnnotationWorkbench({
   assignmentPointsWorth = null,
   provisionalGraderUserIds = [],
   originalityDetection = 'disabled',
+  assignmentTitle = 'Assignment',
+  resubmissionWorkflowEnabled = false,
 }: AssignmentAnnotationWorkbenchProps) {
   const annotationsActive = annotationsActiveProp ?? submissionAllowsFile
   const [panel, setPanel] = useState<'document' | 'media'>('document')
@@ -89,13 +99,76 @@ export function AssignmentAnnotationWorkbench({
   const [originalityReports, setOriginalityReports] = useState<OriginalityReportApi[] | null>(null)
   const [originalityViewerOpen, setOriginalityViewerOpen] = useState(false)
   const [originalityEmbedUrl, setOriginalityEmbedUrl] = useState<string | null>(null)
+  const [originalitySummary, setOriginalitySummary] = useState<OriginalityReportSummary | null>(null)
+  const [originalityViewSummaryOnly, setOriginalityViewSummaryOnly] = useState(false)
+  const [submissionVersions, setSubmissionVersions] = useState<SubmissionVersionApi[]>([])
+  const [viewVersionNumber, setViewVersionNumber] = useState<number | null>(null)
+  const [revisionFormOpen, setRevisionFormOpen] = useState(false)
+  const [revDueLocal, setRevDueLocal] = useState('')
+  const [revFeedback, setRevFeedback] = useState('')
+  const [revisionBusy, setRevisionBusy] = useState(false)
+  const [deadlineNow, setDeadlineNow] = useState(() => Date.now())
 
   const originalityActive = originalityDetection !== 'disabled'
 
   const current: ModuleAssignmentSubmissionApi | null =
     mode === 'staff' ? (submissions[idx] ?? null) : mine
-
   const readOnly = mode === 'student'
+
+  useEffect(() => {
+    setViewVersionNumber(null)
+  }, [current?.id])
+
+  useEffect(() => {
+    if (!resubmissionWorkflowEnabled || mode !== 'staff' || !current?.id) {
+      setSubmissionVersions([])
+      return
+    }
+    let c = true
+    void (async () => {
+      try {
+        const v = await fetchSubmissionVersions(courseCode, itemId, current.id)
+        if (!c) return
+        setSubmissionVersions(v)
+        setViewVersionNumber((prev) => {
+          if (prev == null) return v.length > 0 ? (v[v.length - 1]?.versionNumber ?? null) : null
+          return v.some((x) => x.versionNumber === prev) ? prev : (v[v.length - 1]?.versionNumber ?? null)
+        })
+      } catch {
+        if (c) setSubmissionVersions([])
+      }
+    })()
+    return () => {
+      c = false
+    }
+  }, [resubmissionWorkflowEnabled, courseCode, itemId, mode, current?.id])
+
+  const versionForView = useMemo((): SubmissionVersionApi | null => {
+    if (mode !== 'staff' || !resubmissionWorkflowEnabled || !current?.id || submissionVersions.length === 0) {
+      return null
+    }
+    const n = viewVersionNumber ?? submissionVersions[submissionVersions.length - 1]?.versionNumber
+    if (n == null) return null
+    return submissionVersions.find((v) => v.versionNumber === n) ?? null
+  }, [current?.id, mode, resubmissionWorkflowEnabled, submissionVersions, viewVersionNumber])
+
+  const viewIsLatest =
+    versionForView == null
+      ? true
+      : versionForView.versionNumber === (current?.versionNumber ?? 0)
+
+  const displayFilePath = versionForView ? versionForView.attachmentContentPath : current?.attachmentContentPath
+  const displayMimeType = versionForView ? versionForView.attachmentMimeType : current?.attachmentMimeType
+  const readOnlyDocument =
+    readOnly || (mode === 'staff' && resubmissionWorkflowEnabled && !viewIsLatest)
+
+  useEffect(() => {
+    if (mode === 'student' && mine?.resubmissionRequested && mine.revisionDueAt) {
+      const t = window.setInterval(() => setDeadlineNow(Date.now()), 15_000)
+      return () => clearInterval(t)
+    }
+    return
+  }, [mode, mine?.resubmissionRequested, mine?.revisionDueAt])
 
   const reloadStaffList = useCallback(async () => {
     if (mode !== 'staff') return
@@ -160,13 +233,25 @@ export function AssignmentAnnotationWorkbench({
       setAnnotations([])
       return
     }
+    if (mode === 'staff' && resubmissionWorkflowEnabled && !viewIsLatest) {
+      setAnnotations([])
+      return
+    }
     try {
       const list = await fetchSubmissionAnnotations(courseCode, itemId, current.id)
       setAnnotations(list)
     } catch {
       setAnnotations([])
     }
-  }, [annotationsActive, courseCode, itemId, current?.id])
+  }, [
+    annotationsActive,
+    courseCode,
+    itemId,
+    current?.id,
+    mode,
+    resubmissionWorkflowEnabled,
+    viewIsLatest,
+  ])
 
   const reloadMedia = useCallback(async () => {
     if (!feedbackMediaEnabled || !current?.id) {
@@ -218,7 +303,7 @@ export function AssignmentAnnotationWorkbench({
   }, [annotationsActive, feedbackMediaEnabled])
 
   async function persistAnnotation(payload: PostSubmissionAnnotationInput) {
-    if (!current?.id || readOnly) return
+    if (!current?.id || readOnlyDocument) return
     setBusy(true)
     try {
       await postSubmissionAnnotation(courseCode, itemId, current.id, payload)
@@ -281,7 +366,7 @@ export function AssignmentAnnotationWorkbench({
   }
 
   async function onDeleteAnnotation(id: string) {
-    if (!current?.id || readOnly) return
+    if (!current?.id || readOnlyDocument) return
     if (!window.confirm('Delete this annotation?')) return
     setBusy(true)
     try {
@@ -294,8 +379,47 @@ export function AssignmentAnnotationWorkbench({
     }
   }
 
+  async function onRequestRevision() {
+    if (!current?.id) return
+    setRevisionBusy(true)
+    try {
+      let revisionDueAt: string | null = null
+      if (revDueLocal.trim()) {
+        const d = new Date(revDueLocal)
+        if (Number.isNaN(d.getTime())) {
+          window.alert('Use a valid date and time for the revision deadline.')
+          return
+        }
+        revisionDueAt = d.toISOString()
+      }
+      await postRequestAssignmentRevision(courseCode, itemId, current.id, {
+        revisionDueAt,
+        revisionFeedback: revFeedback.trim() || null,
+      })
+      setRevisionFormOpen(false)
+      setRevDueLocal('')
+      setRevFeedback('')
+      await reloadStaffList()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Request failed.')
+    } finally {
+      setRevisionBusy(false)
+    }
+  }
+
   async function onUploadStudentFile(file: File | null) {
     if (!file || mode !== 'student') return
+    if (
+      resubmissionWorkflowEnabled &&
+      mine &&
+      mine.attachmentFileId &&
+      !mine.resubmissionRequested
+    ) {
+      window.alert(
+        'Resubmission is not open. Your instructor must request a revision before you can upload a new file.',
+      )
+      return
+    }
     setBusy(true)
     try {
       await uploadModuleAssignmentSubmissionFile(courseCode, itemId, file)
@@ -345,12 +469,26 @@ export function AssignmentAnnotationWorkbench({
     if (!current?.id) return
     setBusy(true)
     try {
-      let url = await fetchSubmissionOriginalityEmbedUrl(courseCode, itemId, current.id)
-      if (!/^https?:\/\//i.test(url)) {
-        url = `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`
+      const { embedUrl, summary } = await fetchSubmissionOriginalityEmbed(courseCode, itemId, current.id)
+      if (embedUrl) {
+        let url = embedUrl
+        if (!/^https?:\/\//i.test(url)) {
+          url = `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`
+        }
+        setOriginalityEmbedUrl(url)
+        setOriginalitySummary(summary)
+        setOriginalityViewSummaryOnly(false)
+        setOriginalityViewerOpen(true)
+        return
       }
-      setOriginalityEmbedUrl(url)
-      setOriginalityViewerOpen(true)
+      if (summary) {
+        setOriginalityEmbedUrl(null)
+        setOriginalitySummary(summary)
+        setOriginalityViewSummaryOnly(true)
+        setOriginalityViewerOpen(true)
+        return
+      }
+      window.alert('No originality report is available yet for this submission.')
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'No originality report is available yet.')
     } finally {
@@ -406,6 +544,21 @@ export function AssignmentAnnotationWorkbench({
         </div>
         {mode === 'staff' ? (
           <div className="flex flex-wrap items-center gap-2">
+            {resubmissionWorkflowEnabled && current && current.submittedBy && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setRevisionFormOpen((o) => !o)
+                  if (!revDueLocal && !revFeedback) {
+                    setRevDueLocal('')
+                  }
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800/80"
+              >
+                Request revision
+              </button>
+            )}
             {canRevealIdentities ? (
               <button
                 type="button"
@@ -440,14 +593,108 @@ export function AssignmentAnnotationWorkbench({
         ) : null}
       </div>
 
-      {originalityEmbedUrl ? (
+      {revisionFormOpen && resubmissionWorkflowEnabled && mode === 'staff' && current?.id && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-4 dark:border-neutral-600 dark:bg-neutral-900/60">
+          <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">
+            Request a revision: {assignmentTitle}
+          </p>
+          <p className="mt-1 text-xs text-slate-600 dark:text-neutral-400">
+            The student can resubmit a new file while a revision is open. Optional: set a resubmission
+            deadline.
+          </p>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="text-sm text-slate-700 dark:text-neutral-200">
+              <span className="mb-1 block text-xs font-semibold text-slate-500 dark:text-neutral-400">
+                Resubmit by
+              </span>
+              <input
+                type="datetime-local"
+                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-neutral-600 dark:bg-neutral-950"
+                value={revDueLocal}
+                onChange={(e) => setRevDueLocal(e.target.value)}
+                disabled={revisionBusy}
+              />
+            </label>
+            <div className="min-w-0 flex-1">
+              <span className="mb-1 block text-xs font-semibold text-slate-500 dark:text-neutral-400">
+                Feedback
+              </span>
+              <textarea
+                className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-600 dark:bg-neutral-950"
+                value={revFeedback}
+                onChange={(e) => setRevFeedback(e.target.value)}
+                rows={3}
+                disabled={revisionBusy}
+                placeholder="What should the student change before resubmitting?"
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              disabled={revisionBusy}
+              onClick={() => void onRequestRevision()}
+            >
+              {revisionBusy ? 'Saving…' : 'Send revision request'}
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+              onClick={() => {
+                setRevisionFormOpen(false)
+                setRevDueLocal('')
+                setRevFeedback('')
+              }}
+              disabled={revisionBusy}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {resubmissionWorkflowEnabled && mode === 'staff' && submissionVersions.length > 0 && current?.id ? (
+        <div
+          className="flex flex-wrap gap-1 border-b border-slate-200 pb-1 dark:border-neutral-600"
+          role="tablist"
+          aria-label="Submission version"
+        >
+          {submissionVersions.map((v) => {
+            const active = (viewVersionNumber ?? submissionVersions[submissionVersions.length - 1]?.versionNumber) === v.versionNumber
+            return (
+              <button
+                key={v.versionNumber}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`rounded-t-md px-2.5 py-1.5 text-xs font-semibold ${
+                  active
+                    ? 'bg-slate-100 text-slate-900 dark:bg-neutral-800 dark:text-neutral-50'
+                    : 'text-slate-600 hover:bg-slate-50 dark:text-neutral-400 dark:hover:bg-neutral-800/60'
+                }`}
+                onClick={() => setViewVersionNumber(v.versionNumber)}
+                tabIndex={0}
+              >
+                Version {v.versionNumber}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {originalityViewerOpen ? (
         <OriginalityReportViewer
           open={originalityViewerOpen}
           onClose={() => {
             setOriginalityViewerOpen(false)
             setOriginalityEmbedUrl(null)
+            setOriginalitySummary(null)
+            setOriginalityViewSummaryOnly(false)
           }}
-          embedUrl={originalityEmbedUrl}
+          embedUrl={originalityEmbedUrl ?? ''}
+          storedSummary={originalitySummary}
+          viewStoredSummaryOnly={originalityViewSummaryOnly}
         />
       ) : null}
 
@@ -543,14 +790,59 @@ export function AssignmentAnnotationWorkbench({
         </p>
       ) : null}
 
+      {resubmissionWorkflowEnabled && mode === 'student' && mine?.resubmissionRequested ? (
+        <div
+          className="rounded-lg border border-amber-200 bg-amber-50/95 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          <p className="font-semibold">Revision requested for “{assignmentTitle}”</p>
+          {mine.revisionFeedback ? (
+            <p className="mt-1 text-amber-950/90 dark:text-amber-100/90">{mine.revisionFeedback}</p>
+          ) : null}
+          {mine.revisionDueAt ? (
+            <p className="mt-2" role="timer" aria-live="off">
+              <span className="text-xs font-medium uppercase text-amber-900/80 dark:text-amber-200/80">
+                Resubmit by:{' '}
+              </span>
+              {new Date(mine.revisionDueAt).toLocaleString(undefined, {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })}
+              {Number.isFinite(new Date(mine.revisionDueAt).getTime() - deadlineNow) ? (
+                <span className="ml-2 text-xs text-amber-900/70 dark:text-amber-200/80">
+                  (
+                  {new Date(mine.revisionDueAt).getTime() > deadlineNow
+                    ? `${Math.max(0, Math.floor((new Date(mine.revisionDueAt).getTime() - deadlineNow) / 60000))} min left`
+                    : 'deadline passed'}
+                  )
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {showDocPanel && mode === 'student' && submissionAllowsFile ? (
         <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm font-medium text-slate-700 dark:text-neutral-200">
-            <span className="mr-2">Upload file</span>
+          <label
+            className={`text-sm font-medium ${mine?.resubmissionRequested || !mine?.attachmentFileId ? 'text-slate-700 dark:text-neutral-200' : 'text-slate-400 dark:text-neutral-500'}`}
+          >
+            <span className="mr-2">
+              {mine?.resubmissionRequested
+                ? 'Resubmit file'
+                : resubmissionWorkflowEnabled && mine?.attachmentFileId
+                  ? 'Replace file (locked — revision not requested)'
+                  : 'Upload file'}
+            </span>
             <input
               type="file"
               accept=".pdf,image/png,image/jpeg,image/webp"
-              disabled={busy}
+              disabled={
+                busy ||
+                (Boolean(resubmissionWorkflowEnabled) &&
+                  Boolean(mine?.attachmentFileId) &&
+                  !mine?.resubmissionRequested)
+              }
               className="text-sm"
               onChange={(e) => void onUploadStudentFile(e.target.files?.[0] ?? null)}
             />
@@ -558,7 +850,7 @@ export function AssignmentAnnotationWorkbench({
         </div>
       ) : null}
 
-      {showDocPanel && panel === 'document' && current?.attachmentMimeType === 'application/pdf' && current.id ? (
+      {showDocPanel && panel === 'document' && displayMimeType === 'application/pdf' && current?.id ? (
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -578,31 +870,31 @@ export function AssignmentAnnotationWorkbench({
             onToolChange={setTool}
             colour={colour}
             onColourChange={setColour}
-            disabled={busy || !current?.attachmentFileId}
-            readOnly={readOnly}
+            disabled={busy || !(current?.attachmentFileId || displayFilePath)}
+            readOnly={readOnlyDocument}
           />
 
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
             <div className="min-w-0 flex-1">
               <AnnotationViewer
-                filePath={current?.attachmentContentPath ?? null}
-                mimeType={current?.attachmentMimeType ?? null}
-                readOnly={readOnly}
+                filePath={displayFilePath ?? null}
+                mimeType={displayMimeType ?? null}
+                readOnly={readOnlyDocument}
                 tool={tool}
                 colour={colour}
                 annotations={annotations}
-                onHighlightComplete={readOnly ? undefined : onHighlightComplete}
-                onDrawComplete={readOnly ? undefined : onDrawComplete}
-                onPinComplete={readOnly ? undefined : onPinComplete}
-                onTextBoxComplete={readOnly ? undefined : onTextBoxComplete}
+                onHighlightComplete={readOnlyDocument ? undefined : onHighlightComplete}
+                onDrawComplete={readOnlyDocument ? undefined : onDrawComplete}
+                onPinComplete={readOnlyDocument ? undefined : onPinComplete}
+                onTextBoxComplete={readOnlyDocument ? undefined : onTextBoxComplete}
               />
             </div>
             <AnnotationCommentPanel
               annotations={annotations}
               selectedId={selectedId}
               onSelect={setSelectedId}
-              readOnly={readOnly}
-              onDelete={readOnly ? undefined : onDeleteAnnotation}
+              readOnly={readOnlyDocument}
+              onDelete={readOnlyDocument ? undefined : onDeleteAnnotation}
             />
           </div>
         </>

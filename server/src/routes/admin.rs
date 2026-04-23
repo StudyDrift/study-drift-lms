@@ -1,13 +1,14 @@
 //! Admin-only maintenance endpoints.
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
-    routing::{post, put},
+    routing::{get, post, put},
     Json, Router,
 };
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -15,6 +16,7 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::http_auth::require_permission;
 use crate::repos::originality_platform_config;
+use crate::repos::originality_reports;
 use crate::services::irt_calibration_job;
 use crate::state::AppState;
 
@@ -29,6 +31,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/admin/originality-config",
             put(put_originality_config_handler),
+        )
+        .route(
+            "/api/v1/admin/users/{user_id}/dsar-export",
+            get(get_user_dsar_export_handler),
         )
 }
 
@@ -123,4 +129,34 @@ async fn put_originality_config_handler(
     };
     originality_platform_config::upsert_singleton(&state.pool, &write).await?;
     Ok(Json(json!({ "ok": true })))
+}
+
+/// FERPA-oriented export slice: includes per-submission originality report metadata (plan 3.14).
+async fn get_user_dsar_export_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _auth = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
+
+    let rows = originality_reports::list_for_user_ferpa(&state.pool, user_id).await?;
+    let items: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            json!({
+                "reportId": r.report_id,
+                "submissionId": r.submission_id,
+                "courseCode": r.course_code,
+                "moduleItemId": r.module_item_id,
+                "provider": r.provider,
+                "status": r.status,
+                "similarityPct": r.similarity_pct.as_ref().and_then(|d| d.to_f64()),
+                "aiProbability": r.ai_probability.as_ref().and_then(|d| d.to_f64()),
+                "reportDate": r.updated_at.to_rfc3339(),
+            })
+        })
+        .collect();
+    Ok(Json(
+        json!({ "userId": user_id, "originalityReports": items, "version": 1, "exportKind": "ferpa-slice" }),
+    ))
 }

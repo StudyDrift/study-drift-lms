@@ -1,5 +1,10 @@
 # Development stack: live reload without restarting containers.
 #
+# If the API never listens on 8080 (no "StudyDrift API listening" in server logs) but `cargo` looks
+# "up to date", the `server_target` volume may still hold a stale default binary. Remove the volume
+# once and rebuild:  docker volume rm <project>_server_target  (e.g. lextures_server_target)
+# then:  docker compose -f docker-compose.dev.yml up --build
+#
 # Prefer this single command (includes the base stack so Postgres + port 8080 exist):
 #   docker compose -f docker-compose.dev.yml up --build
 #

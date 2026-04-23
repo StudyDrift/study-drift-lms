@@ -189,6 +189,7 @@ export default function CourseModuleAssignmentPage() {
   const [markups, setMarkups] = useState<ContentPageMarkup[]>([])
   const [viewerEnrollmentRoles, setViewerEnrollmentRoles] = useState<string[]>([])
   const [annotationsEnabled, setAnnotationsEnabled] = useState(false)
+  const [resubmissionWorkflowEnabled, setResubmissionWorkflowEnabled] = useState(false)
   const [feedbackMediaEnabled, setFeedbackMediaEnabled] = useState(false)
   const [blindGrading, setBlindGrading] = useState(false)
   const [identitiesRevealedAt, setIdentitiesRevealedAt] = useState<string | null>(null)
@@ -305,6 +306,7 @@ export default function CourseModuleAssignmentPage() {
       setMdCustom(courseRow.markdownThemeCustom)
       setViewerEnrollmentRoles(courseRow.viewerEnrollmentRoles ?? [])
       setAnnotationsEnabled(Boolean(courseRow.annotationsEnabled))
+      setResubmissionWorkflowEnabled(Boolean(courseRow.resubmissionWorkflowEnabled))
       setFeedbackMediaEnabled(Boolean(courseRow.feedbackMediaEnabled))
       recordLastVisitedModuleItem(courseCode, {
         itemId,
@@ -332,6 +334,7 @@ export default function CourseModuleAssignmentPage() {
       setMarkups([])
       setViewerEnrollmentRoles([])
       setAnnotationsEnabled(false)
+      setResubmissionWorkflowEnabled(false)
       setBlindGrading(false)
       setDraftBlindGrading(false)
       setModeratedGrading(false)
@@ -732,10 +735,12 @@ export default function CourseModuleAssignmentPage() {
               <AssignmentAnnotationWorkbench
                 courseCode={courseCode}
                 itemId={itemId}
+                assignmentTitle={title}
                 mode={viewerIsCourseStaff ? 'staff' : 'student'}
                 submissionAllowsFile={submissionAllowFileUpload}
                 annotationsActive={Boolean(annotationsEnabled && submissionAllowFileUpload)}
                 feedbackMediaEnabled={Boolean(feedbackMediaEnabled)}
+                resubmissionWorkflowEnabled={resubmissionWorkflowEnabled}
                 blindGradingActive={
                   Boolean(blindGrading && !identitiesRevealedAt && viewerIsCourseStaff)
                 }

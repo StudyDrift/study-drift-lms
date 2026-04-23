@@ -97,4 +97,6 @@ pub struct AppState {
     pub gradebook_csv_enabled: bool,
     /// Plan 3.11 — in-memory pending import batches; expire after 30 minutes.
     pub gradebook_import_pending: Arc<Mutex<HashMap<Uuid, GradebookImportPending>>>,
+    /// Plan 3.13 — instructor revision requests and versioned resubmissions.
+    pub resubmission_workflow_enabled: bool,
 }

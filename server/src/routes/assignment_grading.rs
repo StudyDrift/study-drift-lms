@@ -11,6 +11,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use chrono::Utc;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -21,12 +22,15 @@ use crate::repos::course_files;
 use crate::repos::course_module_assignments;
 use crate::repos::course_structure;
 use crate::repos::enrollment;
+use crate::repos::grade_audit_events;
 use crate::repos::module_assignment_submissions::{self, GradedFilter, SubmissionRow};
 use crate::repos::submission_annotations::{self, AnnotationRow, AnnotationUpsertWrite};
+use crate::repos::submission_versions;
 use crate::services::course_image_upload::{
     course_file_content_path, ingest_multipart_submission_document_field,
     persist_course_submission_attachment,
 };
+use crate::services::grading::resubmission;
 use crate::services::originality::spawn_originality_detection_job;
 use crate::routes::blind_grading_redaction;
 use crate::services::submission_annotated_pdf;
@@ -133,6 +137,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/assignments/{item_id}/submissions/{submission_id}",
             get(get_submission_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/assignments/{item_id}/submissions/{submission_id}/request-revision",
+            post(request_revision_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/assignments/{item_id}/submissions/{submission_id}/versions",
+            get(list_submission_versions_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/assignments/{item_id}/submissions/{submission_id}/annotations",
@@ -254,6 +266,13 @@ struct SubmissionResponse {
     attachment_content_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     attachment_mime_type: Option<String>,
+    /// Per-student revision state (plan 3.13).
+    resubmission_requested: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision_due_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision_feedback: Option<String>,
+    version_number: i32,
 }
 
 fn submission_to_response(
@@ -284,7 +303,89 @@ fn submission_to_response(
             .attachment_file_id
             .map(|fid| course_file_content_path(course_code, fid)),
         attachment_mime_type: file.map(|f| f.mime_type.clone()),
+        resubmission_requested: row.resubmission_requested,
+        revision_due_at: row.revision_due_at,
+        revision_feedback: row.revision_feedback.clone(),
+        version_number: row.version_number,
     }
+}
+
+/// Persists a new or replacement file, enforcing plan 3.13 when enabled.
+async fn persist_submission_file(
+    state: &AppState,
+    course_id: Uuid,
+    item_id: Uuid,
+    submitted_by: Uuid,
+    actor_user_id: Uuid,
+    new_file_id: Uuid,
+) -> Result<SubmissionRow, AppError> {
+    let now = Utc::now();
+    let existing = module_assignment_submissions::get_for_course_item_user(
+        &state.pool,
+        course_id,
+        item_id,
+        submitted_by,
+    )
+    .await?;
+    if !state.resubmission_workflow_enabled {
+        return Ok(
+            module_assignment_submissions::upsert_attachment(
+                &state.pool,
+                course_id,
+                item_id,
+                submitted_by,
+                new_file_id,
+            )
+            .await?,
+        );
+    }
+    let Some(ex) = existing else {
+        return Ok(
+            module_assignment_submissions::upsert_attachment(
+                &state.pool,
+                course_id,
+                item_id,
+                submitted_by,
+                new_file_id,
+            )
+            .await?,
+        );
+    };
+    resubmission::student_may_resubmit(now, &ex)?;
+    let mut tx = state.pool.begin().await?;
+    let opt = module_assignment_submissions::resubmit_versioned_in_transaction(
+        &mut tx, now, course_id, ex.id, new_file_id,
+    )
+    .await?;
+    let Some(row) = opt else {
+        return Err(AppError::UnprocessableEntity {
+            message: "Could not resubmit. Check that a revision is still open.".into(),
+        });
+    };
+    grade_audit_events::insert(
+        &mut *tx,
+        course_id,
+        item_id,
+        submitted_by,
+        Some(actor_user_id),
+        "resubmission_received",
+        None,
+        None,
+        None,
+        None,
+        Some("Student resubmitted a new file version."),
+    )
+    .await?;
+    tx.commit().await?;
+    tracing::info!(
+        target: "lextures.audit",
+        event = "resubmission_received",
+        course_id = %course_id,
+        assignment_id = %item_id,
+        student_id = %submitted_by,
+        "resubmission stored"
+    );
+    Ok(row)
 }
 
 async fn list_submissions_handler(
@@ -428,11 +529,12 @@ async fn post_submission_json_handler(
         }
     }
 
-    let row = module_assignment_submissions::upsert_attachment(
-        &state.pool,
+    let row = persist_submission_file(
+        &state,
         course_id,
         item_id,
         submitted_by,
+        user.user_id,
         file_row.id,
     )
     .await?;
@@ -509,10 +611,11 @@ async fn post_submission_upload_handler(
     )
     .await?;
 
-    let row = module_assignment_submissions::upsert_attachment(
-        &state.pool,
+    let row = persist_submission_file(
+        &state,
         course_id,
         item_id,
+        user.user_id,
         user.user_id,
         upload.id,
     )
@@ -611,6 +714,149 @@ async fn get_submission_handler(
     };
     let resp = submission_to_response(&course_code, &row, file.as_ref(), redact, rank);
     Ok(Json(json!({ "submission": resp })))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequestRevisionBody {
+    #[serde(default)]
+    revision_due_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default)]
+    revision_feedback: Option<String>,
+}
+
+async fn request_revision_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, submission_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+    Json(body): Json<RequestRevisionBody>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    require_annotation_feature(&state)?;
+    if !state.resubmission_workflow_enabled {
+        return Err(AppError::NotFound);
+    }
+    let user = auth_user(&state, &headers)?;
+    let ok = enrollment::user_has_access(&state.pool, &course_code, user.user_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    if !enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    let course_id = resolve_course_id(&state, &course_code).await?;
+    let Some(row) =
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    if row.module_item_id != item_id {
+        return Err(AppError::NotFound);
+    }
+    let feedback = body
+        .revision_feedback
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    resubmission::request_revision(
+        &state,
+        &state.pool,
+        course_id,
+        &course_code,
+        item_id,
+        user.user_id,
+        row.submitted_by,
+        &row,
+        body.revision_due_at,
+        feedback,
+    )
+    .await?;
+    let row2 = module_assignment_submissions::get_by_id(&state.pool, submission_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let file = if let Some(fid) = row2.attachment_file_id {
+        course_files::get_for_course(&state.pool, &course_code, fid).await?
+    } else {
+        None
+    };
+    let resp = submission_to_response(&course_code, &row2, file.as_ref(), false, None);
+    Ok(Json(json!({ "ok": true, "submission": resp })))
+}
+
+async fn list_submission_versions_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id, submission_id)): Path<(String, Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, AppError> {
+    require_annotation_feature(&state)?;
+    if !state.resubmission_workflow_enabled {
+        return Err(AppError::NotFound);
+    }
+    let user = auth_user(&state, &headers)?;
+    let ok = enrollment::user_has_access(&state.pool, &course_code, user.user_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    let staff = enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await?;
+    let course_id = resolve_course_id(&state, &course_code).await?;
+    let Some(row) =
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
+    else {
+        return Err(AppError::NotFound);
+    };
+    if row.module_item_id != item_id {
+        return Err(AppError::NotFound);
+    }
+    if !can_view_submission(user.user_id, staff, &row) {
+        return Err(AppError::Forbidden);
+    }
+    let archived = submission_versions::list_for_student_item(
+        &state.pool,
+        course_id,
+        item_id,
+        row.submitted_by,
+    )
+    .await?;
+    let mut versions: Vec<serde_json::Value> = Vec::new();
+    for av in archived {
+        let file = if let Some(fid) = av.attachment_file_id {
+            course_files::get_for_course(&state.pool, &course_code, fid).await?
+        } else {
+            None
+        };
+        versions.push(resubmission::version_json(
+            av.version_number,
+            av.submitted_at,
+            av.attachment_file_id,
+            file.map(|f| f.mime_type.clone()),
+            &course_code,
+        ));
+    }
+    let file = if let Some(fid) = row.attachment_file_id {
+        course_files::get_for_course(&state.pool, &course_code, fid).await?
+    } else {
+        None
+    };
+    versions.push(resubmission::version_json(
+        row.version_number,
+        row.submitted_at,
+        row.attachment_file_id,
+        file.map(|f| f.mime_type.clone()),
+        &course_code,
+    ));
+    versions.sort_by(|a, b| {
+        let na = a
+            .get("versionNumber")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        let nb = b
+            .get("versionNumber")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        na.cmp(&nb)
+    });
+    Ok(Json(json!({ "versions": versions })))
 }
 
 #[derive(Debug, Serialize)]

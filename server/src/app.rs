@@ -97,6 +97,7 @@ mod tests {
             originality_stub_external: false,
             grade_posting_policies_enabled: true,
             gradebook_csv_enabled: false,
+            resubmission_workflow_enabled: false,
             gradebook_import_pending: Arc::new(Mutex::new(HashMap::new())),
         }
     }

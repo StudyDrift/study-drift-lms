@@ -52,6 +52,8 @@ pub struct Config {
     pub grade_posting_policies_enabled: bool,
     /// Plan 3.11 — bulk gradebook CSV. Default off; set `GRADEBOOK_CSV_ENABLED=1` to enable.
     pub gradebook_csv_enabled: bool,
+    /// Plan 3.13 — resubmission workflow. Default off; set `RESUBMISSION_WORKFLOW_ENABLED=1` to enable.
+    pub resubmission_workflow_enabled: bool,
 }
 
 const DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES: &[&str] = &["instructure.com"];
@@ -280,6 +282,14 @@ impl Config {
             Some("1") | Some("true") | Some("yes") | Some("on")
         );
 
+        let resubmission_workflow_enabled = matches!(
+            env::var("RESUBMISSION_WORKFLOW_ENABLED")
+                .ok()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("1") | Some("true") | Some("yes") | Some("on")
+        );
+
         Ok(Self {
             database_url,
             jwt_secret,
@@ -305,6 +315,7 @@ impl Config {
             originality_stub_external,
             grade_posting_policies_enabled,
             gradebook_csv_enabled,
+            resubmission_workflow_enabled,
         })
     }
 }

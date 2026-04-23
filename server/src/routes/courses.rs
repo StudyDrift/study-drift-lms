@@ -6061,6 +6061,7 @@ async fn get_handler(
         viewer_student_enrollment_id,
         annotations_enabled: state.annotation_enabled,
         feedback_media_enabled: state.feedback_media_enabled,
+        resubmission_workflow_enabled: state.resubmission_workflow_enabled,
     }))
 }
 

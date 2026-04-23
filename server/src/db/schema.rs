@@ -36,6 +36,7 @@ pub const SETTINGS_SYSTEM_PROMPTS: &str = "settings.system_prompts";
 pub const SETTINGS_SYSTEM_PROMPTS_AUDIT: &str = "settings.system_prompts_audit";
 pub const COURSE_FILES: &str = "course.course_files";
 pub const MODULE_ASSIGNMENT_SUBMISSIONS: &str = "course.module_assignment_submissions";
+pub const SUBMISSION_VERSIONS: &str = "course.submission_versions";
 pub const ORIGINALITY_REPORTS: &str = "course.originality_reports";
 pub const ORIGINALITY_PLATFORM_CONFIG: &str = "settings.originality_platform_config";
 pub const PROVISIONAL_GRADES: &str = "course.provisional_grades";

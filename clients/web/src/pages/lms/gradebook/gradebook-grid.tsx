@@ -1579,7 +1579,11 @@ export function GradebookGrid({
                             (col.kind === 'assignment' || col.kind === 'quiz' || col.kind === 'quiz_comprehensive') ? (
                               <button
                                 type="button"
-                                className="text-[11px] font-medium text-slate-600 hover:underline dark:text-neutral-400"
+                                tabIndex={isActive ? 0 : -1}
+                                aria-hidden={!isActive}
+                                className={`text-[11px] font-medium text-slate-600 hover:underline dark:text-neutral-400 ${
+                                  !isActive ? 'invisible pointer-events-none' : ''
+                                }`}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   onOpenGradeHistory(student.id, col.id)
@@ -1595,7 +1599,11 @@ export function GradebookGrid({
                               col.kind === 'quiz_comprehensive') ? (
                               <button
                                 type="button"
-                                className="text-[11px] font-medium text-slate-600 hover:underline dark:text-neutral-400"
+                                tabIndex={isActive ? 0 : -1}
+                                aria-hidden={!isActive}
+                                className={`text-[11px] font-medium text-slate-600 hover:underline dark:text-neutral-400 ${
+                                  !isActive ? 'invisible pointer-events-none' : ''
+                                }`}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   void onToggleExcused(student.id, col.id, !isExcused)

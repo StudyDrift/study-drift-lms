@@ -14,6 +14,14 @@ function actionLabel(a: string): string {
       return 'Grade taken back (hidden)'
     case 'deleted':
       return 'Score cleared'
+    case 'excused':
+      return 'Excused'
+    case 'unexcused':
+      return 'Unexcused'
+    case 'revision_requested':
+      return 'Revision requested'
+    case 'resubmission_received':
+      return 'Resubmission received'
     default:
       return a.replaceAll('_', ' ')
   }

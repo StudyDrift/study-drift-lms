@@ -130,6 +130,8 @@ export type CoursePublic = {
   annotationsEnabled?: boolean
   /** Server `FEEDBACK_MEDIA_ENABLED` — instructor A/V feedback on submissions (plan 3.2). */
   feedbackMediaEnabled?: boolean
+  /** Server `RESUBMISSION_WORKFLOW_ENABLED` — revision requests and versioned resubmissions (plan 3.13). */
+  resubmissionWorkflowEnabled?: boolean
 }
 
 export type StructurePathRule = {
@@ -3407,6 +3409,16 @@ export type OriginalityReportApi = {
   errorMessage?: string | null
 }
 
+/** Plan 3.14 — server-built fallback from stored report JSON + row metadata. */
+export type OriginalityReportSummary = {
+  provider: string
+  similarityPct: number | null
+  aiProbability: number | null
+  detectedAt?: string | null
+  fullReportUnavailable: boolean
+  fullReportUnavailableMessage?: string | null
+}
+
 function parseOriginalityReports(raw: unknown): OriginalityReportApi[] {
   if (!raw || typeof raw !== 'object') return []
   const reps = (raw as { reports?: unknown }).reports
@@ -3442,20 +3454,51 @@ export async function fetchSubmissionOriginality(
   return parseOriginalityReports(raw)
 }
 
-export async function fetchSubmissionOriginalityEmbedUrl(
+function parseOriginalityReportSummary(
+  o: unknown,
+): OriginalityReportSummary | null {
+  if (!o || typeof o !== 'object') return null
+  const s = o as Record<string, unknown>
+  return {
+    provider: typeof s.provider === 'string' ? s.provider : '',
+    similarityPct: typeof s.similarityPct === 'number' && Number.isFinite(s.similarityPct) ? s.similarityPct : null,
+    aiProbability:
+      typeof s.aiProbability === 'number' && Number.isFinite(s.aiProbability) ? s.aiProbability : null,
+    detectedAt: typeof s.detectedAt === 'string' ? s.detectedAt : null,
+    fullReportUnavailable: s.fullReportUnavailable === true,
+    fullReportUnavailableMessage:
+      typeof s.fullReportUnavailableMessage === 'string' ? s.fullReportUnavailableMessage : null,
+  }
+}
+
+/** Grader: embed path and/or stored summary (when provider link / token expired). */
+export async function fetchSubmissionOriginalityEmbed(
   courseCode: string,
   itemId: string,
   submissionId: string,
-): Promise<string> {
+): Promise<{ embedUrl: string | null; summary: OriginalityReportSummary | null }> {
   const url = `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/originality/embed-url`
   const res = await authorizedFetch(url)
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   const embedUrl = (raw as { embedUrl?: unknown }).embedUrl
-  if (typeof embedUrl !== 'string' || !embedUrl.trim()) {
-    throw new Error('No embed URL returned.')
-  }
-  return embedUrl.trim()
+  const s = (raw as { summary?: unknown }).summary
+  const u = typeof embedUrl === 'string' && embedUrl.trim() ? embedUrl.trim() : null
+  return { embedUrl: u, summary: parseOriginalityReportSummary(s) }
+}
+
+/** Learner / grader: server summary (visibility rules apply; plan 3.14). */
+export async function fetchSubmissionOriginalitySummary(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+): Promise<OriginalityReportSummary | null> {
+  const url = `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/originality/summary`
+  const res = await authorizedFetch(url)
+  const raw = await parseJson(res)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseOriginalityReportSummary((raw as { summary?: unknown }).summary)
 }
 
 /** Plan 3.4 — roster for moderator / grader pickers (course staff only). */
@@ -4279,6 +4322,20 @@ export type ModuleAssignmentSubmissionApi = {
   updatedAt: string
   attachmentContentPath?: string | null
   attachmentMimeType?: string | null
+  /** Plan 3.13 */
+  resubmissionRequested?: boolean
+  revisionDueAt?: string | null
+  revisionFeedback?: string | null
+  versionNumber?: number
+}
+
+/** One version from `/submissions/:id/versions` (plan 3.13). */
+export type SubmissionVersionApi = {
+  versionNumber: number
+  submittedAt: string
+  attachmentFileId: string | null
+  attachmentContentPath?: string | null
+  attachmentMimeType?: string | null
 }
 
 export type SubmissionAnnotationApi = {
@@ -4370,6 +4427,44 @@ export async function uploadModuleAssignmentSubmissionFile(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return raw as { submission: ModuleAssignmentSubmissionApi }
+}
+
+/** Plan 3.13 — staff requests a revision; student receives in-app message. */
+export async function postRequestAssignmentRevision(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+  body: { revisionDueAt?: string | null; revisionFeedback?: string | null },
+): Promise<{ ok: boolean; submission: ModuleAssignmentSubmissionApi }> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/request-revision`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        revisionDueAt: body.revisionDueAt ?? null,
+        revisionFeedback: body.revisionFeedback ?? null,
+      }),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as { ok: boolean; submission: ModuleAssignmentSubmissionApi }
+}
+
+/** Plan 3.13 — all file versions (archive + current). */
+export async function fetchSubmissionVersions(
+  courseCode: string,
+  itemId: string,
+  submissionId: string,
+): Promise<SubmissionVersionApi[]> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/assignments/${encodeURIComponent(itemId)}/submissions/${encodeURIComponent(submissionId)}/versions`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { versions?: SubmissionVersionApi[] }
+  return Array.isArray(o.versions) ? o.versions : []
 }
 
 export async function fetchSubmissionAnnotations(

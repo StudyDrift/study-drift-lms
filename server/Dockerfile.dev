@@ -14,10 +14,14 @@ RUN mkdir -p src/bin \
     && printf 'fn main() {}\n' > src/main.rs \
     && printf 'fn main() {}\n' > src/bin/migrate_question_bank.rs \
     && cargo build \
+    && rm -f target/debug/study_drift_server \
     && rm -rf src
 
 ENV RUST_LOG=debug
 EXPOSE 8080
 
 # --poll: reliable file events when the project is bind-mounted (e.g. Docker Desktop on macOS).
-CMD ["cargo", "watch", "-q", "-x", "run", "--poll"]
+# The named volume `server_target` is first populated from the image's `target/`. Remove the stub
+# `study_drift_server` (empty main) so the next `cargo` run always links the real `main.rs` from
+# the bind mount; otherwise a no-op build can re-run the wrong binary and nothing listens on 8080.
+CMD ["sh", "-c", "rm -f /app/target/debug/study_drift_server; exec cargo watch -q -x run --poll"]

@@ -40,6 +40,8 @@ pub struct CourseWithViewerResponse {
     pub annotations_enabled: bool,
     /// Server `FEEDBACK_MEDIA_ENABLED` — instructor A/V feedback on submissions (plan 3.2).
     pub feedback_media_enabled: bool,
+    /// Server `RESUBMISSION_WORKFLOW_ENABLED` — revision requests + resubmission (plan 3.13).
+    pub resubmission_workflow_enabled: bool,
 }
 
 #[derive(Debug, sqlx::FromRow, Serialize)]

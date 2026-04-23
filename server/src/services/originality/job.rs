@@ -1,17 +1,14 @@
-use std::path::PathBuf;
-
 use rust_decimal::Decimal;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::repos::course_files;
 use crate::repos::course_module_assignments;
 use crate::repos::module_assignment_submissions;
 use crate::repos::originality_platform_config;
 use crate::repos::originality_reports;
 use crate::services::ai::OpenRouterClient;
 use crate::services::originality::internal;
-use crate::services::originality::text_extract;
+use crate::services::originality::storage;
 use crate::state::AppState;
 
 const INTERNAL_MODEL_DEFAULT: &str = "openai/gpt-4o-mini";
@@ -84,8 +81,8 @@ async fn run_detection_job(
         )
         .await
         {
-            Ok(ai_pct) => {
-                originality_reports::mark_done(
+            Ok((ai_pct, snapshot, model)) => {
+                let rep_id = originality_reports::mark_done(
                     pool,
                     submission_id,
                     "internal",
@@ -96,6 +93,17 @@ async fn run_detection_job(
                     None,
                 )
                 .await?;
+                let full = storage::build_internal_json(&ai_pct, model.trim(), &snapshot);
+                storage::best_effort_store_from_parts(
+                    pool,
+                    course_files_root,
+                    sub.course_id,
+                    rep_id,
+                    submission_id,
+                    "internal",
+                    full,
+                )
+                .await;
                 info!(target: "detection.job_completed", %submission_id, provider = "internal", "originality_internal_done");
             }
             Err(e) => {
@@ -120,7 +128,16 @@ async fn run_detection_job(
                 "{}/about-originality-placeholder",
                 public_web_origin.trim_end_matches('/')
             );
-            originality_reports::mark_done(
+            let snap = match storage::read_submission_file_plain(pool, course_files_root, course_code, &sub)
+                .await
+            {
+                Ok(s) => storage::cap_submission_text_for_storage(&s),
+                Err(e) => {
+                    warn!(target: "originality_report.storage_error", %submission_id, provider = ext, error = %e, "snapshot text unavailable for stub");
+                    String::new()
+                }
+            };
+            let rep_id = originality_reports::mark_done(
                 pool,
                 submission_id,
                 ext,
@@ -131,6 +148,23 @@ async fn run_detection_job(
                 Some("stub-scan"),
             )
             .await?;
+            let full = storage::build_external_stub_json(
+                &report_url,
+                ext,
+                "stub-scan",
+                sim,
+                &snap,
+            );
+            storage::best_effort_store_from_parts(
+                pool,
+                course_files_root,
+                sub.course_id,
+                rep_id,
+                submission_id,
+                ext,
+                full,
+            )
+            .await;
             info!(target: "detection.job_completed", %submission_id, provider = ext, "originality_external_stub_done");
         } else {
             let rid = Uuid::new_v4().to_string();
@@ -155,27 +189,23 @@ async fn run_internal_provider(
     course_code: &str,
     open_router: Option<&OpenRouterClient>,
     sub: &module_assignment_submissions::SubmissionRow,
-) -> Result<Decimal, String> {
+) -> Result<(Decimal, String, String), String> {
     let Some(client) = open_router else {
         return Err("OpenRouter is not configured; internal AI originality is unavailable.".into());
     };
-    let Some(fid) = sub.attachment_file_id else {
+    if sub.attachment_file_id.is_none() {
         return Err("No attachment; internal originality requires extractable document text.".into());
-    };
-    let Some(file_row) = course_files::get_for_course(pool, course_code, fid).await.map_err(|e| e.to_string())?
-    else {
-        return Err("Submission file not found.".into());
-    };
-    let path: PathBuf = course_files::blob_disk_path(course_files_root, course_code, &file_row.storage_key);
-    let bytes = tokio::fs::read(&path)
+    }
+    let text = storage::read_submission_file_plain(pool, course_files_root, course_code, sub)
         .await
-        .map_err(|e| format!("read submission file: {e}"))?;
-    let text = text_extract::submission_bytes_to_plaintext(&file_row.mime_type, &bytes)?;
+        .map_err(|e| e.to_string())?;
     let model = std::env::var("ORIGINALITY_INTERNAL_MODEL")
         .ok()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| INTERNAL_MODEL_DEFAULT.to_string());
-    internal::classify_ai_probability(client, model.trim(), &text)
+    let snapshot = storage::cap_submission_text_for_storage(&text);
+    let ai_pct = internal::classify_ai_probability(client, model.trim(), &text)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    Ok((ai_pct, snapshot, model))
 }

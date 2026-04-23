@@ -228,7 +228,7 @@ function CalendarMonthDayCell({
   return (
     <div
       ref={setNodeRef}
-      className={`flex min-h-[5rem] flex-col bg-white p-1.5 text-left dark:bg-neutral-900/95 ${
+      className={`flex h-full min-h-0 flex-col bg-white p-1.5 text-left dark:bg-neutral-900/95 ${
         inMonth ? '' : 'bg-slate-50/90 text-slate-400 dark:bg-neutral-950/80 dark:text-neutral-500'
       } ${canDragReschedule && isOver ? 'ring-2 ring-inset ring-indigo-400/70 dark:ring-indigo-400/50' : ''} ${
         isFocusDay && !isOver ? 'ring-2 ring-inset ring-amber-400/80 dark:ring-amber-500/50' : ''
@@ -475,10 +475,10 @@ export function CourseCalendar({
   )
 
   return (
-    <div className="mt-8">
+    <div className="flex min-h-0 flex-1 flex-col">
       {view === 'month' && (
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90 md:p-6">
-          <div className="mb-4 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90 md:p-6">
+          <div className="mb-4 flex min-w-0 shrink-0 flex-wrap items-center gap-x-3 gap-y-2">
             <h2 className="shrink-0 text-lg font-semibold tracking-tight text-slate-950 dark:text-neutral-100">
               {monthAnchor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}
             </h2>
@@ -503,56 +503,58 @@ export function CourseCalendar({
             </div>
           </div>
           {rescheduleError ? (
-            <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200">
+            <p className="mb-3 shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-200">
               {rescheduleError}
             </p>
           ) : null}
-          <DndContext
-            sensors={dragSensors}
-            collisionDetection={pointerWithin}
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-            onDragCancel={onDragCancel}
-          >
-            <div
-              className={`grid grid-cols-7 gap-px rounded-xl bg-slate-200/90 dark:bg-neutral-700/90 ${rescheduleBusy ? 'pointer-events-none opacity-60' : ''}`}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <DndContext
+              sensors={dragSensors}
+              collisionDetection={pointerWithin}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDragCancel={onDragCancel}
             >
-              {WEEKDAY_LABELS.map((w) => (
-                <div
-                  key={w}
-                  className="bg-slate-50 px-1 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-neutral-800 dark:text-neutral-400"
-                >
-                  {w}
-                </div>
-              ))}
-              {monthCells.map((cell) => {
-                const key = dateKeyLocal(cell)
-                const dayItems = itemsByDay.get(key) ?? []
-                return (
-                  <CalendarMonthDayCell
-                    key={cell.toISOString()}
-                    cell={cell}
-                    monthAnchor={monthAnchor}
-                    now={now}
-                    dayItems={dayItems}
-                    canDragReschedule={canRescheduleDueByDrag}
-                    itemPath={itemPath}
-                    onShowAssignmentHover={showAssignmentHover}
-                    onHideAssignmentHover={hideAssignmentHover}
-                    focusDateKey={initialDateKey}
-                  />
-                )
-              })}
-            </div>
-            <DragOverlay dropAnimation={null}>
-              {activeDragAssignment ? (
-                <div className="max-w-[14rem] truncate rounded-md border border-indigo-200/90 bg-indigo-50 px-2 py-1 text-left text-[11px] font-semibold text-indigo-950 shadow-md dark:border-indigo-700 dark:bg-indigo-950 dark:text-indigo-100">
-                  {activeDragAssignment.title || 'Untitled'}
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-          <p className="mt-4 text-xs text-slate-500 dark:text-neutral-400">
+              <div
+                className={`grid min-h-0 flex-1 grid-cols-7 grid-rows-[auto_repeat(6,minmax(4rem,1fr))] gap-px rounded-xl bg-slate-200/90 dark:bg-neutral-700/90 ${rescheduleBusy ? 'pointer-events-none opacity-60' : ''}`}
+              >
+                {WEEKDAY_LABELS.map((w) => (
+                  <div
+                    key={w}
+                    className="bg-slate-50 px-1 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-neutral-800 dark:text-neutral-400"
+                  >
+                    {w}
+                  </div>
+                ))}
+                {monthCells.map((cell) => {
+                  const key = dateKeyLocal(cell)
+                  const dayItems = itemsByDay.get(key) ?? []
+                  return (
+                    <CalendarMonthDayCell
+                      key={cell.toISOString()}
+                      cell={cell}
+                      monthAnchor={monthAnchor}
+                      now={now}
+                      dayItems={dayItems}
+                      canDragReschedule={canRescheduleDueByDrag}
+                      itemPath={itemPath}
+                      onShowAssignmentHover={showAssignmentHover}
+                      onHideAssignmentHover={hideAssignmentHover}
+                      focusDateKey={initialDateKey}
+                    />
+                  )
+                })}
+              </div>
+              <DragOverlay dropAnimation={null}>
+                {activeDragAssignment ? (
+                  <div className="max-w-[14rem] truncate rounded-md border border-indigo-200/90 bg-indigo-50 px-2 py-1 text-left text-[11px] font-semibold text-indigo-950 shadow-md dark:border-indigo-700 dark:bg-indigo-950 dark:text-indigo-100">
+                    {activeDragAssignment.title || 'Untitled'}
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          </div>
+          <p className="mt-4 shrink-0 text-xs text-slate-500 dark:text-neutral-400">
             {canRescheduleDueByDrag
               ? 'Drag a due chip to another day to reschedule (the time of day is kept). '
               : ''}
@@ -562,7 +564,7 @@ export function CourseCalendar({
       )}
 
       {view === 'week' && (
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90 md:p-6">
+        <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90 md:p-6">
           <div className="mb-4 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
             <div className="min-w-0 shrink-0">
               <h2 className="text-lg font-semibold tracking-tight text-slate-950 dark:text-neutral-100">
@@ -612,7 +614,7 @@ export function CourseCalendar({
       )}
 
       {view === 'todo' && (
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90 md:p-6">
+        <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90 md:p-6">
           <div className="mb-4 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
             <div className="min-w-0 shrink-0">
               <h2 className="text-lg font-semibold tracking-tight text-slate-950 dark:text-neutral-100">
