@@ -243,7 +243,7 @@ async fn get_reconciliation_handler(
         by_sub.entry(r.submission_id).or_default().push(r);
     }
 
-    let (grades_map, _, _) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (grades_map, _, _, _) = course_grades::list_for_course(&state.pool, course_id).await?;
 
     let mut rows: Vec<ReconciliationRowOut> = Vec::new();
     for s in subs {

@@ -25,6 +25,9 @@ pub struct CourseGradebookGridResponse {
     /// Plan 3.9 — student → item id → whether that score is dropped for course total.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub dropped_grades: HashMap<Uuid, HashMap<Uuid, bool>>,
+    /// Plan 3.12 — excused: excluded from course/scheme math; shown as EX in the grid.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub excused_grades: HashMap<Uuid, HashMap<Uuid, bool>>,
     /// Active course grading scheme (omit when none — gradebook uses raw points).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grading_scheme: Option<GradingSchemeSummary>,
@@ -53,6 +56,16 @@ pub struct PutCourseGradebookGradesRequest {
     /// Free-text reason for the batch (3.10 audit); stored on each cell update.
     #[serde(default)]
     pub change_reason: Option<String>,
+}
+
+/// PATCH body for toggling excused on one gradebook cell (plan 3.12).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchCourseGradebookExcusedRequest {
+    pub student_id: Uuid,
+    pub excused: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -113,6 +126,9 @@ pub struct CourseMyGradesResponse {
     /// Plan 3.9 — item id → score excluded by group drop policy (student view).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub dropped_grades: HashMap<Uuid, bool>,
+    /// Plan 3.12 — per gradable item: `excused` | `graded` when a row exists; omitted when ungraded.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub grade_statuses: HashMap<Uuid, String>,
 }
 
 /// One row in the grade change audit (3.10), JSON for API.

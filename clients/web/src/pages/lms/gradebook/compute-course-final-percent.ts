@@ -115,6 +115,7 @@ export function computeCourseFinalPercent(
   columns: GradebookColumnForFinal[],
   gradesByItemId: Record<string, string>,
   assignmentGroups: AssignmentGroupWeight[],
+  excusedByItemId: Record<string, boolean> = {},
 ): number | null {
   const settingsIds = new Set(assignmentGroups.map((g) => g.id))
   const polByG = new Map<string, GroupPolicy>()
@@ -135,6 +136,7 @@ export function computeCourseFinalPercent(
   for (const col of columns) {
     const max = col.maxPoints
     if (max == null || max <= 0) continue
+    if (excusedByItemId[col.id] === true) continue
     const earned = parseEarned(gradesByItemId[col.id])
     const gid = col.assignmentGroupId?.trim()
     const bucket = gid && settingsIds.has(gid) ? gid : UNGROUPED

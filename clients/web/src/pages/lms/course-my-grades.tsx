@@ -43,6 +43,7 @@ export default function CourseMyGrades() {
   const [assignmentGroups, setAssignmentGroups] = useState<AssignmentGroup[]>([])
   const [heldGradeItemIds, setHeldGradeItemIds] = useState<string[]>([])
   const [droppedGrades, setDroppedGrades] = useState<Record<string, boolean>>({})
+  const [gradeStatuses, setGradeStatuses] = useState<Record<string, string>>({})
   const [historyItem, setHistoryItem] = useState<{
     id: string
     title: string
@@ -69,6 +70,7 @@ export default function CourseMyGrades() {
       setAssignmentGroups(data.assignmentGroups)
       setHeldGradeItemIds(data.heldGradeItemIds ?? [])
       setDroppedGrades(data.droppedGrades ?? {})
+      setGradeStatuses(data.gradeStatuses ?? {})
       setLoadState('ok')
     } catch (e: unknown) {
       setLoadState('error')
@@ -150,9 +152,17 @@ export default function CourseMyGrades() {
     [assignmentGroups],
   )
 
+  const excusedByItem = useMemo(() => {
+    const o: Record<string, boolean> = {}
+    for (const [k, v] of Object.entries(gradeStatuses)) {
+      if (v === 'excused') o[k] = true
+    }
+    return o
+  }, [gradeStatuses])
+
   const finalPct = useMemo(
-    () => computeCourseFinalPercent(finalCols, grades, groupsForFinal),
-    [finalCols, grades, groupsForFinal],
+    () => computeCourseFinalPercent(finalCols, grades, groupsForFinal, excusedByItem),
+    [finalCols, grades, groupsForFinal, excusedByItem],
   )
 
   const base = `/courses/${encodeURIComponent(courseCode ?? '')}`
@@ -224,10 +234,11 @@ export default function CourseMyGrades() {
                 <tbody className="divide-y divide-slate-200 dark:divide-neutral-700">
                   {columns.map((col) => {
                     const held = heldSet.has(col.id)
-                    const dropped = !held && droppedGrades[col.id] === true
+                    const excused = !held && gradeStatuses[col.id] === 'excused'
+                    const dropped = !held && !excused && droppedGrades[col.id] === true
                     const earned = held ? undefined : grades[col.id]
                     const display = held ? undefined : displayGrades[col.id]
-                    const earnedNum = held ? 0 : parseEarned(earned)
+                    const earnedNum = held || excused ? 0 : parseEarned(earned)
                     const max = col.maxPoints
                     const href =
                       col.kind === 'quiz'
@@ -252,14 +263,23 @@ export default function CourseMyGrades() {
                         <td
                           className={`px-4 py-3 text-slate-800 dark:text-neutral-200 ${dropped ? 'line-through decoration-slate-400' : ''}`}
                           aria-label={
-                            dropped
-                              ? 'Score shown but dropped from course total by group policy'
-                              : undefined
+                            excused
+                              ? 'Excused — not counted toward your grade for this item'
+                              : dropped
+                                ? 'Score shown but dropped from course total by group policy'
+                                : undefined
                           }
                         >
                           {held ? (
                             <span className="text-amber-800 dark:text-amber-200/90" title="Grades not yet released">
                               Grades pending
+                            </span>
+                          ) : excused ? (
+                            <span
+                              className="inline-flex rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-800 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200"
+                              title="Excused — does not affect your course grade for this item."
+                            >
+                              {(display ?? '').trim() || 'EX'}
                             </span>
                           ) : (display ?? '').trim() ? (
                             display
@@ -273,10 +293,17 @@ export default function CourseMyGrades() {
                           {max != null && max > 0 ? String(max) : '—'}
                         </td>
                         <td className="px-4 py-3 text-slate-800 dark:text-neutral-200">
-                          {formatRowPercent(earnedNum, max)}
+                          {excused ? '—' : formatRowPercent(earnedNum, max)}
                         </td>
                         <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">
-                          {dropped ? (
+                          {excused ? (
+                            <span
+                              className="inline-flex rounded-md border border-slate-200/90 bg-slate-50 px-1.5 py-0.5 text-xs font-medium text-slate-800 dark:border-neutral-600 dark:bg-neutral-800/60 dark:text-neutral-200"
+                              title="Exempt from the course average; does not affect your final percentage."
+                            >
+                              Excused
+                            </span>
+                          ) : dropped ? (
                             <span
                               className="inline-flex rounded-md border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/50 dark:text-amber-200"
                               title="This score is excluded from your course total by the group’s drop rules."

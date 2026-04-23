@@ -16,10 +16,12 @@ use crate::models::course_gradebook::CourseGradebookGridColumn;
 use crate::models::course_gradebook::GradebookImportCellPreview;
 use crate::models::course_gradebook::GradebookImportPreviewRow;
 use crate::models::course_gradebook::GradebookImportStats;
+use crate::repos::course_grades::GradebookUpsertOp;
 use crate::services::grading::assignment_groups::{compute_course_final_percent, GradebookColumnForFinal};
 use crate::services::grading::conversion::{
     parse_gradebook_cell, resolve_effective, to_display_grade, DisplayGradingKind, ParsedScale,
 };
+use crate::services::grading::excusal::parse_csv_excuse_cell;
 
 const META_MARK: &str = "__lextures__";
 const META_V1: &str = "1";
@@ -28,6 +30,7 @@ const H_STUDENT_NAME: &str = "student_name";
 const H_STUDENT_EMAIL: &str = "student_email";
 const H_SCORE_SUFFIX: &str = " (score)";
 const H_DISPLAY_SUFFIX: &str = " (display grade)";
+const H_EXCUSE_SUFFIX: &str = " (excuse)";
 const H_FINAL_SCORE: &str = "final_score";
 const H_FINAL_GRADE: &str = "final_grade";
 const FINAL_NO_IMPORT: &str = "__no_import__";
@@ -40,7 +43,7 @@ pub struct GradebookImportPending {
     pub user_id: Uuid,
     pub course_id: Uuid,
     /// Grade ops ready for `course_grades::upsert_and_delete` (rubric: None).
-    pub ops: Vec<(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)>,
+    pub ops: Vec<GradebookUpsertOp>,
     /// Plan 3.3 + 3.8: confirm with `acknowledge_blind_manual_hold`.
     pub require_blind_ack: bool,
 }
@@ -80,11 +83,12 @@ fn col_title_with_suffix(title: &str, suffix: &str) -> String {
     format!("{}{}", title.trim(), suffix)
 }
 
-/// Build a gradebook CSV (header row + metadata row + one row per student).
+/// Build a gradebook CSV (header row + metadata row + one row per student; 3.12 adds an ` (excuse)` column per item).
 pub fn build_gradebook_export(
     students: &[(Uuid, String, String)], // id, name, email
     columns: &[CourseGradebookGridColumn],
     grades: &HashMap<Uuid, HashMap<Uuid, String>>,
+    excused: &HashMap<Uuid, HashMap<Uuid, bool>>,
     assignment_groups: &[AssignmentGroupPublic],
     course_kind: Option<DisplayGradingKind>,
     parsed_scale: Option<&ParsedScale>,
@@ -127,6 +131,7 @@ pub fn build_gradebook_export(
         for (_, title, _) in &col_pairs {
             header.push(col_title_with_suffix(title, H_SCORE_SUFFIX));
             header.push(col_title_with_suffix(title, H_DISPLAY_SUFFIX));
+            header.push(col_title_with_suffix(title, H_EXCUSE_SUFFIX));
         }
         header.push(H_FINAL_SCORE.into());
         header.push(H_FINAL_GRADE.into());
@@ -136,6 +141,7 @@ pub fn build_gradebook_export(
         let mut meta: Vec<String> = vec![META_MARK.into(), META_V1.into(), "meta".into()];
         for (id, _, _) in &col_pairs {
             meta.push(id.to_string());
+            meta.push(String::new());
             meta.push(String::new());
         }
         meta.push(FINAL_NO_IMPORT.into());
@@ -150,11 +156,18 @@ pub fn build_gradebook_export(
                 sanitize_for_export(email),
             ];
             let row = grades.get(sid);
+            let ex_row = excused.get(sid);
+            let mut ex_map: HashMap<Uuid, bool> = HashMap::new();
             let mut earned: HashMap<Uuid, f64> = HashMap::new();
             for (id, _, maxp) in &col_pairs {
+                let is_ex = ex_row
+                    .and_then(|m| m.get(id))
+                    .copied()
+                    .unwrap_or(false);
+                ex_map.insert(*id, is_ex);
                 let s = row.and_then(|m| m.get(id)).map(|s| s.as_str()).unwrap_or("");
                 let pts = parse_earned_points(s);
-                if pts.is_finite() {
+                if pts.is_finite() && !is_ex {
                     earned.insert(*id, pts);
                 }
                 let s_clean = s
@@ -171,16 +184,22 @@ pub fn build_gradebook_export(
                     None
                 };
                 let eff = resolve_effective(course_kind, ov.as_deref());
-                let display = to_display_grade(
-                    pts,
-                    maxp.map(|m| m as f64),
-                    parsed_scale,
-                    eff,
-                );
+                let display = if is_ex {
+                    "EX".to_string()
+                } else {
+                    to_display_grade(
+                        pts,
+                        maxp.map(|m| m as f64),
+                        parsed_scale,
+                        eff,
+                    )
+                };
                 rec.push(sanitize_for_export(&display));
+                let ex_cell = if is_ex { "EX" } else { "" };
+                rec.push(sanitize_for_export(ex_cell));
             }
 
-            let final_pct = compute_course_final_percent(&for_final, &earned, assignment_groups);
+            let final_pct = compute_course_final_percent(&for_final, &earned, &ex_map, assignment_groups);
             let (fs, fg) = final_strings(final_pct, course_kind, parsed_scale);
             rec.push(sanitize_for_export(&fs));
             rec.push(sanitize_for_export(&fg));
@@ -231,11 +250,13 @@ fn read_all_records(input: &str) -> Result<Vec<csv::StringRecord>, CsvError> {
 }
 
 /// Validate CSV, diff against current `grades`, and produce ops. Does not require DB.
+/// Plan 3.12: `current_excused` is used to diff excuse columns; export with ` (excuse)` per item.
 pub fn validate_gradebook_import(
     csv_text: &str,
     students: &[(Uuid, String, String)],
     columns: &[CourseGradebookGridColumn],
     current_grades: &HashMap<Uuid, HashMap<Uuid, String>>,
+    current_excused: &HashMap<Uuid, HashMap<Uuid, bool>>,
     course_kind: Option<DisplayGradingKind>,
     parsed_scale: Option<&ParsedScale>,
     types_map: &HashMap<Uuid, Option<String>>,
@@ -264,16 +285,28 @@ pub fn validate_gradebook_import(
     if header.len() < 3 + 2 + n_tail {
         return Err(CsvError::m("The CSV has no grade columns."));
     }
-    let n_pairs = (header.len() - 3 - n_tail) / 2;
-    if (header.len() - 3 - n_tail) % 2 != 0 {
-        return Err(CsvError::m("Grade columns must be score and display grade pairs for each item."));
-    }
+    let rest = header.len() - 3 - n_tail;
+    let (triple_mode, n_slots) = if rest % 3 == 0
+        && rest > 0
+        && header
+            .get(5)
+            .is_some_and(|h| h.trim().ends_with(H_EXCUSE_SUFFIX))
+    {
+        (true, rest / 3)
+    } else if rest % 2 == 0 {
+        (false, rest / 2)
+    } else {
+        return Err(CsvError::m(
+            "Grade columns must be (score) + (display) per item, or (score) + (display) + (excuse) (3.12).",
+        ));
+    };
 
     let col_by_id: HashMap<Uuid, &CourseGradebookGridColumn> =
         columns.iter().map(|c| (c.id, c)).collect();
-    let mut col_order: Vec<Uuid> = Vec::with_capacity(n_pairs);
-    for k in 0..n_pairs {
-        let s_idx = 3 + k * 2;
+    let mut col_order: Vec<Uuid> = Vec::with_capacity(n_slots);
+    for k in 0..n_slots {
+        let step: usize = if triple_mode { 3 } else { 2 };
+        let s_idx = 3 + k * step;
         let m_id = &meta[s_idx + 0];
         if m_id.trim().is_empty() {
             return Err(CsvError::m("Missing assignment id in the metadata row."));
@@ -283,7 +316,12 @@ pub fn validate_gradebook_import(
         if !header[s_idx + 0].ends_with(H_SCORE_SUFFIX)
             || !header[s_idx + 1].ends_with(H_DISPLAY_SUFFIX)
         {
-            return Err(CsvError::m("Header pair must be \"(score)\" and \"(display grade)\" for each item."));
+            return Err(CsvError::m("Each item must start with (score) and (display grade) headers."));
+        }
+        if triple_mode {
+            if !header.get(s_idx + 2).is_some_and(|h| h.trim().ends_with(H_EXCUSE_SUFFIX)) {
+                return Err(CsvError::m("Missing (excuse) column after (display grade) (3.12)."));
+            }
         }
         let Some(c) = col_by_id.get(&aid) else {
             return Err(CsvError::m("Import references an assignment that is not in this course gradebook."));
@@ -308,9 +346,10 @@ pub fn validate_gradebook_import(
 
     let mut stats = GradebookImportStats::default();
     let mut out_rows: Vec<GradebookImportPreviewRow> = vec![];
-    let mut ops: Vec<(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)> = vec![];
+    let mut ops: Vec<GradebookUpsertOp> = vec![];
     let mut has_blocking = false;
     let mut data_student_seen: HashSet<Uuid> = HashSet::new();
+    let step: usize = if triple_mode { 3 } else { 2 };
 
     for (ri, r) in recs.iter().enumerate().skip(2) {
         let r: Vec<String> = r.iter().map(String::from).collect();
@@ -375,8 +414,30 @@ pub fn validate_gradebook_import(
         let mut row_err: Option<String> = None;
         for (k, &aid) in col_order.iter().enumerate() {
             let col = col_by_id[&aid];
-            let s_idx = 3 + k * 2;
+            let s_idx = 3 + k * step;
             let raw = r.get(s_idx).map_or("", |s| s).to_string();
+            let raw_exc: Option<String> = if triple_mode {
+                r.get(s_idx + 2).map(|s| s.to_string())
+            } else {
+                None
+            };
+            let before_ex = current_excused
+                .get(&su)
+                .and_then(|m| m.get(&aid))
+                .copied()
+                .unwrap_or(false);
+            let ex_cell: Option<bool> = raw_exc
+                .as_deref()
+                .and_then(parse_csv_excuse_cell);
+            if triple_mode
+                && raw_exc
+                    .as_deref()
+                    .is_some_and(|s| !s.trim().is_empty() && ex_cell.is_none())
+            {
+                has_blocking = true;
+                stats.errors += 1;
+                row_err.get_or_insert("Invalid (excuse) value: use EX, 1, excused, 0, or no.".into());
+            }
             let maxp = col.max_points.map(|m| m as f64);
             let ov = if col.kind == "assignment" {
                 types_map.get(&aid).cloned().flatten()
@@ -389,10 +450,74 @@ pub fn validate_gradebook_import(
                 .and_then(|m| m.get(&aid))
                 .map(|s| s.as_str().trim().to_string())
                 .unwrap_or_default();
+            let before_n = parse_earned_points(&before);
 
             if raw.trim().is_empty() {
+                if let Some(true) = ex_cell {
+                    if before_ex {
+                        row_cells.push(GradebookImportCellPreview {
+                            item_id: aid,
+                            previous_score: if before.is_empty() {
+                                None
+                            } else {
+                                Some(sanitize_for_export(&before))
+                            },
+                            new_score: "EX".into(),
+                            state: "unchanged".to_string(),
+                            out_of_range: false,
+                        });
+                        stats.unchanged += 1;
+                    } else {
+                        let bp = if before_n > 0.0 { before_n } else { 0.0 };
+                        ops.push((su, aid, Some(bp), None, Some(true)));
+                        row_cells.push(GradebookImportCellPreview {
+                            item_id: aid,
+                            previous_score: if before.is_empty() {
+                                None
+                            } else {
+                                Some(sanitize_for_export(&before))
+                            },
+                            new_score: "EX".into(),
+                            state: if before.is_empty() { "added" } else { "updated" }.to_string(),
+                            out_of_range: false,
+                        });
+                        if before.is_empty() {
+                            stats.added += 1
+                        } else {
+                            stats.updated += 1
+                        };
+                    }
+                    continue;
+                }
+                if let Some(false) = ex_cell {
+                    if before_ex {
+                        if before_n > 0.0 {
+                            ops.push((su, aid, Some(before_n), None, Some(false)));
+                        } else {
+                            ops.push((su, aid, Some(0.0), None, Some(false)));
+                        }
+                        row_cells.push(GradebookImportCellPreview {
+                            item_id: aid,
+                            previous_score: Some("EX".into()),
+                            new_score: before.clone(),
+                            state: "updated".to_string(),
+                            out_of_range: false,
+                        });
+                        stats.updated += 1;
+                    } else {
+                        row_cells.push(GradebookImportCellPreview {
+                            item_id: aid,
+                            previous_score: None,
+                            new_score: String::new(),
+                            state: "unchanged".to_string(),
+                            out_of_range: false,
+                        });
+                        stats.unchanged += 1;
+                    }
+                    continue;
+                }
                 if !before.is_empty() {
-                    ops.push((su, aid, None, None));
+                    ops.push((su, aid, None, None, None));
                     row_cells.push(GradebookImportCellPreview {
                         item_id: aid,
                         previous_score: Some(sanitize_for_export(&before)),
@@ -453,7 +578,13 @@ pub fn validate_gradebook_import(
                             }
                         })
                         .unwrap_or_default();
-                    if before == new_str {
+                    let score_changed = before != new_str;
+                    let ex_changed = triple_mode
+                        && match ex_cell {
+                            None => false,
+                            Some(v) => v != before_ex,
+                        };
+                    if !score_changed && !ex_changed {
                         row_cells.push(GradebookImportCellPreview {
                             item_id: aid,
                             previous_score: if before.is_empty() {
@@ -473,7 +604,8 @@ pub fn validate_gradebook_import(
                         if out_of_range {
                             stats.warnings += 1;
                         }
-                        ops.push((su, aid, p, None));
+                        let set_ex: Option<bool> = if triple_mode { ex_cell } else { None };
+                        ops.push((su, aid, p, None, set_ex));
                         let st = if before.is_empty() { "added" } else { "updated" };
                         if st == "added" {
                             stats.added += 1;
@@ -530,15 +662,16 @@ pub fn validate_gradebook_import(
 }
 
 /// Last write wins for the same (student, assignment) if the file had redundant rows.
-fn dedupe_ops(
-    ops: Vec<(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)>,
-) -> Vec<(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)> {
-    let mut m: HashMap<(Uuid, Uuid), (Option<f64>, Option<HashMap<Uuid, f64>>)> = HashMap::new();
-    for (u, i, p, r) in ops {
-        m.insert((u, i), (p, r));
+fn dedupe_ops(ops: Vec<GradebookUpsertOp>) -> Vec<GradebookUpsertOp> {
+    let mut m: HashMap<
+        (Uuid, Uuid),
+        (Option<f64>, Option<HashMap<Uuid, f64>>, Option<bool>),
+    > = HashMap::new();
+    for (u, i, p, r, e) in ops {
+        m.insert((u, i), (p, r, e));
     }
     m.into_iter()
-        .map(|((u, i), (p, r))| (u, i, p, r))
+        .map(|((u, i), (p, r, e))| (u, i, p, r, e))
         .collect()
 }
 
@@ -557,7 +690,7 @@ fn import_cell_dangerous(raw: &str) -> bool {
 
 /// Result of structural + diff validation; caller checks moderated grading and blind hold.
 pub struct ValidatedImport {
-    pub ops: Vec<(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)>,
+    pub ops: Vec<GradebookUpsertOp>,
     pub has_blocking_errors: bool,
     pub rows: Vec<GradebookImportPreviewRow>,
     pub stats: GradebookImportStats,

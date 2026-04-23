@@ -1329,6 +1329,8 @@ export type CourseGradebookGridResponse = {
   gradingScheme?: GradingSchemeSummary | null
   /** Plan 3.11 — server flag for CSV tools. */
   gradebookCsvEnabled?: boolean
+  /** Plan 3.12 */
+  excusedGrades?: Record<string, Record<string, boolean>>
 }
 
 export async function fetchCourseGradebookGrid(courseCode: string): Promise<CourseGradebookGridResponse> {
@@ -1432,6 +1434,8 @@ export type CourseMyGradesResponse = {
   heldGradeItemIds?: string[]
   /** Plan 3.9 */
   droppedGrades?: Record<string, boolean>
+  /** Plan 3.12 */
+  gradeStatuses?: Record<string, 'excused' | 'graded' | string>
 }
 
 export async function fetchCourseMyGrades(courseCode: string): Promise<CourseMyGradesResponse> {
@@ -1450,6 +1454,7 @@ export async function fetchCourseMyGrades(courseCode: string): Promise<CourseMyG
     gradingScheme: body.gradingScheme ?? null,
     heldGradeItemIds: body.heldGradeItemIds ?? [],
     droppedGrades: body.droppedGrades ?? {},
+    gradeStatuses: body.gradeStatuses,
   }
 }
 
@@ -1529,6 +1534,31 @@ export async function putCourseGradebookGrades(
           : {}),
         ...(body.changeReason != null && String(body.changeReason).trim() !== ''
           ? { changeReason: String(body.changeReason).trim() }
+          : {}),
+      }),
+    },
+  )
+  if (res.ok) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+/** PATCH one cell’s excused flag (3.12). */
+export async function patchCourseGradebookCellExcused(
+  courseCode: string,
+  itemId: string,
+  body: { studentId: string; excused: boolean; reason?: string },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook/cells/${encodeURIComponent(itemId)}/excused`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        studentId: body.studentId,
+        excused: body.excused,
+        ...(body.reason != null && String(body.reason).trim() !== ''
+          ? { reason: String(body.reason).trim() }
           : {}),
       }),
     },

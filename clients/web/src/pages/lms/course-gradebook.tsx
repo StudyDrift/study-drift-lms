@@ -8,6 +8,7 @@ import {
   fetchCourseGradebookGrid,
   fetchCourseGradingSettings,
   fetchGradeCellHistory,
+  patchCourseGradebookCellExcused,
   type GradeHistoryEvent,
   postCourseAssignmentGrades,
   putCourseGradebookGrades,
@@ -47,6 +48,7 @@ function mergeGradesFromApi(
   columns: GradebookColumn[],
   apiGrades: Record<string, Record<string, string>> | undefined,
   apiDisplay?: Record<string, Record<string, string>> | undefined,
+  excusedGrades?: Record<string, Record<string, boolean>> | undefined,
 ): Record<string, Record<string, string>> {
   const out = buildEmptyGrades(students, columns)
   for (const s of students) {
@@ -56,8 +58,14 @@ function mergeGradesFromApi(
     for (const c of columns) {
       const disp = drow?.[c.id]
       const raw = row?.[c.id]
-      const v =
-        disp != null && String(disp).trim() !== ''
+      const isEx = excusedGrades?.[s.id]?.[c.id] === true
+      const v = isEx
+        ? raw != null && String(raw).trim() !== ''
+          ? String(raw).trim()
+          : disp != null && String(disp).trim() !== ''
+            ? String(disp).trim()
+            : ''
+        : disp != null && String(disp).trim() !== ''
           ? String(disp).trim()
           : raw != null && String(raw).trim() !== ''
             ? String(raw).trim()
@@ -316,6 +324,7 @@ export default function CourseGradebook() {
   const [rubricModal, setRubricModal] = useState<RubricModalState | null>(null)
   const [gradeHeld, setGradeHeld] = useState<Record<string, Record<string, boolean>> | undefined>(undefined)
   const [droppedGrades, setDroppedGrades] = useState<Record<string, Record<string, boolean>> | undefined>(undefined)
+  const [gradeExcused, setGradeExcused] = useState<Record<string, Record<string, boolean>> | undefined>(undefined)
   const [postGradesPending, setPostGradesPending] = useState<string | null>(null)
   const [gradeChangeReason, setGradeChangeReason] = useState('')
   const [gradeHistoryOpen, setGradeHistoryOpen] = useState<{
@@ -401,7 +410,14 @@ export default function CourseGradebook() {
       }))
       setDroppedGrades(data.droppedGrades)
       setGradingScheme(data.gradingScheme ?? null)
-      const merged = mergeGradesFromApi(gridSt, gridCols, data.grades, data.displayGrades)
+      setGradeExcused(data.excusedGrades)
+      const merged = mergeGradesFromApi(
+        gridSt,
+        gridCols,
+        data.grades,
+        data.displayGrades,
+        data.excusedGrades,
+      )
       const mergedRubric = mergeRubricScoresFromApi(data.rubricScores)
       setSavedGrades(merged)
       setSavedRubricScores(mergedRubric)
@@ -424,6 +440,7 @@ export default function CourseGradebook() {
       setColumns([])
       setGradeHeld(undefined)
       setDroppedGrades(undefined)
+      setGradeExcused(undefined)
       setGradingScheme(null)
       setAssignmentGroups([])
       setGradebookCsvEnabled(false)
@@ -451,6 +468,25 @@ export default function CourseGradebook() {
       }
     },
     [courseCode, loadGrid],
+  )
+
+  const handleToggleExcused = useCallback(
+    async (studentId: string, columnId: string, next: boolean) => {
+      if (!courseCode) return
+      try {
+        const cr = gradeChangeReason.trim()
+        await patchCourseGradebookCellExcused(courseCode, columnId, {
+          studentId,
+          excused: next,
+          ...(cr !== '' ? { reason: cr } : {}),
+        })
+        await loadGrid()
+        toastSaveOk(next ? 'Marked as excused' : 'Excusal removed')
+      } catch (e: unknown) {
+        toastMutationError(e instanceof Error ? e.message : 'Could not update excused status.')
+      }
+    },
+    [courseCode, loadGrid, gradeChangeReason],
   )
 
   const handleDiscard = useCallback(() => {
@@ -748,6 +784,8 @@ export default function CourseGradebook() {
             gradingScheme={gradingScheme}
             gradeHeld={gradeHeld}
             droppedGrades={droppedGrades}
+            gradeExcused={gradeExcused}
+            onToggleExcused={canEditGrades ? handleToggleExcused : undefined}
             onPostAssignmentGrades={canEditGrades ? handlePostAssignmentGrades : undefined}
             postGradesPending={postGradesPending}
             footerNote={

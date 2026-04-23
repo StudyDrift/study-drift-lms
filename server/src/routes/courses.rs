@@ -20,7 +20,8 @@ use crate::models::course_export::{
 use crate::models::course_gradebook::{
     CourseGradebookGridColumn, CourseGradebookGridResponse, CourseGradebookGridStudent,
     CourseMyGradesResponse, GradeHistoryEventOut, GradeHistoryResponse, GradingSchemeSummary,
-    GradebookImportConfirmRequest, GradebookImportValidateResponse, PutCourseGradebookGradesRequest,
+    GradebookImportConfirmRequest, GradebookImportValidateResponse, PatchCourseGradebookExcusedRequest,
+    PutCourseGradebookGradesRequest,
 };
 use crate::models::grading_scheme::{
     CourseGradingSchemeEnvelope, GradingSchemeResponse, PutGradingSchemeRequest,
@@ -502,6 +503,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/courses/{course_code}/gradebook/grades",
             put(gradebook_grades_put_handler),
+        )
+        .route(
+            "/api/v1/courses/{course_code}/gradebook/cells/{item_id}/excused",
+            patch(gradebook_cell_excused_patch_handler),
         )
         .route(
             "/api/v1/courses/{course_code}/gradebook.csv",
@@ -4248,10 +4253,20 @@ fn grid_display_grades(
     grades: &HashMap<Uuid, HashMap<Uuid, String>>,
     columns: &[CourseGradebookGridColumn],
     parsed: Option<&ParsedScale>,
+    excused: &HashMap<Uuid, HashMap<Uuid, bool>>,
 ) -> HashMap<Uuid, HashMap<Uuid, String>> {
     let mut out: HashMap<Uuid, HashMap<Uuid, String>> = HashMap::new();
     for (uid, row) in grades {
         for (item_id, pts_str) in row {
+            if excused
+                .get(uid)
+                .and_then(|m| m.get(item_id))
+                .copied()
+                .unwrap_or(false)
+            {
+                out.entry(*uid).or_default().insert(*item_id, "EX".into());
+                continue;
+            }
             let Ok(pts) = pts_str.trim().replace(',', "").parse::<f64>() else {
                 continue;
             };
@@ -4315,6 +4330,7 @@ fn dropped_by_student_for_grid(
     columns: &[CourseGradebookGridColumn],
     group_policies: &HashMap<Uuid, GroupDropPolicy>,
     grades: &HashMap<Uuid, HashMap<Uuid, String>>,
+    excused_by_student: &HashMap<Uuid, HashMap<Uuid, bool>>,
 ) -> HashMap<Uuid, HashMap<Uuid, bool>> {
     let col_meta: Vec<(Uuid, Option<Uuid>, f64, bool, bool)> = columns
         .iter()
@@ -4330,6 +4346,10 @@ fn dropped_by_student_for_grid(
     let mut out: HashMap<Uuid, HashMap<Uuid, bool>> = HashMap::new();
     for s in students {
         let row = grades.get(&s.user_id);
+        let exc = excused_by_student
+            .get(&s.user_id)
+            .cloned()
+            .unwrap_or_default();
         let earned: HashMap<Uuid, f64> = if let Some(r) = row {
             r.iter()
                 .map(|(i, t)| (*i, parse_gradebook_points(t)))
@@ -4339,7 +4359,7 @@ fn dropped_by_student_for_grid(
         };
         out.insert(
             s.user_id,
-            item_drops_for_learner(group_policies, &col_meta, &earned),
+            item_drops_for_learner(group_policies, &col_meta, &earned, &exc),
         );
     }
     out
@@ -4505,7 +4525,8 @@ async fn gradebook_grid_get_handler(
 
     let (course_id, students, columns, types_map, posting) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
-    let (grades, rubric_scores, posted_at) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (grades, rubric_scores, posted_at, excused_grades) =
+        course_grades::list_for_course(&state.pool, course_id).await?;
 
     let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
     let course_kind = scheme_row
@@ -4521,9 +4542,20 @@ async fn gradebook_grid_get_handler(
     let columns = enrich_columns_with_drop_flags(columns, &drop_flags);
     let group_rows = course_grading::list_assignment_groups(&state.pool, course_id).await?;
     let gpol = group_drop_policy_map(&group_rows);
-    let dropped_grades = dropped_by_student_for_grid(&students, &columns, &gpol, &grades);
+    let dropped_grades = dropped_by_student_for_grid(
+        &students,
+        &columns,
+        &gpol,
+        &grades,
+        &excused_grades,
+    );
     let grading_scheme = scheme_row.as_ref().map(scheme_summary_from_row);
-    let display_grades = grid_display_grades(&grades, &columns, parsed_scale.as_ref());
+    let display_grades = grid_display_grades(
+        &grades,
+        &columns,
+        parsed_scale.as_ref(),
+        &excused_grades,
+    );
 
     let mut grade_held: HashMap<Uuid, HashMap<Uuid, bool>> = HashMap::new();
     for (uid, by_item) in &grades {
@@ -4553,6 +4585,7 @@ async fn gradebook_grid_get_handler(
         rubric_scores,
         grade_held,
         dropped_grades,
+        excused_grades,
         grading_scheme,
         gradebook_csv_enabled: state.gradebook_csv_enabled,
     }))
@@ -4574,9 +4607,14 @@ async fn my_grades_get_handler(
         return Err(AppError::Forbidden);
     }
 
-    let (all_grades, _, posted_at) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (all_grades, _, posted_at, excused_all) =
+        course_grades::list_for_course(&state.pool, course_id).await?;
     let all_row = all_grades.get(&user.user_id).cloned().unwrap_or_default();
     let posted_for_me = posted_at.get(&user.user_id).cloned().unwrap_or_default();
+    let my_excused: HashMap<Uuid, bool> = excused_all
+        .get(&user.user_id)
+        .cloned()
+        .unwrap_or_default();
 
     let assignment_groups = course_grading::get_settings_for_course_code(&state.pool, &course_code)
         .await?
@@ -4600,6 +4638,7 @@ async fn my_grades_get_handler(
     let mut held_grade_item_ids: Vec<Uuid> = Vec::new();
     let mut grades: HashMap<Uuid, String> = HashMap::new();
     let mut display_grades: HashMap<Uuid, String> = HashMap::new();
+    let mut grade_statuses: HashMap<Uuid, String> = HashMap::new();
     for (item_id, pts_str) in &all_row {
         let is_assn_manual = columns
             .iter()
@@ -4608,6 +4647,11 @@ async fn my_grades_get_handler(
         let is_held = is_assn_manual && posted_for_me.get(item_id).copied().flatten().is_none();
         if is_held {
             held_grade_item_ids.push(*item_id);
+            continue;
+        }
+        if my_excused.get(item_id).copied().unwrap_or(false) {
+            grade_statuses.insert(*item_id, "excused".to_string());
+            display_grades.insert(*item_id, "EX".into());
             continue;
         }
         grades.insert(*item_id, pts_str.clone());
@@ -4629,6 +4673,7 @@ async fn my_grades_get_handler(
             eff,
         );
         display_grades.insert(*item_id, dg);
+        grade_statuses.insert(*item_id, "graded".to_string());
     }
     held_grade_item_ids.sort();
     held_grade_item_ids.dedup();
@@ -4636,7 +4681,7 @@ async fn my_grades_get_handler(
     let held_set: HashSet<Uuid> = held_grade_item_ids.iter().copied().collect();
     let col_meta: Vec<(Uuid, Option<Uuid>, f64, bool, bool)> = columns
         .iter()
-        .filter(|c| !held_set.contains(&c.id))
+        .filter(|c| !held_set.contains(&c.id) && !my_excused.get(&c.id).copied().unwrap_or(false))
         .filter_map(|c| {
             let m = c.max_points?;
             let mf = m as f64;
@@ -4657,7 +4702,7 @@ async fn my_grades_get_handler(
         earned.insert(*id, parse_gradebook_points(s));
     }
     let gpol = group_drop_policy_map(&assignment_groups);
-    let dropped_grades = item_drops_for_learner(&gpol, &col_meta, &earned);
+    let dropped_grades = item_drops_for_learner(&gpol, &col_meta, &earned, &my_excused);
 
     Ok(Json(CourseMyGradesResponse {
         columns,
@@ -4667,6 +4712,7 @@ async fn my_grades_get_handler(
         grading_scheme,
         held_grade_item_ids,
         dropped_grades,
+        grade_statuses,
     }))
 }
 
@@ -4703,7 +4749,7 @@ async fn gradebook_grades_put_handler(
         .filter_map(|c| c.rubric.clone().map(|r| (c.id, r)))
         .collect();
 
-    let mut ops: Vec<(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)> = Vec::new();
+    let mut ops: Vec<course_grades::GradebookUpsertOp> = Vec::new();
 
     for (user_id, row) in req.grades {
         if !student_ok.contains(&user_id) {
@@ -4753,24 +4799,24 @@ async fn gradebook_grades_put_handler(
                                 ));
                             }
                         }
-                        ops.push((user_id, item_id, Some(total), Some(scores.clone())));
+                        ops.push((user_id, item_id, Some(total), Some(scores.clone()), None));
                         continue;
                     }
                 }
             }
 
             match parsed {
-                None => ops.push((user_id, item_id, None, None)),
+                None => ops.push((user_id, item_id, None, None, None)),
                 Some(p) => {
                     ensure_points_within_max(p, max_p)?;
-                    ops.push((user_id, item_id, Some(p), None));
+                    ops.push((user_id, item_id, Some(p), None, None));
                 }
             }
         }
     }
 
     if state.moderated_grading_enabled {
-        let touched_items: HashSet<Uuid> = ops.iter().map(|(_, item_id, _, _)| *item_id).collect();
+        let touched_items: HashSet<Uuid> = ops.iter().map(|(_, item_id, _, _, _)| *item_id).collect();
         for item_id in touched_items {
             let Some(asn) =
                 course_module_assignments::get_for_course_item(&state.pool, course_id, item_id)
@@ -4822,7 +4868,7 @@ async fn gradebook_grades_put_handler(
     if let Some(c) = course::get_by_id(&state.pool, course_id).await? {
         if c.sbg_enabled {
             let students: std::collections::HashSet<Uuid> =
-                ops.iter().map(|(uid, _, _, _)| *uid).collect();
+                ops.iter().map(|(uid, _, _, _, _)| *uid).collect();
             for student_id in students {
                 let _ = sbg_grading::recompute_student_sbg(
                     &state.pool,
@@ -4834,6 +4880,45 @@ async fn gradebook_grades_put_handler(
             }
         }
     }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn gradebook_cell_excused_patch_handler(
+    State(state): State<AppState>,
+    Path((course_code, item_id)): Path<(String, Uuid)>,
+    headers: HeaderMap,
+    Json(req): Json<PatchCourseGradebookExcusedRequest>,
+) -> Result<StatusCode, AppError> {
+    let user = auth_user(&state, &headers)?;
+    require_course_access(&state, &course_code, user.user_id).await?;
+    let required = course_grants::course_item_create_permission(&course_code);
+    assert_permission(&state.pool, user.user_id, &required).await?;
+    let (course_id, students, columns, _types, _posting) =
+        gradebook_students_and_columns(&state.pool, &course_code).await?;
+    if !columns.iter().any(|c| c.id == item_id) {
+        return Err(AppError::NotFound);
+    }
+    if !students.iter().any(|s| s.user_id == req.student_id) {
+        return Err(AppError::invalid_input(
+            "The selected user is not enrolled in this course as a student.",
+        ));
+    }
+    let reason = req
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    course_grades::set_excused_for_cell(
+        &state.pool,
+        course_id,
+        req.student_id,
+        item_id,
+        req.excused,
+        user.user_id,
+        reason,
+    )
+    .await
+    .map_err(AppError::from)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -4856,13 +4941,13 @@ async fn assert_ops_pass_moderated(
     course_code: &str,
     course_id: Uuid,
     user_id: Uuid,
-    ops: &[(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)],
+    ops: &[course_grades::GradebookUpsertOp],
 ) -> Result<(), AppError> {
     if !state.moderated_grading_enabled {
         return Ok(());
     }
     let mut touched: HashSet<Uuid> = HashSet::new();
-    for (_, item_id, _, _) in ops {
+    for (_, item_id, _, _, _) in ops {
         touched.insert(*item_id);
     }
     for item_id in touched {
@@ -4901,12 +4986,12 @@ async fn gradebook_import_needs_blind_ack(
     pool: &PgPool,
     course_id: Uuid,
     global_blind_enabled: bool,
-    ops: &[(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)],
+    ops: &[course_grades::GradebookUpsertOp],
 ) -> Result<bool, sqlx::Error> {
     if !global_blind_enabled {
         return Ok(false);
     }
-    for (_uid, item_id, _pts, _) in ops {
+    for (_uid, item_id, _pts, _, _) in ops {
         let Some(a) = course_module_assignments::get_for_course_item(pool, course_id, *item_id).await? else {
             continue;
         };
@@ -4933,7 +5018,7 @@ async fn gradebook_csv_get_handler(
 
     let (course_id, _students, columns, types_map, posting) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
-    let (grades, _, _posted) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (grades, _, _posted, excused) = course_grades::list_for_course(&state.pool, course_id).await?;
     let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
     let course_kind = scheme_row
         .as_ref()
@@ -4952,6 +5037,7 @@ async fn gradebook_csv_get_handler(
         &roster,
         &columns,
         &grades,
+        &excused,
         &assignment_groups,
         course_kind,
         parsed_scale.as_ref(),
@@ -4998,7 +5084,7 @@ async fn gradebook_import_validate_post_handler(
     let (course_id, _grid_students, columns, types_map, posting) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
     let roster = enrollment::list_students_for_gradebook_csv(&state.pool, &course_code).await?;
-    let (grades, _, _posted) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (grades, _, _posted, excused) = course_grades::list_for_course(&state.pool, course_id).await?;
     let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
     let course_kind = scheme_row
         .as_ref()
@@ -5016,6 +5102,7 @@ async fn gradebook_import_validate_post_handler(
         &roster,
         &columns,
         &grades,
+        &excused,
         course_kind,
         parsed_scale.as_ref(),
         &types_map,
@@ -5140,7 +5227,7 @@ async fn gradebook_import_confirm_post_handler(
     if c_id != pending.course_id {
         return Err(AppError::NotFound);
     }
-    let ops: Vec<(Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>)> = pending.ops.clone();
+    let ops: Vec<course_grades::GradebookUpsertOp> = pending.ops.clone();
     if ops.is_empty() {
         return Ok(StatusCode::NO_CONTENT);
     }
@@ -5157,7 +5244,7 @@ async fn gradebook_import_confirm_post_handler(
     .map_err(AppError::from)?;
     if let Some(c) = course::get_by_id(&state.pool, c_id).await? {
         if c.sbg_enabled {
-            let sids: HashSet<Uuid> = ops.iter().map(|(uid, _, _, _)| *uid).collect();
+            let sids: HashSet<Uuid> = ops.iter().map(|(uid, _, _, _, _)| *uid).collect();
             for student_id in sids {
                 let _ = sbg_grading::recompute_student_sbg(
                     &state.pool,

@@ -327,6 +327,9 @@ export const courseGradebookGridResponseSchema = z.object({
   droppedGrades: z
     .record(z.string(), z.record(z.string(), z.boolean()))
     .optional(),
+  excusedGrades: z
+    .record(z.string(), z.record(z.string(), z.boolean()))
+    .optional(),
   gradingScheme: z
     .object({
       type: z.string(),
@@ -377,6 +380,7 @@ export const courseMyGradesRawSchema = z.object({
   displayGrades: z.record(z.string(), z.string()).optional(),
   heldGradeItemIds: z.array(z.string()).optional(),
   droppedGrades: z.record(z.string(), z.boolean()).optional(),
+  gradeStatuses: z.record(z.string(), z.string()).optional(),
   assignmentGroups: z.unknown().optional(),
   gradingScheme: z
     .object({

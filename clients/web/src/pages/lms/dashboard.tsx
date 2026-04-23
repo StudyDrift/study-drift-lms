@@ -793,7 +793,11 @@ export default function Dashboard() {
                     dropHighest: g.dropHighest,
                     replaceLowestWithFinal: g.replaceLowestWithFinal,
                   }))
-                  const finalPct = computeCourseFinalPercent(cols, row.myGrades?.grades ?? {}, weights)
+                  const exc: Record<string, boolean> = {}
+                  for (const [k, v] of Object.entries(row.myGrades?.gradeStatuses ?? {})) {
+                    if (v === 'excused') exc[k] = true
+                  }
+                  const finalPct = computeCourseFinalPercent(cols, row.myGrades?.grades ?? {}, weights, exc)
                   const base = `/courses/${encodeURIComponent(row.course.courseCode)}`
                   return (
                     <div

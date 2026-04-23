@@ -73,6 +73,10 @@ type GradebookGridProps = {
   gradeHeld?: Record<string, Record<string, boolean>>
   /** Plan 3.9 — dropped for course total. */
   droppedGrades?: Record<string, Record<string, boolean>>
+  /** Plan 3.12 — excused cells (excluded from course math). */
+  gradeExcused?: Record<string, Record<string, boolean>>
+  /** Mark / clear excused for one cell; causes parent to PATCH and refetch. */
+  onToggleExcused?: (studentId: string, columnId: string, excused: boolean) => void | Promise<void>
   /** When set, show “Post grades” in column header for manual assignment columns. */
   onPostAssignmentGrades?: (itemId: string) => void
   postGradesPending?: string | null
@@ -250,6 +254,8 @@ export function GradebookGrid({
   gradingScheme = null,
   gradeHeld = undefined,
   droppedGrades = undefined,
+  gradeExcused = undefined,
+  onToggleExcused,
   onPostAssignmentGrades,
   postGradesPending = null,
 }: GradebookGridProps) {
@@ -387,22 +393,29 @@ export function GradebookGrid({
   const finalPercentByStudentId = useMemo(() => {
     const out: Record<string, number | null> = {}
     for (const s of students) {
-      out[s.id] = computeCourseFinalPercent(columnsForFinal, grades[s.id] ?? {}, groupsForFinal)
+      const ex = gradeExcused?.[s.id] ?? {}
+      out[s.id] = computeCourseFinalPercent(
+        columnsForFinal,
+        grades[s.id] ?? {},
+        groupsForFinal,
+        ex,
+      )
     }
     return out
-  }, [students, columnsForFinal, grades, groupsForFinal])
+  }, [students, columnsForFinal, grades, groupsForFinal, gradeExcused])
 
   const columnScoreBounds = useMemo(() => {
     return visibleColumns.map((col) => {
       const nums: number[] = []
       for (const s of filteredStudents) {
+        if (gradeExcused?.[s.id]?.[col.id] === true) continue
         const n = parseGradeNumber(grades[s.id]?.[col.id] ?? '')
         if (n != null) nums.push(n)
       }
       if (nums.length === 0) return { min: null as number | null, max: null as number | null }
       return { min: Math.min(...nums), max: Math.max(...nums) }
     })
-  }, [visibleColumns, filteredStudents, grades])
+  }, [visibleColumns, filteredStudents, grades, gradeExcused])
 
   const classSummaryStats = useMemo(() => {
     const finalVals: number[] = []
@@ -413,6 +426,7 @@ export function GradebookGrid({
     const columns = visibleColumns.map((col) => {
       const nums: number[] = []
       for (const s of filteredStudents) {
+        if (gradeExcused?.[s.id]?.[col.id] === true) continue
         const n = parseGradeNumber(grades[s.id]?.[col.id] ?? '')
         if (n != null) nums.push(n)
       }
@@ -423,7 +437,7 @@ export function GradebookGrid({
       finalMed: median(finalVals),
       columns,
     }
-  }, [filteredStudents, visibleColumns, grades, finalPercentByStudentId])
+  }, [filteredStudents, visibleColumns, grades, finalPercentByStudentId, gradeExcused])
 
   const heatPercentForCell = useCallback(
     (colIndex: number, valStr: string): number | null => {
@@ -579,9 +593,10 @@ export function GradebookGrid({
     (row: number, col: number) => {
       const sid = filteredStudents[row]!.id
       const aid = visibleColumns[col]!.id
+      if (gradeExcused?.[sid]?.[aid] === true) return 'EX'
       return grades[sid]?.[aid] ?? ''
     },
-    [grades, filteredStudents, visibleColumns],
+    [grades, filteredStudents, visibleColumns, gradeExcused],
   )
 
   const beginEdit = useCallback(
@@ -598,10 +613,26 @@ export function GradebookGrid({
         colMin = Math.min(selectionAnchor.col, focusCol)
         colMax = Math.max(selectionAnchor.col, focusCol)
       }
-      setDraft(displayValue(row, col))
+      const sid = filteredStudents[row]!.id
+      const aid = visibleColumns[col]!.id
+      if (gradeExcused?.[sid]?.[aid] === true) {
+        setDraft(grades[sid]?.[aid] ?? '')
+      } else {
+        setDraft(displayValue(row, col))
+      }
       setEditing({ rowMin, rowMax, colMin, colMax })
     },
-    [displayValue, selectionAnchor, focusRow, focusCol, readOnly],
+    [
+      displayValue,
+      selectionAnchor,
+      focusRow,
+      focusCol,
+      readOnly,
+      filteredStudents,
+      visibleColumns,
+      gradeExcused,
+      grades,
+    ],
   )
 
   const commitEdit = useCallback(() => {
@@ -1331,6 +1362,7 @@ export function GradebookGrid({
                   const showEditor = editing != null && row === focusRow && colIndex === focusCol
                   const inEditBand = editing != null && inRect && !showEditor
                   const val = displayValue(row, colIndex)
+                  const isExcused = Boolean(gradeExcused?.[student.id]?.[col.id])
                   const cellHeld = Boolean(gradeHeld?.[student.id]?.[col.id])
                   const cellDropped = Boolean(droppedGrades?.[student.id]?.[col.id])
                   const singleCellEdit =
@@ -1360,7 +1392,10 @@ export function GradebookGrid({
                     colIndex <= fillDrag.src.col1
                   const inFillExtension = inFillDest && !inFillSource
 
-                  const heatT = colorScaleEnabled ? heatPercentForCell(colIndex, val) : null
+                  const heatT =
+                    colorScaleEnabled && !isExcused
+                      ? heatPercentForCell(colIndex, val === 'EX' ? '' : val)
+                      : null
                   const heatSurface =
                     heatT != null && !showEditor && !inFillDest ? heatMapCellClass(heatT) : null
 
@@ -1408,9 +1443,11 @@ export function GradebookGrid({
                           : undefined
                       }
                       aria-label={
-                        cellDropped
-                          ? `${val || 'Empty'}, score dropped by group policy for ${col.title} — ${student.name}`
-                          : undefined
+                        isExcused
+                          ? `Assignment ${col.title}: Excused — not counted toward grade for ${student.name}`
+                          : cellDropped
+                            ? `${val || 'Empty'}, score dropped by group policy for ${col.title} — ${student.name}`
+                            : undefined
                       }
                       onKeyDown={(e) => handleGradeCellKeyDown(e, row, colIndex)}
                       onPaste={(e) => {
@@ -1508,9 +1545,19 @@ export function GradebookGrid({
                             ) : null}
                             <span
                               className={
-                                val ? 'text-slate-950 dark:text-neutral-100' : 'text-neutral-400 dark:text-neutral-500'
+                                val
+                                  ? isExcused
+                                    ? 'font-semibold text-slate-700 dark:text-neutral-200'
+                                    : 'text-slate-950 dark:text-neutral-100'
+                                  : 'text-neutral-400 dark:text-neutral-500'
                               }
-                              aria-label={cellHeld ? 'Grade pending release' : undefined}
+                              aria-label={
+                                isExcused
+                                  ? 'Excused — not counted toward grade'
+                                  : cellHeld
+                                    ? 'Grade pending release'
+                                    : undefined
+                              }
                             >
                               {val || '—'}
                             </span>
@@ -1539,6 +1586,22 @@ export function GradebookGrid({
                                 }}
                               >
                                 History
+                              </button>
+                            ) : null}
+                            {!readOnly &&
+                            onToggleExcused &&
+                            (col.kind === 'assignment' ||
+                              col.kind === 'quiz' ||
+                              col.kind === 'quiz_comprehensive') ? (
+                              <button
+                                type="button"
+                                className="text-[11px] font-medium text-slate-600 hover:underline dark:text-neutral-400"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  void onToggleExcused(student.id, col.id, !isExcused)
+                                }}
+                              >
+                                {isExcused ? 'Unexcuse' : 'Excuse'}
                               </button>
                             ) : null}
                           </span>

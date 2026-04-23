@@ -15,6 +15,8 @@ pub struct GroupScoreLine {
     pub never_drop: bool,
     /// Designates the “final” column for replace-lowest policy.
     pub replace_with_final: bool,
+    /// Plan 3.12 — excluded from group pools, drop math, and effective totals.
+    pub excused: bool,
 }
 
 /// Config from `assignment_groups` row.
@@ -61,6 +63,7 @@ pub fn compute_group_average_with_drops(
 
     let mut rows: Vec<Scored> = lines
         .iter()
+        .filter(|l| !l.excused)
         .map(|l| {
             let max = if l.max_points > 0.0 && l.max_points.is_finite() {
                 l.max_points
@@ -155,6 +158,7 @@ pub fn item_drops_for_learner(
     group_policies: &HashMap<Uuid, GroupDropPolicy>,
     col_meta: &[(Uuid, Option<Uuid>, f64, bool, bool)], // id, group_id, max, never_drop, is_final
     earned_by_item: &HashMap<Uuid, f64>,
+    excused_by_item: &HashMap<Uuid, bool>,
 ) -> HashMap<Uuid, bool> {
     let mut by_group: HashMap<Uuid, Vec<GroupScoreLine>> = HashMap::new();
     for (id, gid, max, never_drop, is_final) in col_meta {
@@ -165,6 +169,9 @@ pub fn item_drops_for_learner(
         if g.is_none() {
             continue;
         }
+        if excused_by_item.get(id).copied().unwrap_or(false) {
+            continue;
+        }
         let e = earned_by_item.get(id).copied().unwrap_or(0.0);
         let line = GroupScoreLine {
             item_id: *id,
@@ -172,6 +179,7 @@ pub fn item_drops_for_learner(
             earned_points: e,
             never_drop: *never_drop,
             replace_with_final: *is_final,
+            excused: false,
         };
         by_group.entry(g.unwrap()).or_default().push(line);
     }
@@ -208,6 +216,7 @@ const UNGROUPED: &str = "__ungrouped__";
 pub fn compute_course_final_percent(
     columns: &[GradebookColumnForFinal],
     earned_by_item: &HashMap<Uuid, f64>,
+    excused_by_item: &HashMap<Uuid, bool>,
     assignment_groups: &[AssignmentGroupPublic],
 ) -> Option<f64> {
     let settings_ids: HashSet<Uuid> = assignment_groups.iter().map(|g| g.id).collect();
@@ -233,6 +242,13 @@ pub fn compute_course_final_percent(
         if col.max_points <= 0.0 || !col.max_points.is_finite() {
             continue;
         }
+        if excused_by_item
+            .get(&col.item_id)
+            .copied()
+            .unwrap_or(false)
+        {
+            continue;
+        }
         let earned = earned_by_item
             .get(&col.item_id)
             .copied()
@@ -247,6 +263,7 @@ pub fn compute_course_final_percent(
                     earned_points: earned,
                     never_drop: col.never_drop,
                     replace_with_final: col.replace_with_final,
+                    excused: false,
                 });
             }
             _ => {
@@ -365,12 +382,13 @@ mod tests {
         Uuid::from_u128(n)
     }
 
-    fn line(
+    fn line_ex(
         n: u128,
         max: f64,
         earned: f64,
         never_drop: bool,
         is_final: bool,
+        excused: bool,
     ) -> GroupScoreLine {
         GroupScoreLine {
             item_id: id(n),
@@ -378,7 +396,18 @@ mod tests {
             earned_points: earned,
             never_drop,
             replace_with_final: is_final,
+            excused,
         }
+    }
+
+    fn line(
+        n: u128,
+        max: f64,
+        earned: f64,
+        never_drop: bool,
+        is_final: bool,
+    ) -> GroupScoreLine {
+        line_ex(n, max, earned, never_drop, is_final, false)
     }
 
     #[test]
@@ -435,6 +464,26 @@ mod tests {
     }
 
     #[test]
+    fn ac_excused_excluded_from_drop() {
+        // 3.12 / 3.9: excused 60 not in pool — drop 50 from {50, EX, 80, 90}
+        let g = [
+            line_ex(1, 100.0, 50.0, false, false, false),
+            line_ex(2, 100.0, 60.0, false, false, true),
+            line_ex(3, 100.0, 80.0, false, false, false),
+            line_ex(4, 100.0, 90.0, false, false, false),
+        ];
+        let pol = GroupDropPolicy {
+            drop_lowest: 1,
+            drop_highest: 0,
+            replace_lowest_with_final: false,
+        };
+        let r = compute_group_average_with_drops(&pol, &g);
+        assert!(r.dropped.contains(&id(1)));
+        assert!((r.effective_earned - 170.0).abs() < 1e-6);
+        assert!((r.effective_max - 200.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn replace_with_final() {
         let g = [
             line(1, 100.0, 50.0, false, false),
@@ -474,6 +523,7 @@ mod tests {
                 },
             ],
             &HashMap::from([(a, 80.0), (b, 40.0)]),
+            &HashMap::new(),
             &[],
         );
         assert!((p.unwrap() - (120.0 / 150.0) * 100.0).abs() < 1e-4);
@@ -502,6 +552,7 @@ mod tests {
                 },
             ],
             &HashMap::from([(a, 40.0), (b, 30.0)]),
+            &HashMap::new(),
             &[AssignmentGroupPublic {
                 id: g1,
                 sort_order: 0,
