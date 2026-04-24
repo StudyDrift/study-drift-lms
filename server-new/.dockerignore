@@ -1,0 +1,6 @@
+coverage.out
+*.md
+.env
+.env.*
+.git
+.gitignore

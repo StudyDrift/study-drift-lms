@@ -133,6 +133,46 @@ jobs:
       - name: Build
         run: cargo build --release
 
+  server-go:
+    name: Server (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TEST_DATABASE_URL: postgres://test:test@localhost:5432/studydrift_test
+      JWT_SECRET: ci-test-jwt-secret-needs-32-chars-minimum-ok
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: studydrift_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d studydrift_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: server-new
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+
+      - name: Mod tidy
+        run: go mod tidy
+
+      - name: Test with coverage gate
+        run: make test
+
+      - name: Build static binary
+        run: go build -trimpath -o /dev/null ./cmd/lextures-server
+
   clients:
     name: Client (${{ matrix.client }})
     runs-on: ubuntu-latest

@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: studydrift
+      POSTGRES_PASSWORD: studydrift
+      POSTGRES_DB: studydrift
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studydrift -d studydrift"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://studydrift:studydrift@postgres:5432/studydrift?sslmode=disable
+      JWT_SECRET: "01234567890123456789012345678901-dev-only-do-not-use"
+      RUN_MIGRATIONS: "true"
+      LTI_API_BASE_URL: http://localhost:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy

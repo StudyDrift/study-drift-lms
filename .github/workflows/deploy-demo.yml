@@ -57,6 +57,7 @@ jobs:
         run: |
           REPO_LOWER="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
           echo "server=ghcr.io/${REPO_LOWER}/server-demo:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "server_go=ghcr.io/${REPO_LOWER}/server-go:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           echo "web=ghcr.io/${REPO_LOWER}/web-demo:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
@@ -78,6 +79,16 @@ jobs:
           tags: ${{ steps.images.outputs.server }}
           cache-from: type=gha,scope=deploy-demo-server
           cache-to: type=gha,mode=max,scope=deploy-demo-server
+
+      - name: Build and push Go server image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server-new
+          file: ./server-new/Dockerfile
+          push: true
+          tags: ${{ steps.images.outputs.server_go }}
+          cache-from: type=gha,scope=deploy-demo-server-go
+          cache-to: type=gha,mode=max,scope=deploy-demo-server-go
 
       - name: Build and push web image
         uses: docker/build-push-action@v6
