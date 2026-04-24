@@ -5,6 +5,9 @@
 # once and rebuild:  docker volume rm <project>_server_target  (e.g. lextures_server_target)
 # then:  docker compose -f docker-compose.dev.yml up --build
 #
+# If `samael` build fails with "xmlsec1-config" not found, the server image predates SAML native
+# deps — rebuild without cache:  docker compose -f docker-compose.dev.yml build --no-cache server
+#
 # Prefer this single command (includes the base stack so Postgres + port 8080 exist):
 #   docker compose -f docker-compose.dev.yml up --build
 #

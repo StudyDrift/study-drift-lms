@@ -62,8 +62,15 @@ urlencoding = "2.1"
 uuid = { version = "1", features = ["serde", "v4", "v5"] }
 utoipa = { version = "5", features = ["axum_extras"] }
 roxmltree = "0.20"
+# 0.0.20 on crates.io predates a Rust 1.88+ `CStr` pointer fix; use git for Docker/latest rustc.
+samael = { git = "https://github.com/njaremko/samael", rev = "f879f1942ec1b34b6d3027ce7e4724ad95d15dfa" }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
+openidconnect = { version = "4.0.1", default-features = false, features = [
+    "reqwest",
+    "rustls-tls",
+] }
+hex = { version = "0.4.3", features = ["alloc"] }
 
 [dev-dependencies]
 http-body-util = "0.1"

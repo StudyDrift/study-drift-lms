@@ -23,6 +23,8 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::openapi::swagger_router())
         .merge(routes::admin::router())
         .merge(routes::auth::router())
+        .merge(routes::saml::router())
+        .merge(routes::oidc::router())
         .merge(routes::accommodations::router())
         .merge(routes::adaptive_paths::router())
         .merge(routes::diagnostic::router())
@@ -99,6 +101,8 @@ mod tests {
             gradebook_csv_enabled: false,
             resubmission_workflow_enabled: false,
             gradebook_import_pending: Arc::new(Mutex::new(HashMap::new())),
+            saml: None,
+            oidc: None,
         }
     }
 

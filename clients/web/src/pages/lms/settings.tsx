@@ -8,6 +8,7 @@ import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-setti
 import { RolesPermissionsPanel } from '../../components/settings/roles-permissions-panel'
 import { usePermissions } from '../../context/use-permissions'
 import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
+import { OidcConnectedAccountsPanel } from '../../components/oidc-connected-accounts-panel'
 import { LmsPage } from './lms-page'
 import { FALLBACK_IMAGE_MODEL_OPTIONS, FALLBACK_TEXT_MODEL_OPTIONS } from '../../lib/ai-models'
 import { authorizedFetch } from '../../lib/api'
@@ -892,6 +893,7 @@ export default function Settings() {
                 </button>
               </form>
             )}
+            {!accountLoading && <OidcConnectedAccountsPanel />}
           </div>
         )}
 

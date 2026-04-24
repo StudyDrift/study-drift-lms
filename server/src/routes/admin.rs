@@ -17,6 +17,8 @@ use crate::error::AppError;
 use crate::http_auth::require_permission;
 use crate::repos::originality_platform_config;
 use crate::repos::originality_reports;
+use crate::repos::oidc as oidc_repo;
+use crate::repos::saml as saml_repo;
 use crate::services::irt_calibration_job;
 use crate::state::AppState;
 
@@ -35,6 +37,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/admin/users/{user_id}/dsar-export",
             get(get_user_dsar_export_handler),
+        )
+        .route(
+            "/api/v1/admin/saml/config",
+            get(get_saml_config_handler).put(put_saml_config_handler),
+        )
+        .route(
+            "/api/v1/admin/oidc/providers",
+            get(get_oidc_providers_handler).put(put_oidc_provider_handler),
         )
 }
 
@@ -159,4 +169,136 @@ async fn get_user_dsar_export_handler(
     Ok(Json(
         json!({ "userId": user_id, "originalityReports": items, "version": 1, "exportKind": "ferpa-slice" }),
     ))
+}
+
+async fn get_saml_config_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _auth = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
+    let idp = saml_repo::get_default_idp(&state.pool).await?;
+    if let Some(row) = idp {
+        return Ok(Json(json!({
+            "id": row.id,
+            "institutionId": row.institution_id,
+            "displayName": row.display_name,
+            "entityId": row.entity_id,
+            "ssoUrl": row.sso_url,
+            "sloUrl": row.slo_url,
+            "attributeMapping": row.attribute_mapping,
+            "forceSaml": row.force_saml
+        })));
+    }
+    Ok(Json(json!({ "config": serde_json::Value::Null })))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PutSamlConfigRequest {
+    id: Option<Uuid>,
+    #[serde(default)]
+    institution_id: Option<Uuid>,
+    display_name: String,
+    entity_id: String,
+    sso_url: String,
+    slo_url: Option<String>,
+    idp_cert_pem: String,
+    attribute_mapping: serde_json::Value,
+    #[serde(default)]
+    force_saml: bool,
+}
+
+async fn put_saml_config_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<PutSamlConfigRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _auth = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
+    let w = saml_repo::SamlIdpConfigWrite {
+        institution_id: body.institution_id,
+        display_name: body.display_name.trim().to_string(),
+        entity_id: body.entity_id.trim().to_string(),
+        sso_url: body.sso_url.trim().to_string(),
+        slo_url: body.slo_url,
+        idp_cert_pem: body.idp_cert_pem,
+        attribute_mapping: body.attribute_mapping,
+        force_saml: body.force_saml,
+    };
+    if w.entity_id.is_empty() || w.sso_url.is_empty() {
+        return Err(AppError::invalid_input("entityId and ssoUrl are required."));
+    }
+    let row = saml_repo::upsert_idp(&state.pool, body.id, &w).await?;
+    Ok(Json(json!({
+        "id": row.id,
+        "entityId": row.entity_id
+    })))
+}
+
+async fn get_oidc_providers_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _auth = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
+    let rows = oidc_repo::list_custom_configs(&state.pool).await?;
+    let items: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|r| {
+            json!({
+                "id": r.id,
+                "institutionId": r.institution_id,
+                "displayName": r.display_name,
+                "clientId": r.client_id,
+                "hasClientSecret": !r.client_secret.is_empty(),
+                "discoveryUrl": r.discovery_url,
+                "hdRestriction": r.hd_restriction,
+                "attributeMapping": r.attribute_mapping
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "providers": items })))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PutOidcProviderRequest {
+    id: Option<Uuid>,
+    #[serde(default)]
+    institution_id: Option<Uuid>,
+    display_name: String,
+    client_id: String,
+    client_secret: String,
+    discovery_url: String,
+    #[serde(default)]
+    hd_restriction: Option<String>,
+    #[serde(default)]
+    attribute_mapping: serde_json::Value,
+}
+
+async fn put_oidc_provider_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<PutOidcProviderRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _auth = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
+    let w = oidc_repo::OidcProviderConfigWrite {
+        institution_id: body.institution_id,
+        display_name: body.display_name.trim().to_string(),
+        client_id: body.client_id.trim().to_string(),
+        client_secret: body.client_secret,
+        discovery_url: body.discovery_url.trim().to_string(),
+        hd_restriction: body
+            .hd_restriction
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+        attribute_mapping: if body.attribute_mapping.is_null() {
+            serde_json::json!({})
+        } else {
+            body.attribute_mapping
+        },
+    };
+    if w.client_id.is_empty() || w.discovery_url.is_empty() {
+        return Err(AppError::invalid_input("clientId and discoveryUrl are required."));
+    }
+    let id = oidc_repo::upsert_custom_config(&state.pool, body.id, &w).await?;
+    Ok(Json(json!({ "id": id })))
 }

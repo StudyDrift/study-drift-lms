@@ -139,7 +139,10 @@ pub async fn insert_course(
                 misconception_detection_enabled,
                 course_type,
                 created_at,
-                updated_at
+                updated_at,
+                sbg_enabled,
+                sbg_proficiency_scale_json,
+                sbg_aggregation_rule
             "#,
             schema::COURSES
         ))

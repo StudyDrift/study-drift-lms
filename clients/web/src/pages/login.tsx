@@ -1,6 +1,7 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { BrandLogo } from '../components/brand-logo'
+import { OidcSignInButtons } from '../components/oidc-sign-in-buttons'
 import { getAccessToken, setAccessToken } from '../lib/auth'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
@@ -25,6 +26,37 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
+  const [saml, setSaml] = useState<{
+    enabled: boolean
+    idp?: { id: string; label: string; forceSaml: boolean }
+  } | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const res = await fetch(apiUrl('/api/v1/auth/saml/status'))
+        const raw: unknown = await res.json().catch(() => ({}))
+        if (!alive) return
+        const o = raw as {
+          enabled?: boolean
+          idp?: { id: string; label: string; forceSaml: boolean }
+        }
+        if (o.enabled && o.idp) {
+          setSaml({ enabled: true, idp: o.idp })
+        } else if (o.enabled) {
+          setSaml({ enabled: true })
+        } else {
+          setSaml({ enabled: false })
+        }
+      } catch {
+        if (alive) setSaml({ enabled: false })
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
 
   if (getAccessToken()) {
     return <Navigate to="/" replace />
@@ -81,7 +113,27 @@ export default function Login() {
         </header>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm shadow-slate-900/5">
-          <form className="space-y-5" onSubmit={onSubmit}>
+          <OidcSignInButtons nextPath={from} />
+          {saml?.enabled && saml.idp && (
+            <div className="mb-6">
+              <a
+                className="flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-indigo-300 hover:bg-slate-50"
+                href={apiUrl(
+                  `/auth/saml/login?idpId=${encodeURIComponent(saml.idp.id)}&RelayState=${encodeURIComponent(from)}`,
+                )}
+                aria-label="Log in with institutional single sign-on"
+              >
+                Log in with {saml.idp.label} SSO
+              </a>
+            </div>
+          )}
+          {saml?.enabled && saml.idp?.forceSaml && (
+            <p className="mb-4 text-center text-sm text-slate-500">
+              Your organization requires institutional sign-in.
+            </p>
+          )}
+          {!saml?.idp?.forceSaml && (
+            <form className="space-y-5" onSubmit={onSubmit}>
             <div>
               <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
                 Email
@@ -137,13 +189,16 @@ export default function Login() {
               {status === 'loading' ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+          )}
 
-          <p className="mt-6 text-center text-sm text-slate-500">
-            New here?{' '}
-            <Link to="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
-              Create an account
-            </Link>
-          </p>
+          {!saml?.idp?.forceSaml && (
+            <p className="mt-6 text-center text-sm text-slate-500">
+              New here?{' '}
+              <Link to="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
+                Create an account
+              </Link>
+            </p>
+          )}
         </div>
       </div>
     </div>

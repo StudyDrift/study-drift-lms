@@ -1,10 +1,13 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
-    routing::{get, post},
+    routing::delete,
+    routing::get, routing::post,
     Json, Router,
 };
 use serde::Deserialize;
+use serde_json::json;
+use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::http_auth::auth_user;
@@ -12,13 +15,18 @@ use crate::models::me::MyPermissionsResponse;
 use crate::models::student_notebook_rag::{
     StudentNotebookDocInput, StudentNotebookRagRequest, StudentNotebookRagResponse,
 };
-use crate::repos::{enrollment, rbac};
+use crate::repos::{enrollment, oidc as oidc_repo, rbac};
 use crate::services::student_notebook_rag_ai;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/me/permissions", get(get_my_permissions))
+        .route("/api/v1/me/oidc-identities", get(get_my_oidc_identities))
+        .route(
+            "/api/v1/me/oidc-identities/{id}",
+            delete(delete_my_oidc_identity),
+        )
         .route("/api/v1/me/notebooks/query", post(post_notebooks_query))
 }
 
@@ -139,4 +147,36 @@ async fn post_notebooks_query(
     )
     .await
     .map(Json)
+}
+
+async fn get_my_oidc_identities(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let u = auth_user(&state, &headers)?;
+    let rows = oidc_repo::list_identities_for_user(&state.pool, u.user_id).await?;
+    let items: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            json!({
+                "id": r.id,
+                "provider": r.provider,
+                "email": r.email
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "identities": items })))
+}
+
+async fn delete_my_oidc_identity(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(identity_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let u = auth_user(&state, &headers)?;
+    let ok = oidc_repo::delete_identity_by_id_for_user(&state.pool, u.user_id, identity_id).await?;
+    if !ok {
+        return Err(AppError::NotFound);
+    }
+    Ok(Json(json!({ "ok": true })))
 }

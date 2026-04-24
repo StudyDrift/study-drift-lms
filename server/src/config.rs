@@ -54,6 +54,33 @@ pub struct Config {
     pub gradebook_csv_enabled: bool,
     /// Plan 3.13 — resubmission workflow. Default off; set `RESUBMISSION_WORKFLOW_ENABLED=1` to enable.
     pub resubmission_workflow_enabled: bool,
+    /// Plan 4.1 — SAML 2.0 SP: default off (`SAML_SSO_ENABLED=1` to enable; requires cert material).
+    pub saml_sso_enabled: bool,
+    /// Public base URL of the API (no trailing slash) for `/auth/saml/*` — defaults to `LTI_API_BASE_URL` / `http://localhost:8080`.
+    pub saml_public_base_url: String,
+    /// SP `EntityID` in SAML metadata; default `{saml_public_base_url}/auth/saml/metadata`.
+    pub saml_sp_entity_id: String,
+    /// SP X.509 certificate (PEM) for published metadata; required when `saml_sso_enabled`.
+    pub saml_sp_x509_pem: Option<String>,
+    /// Optional SP private key (PEM) for encrypted assertions from some IdPs.
+    pub saml_sp_private_key_pem: Option<String>,
+    /// Plan 4.2 — OIDC SSO (`OIDC_SSO_ENABLED=1`).
+    pub oidc_sso_enabled: bool,
+    /// Public API base for `/auth/oidc/*` redirect URIs (defaults to `LTI_API_BASE_URL` / `http://localhost:8080`).
+    pub oidc_public_base_url: String,
+    pub oidc_google_client_id: Option<String>,
+    pub oidc_google_client_secret: Option<String>,
+    /// Optional Google Workspace hosted domain (restricts to @domain accounts via `hd`).
+    pub oidc_google_hd: Option<String>,
+    /// Microsoft Entra tenant segment in issuer URL, e.g. `common` or a tenant id (default `common`).
+    pub oidc_microsoft_tenant: String,
+    pub oidc_microsoft_client_id: Option<String>,
+    pub oidc_microsoft_client_secret: Option<String>,
+    /// Apple Service ID, Team ID, Key ID, and AuthKey `.p8` PEM for dynamic `client_secret` JWT.
+    pub oidc_apple_client_id: Option<String>,
+    pub oidc_apple_team_id: Option<String>,
+    pub oidc_apple_key_id: Option<String>,
+    pub oidc_apple_private_key_pem: Option<String>,
 }
 
 const DEFAULT_CANVAS_ALLOWED_HOST_SUFFIXES: &[&str] = &["instructure.com"];
@@ -290,6 +317,109 @@ impl Config {
             Some("1") | Some("true") | Some("yes") | Some("on")
         );
 
+        let saml_sso_enabled = matches!(
+            env::var("SAML_SSO_ENABLED")
+                .ok()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("1") | Some("true") | Some("yes") | Some("on")
+        );
+
+        let saml_public_base_url = env::var("SAML_PUBLIC_BASE_URL")
+            .ok()
+            .or_else(|| env::var("LTI_API_BASE_URL").ok())
+            .map(|s| s.trim().trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "http://localhost:8080".to_string());
+
+        let saml_sp_entity_id = env::var("SAML_SP_ENTITY_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| {
+                format!("{saml_public_base_url}/auth/saml/metadata")
+            });
+
+        let saml_sp_x509_pem = env::var("SAML_SP_X509_PEM")
+            .ok()
+            .or_else(|| env::var("SAML_SP_X509_PATH").ok().and_then(|p| std::fs::read_to_string(p).ok()))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        let saml_sp_private_key_pem = env::var("SAML_SP_PRIVATE_KEY_PEM")
+            .ok()
+            .or_else(|| env::var("SAML_SP_PRIVATE_KEY_PATH").ok().and_then(|p| std::fs::read_to_string(p).ok()))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        if saml_sso_enabled && saml_sp_x509_pem.is_none() {
+            anyhow::bail!(
+                "SAML_SSO_ENABLED is set but SAML_SP_X509_PEM (or SAML_SP_X509_PATH) is missing. Provide a PEM certificate for the SAML service provider or disable SAML."
+            );
+        }
+
+        let oidc_sso_enabled = matches!(
+            env::var("OIDC_SSO_ENABLED")
+                .ok()
+                .map(|s| s.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("1") | Some("true") | Some("yes") | Some("on")
+        );
+
+        let oidc_public_base_url = env::var("OIDC_PUBLIC_BASE_URL")
+            .ok()
+            .or_else(|| env::var("LTI_API_BASE_URL").ok())
+            .map(|s| s.trim().trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "http://localhost:8080".to_string());
+
+        let oidc_google_client_id = env::var("OIDC_GOOGLE_CLIENT_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let oidc_google_client_secret = env::var("OIDC_GOOGLE_CLIENT_SECRET")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let oidc_google_hd = env::var("OIDC_GOOGLE_HOSTED_DOMAIN")
+            .ok()
+            .or_else(|| env::var("OIDC_GOOGLE_HD").ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        let oidc_microsoft_tenant = env::var("OIDC_MICROSOFT_TENANT")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "common".to_string());
+
+        let oidc_microsoft_client_id = env::var("OIDC_MICROSOFT_CLIENT_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let oidc_microsoft_client_secret = env::var("OIDC_MICROSOFT_CLIENT_SECRET")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        let oidc_apple_client_id = env::var("OIDC_APPLE_CLIENT_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let oidc_apple_team_id = env::var("OIDC_APPLE_TEAM_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let oidc_apple_key_id = env::var("OIDC_APPLE_KEY_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let oidc_apple_private_key_pem = env::var("OIDC_APPLE_PRIVATE_KEY_PEM")
+            .ok()
+            .or_else(|| env::var("OIDC_APPLE_PRIVATE_KEY_PATH").ok().and_then(|p| std::fs::read_to_string(p).ok()))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
         Ok(Self {
             database_url,
             jwt_secret,
@@ -316,6 +446,23 @@ impl Config {
             grade_posting_policies_enabled,
             gradebook_csv_enabled,
             resubmission_workflow_enabled,
+            saml_sso_enabled,
+            saml_public_base_url,
+            saml_sp_entity_id,
+            saml_sp_x509_pem,
+            saml_sp_private_key_pem,
+            oidc_sso_enabled,
+            oidc_public_base_url,
+            oidc_google_client_id,
+            oidc_google_client_secret,
+            oidc_google_hd,
+            oidc_microsoft_tenant,
+            oidc_microsoft_client_id,
+            oidc_microsoft_client_secret,
+            oidc_apple_client_id,
+            oidc_apple_team_id,
+            oidc_apple_key_id,
+            oidc_apple_private_key_pem,
         })
     }
 }

@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { BrandLogo } from '../components/brand-logo'
+import { OidcSignInButtons } from '../components/oidc-sign-in-buttons'
 import { getAccessToken, setAccessToken } from '../lib/auth'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
@@ -71,7 +72,8 @@ export default function Signup() {
         </header>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm shadow-slate-900/5">
-          <form className="space-y-5" onSubmit={onSubmit}>
+          <OidcSignInButtons nextPath="/" />
+          <form className="mt-4 space-y-5" onSubmit={onSubmit}>
             <div>
               <label htmlFor="displayName" className="mb-1.5 block text-sm font-medium text-slate-700">
                 Display name <span className="font-normal text-slate-500">(optional)</span>

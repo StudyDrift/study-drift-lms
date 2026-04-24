@@ -126,6 +126,77 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         _ => None,
     };
 
+    let saml = if config.saml_sso_enabled {
+        let Some(ref pem) = config.saml_sp_x509_pem else {
+            unreachable!("SAML_SSO_ENABLED without cert should be rejected in Config::from_env");
+        };
+        Some(crate::state::SamlSpSettings {
+            public_base_url: config.saml_public_base_url.clone(),
+            sp_entity_id: config.saml_sp_entity_id.clone(),
+            sp_x509_pem: pem.clone(),
+            sp_private_key_pem: config.saml_sp_private_key_pem.clone(),
+        })
+    } else {
+        None
+    };
+
+    let oidc = if config.oidc_sso_enabled {
+        let http = openidconnect::reqwest::ClientBuilder::new()
+            .redirect(openidconnect::reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| anyhow::anyhow!("OIDC HTTP client: {e}"))?;
+        let google = match (
+            config.oidc_google_client_id.as_ref(),
+            config.oidc_google_client_secret.as_ref(),
+        ) {
+            (Some(id), Some(sec)) => Some((
+                crate::state::OidcClientCredentials {
+                    client_id: id.clone(),
+                    client_secret: sec.clone(),
+                },
+                config.oidc_google_hd.clone(),
+            )),
+            _ => None,
+        };
+        let microsoft = match (
+            config.oidc_microsoft_client_id.as_ref(),
+            config.oidc_microsoft_client_secret.as_ref(),
+        ) {
+            (Some(id), Some(sec)) => Some((
+                crate::state::OidcClientCredentials {
+                    client_id: id.clone(),
+                    client_secret: sec.clone(),
+                },
+                config.oidc_microsoft_tenant.clone(),
+            )),
+            _ => None,
+        };
+        let apple = match (
+            config.oidc_apple_client_id.as_ref(),
+            config.oidc_apple_team_id.as_ref(),
+            config.oidc_apple_key_id.as_ref(),
+            config.oidc_apple_private_key_pem.as_ref(),
+        ) {
+            (Some(cid), Some(team), Some(kid), Some(pem)) => Some(crate::state::AppleOidcCreds {
+                client_id: cid.clone(),
+                team_id: team.clone(),
+                key_id: kid.clone(),
+                private_key_pem: pem.clone(),
+            }),
+            _ => None,
+        };
+        Some(std::sync::Arc::new(crate::state::OidcState {
+            public_base: config.oidc_public_base_url.clone(),
+            http,
+            google,
+            microsoft,
+            apple,
+            metadata_cache: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+        }))
+    } else {
+        None
+    };
+
     Ok(AppState {
         pool,
         jwt,
@@ -152,7 +223,11 @@ pub async fn build_app_state_from_env() -> anyhow::Result<AppState> {
         grade_posting_policies_enabled: config.grade_posting_policies_enabled,
         gradebook_csv_enabled: config.gradebook_csv_enabled,
         resubmission_workflow_enabled: config.resubmission_workflow_enabled,
-        gradebook_import_pending: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        gradebook_import_pending: std::sync::Arc::new(std::sync::Mutex::new(
+            std::collections::HashMap::new(),
+        )),
+        saml,
+        oidc,
     })
 }
 

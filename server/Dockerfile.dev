@@ -1,6 +1,17 @@
 # Development image: cargo-watch recompiles and restarts the server when sources change.
 FROM rust:1-bookworm
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  pkg-config \
+  libssl-dev \
+  libxml2-dev \
+  libxslt1-dev \
+  libxmlsec1-dev \
+  clang \
+  libclang-dev \
+  && rm -rf /var/lib/apt/lists/* \
+  && test -x /usr/bin/xmlsec1-config
+
 RUN cargo install cargo-watch
 
 WORKDIR /app
@@ -20,8 +31,11 @@ RUN mkdir -p src/bin \
 ENV RUST_LOG=debug
 EXPOSE 8080
 
+COPY docker-entrypoint.dev.sh /usr/local/bin/docker-entrypoint.dev.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.dev.sh
+
 # --poll: reliable file events when the project is bind-mounted (e.g. Docker Desktop on macOS).
 # The named volume `server_target` is first populated from the image's `target/`. Remove the stub
 # `study_drift_server` (empty main) so the next `cargo` run always links the real `main.rs` from
 # the bind mount; otherwise a no-op build can re-run the wrong binary and nothing listens on 8080.
-CMD ["sh", "-c", "rm -f /app/target/debug/study_drift_server; exec cargo watch -q -x run --poll"]
+CMD ["/usr/local/bin/docker-entrypoint.dev.sh"]

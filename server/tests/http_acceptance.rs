@@ -15,6 +15,15 @@ async fn json_body(res: reqwest::Response) -> Value {
     serde_json::from_str(&t).unwrap_or_else(|_| json!({}))
 }
 
+/// Local `.env` may set `SAML_SSO_ENABLED` without a valid cert; integration tests must not require SAML SP key material.
+fn clear_saml_env_for_tests() {
+    std::env::set_var("SAML_SSO_ENABLED", "0");
+    std::env::remove_var("SAML_SP_X509_PEM");
+    std::env::remove_var("SAML_SP_X509_PATH");
+    std::env::remove_var("SAML_SP_PRIVATE_KEY_PEM");
+    std::env::remove_var("SAML_SP_PRIVATE_KEY_PATH");
+}
+
 #[tokio::test]
 async fn full_http_walkthrough() {
     std::env::set_var("RUN_MIGRATIONS", "true");
@@ -25,6 +34,7 @@ async fn full_http_walkthrough() {
         );
     }
     study_drift_server::load_dotenv();
+    clear_saml_env_for_tests();
     if std::env::var("DATABASE_URL").is_err() {
         std::env::set_var(
             "DATABASE_URL",
@@ -656,6 +666,7 @@ async fn password_reset_flow() {
         );
     }
     study_drift_server::load_dotenv();
+    clear_saml_env_for_tests();
     if std::env::var("DATABASE_URL").is_err() {
         std::env::set_var(
             "DATABASE_URL",

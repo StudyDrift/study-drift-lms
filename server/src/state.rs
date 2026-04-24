@@ -99,4 +99,45 @@ pub struct AppState {
     pub gradebook_import_pending: Arc<Mutex<HashMap<Uuid, GradebookImportPending>>>,
     /// Plan 3.13 — instructor revision requests and versioned resubmissions.
     pub resubmission_workflow_enabled: bool,
+    /// Plan 4.1 — SAML 2.0 SP (present when `SAML_SSO_ENABLED` and key material are configured).
+    pub saml: Option<crate::state::SamlSpSettings>,
+    /// Plan 4.2 — OpenID Connect (when `OIDC_SSO_ENABLED`).
+    pub oidc: Option<std::sync::Arc<crate::state::OidcState>>,
+}
+
+/// Google / Microsoft (client secret) env-backed creds; Apple is handled separately in [`OidcState`].
+#[derive(Clone, Debug)]
+pub struct OidcClientCredentials {
+    pub client_id: String,
+    pub client_secret: String,
+}
+
+/// Plan 4.2 — OIDC provider material loaded from the environment and shared HTTP client.
+#[derive(Debug)]
+pub struct OidcState {
+    pub public_base: String,
+    pub http: openidconnect::reqwest::Client,
+    pub google: Option<(OidcClientCredentials, Option<String>)>,
+    pub microsoft: Option<(OidcClientCredentials, String)>,
+    pub apple: Option<AppleOidcCreds>,
+    pub metadata_cache:
+        tokio::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, openidconnect::core::CoreProviderMetadata)>>,
+}
+
+/// Apple “Sign in with Apple” key material: dynamic ES256 `client_secret` (JWT) for each code exchange.
+#[derive(Clone, Debug)]
+pub struct AppleOidcCreds {
+    pub client_id: String,
+    pub team_id: String,
+    pub key_id: String,
+    pub private_key_pem: String,
+}
+
+/// Public API base + SP key material for `samael` metadata and response validation.
+#[derive(Clone, Debug)]
+pub struct SamlSpSettings {
+    pub public_base_url: String,
+    pub sp_entity_id: String,
+    pub sp_x509_pem: String,
+    pub sp_private_key_pem: Option<String>,
 }

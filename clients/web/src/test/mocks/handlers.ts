@@ -59,6 +59,9 @@ export const handlers = [
   http.get('http://localhost:8080/api/v1/communication/unread-count', () => {
     return HttpResponse.json({ unread_inbox: 0 })
   }),
+  http.get('http://localhost:8080/api/v1/auth/saml/status', () => {
+    return HttpResponse.json({ enabled: false })
+  }),
   http.post('http://localhost:8080/api/v1/auth/login', async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string }
     return HttpResponse.json({

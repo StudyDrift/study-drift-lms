@@ -16,6 +16,16 @@ pub struct UserRow {
     pub sid: Option<String>,
 }
 
+pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<UserRow>, sqlx::Error> {
+    sqlx::query_as::<_, UserRow>(&format!(
+        "SELECT id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid FROM {} WHERE id = $1",
+        schema::USERS
+    ))
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
 pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>, sqlx::Error> {
     sqlx::query_as::<_, UserRow>(&format!(
         "SELECT id, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid FROM {} WHERE email = $1",
