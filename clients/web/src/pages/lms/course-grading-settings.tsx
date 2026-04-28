@@ -235,8 +235,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
     }
   }
 
-  async function onSaveGradingScheme(e: React.FormEvent) {
-    e.preventDefault()
+  async function onSaveGradingScheme() {
     if (!canEdit) return
     setSchemeStatus('saving')
     setSchemeMessage(null)
@@ -364,7 +363,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
             Controls how gradebook and My Grades show scores (letters, pass/fail, etc.). Stored scores stay as
             points; changing this only updates labels.
           </p>
-          <form onSubmit={onSaveGradingScheme} className="mt-4 space-y-4">
+          <div className="mt-4 space-y-4">
             <div>
               <label htmlFor="grading-scheme-type" className="text-xs font-medium text-slate-500 dark:text-neutral-400">
                 Display as
@@ -445,14 +444,15 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
             )}
             {canEdit && (
               <button
-                type="submit"
+                type="button"
                 disabled={schemeStatus === 'saving'}
+                onClick={() => void onSaveGradingScheme()}
                 className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-200 dark:text-neutral-900 dark:hover:bg-white"
               >
                 {schemeStatus === 'saving' ? 'Saving…' : 'Save grade display scheme'}
               </button>
             )}
-          </form>
+          </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-600 dark:bg-neutral-900 dark:shadow-none">

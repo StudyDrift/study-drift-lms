@@ -10,7 +10,7 @@ export function useViewerEnrollmentRoles(courseCode: string | null | undefined):
   const [viewerRoles, setViewerRoles] = useState<string[] | null>(null)
 
   useEffect(() => {
-    if (!courseCode) {
+    if (!courseCode || courseCode === 'create') {
       setViewerRoles(null)
       return
     }

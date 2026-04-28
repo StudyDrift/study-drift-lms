@@ -35,6 +35,14 @@ export default defineConfig({
     watch: {
       usePolling: process.env.CHOKIDAR_USEPOLLING === 'true',
     },
+    // If anything still fetches a relative /api/... path, send it to the API (avoids 404 from Vite).
+    // In compose, set VITE_DEV_API_PROXY to http://server:8080 so the Vite container can reach the API service.
+    proxy: {
+      '/api': {
+        target: process.env.VITE_DEV_API_PROXY ?? 'http://127.0.0.1:8080',
+        changeOrigin: true,
+      },
+    },
   },
   test: {
     globals: true,

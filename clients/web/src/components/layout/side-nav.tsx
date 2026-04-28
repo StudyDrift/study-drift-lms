@@ -45,7 +45,10 @@ export function SideNav() {
     }
   }, [mobileNavOpen])
   const courseMatch = matchPath({ path: '/courses/:courseCode', end: false }, location.pathname)
-  const courseCode = courseMatch?.params.courseCode
+  const courseCode =
+    courseMatch?.params.courseCode && courseMatch.params.courseCode !== 'create'
+      ? courseMatch.params.courseCode
+      : undefined
   const courseSettingsMatch = matchPath(
     { path: '/courses/:courseCode/settings', end: false },
     location.pathname,

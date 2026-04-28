@@ -51,3 +51,6 @@ iac/demo/override.tf
 
 # Agents
 .agents/
+
+# Go Air (server-new dev container)
+server-new/tmp/

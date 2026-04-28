@@ -1,0 +1,12 @@
+run:
+  timeout: 4m
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+issues:
+  max-same-issues: 0

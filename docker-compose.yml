@@ -1,6 +1,6 @@
 # Web does not expose ports here so dev/prod overrides do not merge duplicate port mappings.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build   # Vite HMR :5173 + cargo-watch
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build   # Vite HMR :5173 + Go API
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build    # nginx :3000
 
 services:
@@ -48,20 +48,41 @@ services:
       timeout: 5s
       retries: 5
 
+  # Rust API (./server) — left here for reference; the running `server` service is Go (./server-new).
+  # server:
+  #   build:
+  #     context: ./server
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     RUST_LOG: info
+  #     DATABASE_URL: postgres://studydrift:studydrift@postgres:5432/studydrift?sslmode=disable
+  #     MONGODB_URI: mongodb://studydrift:studydrift@mongo:27017/?authSource=admin
+  #     JWT_SECRET: change-me-in-production-use-a-long-random-string
+  #     RUN_MIGRATIONS: "true"
+  #     OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
+  #     COURSE_FILES_ROOT: /var/course-files
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./data/course-files:/var/course-files
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     mongo:
+  #       condition: service_healthy
+
   server:
     build:
-      context: ./server
+      context: ./server-new
       dockerfile: Dockerfile
     environment:
-      RUST_LOG: info
       # sslmode=disable avoids TLS negotiation issues with the local Postgres container.
       DATABASE_URL: postgres://studydrift:studydrift@postgres:5432/studydrift?sslmode=disable
-      MONGODB_URI: mongodb://studydrift:studydrift@mongo:27017/?authSource=admin
       JWT_SECRET: change-me-in-production-use-a-long-random-string
       RUN_MIGRATIONS: "true"
       OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
-      # Uploaded course images and other files; host path is ignored in .git
       COURSE_FILES_ROOT: /var/course-files
+      PORT: "8080"
     ports:
       - "8080:8080"
     volumes:

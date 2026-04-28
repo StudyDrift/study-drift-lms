@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearAccessToken, getAccessToken, setAccessToken } from '../auth'
-import { apiUrl, authorizedFetch, backoffWithJitterMs, joinApiBase } from '../api'
+import { apiBaseUrl, apiUrl, authorizedFetch, backoffWithJitterMs, joinApiBase } from '../api'
 import { server } from '../../test/mocks/server'
 
 describe('joinApiBase', () => {
@@ -24,6 +24,12 @@ describe('apiUrl', () => {
   it('uses VITE_API_URL when set', () => {
     vi.stubEnv('VITE_API_URL', 'https://api.example.com')
     expect(apiUrl('/api/v1/x')).toBe('https://api.example.com/api/v1/x')
+  })
+
+  it('falls back when VITE_API_URL is empty (e.g. Docker .env placeholder)', () => {
+    vi.stubEnv('VITE_API_URL', '')
+    expect(apiBaseUrl()).toBe('http://localhost:8080')
+    expect(apiUrl('/api/v1/x')).toBe('http://localhost:8080/api/v1/x')
   })
 })
 

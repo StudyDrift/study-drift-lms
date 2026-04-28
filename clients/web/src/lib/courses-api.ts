@@ -1,4 +1,4 @@
-import { apiUrl, authorizedFetch } from './api'
+import { apiBaseUrl, apiUrl, authorizedFetch } from './api'
 import { getAccessToken } from './auth'
 import { readApiErrorMessage } from './errors'
 import {
@@ -4223,7 +4223,7 @@ export type PostCourseImportCanvasBody = {
 
 function courseCanvasImportWebSocketUrl(courseCode: string): string | null {
   if (!getAccessToken()) return null
-  const base = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+  const base = apiBaseUrl()
   const u = new URL(base)
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${u.origin}/api/v1/courses/${encodeURIComponent(courseCode)}/import/canvas/ws`

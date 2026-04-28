@@ -40,7 +40,10 @@ export function CourseFeedUnreadProvider({ children }: { children: ReactNode }) 
     () => matchPath({ path: '/courses/:courseCode', end: false }, location.pathname),
     [location.pathname],
   )
-  const activeCourseCode = courseMatch?.params.courseCode
+  const activeCourseCode =
+    courseMatch?.params.courseCode && courseMatch.params.courseCode !== 'create'
+      ? courseMatch.params.courseCode
+      : undefined
 
   const clearFeedChannelUnread = useCallback((code: string, channelId: string) => {
     const key = channelId.toLowerCase()

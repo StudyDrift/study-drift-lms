@@ -1,4 +1,4 @@
-import { authorizedFetch } from './api'
+import { apiBaseUrl, authorizedFetch } from './api'
 import { getAccessToken } from './auth'
 
 export type MailboxParty = {
@@ -22,14 +22,29 @@ export type MailboxMessage = {
 
 export type MailboxFolder = 'inbox' | 'starred' | 'sent' | 'drafts' | 'trash'
 
+type MailboxMessageWire = Omit<MailboxMessage, 'sent_at' | 'has_attachment'> & {
+  sent_at?: string
+  sentAt?: string
+  has_attachment?: boolean
+  hasAttachment?: boolean
+}
+
+function normalizeMailboxMessage(w: MailboxMessageWire): MailboxMessage {
+  return {
+    ...w,
+    sent_at: w.sent_at ?? w.sentAt ?? '',
+    has_attachment: w.has_attachment ?? w.hasAttachment ?? false,
+  }
+}
+
 export async function fetchMailboxMessages(folder: MailboxFolder, q: string): Promise<MailboxMessage[]> {
   const params = new URLSearchParams({ folder, q: q.trim() })
   const res = await authorizedFetch(`/api/v1/communication/messages?${params}`)
   if (!res.ok) {
     throw new Error(`Failed to load messages (${res.status})`)
   }
-  const data = (await res.json()) as { messages: MailboxMessage[] }
-  return data.messages
+  const data = (await res.json()) as { messages: MailboxMessageWire[] }
+  return (data.messages ?? []).map(normalizeMailboxMessage)
 }
 
 export async function fetchUnreadInboxCount(): Promise<number> {
@@ -37,8 +52,8 @@ export async function fetchUnreadInboxCount(): Promise<number> {
   if (!res.ok) {
     throw new Error(`Failed to load unread count (${res.status})`)
   }
-  const data = (await res.json()) as { unread_inbox: number }
-  return data.unread_inbox
+  const data = (await res.json()) as { unread_inbox?: number; unreadInbox?: number }
+  return data.unread_inbox ?? data.unreadInbox ?? 0
 }
 
 export async function patchMailbox(
@@ -73,7 +88,7 @@ export async function sendMessage(
 /** WebSocket URL for mailbox notifications (auth is sent in first WS message). */
 export function mailboxWebSocketUrl(): string | null {
   if (!getAccessToken()) return null
-  const base = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+  const base = apiBaseUrl()
   const u = new URL(base)
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${u.origin}/api/v1/communication/ws`

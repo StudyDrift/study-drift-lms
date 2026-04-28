@@ -19,7 +19,7 @@ export type CourseCreateStarterTemplate = {
 export const COURSE_CREATE_STARTER_TEMPLATES: CourseCreateStarterTemplate[] = [
   {
     id: 'k12-semester',
-    name: 'K–12 semester',
+    name: 'K–12',
     summary: 'Term dates, grading categories, expectations, and contact — tuned for secondary classes.',
     suggestedFirstModuleTitle: 'Unit 1: Getting started',
     sections: [
@@ -52,7 +52,7 @@ export const COURSE_CREATE_STARTER_TEMPLATES: CourseCreateStarterTemplate[] = [
   },
   {
     id: 'higher-ed-15-week',
-    name: 'Higher ed (15-week)',
+    name: 'Higher ed',
     summary: 'Learning outcomes, weekly rhythm, texts, assessment, and campus policies in one place.',
     suggestedFirstModuleTitle: 'Week 1: Introduction & syllabus',
     sections: [

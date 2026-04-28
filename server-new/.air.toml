@@ -1,0 +1,30 @@
+# Air: https://github.com/air-verse/air
+# poll=true helps Docker bind mounts (especially on macOS) where inotify is unreliable.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  bin = "./tmp/main"
+  cmd = "go build -o ./tmp/main ./cmd/server"
+  delay = 200
+  exclude_dir = ["tmp", "vendor"]
+  exclude_unchanged = true
+  include_ext = ["go", "mod", "sum"]
+  full_bin = ""
+  kill_delay = "2s"
+  log = "tmp/air_build.log"
+  send_interrupt = true
+  # Keep the last successful binary running when a rebuild fails, so
+  # frontend clients do not get connection resets during transient edits.
+  stop_on_error = false
+  poll = true
+  poll_interval = 500
+
+[log]
+  time = true
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = true

@@ -32,6 +32,19 @@ export type FeedMessage = {
   replies: FeedMessage[]
 }
 
+type FeedMessageWire = Omit<FeedMessage, 'mentionUserIds' | 'replies'> & {
+  mentionUserIds?: string[] | null
+  replies?: FeedMessageWire[] | null
+}
+
+function normalizeFeedMessage(m: FeedMessageWire): FeedMessage {
+  return {
+    ...m,
+    mentionUserIds: Array.isArray(m.mentionUserIds) ? m.mentionUserIds : [],
+    replies: Array.isArray(m.replies) ? m.replies.map(normalizeFeedMessage) : [],
+  }
+}
+
 function enc(cc: string) {
   return encodeURIComponent(cc)
 }
@@ -72,8 +85,8 @@ export async function fetchFeedMessages(
   )
   const raw: unknown = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
-  const o = raw as { messages?: FeedMessage[] }
-  return o.messages ?? []
+  const o = raw as { messages?: FeedMessageWire[] | null }
+  return Array.isArray(o.messages) ? o.messages.map(normalizeFeedMessage) : []
 }
 
 export type FeedImageUploadResponse = {

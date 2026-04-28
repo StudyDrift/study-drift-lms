@@ -133,6 +133,63 @@ jobs:
       - name: Build
         run: cargo build --release
 
+  server-go:
+    name: Server (Go) — server-new
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgres://test:test@localhost:5432/studydrift_test
+      RUN_MIGRATIONS: "true"
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: studydrift_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d studydrift_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: server-new
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: server-new/go.sum
+
+      - name: go mod download
+        run: go mod download
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.2
+          working-directory: server-new
+          args: --timeout=4m
+
+      - name: go test (internal packages; Postgres-backed integration tests)
+        run: go test ./internal/... -count=1 -timeout=5m -coverprofile=coverage.out -covermode=atomic
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: Cover total (>= 75% during bootstrap; raise to 90% as routes land)
+        run: |
+          go tool cover -func=coverage.out | tail -1
+          t=$(go tool cover -func=coverage.out | tail -1 | awk '{ gsub(/%/,"",$NF); print $NF }')
+          echo "total statement coverage (internal): ${t}%"
+          awk -v t="$t" 'BEGIN{ exit (t+0 < 75) ? 1 : 0 }' /dev/null || (echo "coverage of ./internal/... must be >= 75%" && exit 1)
+
+      - name: go build
+        run: go build -o /dev/null ./cmd/server
+
   clients:
     name: Client (${{ matrix.client }})
     runs-on: ubuntu-latest

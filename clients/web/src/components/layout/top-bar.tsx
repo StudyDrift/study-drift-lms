@@ -151,7 +151,8 @@ function CourseEnrollmentViewDropdown() {
   const location = useLocation()
   const courseCode = useMemo(() => {
     const m = matchPath({ path: '/courses/:courseCode', end: false }, location.pathname)
-    return m?.params.courseCode ?? null
+    const code = m?.params.courseCode
+    return code && code !== 'create' ? code : null
   }, [location.pathname])
 
   const courseViewMode = useCourseViewAs(courseCode ?? undefined)

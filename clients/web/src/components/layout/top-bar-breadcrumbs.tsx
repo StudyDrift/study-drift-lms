@@ -214,7 +214,8 @@ export function TopBarBreadcrumbs() {
   const { pathname } = useLocation()
   const courseCode = useMemo(() => {
     const m = matchPath({ path: '/courses/:courseCode/*', end: false }, pathname)
-    return m?.params.courseCode ?? null
+    const code = m?.params.courseCode
+    return code && code !== 'create' ? code : null
   }, [pathname])
 
   const [courseTitle, setCourseTitle] = useState<string | null>(() =>

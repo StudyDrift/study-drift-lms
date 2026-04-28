@@ -2,6 +2,14 @@ import { clearAccessToken, getAccessToken } from './auth'
 
 const defaultApi = 'http://localhost:8080'
 
+/** Resolves the API origin. Treats empty/whitespace VITE_API_URL as unset (Docker/.env can set it to ""). */
+export function apiBaseUrl(): string {
+  const v = import.meta.env.VITE_API_URL
+  if (v == null) return defaultApi
+  const s = String(v).trim()
+  return s !== '' ? s : defaultApi
+}
+
 const MAX_IDEMPOTENT_ATTEMPTS = 3
 const BASE_BACKOFF_MS = 250
 
@@ -25,8 +33,7 @@ export function joinApiBase(base: string, path: string): string {
 }
 
 export function apiUrl(path: string): string {
-  const base = import.meta.env.VITE_API_URL ?? defaultApi
-  return joinApiBase(base, path)
+  return joinApiBase(apiBaseUrl(), path)
 }
 
 /** WebSocket URL for the same API host as {@link apiUrl}. */
