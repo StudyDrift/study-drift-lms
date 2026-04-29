@@ -36,7 +36,7 @@ func (d Deps) handleOriginalityWebhook() http.HandlerFunc {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
-		if !d.Config.OriginalityDetectionEnabled {
+		if !d.effectiveConfig().OriginalityDetectionEnabled {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Not found.")
 			return
 		}

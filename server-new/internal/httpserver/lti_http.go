@@ -233,7 +233,7 @@ func (d Deps) handleLtiProviderLaunch() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Could not issue session token.")
 			return
 		}
-		public := strings.TrimRight(strings.TrimSpace(d.Config.PublicWebOrigin), "/")
+		public := strings.TrimRight(strings.TrimSpace(d.effectiveConfig().PublicWebOrigin), "/")
 		escTok, _ := json.Marshal(appTok)
 		escURL, _ := json.Marshal(public + "/")
 		html := fmt.Sprintf(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Signing in…</title></head>

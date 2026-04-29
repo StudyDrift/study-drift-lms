@@ -122,6 +122,14 @@ export function buildSearchItems(
 
   if (allows(PERM_RBAC_MANAGE)) {
     items.push({
+      id: 'page:/settings/platform',
+      group: 'page',
+      title: 'Global platform',
+      subtitle: 'System settings',
+      path: '/settings/platform',
+      haystack: 'openrouter saml feature flags lti oneroster platform environment database admin page'.toLowerCase(),
+    })
+    items.push({
       id: 'page:/settings/ai/models',
       group: 'page',
       title: 'AI models',

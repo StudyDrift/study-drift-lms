@@ -25,7 +25,7 @@ func (d Deps) handleAdminOneRosterUpload() http.HandlerFunc {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
-		if !d.Config.OneRosterEnabled {
+		if !d.effectiveConfig().OneRosterEnabled {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeInvalidInput, "OneRoster is not enabled.")
 			return
 		}
@@ -95,7 +95,7 @@ func (d Deps) handleAdminOneRosterSyncRunsList() http.HandlerFunc {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
-		if !d.Config.OneRosterEnabled {
+		if !d.effectiveConfig().OneRosterEnabled {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeInvalidInput, "OneRoster is not enabled.")
 			return
 		}
@@ -164,7 +164,7 @@ func (d Deps) handleAdminOneRosterSyncRunDetail() http.HandlerFunc {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
-		if !d.Config.OneRosterEnabled {
+		if !d.effectiveConfig().OneRosterEnabled {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeInvalidInput, "OneRoster is not enabled.")
 			return
 		}
@@ -222,7 +222,7 @@ func (d Deps) handleAdminOneRosterBearerPost() http.HandlerFunc {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
-		if !d.Config.OneRosterEnabled {
+		if !d.effectiveConfig().OneRosterEnabled {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeInvalidInput, "OneRoster is not enabled.")
 			return
 		}
@@ -259,7 +259,7 @@ func (d Deps) handleAdminOneRosterBearerPost() http.HandlerFunc {
 
 func (d Deps) handleOneRosterV1P2() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !d.Config.OneRosterEnabled {
+		if !d.effectiveConfig().OneRosterEnabled {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeInvalidInput, "OneRoster is not enabled.")
 			return
 		}
@@ -269,7 +269,7 @@ func (d Deps) handleOneRosterV1P2() http.HandlerFunc {
 			return
 		}
 		raw := r.Header.Get("Authorization")
-		instID, err := oneroster.ResolveInstitutionFromBearer(r.Context(), d.Pool, d.Config, raw)
+		instID, err := oneroster.ResolveInstitutionFromBearer(r.Context(), d.Pool, d.effectiveConfig(), raw)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusUnauthorized, apierr.CodeUnauthorized, "Unauthorized.")
 			return

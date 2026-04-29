@@ -42,7 +42,7 @@ func (d Deps) handleGetCourseFileContent() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Not found.")
 			return
 		}
-		root := strings.TrimSpace(d.Config.CourseFilesRoot)
+		root := strings.TrimSpace(d.effectiveConfig().CourseFilesRoot)
 		if root == "" {
 			root = "data/course-files"
 		}

@@ -20,17 +20,17 @@ func (d Deps) registerSAMLBrowserRoutes(r chi.Router) {
 
 func (d Deps) handleSAMLMetadata() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !d.Config.SAMLSSOEnabled {
+		if !d.effectiveConfig().SAMLSSOEnabled {
 			writeSAMLorLTIErr(w, http.StatusBadRequest, "SAML is not enabled on this server.")
 			return
 		}
-		browsersaml.HandleMetadata(d.Config, w, r)
+		browsersaml.HandleMetadata(d.effectiveConfig(), w, r)
 	}
 }
 
 func (d Deps) handleSAMLLoginGet() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !d.Config.SAMLSSOEnabled {
+		if !d.effectiveConfig().SAMLSSOEnabled {
 			writeSAMLorLTIErr(w, http.StatusBadRequest, "SAML is not enabled on this server.")
 			return
 		}
@@ -38,7 +38,7 @@ func (d Deps) handleSAMLLoginGet() http.HandlerFunc {
 			writeSAMLorLTIErr(w, http.StatusInternalServerError, "Database is not configured.")
 			return
 		}
-		err := browsersaml.HandleLoginRedirect(r.Context(), d.Pool, d.Config, w, r)
+		err := browsersaml.HandleLoginRedirect(r.Context(), d.Pool, d.effectiveConfig(), w, r)
 		if err == nil {
 			return
 		}
@@ -53,7 +53,7 @@ func (d Deps) handleSAMLLoginGet() http.HandlerFunc {
 
 func (d Deps) handleSAMLACS() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !d.Config.SAMLSSOEnabled {
+		if !d.effectiveConfig().SAMLSSOEnabled {
 			writeSAMLorLTIErr(w, http.StatusBadRequest, "SAML is not enabled on this server.")
 			return
 		}
@@ -61,7 +61,7 @@ func (d Deps) handleSAMLACS() http.HandlerFunc {
 			writeSAMLorLTIErr(w, http.StatusInternalServerError, "Server is not fully configured.")
 			return
 		}
-		err := browsersaml.HandleACS(r.Context(), d.Pool, d.Config, d.JWTSigner, d.Config.PublicWebOrigin, w, r)
+		err := browsersaml.HandleACS(r.Context(), d.Pool, d.effectiveConfig(), d.JWTSigner, d.effectiveConfig().PublicWebOrigin, w, r)
 		if err == nil {
 			return
 		}

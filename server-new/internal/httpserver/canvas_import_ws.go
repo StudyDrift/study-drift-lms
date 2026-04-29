@@ -152,7 +152,7 @@ func (d Deps) runCanvasImport(
 	if mode != "erase" && mode != "mergeAdd" && mode != "overwrite" {
 		return errors.New("Invalid import mode.")
 	}
-	canvasBase, err := normalizeCanvasBaseURL(canvasBaseURL, d.Config.CanvasAllowedHostSuffixes)
+	canvasBase, err := normalizeCanvasBaseURL(canvasBaseURL, d.effectiveConfig().CanvasAllowedHostSuffixes)
 	if err != nil {
 		return err
 	}

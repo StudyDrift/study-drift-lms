@@ -40,7 +40,7 @@ func (d Deps) handleListAIModels() http.HandlerFunc {
 				"Could not load models from OpenRouter. Try again. ("+err.Error()+")")
 			return
 		}
-		configured := d.OpenRouter != nil
+		configured := d.openRouterClient() != nil
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"configured": configured,

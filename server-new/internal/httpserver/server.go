@@ -13,20 +13,36 @@ import (
 	"github.com/lextures/lextures/server-new/internal/config"
 	"github.com/lextures/lextures/server-new/internal/lti"
 	"github.com/lextures/lextures/server-new/internal/openapi"
+	"github.com/lextures/lextures/server-new/internal/platformstate"
 	"github.com/lextures/lextures/server-new/internal/service/oidcauth"
 	"github.com/lextures/lextures/server-new/internal/service/openrouter"
 )
 
 // Deps is the minimal set of server dependencies. Expand with auth, LTI, etc. during the migration.
 type Deps struct {
-	Pool       *pgxpool.Pool
-	Ready      ReadyChecker
-	JWTSigner  *auth.JWTSigner
-	Config     config.Config
-	OpenRouter *openrouter.Client
-	OIDC       *oidcauth.Service
-	Comm       *commevents.Hub
-	Lti        *lti.Runtime
+	Pool      *pgxpool.Pool
+	Ready     ReadyChecker
+	JWTSigner *auth.JWTSigner
+	// Config is the environment-only configuration (used with DB overrides in Platform).
+	Config   config.Config
+	Platform *platformstate.Platform
+	OIDC     *oidcauth.Service
+	Comm     *commevents.Hub
+	Lti      *lti.Runtime
+}
+
+func (d Deps) effectiveConfig() config.Config {
+	if d.Platform != nil {
+		return d.Platform.Config()
+	}
+	return d.Config
+}
+
+func (d Deps) openRouterClient() *openrouter.Client {
+	if d.Platform != nil {
+		return d.Platform.OpenRouter()
+	}
+	return nil
 }
 
 // NewHandler builds the HTTP API (routes only; does not start listening).
@@ -71,6 +87,8 @@ func NewHandler(d Deps) http.Handler {
 	r.Get("/api/v1/settings/ai/models", d.handleListAIModels())
 	r.Get("/api/v1/settings/ai", d.handleGetSettingsAI())
 	r.Put("/api/v1/settings/ai", d.handlePutSettingsAI())
+	r.Get("/api/v1/settings/platform", d.handleGetPlatformSettings())
+	r.Put("/api/v1/settings/platform", d.handlePutPlatformSettings())
 	r.Get("/api/v1/settings/system-prompts", d.handleListSystemPrompts())
 	r.Put("/api/v1/settings/system-prompts/{key}", d.handlePutSystemPrompt())
 	r.Get("/api/v1/search", d.handleSearchIndex())

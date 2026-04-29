@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { ArrowLeft, Bell, Bot, ChevronDown, Plug, Shield, User } from 'lucide-react'
+import { ArrowLeft, Bell, Bot, ChevronDown, Plug, Settings2, Shield, User } from 'lucide-react'
 import { usePermissions } from '../../context/use-permissions'
 import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
 import { settingsViewFromPathname } from './side-nav-path-utils'
@@ -65,6 +65,13 @@ export function SideNavSettingsLinks() {
           >
             <Plug className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
             LTI tools
+          </NavLink>
+          <NavLink
+            to="/settings/platform"
+            className={() => `${sideNavLinkClass} ${view === 'platform' ? sideNavActiveClass : ''}`}
+          >
+            <Settings2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+            Global platform
           </NavLink>
           <div className="flex flex-col gap-0.5">
             <button

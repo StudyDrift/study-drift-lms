@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -10,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/lextures/lextures/server-new/internal/auth"
 	"github.com/lextures/lextures/server-new/internal/background"
@@ -19,8 +22,9 @@ import (
 	"github.com/lextures/lextures/server-new/internal/httpserver"
 	"github.com/lextures/lextures/server-new/internal/lti"
 	"github.com/lextures/lextures/server-new/internal/migrate"
+	"github.com/lextures/lextures/server-new/internal/platformstate"
+	"github.com/lextures/lextures/server-new/internal/repos/platformconfig"
 	"github.com/lextures/lextures/server-new/internal/service/oidcauth"
-	"github.com/lextures/lextures/server-new/internal/service/openrouter"
 )
 
 // Run starts the API. Pass the migration file tree (e.g. serverdata.Migrations from the module root).
@@ -39,19 +43,33 @@ func Run(ctx context.Context, fsys fs.FS) error {
 			return err
 		}
 	}
-	background.Start(ctx, pool, cfg)
 
-	ltiRT := lti.NewFromConfig(cfg)
+	dbPlatform, err := platformconfig.Get(ctx, pool)
+	if err != nil {
+		// Integration tests (and some local workflows) set RUN_MIGRATIONS=false against an
+		// empty database, so migration 118 never creates settings.platform_app_settings.
+		// Treat a missing table like "no DB overrides" instead of failing startup.
+		if cfg.RunMigrations || !isUndefinedTable(err) {
+			return fmt.Errorf("app: platform settings: %w", err)
+		}
+		dbPlatform = nil
+	}
+	merged := platformconfig.Merge(cfg, dbPlatform)
+	if err := merged.Validate(); err != nil {
+		return fmt.Errorf("app: effective configuration invalid (environment + database settings): %w", err)
+	}
+
+	background.Start(ctx, pool, merged)
+
+	ltiRT := lti.NewFromConfig(merged)
 	deps := httpserver.Deps{
 		Pool:      pool,
 		JWTSigner: auth.NewJWTSigner(cfg.JWTSecret),
 		Config:    cfg,
-		OIDC:      oidcauth.NewService(cfg),
+		Platform:  platformstate.New(merged),
+		OIDC:      oidcauth.NewService(merged),
 		Comm:      commevents.New(),
 		Lti:       ltiRT,
-	}
-	if k := strings.TrimSpace(cfg.OpenRouterAPIKey); k != "" {
-		deps.OpenRouter = openrouter.NewClient(k)
 	}
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,
@@ -73,4 +91,9 @@ func Run(ctx context.Context, fsys fs.FS) error {
 		}
 		return nil
 	}
+}
+
+func isUndefinedTable(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "42P01"
 }
