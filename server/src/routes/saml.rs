@@ -6,8 +6,8 @@ use axum::response::IntoResponse;
 use axum::Form;
 use axum::{routing::get, Router};
 use serde::Deserialize;
-use uuid::Uuid;
 use urlencoding::encode;
+use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::services::auth::saml as saml_service;
@@ -18,7 +18,10 @@ pub fn router() -> Router<AppState> {
         .route("/auth/saml/metadata", get(saml_metadata_handler))
         .route("/auth/saml/login", get(saml_login_handler))
         .route("/auth/saml/acs", axum::routing::post(saml_acs_handler))
-        .route("/auth/saml/slo", axum::routing::post(saml_slo_unimplemented))
+        .route(
+            "/auth/saml/slo",
+            axum::routing::post(saml_slo_unimplemented),
+        )
 }
 
 fn require_saml(s: &AppState) -> Result<&crate::state::SamlSpSettings, AppError> {
@@ -27,7 +30,9 @@ fn require_saml(s: &AppState) -> Result<&crate::state::SamlSpSettings, AppError>
         .ok_or_else(|| AppError::invalid_input("SAML is not enabled on this server."))
 }
 
-async fn saml_metadata_handler(State(s): State<AppState>) -> Result<axum::response::Response, AppError> {
+async fn saml_metadata_handler(
+    State(s): State<AppState>,
+) -> Result<axum::response::Response, AppError> {
     let sp = require_saml(&s)?;
     let xml = saml_service::sp_metadata_xml(sp)?;
     Ok((

@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 
+use axum::body::Body;
 use axum::body::Bytes;
 use axum::extract::Path;
 use axum::http::header;
-use axum::body::Body;
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::routing::{get, post, put};
@@ -16,7 +16,8 @@ use crate::error::AppError;
 use crate::http_auth::{assert_permission, auth_user};
 use crate::models::sbg::{
     SbgGradebookCell, SbgGradebookStudent, SbgItemAlignmentsPut, SbgMasteryTranscriptResponse,
-    SbgMasteryTranscriptRow, SbgStandardPublic, SbgStandardsGradebookResponse, SbgStandardsListResponse,
+    SbgMasteryTranscriptRow, SbgStandardPublic, SbgStandardsGradebookResponse,
+    SbgStandardsListResponse,
 };
 use crate::repos::course;
 use crate::repos::enrollment;
@@ -50,7 +51,9 @@ fn parse_standards_csv_simple(
         .filter(|l| !l.is_empty())
         .collect();
     if lines.len() < 2 {
-        return Err(AppError::invalid_input("CSV must include a header and at least one data row."));
+        return Err(AppError::invalid_input(
+            "CSV must include a header and at least one data row.",
+        ));
     }
     let head: Vec<String> = lines[0]
         .split(',')
@@ -69,21 +72,15 @@ fn parse_standards_csv_simple(
         for (i, h) in head.iter().enumerate() {
             let f = cells.get(i).map(String::as_str).unwrap_or("").trim();
             match h.as_str() {
-                "standard_id" => {
-                    if !f.is_empty() {
-                        ext = Some(f.to_string());
-                    }
+                "standard_id" if !f.is_empty() => {
+                    ext = Some(f.to_string());
                 }
                 "description" => desc = f.to_string(),
-                "subject" => {
-                    if !f.is_empty() {
-                        sub = Some(f.to_string());
-                    }
+                "subject" if !f.is_empty() => {
+                    sub = Some(f.to_string());
                 }
-                "grade_level" | "gradelevel" => {
-                    if !f.is_empty() {
-                        gr = Some(f.to_string());
-                    }
+                "grade_level" | "gradelevel" if !f.is_empty() => {
+                    gr = Some(f.to_string());
                 }
                 _ => {}
             }
@@ -94,7 +91,9 @@ fn parse_standards_csv_simple(
         out.push((ext, desc, sub, gr, pos as i32));
     }
     if out.is_empty() {
-        return Err(AppError::invalid_input("No data rows with a description column."));
+        return Err(AppError::invalid_input(
+            "No data rows with a description column.",
+        ));
     }
     Ok(out)
 }
@@ -268,19 +267,22 @@ async fn mastery_transcript_pdf_handler(
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let j = build_mastery_transcript_inner(&state, &course_code, user_id, &headers).await?;
-    let student_label = crate::repos::enrollment::list_student_users_for_course_code(
-        &state.pool,
-        &j.course_code,
-    )
-    .await?
-    .into_iter()
-    .find(|(u, _)| *u == user_id)
-    .map(|(_, s)| s)
-    .unwrap_or_else(|| format!("{user_id}"));
+    let student_label =
+        crate::repos::enrollment::list_student_users_for_course_code(&state.pool, &j.course_code)
+            .await?
+            .into_iter()
+            .find(|(u, _)| *u == user_id)
+            .map(|(_, s)| s)
+            .unwrap_or_else(|| format!("{user_id}"));
     let lines: Vec<(String, String)> = j
         .rows
         .iter()
-        .map(|r| (r.external_id.clone().unwrap_or_default(), r.level_label.clone()))
+        .map(|r| {
+            (
+                r.external_id.clone().unwrap_or_default(),
+                r.level_label.clone(),
+            )
+        })
         .collect();
     let pdf = mastery_transcript_pdf::build_mastery_transcript_pdf(
         &j.course_title,
@@ -288,9 +290,7 @@ async fn mastery_transcript_pdf_handler(
         &student_label,
         &lines,
     )
-    .map_err(|e| {
-        AppError::invalid_input(format!("Could not build PDF: {e}"))
-    })?;
+    .map_err(|e| AppError::invalid_input(format!("Could not build PDF: {e}")))?;
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "application/pdf")
@@ -321,15 +321,12 @@ async fn build_mastery_transcript_inner(
         .await?
         .ok_or(AppError::NotFound)?;
     if !c.sbg_enabled {
-        return Err(AppError::invalid_input("Mastery transcript requires SBG for this course."));
+        return Err(AppError::invalid_input(
+            "Mastery transcript requires SBG for this course.",
+        ));
     }
-    sbg_grading::recompute_student_sbg(
-        &state.pool,
-        course_id,
-        user_id,
-        me.user_id == user_id,
-    )
-    .await?;
+    sbg_grading::recompute_student_sbg(&state.pool, course_id, user_id, me.user_id == user_id)
+        .await?;
     let st = sbg::list_course_standards(&state.pool, course_id).await?;
     let prows = sbg::list_proficiency_for_student(&state.pool, course_id, user_id).await?;
     let pmap: HashMap<Uuid, _> = prows.into_iter().map(|p| (p.standard_id, p)).collect();
@@ -374,13 +371,17 @@ async fn item_alignments_put_handler(
         .await?
         .ok_or(AppError::NotFound)?;
     if !c.sbg_enabled {
-        return Err(AppError::invalid_input("SBG is not enabled for this course."));
+        return Err(AppError::invalid_input(
+            "SBG is not enabled for this course.",
+        ));
     }
     let mut rows: Vec<(Uuid, Uuid, String, f64)> = Vec::new();
     for a in &req.alignments {
         let t = a.alignable_type.trim().to_string();
         if t != "rubric_criterion" && t != "quiz_question" {
-            return Err(AppError::invalid_input("alignableType must be rubric_criterion or quiz_question."));
+            return Err(AppError::invalid_input(
+                "alignableType must be rubric_criterion or quiz_question.",
+            ));
         }
         rows.push((a.standard_id, a.alignable_id, t, a.weight));
     }

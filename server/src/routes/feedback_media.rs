@@ -39,9 +39,7 @@ fn initiate_rl_map() -> &'static Mutex<HashMap<Uuid, Vec<Instant>>> {
 }
 
 fn check_initiate_rate_limit(user_id: Uuid) -> Result<(), AppError> {
-    let mut map = initiate_rl_map()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut map = initiate_rl_map().lock().unwrap_or_else(|e| e.into_inner());
     let now = Instant::now();
     let window = Duration::from_secs(60);
     let v = map.entry(user_id).or_default();
@@ -76,12 +74,9 @@ async fn load_submission(
     submission_id: Uuid,
 ) -> Result<module_assignment_submissions::SubmissionRow, AppError> {
     let course_id = resolve_course_id(state, course_code).await?;
-    let Some(s) = module_assignment_submissions::get_by_id_for_course(
-        &state.pool,
-        course_id,
-        submission_id,
-    )
-    .await?
+    let Some(s) =
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
     else {
         return Err(AppError::NotFound);
     };
@@ -97,7 +92,11 @@ async fn load_submission(
     Ok(s)
 }
 
-fn can_view_media(user_id: Uuid, staff: bool, sub: &module_assignment_submissions::SubmissionRow) -> bool {
+fn can_view_media(
+    user_id: Uuid,
+    staff: bool,
+    sub: &module_assignment_submissions::SubmissionRow,
+) -> bool {
     staff || sub.submitted_by == user_id
 }
 
@@ -112,8 +111,9 @@ fn parse_u64_header(headers: &HeaderMap, name: &'static str) -> Result<u64, AppE
     let s = v
         .to_str()
         .map_err(|_| AppError::invalid_input(format!("Invalid `{name}` header.")))?;
-    s.parse::<u64>()
-        .map_err(|_| AppError::invalid_input(format!("Invalid `{name}` header (expected integer).")))
+    s.parse::<u64>().map_err(|_| {
+        AppError::invalid_input(format!("Invalid `{name}` header (expected integer)."))
+    })
 }
 
 /// Public path for a feedback media file (served with auth, same as course file content).
@@ -196,7 +196,9 @@ async fn post_initiate(
         return Err(AppError::invalid_input("mimeType is required."));
     }
     let Some(mime_norm) = fm::normalize_feedback_mime(Some(mime)) else {
-        return Err(AppError::invalid_input("MIME type is not allowed for feedback media."));
+        return Err(AppError::invalid_input(
+            "MIME type is not allowed for feedback media.",
+        ));
     };
     let media = if !body.media_type.is_empty() {
         match body.media_type.as_str() {
@@ -214,10 +216,14 @@ async fn post_initiate(
     };
 
     if media == "video" && !mime_norm.starts_with("video/") {
-        return Err(AppError::invalid_input("mimeType does not match video mediaType."));
+        return Err(AppError::invalid_input(
+            "mimeType does not match video mediaType.",
+        ));
     }
     if media == "audio" && !mime_norm.starts_with("audio/") {
-        return Err(AppError::invalid_input("mimeType does not match audio mediaType."));
+        return Err(AppError::invalid_input(
+            "mimeType does not match audio mediaType.",
+        ));
     }
 
     let id = Uuid::new_v4();
@@ -282,7 +288,9 @@ async fn put_blob(
         return Err(AppError::invalid_input("Request body is empty."));
     }
     if body.len() as u64 > 32 * 1024 * 1024 {
-        return Err(AppError::invalid_input("Chunk is too large (max 32 MB per part)."));
+        return Err(AppError::invalid_input(
+            "Chunk is too large (max 32 MB per part).",
+        ));
     }
 
     let row = feedback_media::get_by_id(&state.pool, media_id)
@@ -291,7 +299,7 @@ async fn put_blob(
     if row.submission_id != submission_id
         || row.module_item_id != item_id
         || row.deleted_at.is_some()
-        || !matches!(row.upload_complete, false)
+        || row.upload_complete
     {
         return Err(AppError::NotFound);
     }
@@ -305,12 +313,16 @@ async fn put_blob(
         ));
     }
     if offset + body.len() as u64 > row.expected_byte_size.unwrap_or(0) as u64 {
-        return Err(AppError::invalid_input("Upload exceeds declared byte size."));
+        return Err(AppError::invalid_input(
+            "Upload exceeds declared byte size.",
+        ));
     }
 
     let path = fm::feedback_blob_path(&state.course_files_root, &course_code, &row.storage_key);
     if !path.exists() && offset > 0 {
-        return Err(AppError::invalid_input("Upload offset invalid (no partial file)."));
+        return Err(AppError::invalid_input(
+            "Upload offset invalid (no partial file).",
+        ));
     }
     if !path.exists() && offset == 0 {
         if let Some(parent) = path.parent() {
@@ -409,7 +421,7 @@ async fn post_complete(
         .map_err(|e| AppError::invalid_input(format!("could not finalize file: {e}")))?;
 
     if let Some(ds) = body.duration_secs {
-        if ds < 0 || ds > MAX_RECORDING_SECS {
+        if !(0..=MAX_RECORDING_SECS).contains(&ds) {
             return Err(AppError::invalid_input(format!(
                 "durationSecs must be between 0 and {MAX_RECORDING_SECS} (10 min)."
             )));
@@ -453,12 +465,14 @@ async fn post_complete(
         "finalized feedback media upload"
     );
 
-    Ok(Json(serde_json::json!({ "ok": true, "media": feedback_media_to_json(
+    Ok(Json(
+        serde_json::json!({ "ok": true, "media": feedback_media_to_json(
         &course_code,
         item_id,
         submission_id,
         &finalized
-    )? })))
+    )? }),
+    ))
 }
 
 async fn post_upload_multipart(
@@ -509,9 +523,12 @@ async fn post_upload_multipart(
             duration_from_form = t.parse::<i32>().ok();
         }
     }
-    let bytes = file_bytes.ok_or_else(|| AppError::invalid_input("Missing multipart field `file`."))?;
+    let bytes =
+        file_bytes.ok_or_else(|| AppError::invalid_input("Missing multipart field `file`."))?;
     let Some(m) = fm::normalize_feedback_mime(content_type.as_deref()) else {
-        return Err(AppError::invalid_input("MIME type is not allowed for feedback media."));
+        return Err(AppError::invalid_input(
+            "MIME type is not allowed for feedback media.",
+        ));
     };
     let media = fm::media_type_for_mime(m)
         .ok_or_else(|| AppError::invalid_input("Could not infer media type from MIME."))?
@@ -531,7 +548,7 @@ async fn post_upload_multipart(
         .map_err(|e| AppError::invalid_input(e.to_string()))?;
 
     if let Some(ds) = duration_from_form {
-        if ds < 0 || ds > MAX_RECORDING_SECS {
+        if !(0..=MAX_RECORDING_SECS).contains(&ds) {
             return Err(AppError::invalid_input(format!(
                 "durationSecs must be between 0 and {MAX_RECORDING_SECS} (10 min)."
             )));
@@ -564,12 +581,14 @@ async fn post_upload_multipart(
         id,
     );
 
-    Ok(Json(serde_json::json!({ "ok": true, "media": feedback_media_to_json(
+    Ok(Json(
+        serde_json::json!({ "ok": true, "media": feedback_media_to_json(
         &course_code,
         item_id,
         submission_id,
         &row
-    )? })))
+    )? }),
+    ))
 }
 
 fn feedback_media_to_json(
@@ -612,7 +631,12 @@ async fn get_list(
     let mut out = Vec::new();
     for r in &rows {
         if r.upload_complete {
-            out.push(feedback_media_to_json(&course_code, item_id, submission_id, r)?);
+            out.push(feedback_media_to_json(
+                &course_code,
+                item_id,
+                submission_id,
+                r,
+            )?);
         }
     }
     Ok(Json(serde_json::json!({ "items": out })))

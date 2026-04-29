@@ -36,8 +36,7 @@ pub async fn try_store_detection_artifacts(
     mut provider_json: serde_json::Value,
 ) -> Result<(), String> {
     if let Some(obj) = provider_json.as_object_mut() {
-        obj
-            .entry("capturedAt")
+        obj.entry("capturedAt")
             .or_insert_with(|| json!(chrono::Utc::now().to_rfc3339()));
         obj.insert("submissionId".to_string(), json!(submission_id.to_string()));
         obj.insert("reportId".to_string(), json!(report_id.to_string()));
@@ -54,12 +53,10 @@ pub async fn try_store_detection_artifacts(
     let s_key = key_snapshot(report_id);
     let path_r = course_files::blob_disk_path(root, &course_code, &r_key);
     let path_s = course_files::blob_disk_path(root, &course_code, &s_key);
-    for p in [path_r.parent(), path_s.parent()] {
-        if let Some(d) = p {
-            tokio::fs::create_dir_all(d)
-                .await
-                .map_err(|e| format!("create storage dir: {e}"))?;
-        }
+    for d in [path_r.parent(), path_s.parent()].into_iter().flatten() {
+        tokio::fs::create_dir_all(d)
+            .await
+            .map_err(|e| format!("create storage dir: {e}"))?;
     }
 
     let text = text_from_provider_json(&provider_json);
@@ -97,8 +94,16 @@ pub async fn best_effort_store_from_parts(
     provider: &str,
     full_json: serde_json::Value,
 ) {
-    if let Err(e) =
-        try_store_detection_artifacts(pool, root, course_id, report_id, submission_id, provider, full_json).await
+    if let Err(e) = try_store_detection_artifacts(
+        pool,
+        root,
+        course_id,
+        report_id,
+        submission_id,
+        provider,
+        full_json,
+    )
+    .await
     {
         warn!(
             target: "originality_report.storage_error",
@@ -141,15 +146,10 @@ pub async fn remove_all_for_submission(
         Some(c) => c,
         None => return Ok(()),
     };
-    let rows = originality_reports::list_storage_key_pairs_for_submission(pool, submission_id).await?;
+    let rows =
+        originality_reports::list_storage_key_pairs_for_submission(pool, submission_id).await?;
     for (a, b) in rows {
-        remove_artifacts_by_keys(
-            root,
-            &course_row.course_code,
-            a.as_deref(),
-            b.as_deref(),
-        )
-        .await;
+        remove_artifacts_by_keys(root, &course_row.course_code, a.as_deref(), b.as_deref()).await;
     }
     Ok(())
 }
@@ -242,6 +242,7 @@ pub async fn read_stored_json_summary(
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|e| format!("read stored report: {e}"))?;
-    let v: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| format!("parse report json: {e}"))?;
+    let v: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|e| format!("parse report json: {e}"))?;
     Ok(v)
 }

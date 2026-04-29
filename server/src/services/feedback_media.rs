@@ -89,7 +89,10 @@ fn format_duration_vtt(secs: f32) -> String {
 }
 
 /// Validates multipart filename + declared MIME for feedback uploads.
-pub fn parse_upload_file_meta(filename: &str, declared_mime: Option<&str>) -> Result<String, AppError> {
+pub fn parse_upload_file_meta(
+    filename: &str,
+    declared_mime: Option<&str>,
+) -> Result<String, AppError> {
     let _ = truncate_filename(filename);
     let Some(m) = normalize_feedback_mime(declared_mime) else {
         return Err(AppError::invalid_input(

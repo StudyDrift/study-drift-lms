@@ -161,7 +161,7 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 			if items[i].AssignmentGroupID != nil {
 				ag = items[i].AssignmentGroupID
 			}
-			df, _ := dropFlags[itemID]
+			df := dropFlags[itemID]
 			c := gradebookGridColumn{
 				ID:                items[i].ID,
 				Kind:              items[i].Kind,

@@ -15,7 +15,13 @@ use crate::repos::grade_audit_events;
 /// Bulk gradebook write: (student, item, points, rubric, set_excused).
 /// `set_excused = None` means preserve excused (or default false on insert) except when
 /// `upsert_and_delete` clears it because points or rubric changed.
-pub type GradebookUpsertOp = (Uuid, Uuid, Option<f64>, Option<HashMap<Uuid, f64>>, Option<bool>);
+pub type GradebookUpsertOp = (
+    Uuid,
+    Uuid,
+    Option<f64>,
+    Option<HashMap<Uuid, f64>>,
+    Option<bool>,
+);
 
 /// All stored grades for a course: point cells, optional rubric scores, and per-cell `posted_at` (3.8).
 pub async fn list_for_course(
@@ -89,34 +95,20 @@ pub async fn list_for_course(
 pub async fn list_raw_for_course_sbg(
     pool: &PgPool,
     course_id: Uuid,
-) -> Result<
-    Vec<(
-        Uuid,
-        Uuid,
-        f64,
-        Option<serde_json::Value>,
-        DateTime<Utc>,
-    )>,
-    sqlx::Error,
-> {
-    let rows: Vec<(
-        Uuid,
-        Uuid,
-        f64,
-        Option<serde_json::Value>,
-        DateTime<Utc>,
-    )> = sqlx::query_as(&format!(
-        r#"
+) -> Result<Vec<(Uuid, Uuid, f64, Option<serde_json::Value>, DateTime<Utc>)>, sqlx::Error> {
+    let rows: Vec<(Uuid, Uuid, f64, Option<serde_json::Value>, DateTime<Utc>)> =
+        sqlx::query_as(&format!(
+            r#"
         SELECT student_user_id, module_item_id, points_earned, rubric_scores_json, updated_at
         FROM {}
         WHERE course_id = $1
           AND NOT excused
         "#,
-        schema::COURSE_GRADES
-    ))
-    .bind(course_id)
-    .fetch_all(pool)
-    .await?;
+            schema::COURSE_GRADES
+        ))
+        .bind(course_id)
+        .fetch_all(pool)
+        .await?;
     Ok(rows)
 }
 
@@ -127,15 +119,7 @@ pub async fn list_raw_for_student_sbg(
     course_id: Uuid,
     student_id: Uuid,
     student_visible: bool,
-) -> Result<
-    Vec<(
-        Uuid,
-        f64,
-        Option<serde_json::Value>,
-        DateTime<Utc>,
-    )>,
-    sqlx::Error,
-> {
+) -> Result<Vec<(Uuid, f64, Option<serde_json::Value>, DateTime<Utc>)>, sqlx::Error> {
     let q = if student_visible {
         format!(
             r#"
@@ -166,16 +150,11 @@ pub async fn list_raw_for_student_sbg(
             schema::COURSE_GRADES
         )
     };
-    let rows: Vec<(
-        Uuid,
-        f64,
-        Option<serde_json::Value>,
-        DateTime<Utc>,
-    )> = sqlx::query_as(&q)
-    .bind(course_id)
-    .bind(student_id)
-    .fetch_all(pool)
-    .await?;
+    let rows: Vec<(Uuid, f64, Option<serde_json::Value>, DateTime<Utc>)> = sqlx::query_as(&q)
+        .bind(course_id)
+        .bind(student_id)
+        .fetch_all(pool)
+        .await?;
     Ok(rows)
 }
 
@@ -219,12 +198,9 @@ pub async fn upsert_and_delete(
         s.dedup();
         s
     };
-    let policies = course_module_assignments::posting_settings_for_structure_items(
-        pool,
-        course_id,
-        &item_ids,
-    )
-    .await?;
+    let policies =
+        course_module_assignments::posting_settings_for_structure_items(pool, course_id, &item_ids)
+            .await?;
 
     let all_keys: Vec<(Uuid, Uuid)> = {
         let mut s: Vec<_> = ops.iter().map(|(u, i, _, _, _)| (*u, *i)).collect();
@@ -274,9 +250,7 @@ pub async fn upsert_and_delete(
     let now = Utc::now();
     let mut tx = pool.begin().await?;
     for (user_id, item_id, pts, rubric_scores, set_excused) in ops {
-        let is_manual = policies
-            .get(item_id)
-            .is_some_and(|(p, _)| p == "manual");
+        let is_manual = policies.get(item_id).is_some_and(|(p, _)| p == "manual");
         match pts {
             None => {
                 let n = sqlx::query(&format!(
@@ -295,9 +269,10 @@ pub async fn upsert_and_delete(
                 if n == 0 {
                     continue;
                 }
-                if let Some((p, posted_at, _, _)) = prior_cells.get(&(*user_id, *item_id)).cloned() {
+                if let Some((p, posted_at, _, _)) = prior_cells.get(&(*user_id, *item_id)).cloned()
+                {
                     grade_audit_events::insert(
-                        &mut *tx,
+                        &mut tx,
                         course_id,
                         *item_id,
                         *user_id,
@@ -321,10 +296,7 @@ pub async fn upsert_and_delete(
                 let rubric_for_compare = rubric_json.clone();
                 let prior = prior_cells.get(&(*user_id, *item_id)).cloned();
                 let posted_at = if is_manual {
-                    prior_posted
-                        .get(&(*user_id, *item_id))
-                        .copied()
-                        .flatten()
+                    prior_posted.get(&(*user_id, *item_id)).copied().flatten()
                 } else {
                     Some(now)
                 };
@@ -333,7 +305,8 @@ pub async fn upsert_and_delete(
                     Some((op, _opa, prev_rj, ex)) => {
                         let rubric_changed = prev_rj != &rubric_for_compare;
                         let points_changed = (op - p).abs() > 1e-9;
-                        let should_clear = *ex && set_excused.is_none() && (points_changed || rubric_changed);
+                        let should_clear =
+                            *ex && set_excused.is_none() && (points_changed || rubric_changed);
                         let ne = match set_excused {
                             Some(b) => *b,
                             None if should_clear => false,
@@ -380,17 +353,16 @@ pub async fn upsert_and_delete(
                     let rubric_changed = prev_rj != &rubric_for_compare;
                     let points_changed = (old_pts - p).abs() > 1e-9;
                     let status_changed = old_lbl != new_lbl;
-                    let default_reason: Option<String> = if !points_changed && !status_changed && rubric_changed {
-                        Some("Rubric update".into())
-                    } else {
-                        None
-                    };
-                    let reason = change_reason
-                        .map(String::from)
-                        .or(default_reason);
+                    let default_reason: Option<String> =
+                        if !points_changed && !status_changed && rubric_changed {
+                            Some("Rubric update".into())
+                        } else {
+                            None
+                        };
+                    let reason = change_reason.map(String::from).or(default_reason);
                     if points_changed || rubric_changed || status_changed {
                         grade_audit_events::insert(
-                            &mut *tx,
+                            &mut tx,
                             course_id,
                             *item_id,
                             *user_id,
@@ -407,7 +379,7 @@ pub async fn upsert_and_delete(
                     if new_excused != old_ex {
                         let a = if new_excused { "excused" } else { "unexcused" };
                         grade_audit_events::insert(
-                            &mut *tx,
+                            &mut tx,
                             course_id,
                             *item_id,
                             *user_id,
@@ -415,15 +387,23 @@ pub async fn upsert_and_delete(
                             a,
                             Some(*old_pts),
                             Some(*p),
-                            if old_ex { Some("excused") } else { Some("unexcused") },
-                            if new_excused { Some("excused") } else { Some("unexcused") },
+                            if old_ex {
+                                Some("excused")
+                            } else {
+                                Some("unexcused")
+                            },
+                            if new_excused {
+                                Some("excused")
+                            } else {
+                                Some("unexcused")
+                            },
                             change_reason,
                         )
                         .await?;
                     }
                 } else {
                     grade_audit_events::insert(
-                        &mut *tx,
+                        &mut tx,
                         course_id,
                         *item_id,
                         *user_id,
@@ -495,26 +475,10 @@ pub async fn upsert_points(
     .await?;
     // Quizzes are automatic posting; the row ends with `posted_at` set to NOW.
     let new_s = "posted";
-    if prior.is_none() {
-        grade_audit_events::insert(
-            &mut *tx,
-            course_id,
-            module_item_id,
-            student_user_id,
-            None,
-            "created",
-            None,
-            Some(points),
-            None,
-            Some(new_s),
-            Some("Quiz / auto-score"),
-        )
-        .await?;
-    } else {
-        let (op, opa) = prior.expect("prior");
+    if let Some((op, opa)) = prior {
         let old_s = posting_status_label(opa);
         grade_audit_events::insert(
-            &mut *tx,
+            &mut tx,
             course_id,
             module_item_id,
             student_user_id,
@@ -523,6 +487,21 @@ pub async fn upsert_points(
             Some(op),
             Some(points),
             Some(old_s),
+            Some(new_s),
+            Some("Quiz / auto-score"),
+        )
+        .await?;
+    } else {
+        grade_audit_events::insert(
+            &mut tx,
+            course_id,
+            module_item_id,
+            student_user_id,
+            None,
+            "created",
+            None,
+            Some(points),
+            None,
             Some(new_s),
             Some("Quiz / auto-score"),
         )
@@ -554,35 +533,27 @@ pub async fn upsert_reconciled_final(
         &[module_item_id],
     )
     .await?;
-    let is_manual = pol
-        .get(&module_item_id)
-        .is_some_and(|(p, _)| p == "manual");
+    let is_manual = pol.get(&module_item_id).is_some_and(|(p, _)| p == "manual");
     let now = Utc::now();
     let mut tx = pool.begin().await?;
-    let prior: Option<(f64, Option<DateTime<Utc>>, Option<serde_json::Value>)> = sqlx::query_as(
-        &format!(
+    let prior: Option<(f64, Option<DateTime<Utc>>, Option<serde_json::Value>)> =
+        sqlx::query_as(&format!(
             r#"
             SELECT points_earned, posted_at, rubric_scores_json
             FROM {}
             WHERE course_id = $1 AND student_user_id = $2 AND module_item_id = $3
             "#,
             schema::COURSE_GRADES
-        ),
-    )
-    .bind(course_id)
-    .bind(student_user_id)
-    .bind(module_item_id)
-    .fetch_optional(&mut *tx)
-    .await?;
+        ))
+        .bind(course_id)
+        .bind(student_user_id)
+        .bind(module_item_id)
+        .fetch_optional(&mut *tx)
+        .await?;
     // `prior` is reused for audit: clone `posted_at` without moving `prior`.
-    let prior_posted: Option<Option<DateTime<Utc>>> =
-        prior.as_ref()
-            .map(|(_, p_at, _)| p_at.clone());
+    let prior_posted: Option<Option<DateTime<Utc>>> = prior.as_ref().map(|(_, p_at, _)| *p_at);
     let posted_at: Option<DateTime<Utc>> = if is_manual {
-        match prior_posted {
-            None => None,
-            Some(inside) => inside,
-        }
+        prior_posted.unwrap_or_default()
     } else {
         Some(now)
     };
@@ -636,26 +607,10 @@ pub async fn upsert_reconciled_final(
     } else {
         Some(audit_reason)
     };
-    if prior.is_none() {
-        grade_audit_events::insert(
-            &mut *tx,
-            course_id,
-            module_item_id,
-            student_user_id,
-            Some(reconciled_by),
-            "created",
-            None,
-            Some(points),
-            None,
-            Some(new_l),
-            r,
-        )
-        .await?;
-    } else {
-        let (old_p, old_pa, _) = prior.expect("prior");
+    if let Some((old_p, old_pa, _)) = prior {
         let old_l = posting_status_label(old_pa);
         grade_audit_events::insert(
-            &mut *tx,
+            &mut tx,
             course_id,
             module_item_id,
             student_user_id,
@@ -664,6 +619,21 @@ pub async fn upsert_reconciled_final(
             Some(old_p),
             Some(points),
             Some(old_l),
+            Some(new_l),
+            r,
+        )
+        .await?;
+    } else {
+        grade_audit_events::insert(
+            &mut tx,
+            course_id,
+            module_item_id,
+            student_user_id,
+            Some(reconciled_by),
+            "created",
+            None,
+            Some(points),
+            None,
             Some(new_l),
             r,
         )
@@ -789,26 +759,23 @@ pub async fn set_excused_for_cell(
         &[module_item_id],
     )
     .await?;
-    let is_manual = pol
-        .get(&module_item_id)
-        .is_some_and(|(p, _)| p == "manual");
+    let is_manual = pol.get(&module_item_id).is_some_and(|(p, _)| p == "manual");
     let now = Utc::now();
     let mut tx = pool.begin().await?;
-    let prior: Option<(f64, Option<DateTime<Utc>>, Option<serde_json::Value>, bool)> = sqlx::query_as(
-        &format!(
+    let prior: Option<(f64, Option<DateTime<Utc>>, Option<serde_json::Value>, bool)> =
+        sqlx::query_as(&format!(
             r#"
             SELECT points_earned, posted_at, rubric_scores_json, excused
             FROM {}
             WHERE course_id = $1 AND student_user_id = $2 AND module_item_id = $3
             "#,
             schema::COURSE_GRADES
-        ),
-    )
-    .bind(course_id)
-    .bind(student_user_id)
-    .bind(module_item_id)
-    .fetch_optional(&mut *tx)
-    .await?;
+        ))
+        .bind(course_id)
+        .bind(student_user_id)
+        .bind(module_item_id)
+        .fetch_optional(&mut *tx)
+        .await?;
     let prior_ex = prior.as_ref().is_some_and(|(_, _, _, e)| *e);
     if prior.is_some() && prior_ex == excused {
         tx.commit().await?;
@@ -858,7 +825,7 @@ pub async fn set_excused_for_cell(
     .await?;
     let a = if excused { "excused" } else { "unexcused" };
     grade_audit_events::insert(
-        &mut *tx,
+        &mut tx,
         course_id,
         module_item_id,
         student_user_id,
@@ -866,8 +833,16 @@ pub async fn set_excused_for_cell(
         a,
         Some(points),
         Some(points),
-        if prior_ex { Some("excused") } else { Some("unexcused") },
-        if excused { Some("excused") } else { Some("unexcused") },
+        if prior_ex {
+            Some("excused")
+        } else {
+            Some("unexcused")
+        },
+        if excused {
+            Some("excused")
+        } else {
+            Some("unexcused")
+        },
         reason,
     )
     .await?;

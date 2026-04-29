@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 
 use chrono::Utc;
 use uuid::Uuid;
@@ -42,9 +43,7 @@ fn sanitized_export_grading_type(body: &ExportedAssignmentBody) -> Option<&str> 
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .filter(|s| {
-            crate::services::grading::conversion::DisplayGradingKind::from_str(s).is_some()
-        })
+        .filter(|s| crate::services::grading::conversion::DisplayGradingKind::from_str(s).is_ok())
 }
 
 fn normalize_enrollment_email(raw: &str) -> String {
@@ -955,7 +954,9 @@ pub async fn build_export(pool: &PgPool, course_code: &str) -> Result<CourseExpo
                             rubric: row.rubric_json.clone(),
                             blind_grading: row.blind_grading,
                             originality_detection: row.originality_detection.clone(),
-                            originality_student_visibility: row.originality_student_visibility.clone(),
+                            originality_student_visibility: row
+                                .originality_student_visibility
+                                .clone(),
                             grading_type: row.grading_type.clone(),
                         },
                     );

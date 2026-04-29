@@ -21,7 +21,7 @@ func UpsertForCourse(
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck
 
 	var schemeID *uuid.UUID
 	if err := tx.QueryRow(ctx, `

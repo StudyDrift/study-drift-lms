@@ -7,17 +7,17 @@ use axum::{
     Json, Router,
 };
 use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::http_auth::require_permission;
+use crate::repos::oidc as oidc_repo;
 use crate::repos::originality_platform_config;
 use crate::repos::originality_reports;
-use crate::repos::oidc as oidc_repo;
 use crate::repos::saml as saml_repo;
 use crate::services::irt_calibration_job;
 use crate::state::AppState;
@@ -118,10 +118,7 @@ async fn put_originality_config_handler(
     let _auth = require_permission(&state, &headers, PERM_RBAC_MANAGE).await?;
 
     let p = body.active_external_provider.trim().to_ascii_lowercase();
-    if !matches!(
-        p.as_str(),
-        "none" | "turnitin" | "copyleaks" | "gptzero"
-    ) {
+    if !matches!(p.as_str(), "none" | "turnitin" | "copyleaks" | "gptzero") {
         return Err(AppError::invalid_input(
             "activeExternalProvider must be none, turnitin, copyleaks, or gptzero.",
         ));
@@ -297,7 +294,9 @@ async fn put_oidc_provider_handler(
         },
     };
     if w.client_id.is_empty() || w.discovery_url.is_empty() {
-        return Err(AppError::invalid_input("clientId and discoveryUrl are required."));
+        return Err(AppError::invalid_input(
+            "clientId and discoveryUrl are required.",
+        ));
     }
     let id = oidc_repo::upsert_custom_config(&state.pool, body.id, &w).await?;
     Ok(Json(json!({ "id": id })))

@@ -65,15 +65,9 @@ pub async fn mark_posted_instructor(
         }
     }
     let mut tx = pool.begin().await.map_err(PostingError::from)?;
-    let posted = course_grades::mark_posted(
-        &mut *tx,
-        course_id,
-        module_item_id,
-        at,
-        only_students,
-    )
-    .await
-    .map_err(PostingError::from)?;
+    let posted = course_grades::mark_posted(&mut tx, course_id, module_item_id, at, only_students)
+        .await
+        .map_err(PostingError::from)?;
     for (sid, pts) in &posted {
         let actor = if actor_user_id == Uuid::nil() {
             None
@@ -86,7 +80,7 @@ pub async fn mark_posted_instructor(
             None
         };
         grade_audit_events::insert(
-            &mut *tx,
+            &mut tx,
             course_id,
             module_item_id,
             *sid,
@@ -123,17 +117,12 @@ pub async fn mark_unposted_instructor(
     actor_user_id: Uuid,
 ) -> Result<usize, PostingError> {
     let mut tx = pool.begin().await.map_err(PostingError::from)?;
-    let u = course_grades::mark_unposted(
-        &mut *tx,
-        course_id,
-        module_item_id,
-        only_students,
-    )
-    .await
-    .map_err(PostingError::from)?;
+    let u = course_grades::mark_unposted(&mut tx, course_id, module_item_id, only_students)
+        .await
+        .map_err(PostingError::from)?;
     for (sid, pts) in &u {
         grade_audit_events::insert(
-            &mut *tx,
+            &mut tx,
             course_id,
             module_item_id,
             *sid,

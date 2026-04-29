@@ -44,7 +44,7 @@ func PatchForCourseItem(ctx context.Context, pool *pgxpool.Pool, courseID, itemI
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE course.course_structure_items

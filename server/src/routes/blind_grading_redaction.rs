@@ -10,7 +10,9 @@ pub fn blind_student_label(rank_one_indexed: usize) -> String {
     format!("Student {}", rank_one_indexed)
 }
 
-pub fn submission_rank_by_id(submissions_newest_first_order: &[SubmissionRow]) -> HashMap<Uuid, usize> {
+pub fn submission_rank_by_id(
+    submissions_newest_first_order: &[SubmissionRow],
+) -> HashMap<Uuid, usize> {
     submissions_newest_first_order
         .iter()
         .enumerate()

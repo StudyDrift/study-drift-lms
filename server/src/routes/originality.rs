@@ -140,7 +140,8 @@ async fn get_submission_originality_handler(
     let staff = enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await?;
     let course_id = resolve_course_id(&state, &course_code).await?;
     let Some(sub) =
-        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id).await?
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
     else {
         return Err(AppError::NotFound);
     };
@@ -161,18 +162,14 @@ async fn get_submission_originality_handler(
                 return Ok(Json(serde_json::json!({ "reports": [] })));
             }
             "show_after_grading" => {
-                let graded = course_grades::row_exists(
-                    &state.pool,
-                    course_id,
-                    sub.submitted_by,
-                    item_id,
-                )
-                .await?;
+                let graded =
+                    course_grades::row_exists(&state.pool, course_id, sub.submitted_by, item_id)
+                        .await?;
                 if !graded {
                     return Ok(Json(serde_json::json!({ "reports": [] })));
                 }
             }
-            "show" | _ => {}
+            _ => {}
         }
     }
 
@@ -185,11 +182,7 @@ async fn get_submission_originality_handler(
             similarity_pct: decimal_to_f64(r.similarity_pct),
             ai_probability: decimal_to_f64(r.ai_probability),
             report_url: r.report_url,
-            report_token: if staff {
-                r.report_token
-            } else {
-                None
-            },
+            report_token: if staff { r.report_token } else { None },
             error_message: r.error_message,
         })
         .collect();
@@ -215,15 +208,17 @@ async fn embed_summary_enriched(
         return base;
     }
     if let Ok(v) =
-        storage::read_stored_json_summary(&state.course_files_root, course_code, key.unwrap())
-            .await
+        storage::read_stored_json_summary(&state.course_files_root, course_code, key.unwrap()).await
     {
         let mut o = base;
         if o.similarity_pct.is_none() {
             if let Some(f) = v
                 .get("similarityPct")
                 .or_else(|| v.get("similarity_pct"))
-                .and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
+                .and_then(|v| {
+                    v.as_f64()
+                        .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+                })
             {
                 o.similarity_pct = Some(f);
             }
@@ -232,7 +227,10 @@ async fn embed_summary_enriched(
             if let Some(f) = v
                 .get("aiProbability")
                 .or_else(|| v.get("ai_probability"))
-                .and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
+                .and_then(|v| {
+                    v.as_f64()
+                        .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+                })
             {
                 o.ai_probability = Some(f);
             }
@@ -257,7 +255,8 @@ async fn get_originality_embed_url_handler(
     }
     let course_id = resolve_course_id(&state, &course_code).await?;
     let Some(sub) =
-        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id).await?
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
     else {
         return Err(AppError::NotFound);
     };
@@ -271,9 +270,8 @@ async fn get_originality_embed_url_handler(
         ));
     };
     let embed = resolve_embed_path(r);
-    let can_fallback = r.similarity_pct.is_some()
-        || r.ai_probability.is_some()
-        || r.report_storage_key.is_some();
+    let can_fallback =
+        r.similarity_pct.is_some() || r.ai_probability.is_some() || r.report_storage_key.is_some();
     if embed.is_none() && !can_fallback {
         return Err(AppError::invalid_input(
             "No originality report URL is available yet for this submission.",
@@ -302,7 +300,8 @@ async fn get_submission_originality_summary_handler(
     let staff = enrollment::user_is_course_staff(&state.pool, &course_code, user.user_id).await?;
     let course_id = resolve_course_id(&state, &course_code).await?;
     let Some(sub) =
-        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id).await?
+        module_assignment_submissions::get_by_id_for_course(&state.pool, course_id, submission_id)
+            .await?
     else {
         return Err(AppError::NotFound);
     };
@@ -323,31 +322,24 @@ async fn get_submission_originality_summary_handler(
                 return Err(AppError::Forbidden);
             }
             "show_after_grading" => {
-                let graded = course_grades::row_exists(
-                    &state.pool,
-                    course_id,
-                    sub.submitted_by,
-                    item_id,
-                )
-                .await?;
+                let graded =
+                    course_grades::row_exists(&state.pool, course_id, sub.submitted_by, item_id)
+                        .await?;
                 if !graded {
                     return Err(AppError::Forbidden);
                 }
             }
-            "show" | _ => {}
+            _ => {}
         }
     }
 
     let rows = originality_reports::list_for_submission(&state.pool, submission_id).await?;
-    let Some(r) = rows
-        .iter()
-        .find(|r| {
-            r.status == "done"
-                && (r.similarity_pct.is_some()
-                    || r.ai_probability.is_some()
-                    || r.report_storage_key.is_some())
-        })
-    else {
+    let Some(r) = rows.iter().find(|r| {
+        r.status == "done"
+            && (r.similarity_pct.is_some()
+                || r.ai_probability.is_some()
+                || r.report_storage_key.is_some())
+    }) else {
         return Err(AppError::NotFound);
     };
     let base = build_summary_from_row(r, true);
@@ -377,7 +369,11 @@ async fn webhook_originality_handler(
         return Err(AppError::NotFound);
     }
     let cfg = originality_platform_config::get_singleton(&state.pool).await?;
-    let Some(secret) = cfg.webhook_hmac_secret.as_deref().filter(|s| !s.trim().is_empty()) else {
+    let Some(secret) = cfg
+        .webhook_hmac_secret
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+    else {
         return Err(AppError::Forbidden);
     };
     let sig_header = headers
@@ -393,8 +389,9 @@ async fn webhook_originality_handler(
 
     let full_raw: serde_json::Value = serde_json::from_slice(body.as_ref())
         .map_err(|_| AppError::invalid_input("Invalid webhook JSON."))?;
-    let parsed: WebhookBody = serde_json::from_slice(body.as_ref())
-        .map_err(|_| AppError::invalid_input("Invalid webhook JSON (expected providerReportId)."))?;
+    let parsed: WebhookBody = serde_json::from_slice(body.as_ref()).map_err(|_| {
+        AppError::invalid_input("Invalid webhook JSON (expected providerReportId).")
+    })?;
     let sim = parsed
         .similarity_pct
         .map(|v| Decimal::try_from(v).unwrap_or(Decimal::ZERO));
@@ -417,7 +414,9 @@ async fn webhook_originality_handler(
         return Err(AppError::NotFound);
     }
     for (report_id, submission_id) in updated {
-        let Some(sub) = module_assignment_submissions::get_by_id(&state.pool, submission_id).await? else {
+        let Some(sub) =
+            module_assignment_submissions::get_by_id(&state.pool, submission_id).await?
+        else {
             continue;
         };
         let Some(crow) = course::get_by_id(&state.pool, sub.course_id).await? else {
@@ -458,7 +457,10 @@ async fn webhook_originality_handler(
 fn compute_hmac_hex(secret: &[u8], body: &[u8]) -> String {
     let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC key length");
     mac.update(body);
-    format!("sha256={}", bytes_to_hex_lower(&mac.finalize().into_bytes()))
+    format!(
+        "sha256={}",
+        bytes_to_hex_lower(&mac.finalize().into_bytes())
+    )
 }
 
 fn bytes_to_hex_lower(bytes: &[u8]) -> String {

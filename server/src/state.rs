@@ -120,8 +120,15 @@ pub struct OidcState {
     pub google: Option<(OidcClientCredentials, Option<String>)>,
     pub microsoft: Option<(OidcClientCredentials, String)>,
     pub apple: Option<AppleOidcCreds>,
-    pub metadata_cache:
-        tokio::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, openidconnect::core::CoreProviderMetadata)>>,
+    pub metadata_cache: tokio::sync::Mutex<
+        std::collections::HashMap<
+            String,
+            (
+                std::time::Instant,
+                openidconnect::core::CoreProviderMetadata,
+            ),
+        >,
+    >,
 }
 
 /// Apple “Sign in with Apple” key material: dynamic ES256 `client_secret` (JWT) for each code exchange.

@@ -1,7 +1,7 @@
 //! SAML 2.0 service provider (plan 4.1) using `samael` and xmlsec for XML digital signatures.
 
-use chrono::Duration;
 use axum::response::Redirect;
+use chrono::Duration;
 use openssl::pkey::PKey;
 use openssl::x509::X509;
 use regex::Regex;
@@ -20,18 +20,16 @@ use crate::error::AppError;
 use crate::jwt::JwtSigner;
 use crate::models::auth::{AuthResponse, UserPublic};
 use crate::repos::saml as saml_repo;
-use saml_repo::SamlIdpConfigRow;
 use crate::repos::{rbac, user};
 use crate::services::auth::{hash_placeholder_password, normalize_email};
 use crate::state::SamlSpSettings;
+use saml_repo::SamlIdpConfigRow;
 
 static RE_IN_RESPONSE: OnceLock<Regex> = OnceLock::new();
 static RE_RESPONSE_ID: OnceLock<Regex> = OnceLock::new();
 
 fn in_response_re() -> &'static Regex {
-    RE_IN_RESPONSE.get_or_init(|| {
-        Regex::new(r#"(?i)InResponseTo\s*=\s*"([^"]*)""#).expect("regex")
-    })
+    RE_IN_RESPONSE.get_or_init(|| Regex::new(r#"(?i)InResponseTo\s*=\s*"([^"]*)""#).expect("regex"))
 }
 
 fn response_id_re() -> &'static Regex {
@@ -97,17 +95,14 @@ fn idp_row_to_metadata_xml(row: &SamlIdpConfigRow) -> Result<String, AppError> {
 fn idp_entity_descriptor_from_row(row: &SamlIdpConfigRow) -> Result<EntityDescriptor, AppError> {
     idp_row_to_metadata_xml(row)?
         .parse::<EntityDescriptor>()
-        .map_err(|e| {
-            AppError::UnprocessableEntity {
-                message: format!("Invalid IdP configuration metadata: {e}"),
-            }
+        .map_err(|e| AppError::UnprocessableEntity {
+            message: format!("Invalid IdP configuration metadata: {e}"),
         })
 }
 
 fn sp_cert_der(pem: &str) -> Result<CertificateDer, AppError> {
-    let c = X509::from_pem(pem.as_bytes()).map_err(|e| {
-        AppError::invalid_input(format!("Invalid SAML SP X.509 certificate: {e}"))
-    })?;
+    let c = X509::from_pem(pem.as_bytes())
+        .map_err(|e| AppError::invalid_input(format!("Invalid SAML SP X.509 certificate: {e}")))?;
     let der = c
         .to_der()
         .map_err(|e| AppError::invalid_input(format!("Invalid SAML SP X.509 DER: {e}")))?;
@@ -139,10 +134,9 @@ fn build_sp(
         })?;
         bld.key(Some(pkey));
     }
-    bld.build()
-        .map_err(|e| AppError::UnprocessableEntity {
-            message: e.to_string(),
-        })
+    bld.build().map_err(|e| AppError::UnprocessableEntity {
+        message: e.to_string(),
+    })
 }
 
 /// SP role metadata only (idp is empty).
@@ -199,13 +193,14 @@ pub async fn start_sso_redirect(
         })?;
     ar.id = format!("id-{}", Uuid::new_v4());
 
-    saml_repo::save_authn_state(pool, &ar.id, idp_id, relay_state.as_deref())
-        .await?;
+    saml_repo::save_authn_state(pool, &ar.id, idp_id, relay_state.as_deref()).await?;
 
     let rs = relay_state.unwrap_or_default();
-    let url = ar.redirect(&rs).map_err(|e| AppError::UnprocessableEntity {
-        message: e.to_string(),
-    })?;
+    let url = ar
+        .redirect(&rs)
+        .map_err(|e| AppError::UnprocessableEntity {
+            message: e.to_string(),
+        })?;
     let u = url.ok_or_else(|| AppError::UnprocessableEntity {
         message: "SAML: missing HTTP-Redirect destination for AuthnRequest".into(),
     })?;
@@ -223,9 +218,7 @@ pub async fn acs_post_form(
 ) -> Result<AuthResponse, AppError> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(saml_response_b64)
-        .map_err(|e| {
-            AppError::invalid_input(format!("Invalid base64 in SAMLResponse: {e}"))
-        })?;
+        .map_err(|e| AppError::invalid_input(format!("Invalid base64 in SAMLResponse: {e}")))?;
     let xml = String::from_utf8_lossy(&bytes);
     let xmls = xml.trim();
     if xmls.is_empty() {
@@ -236,22 +229,24 @@ pub async fn acs_post_form(
     saml_repo::delete_stale_authn_state(pool).await?;
     saml_repo::delete_stale_replay_guard(pool).await?;
 
-    let (allow_idp, possible_ids, idp_id): (bool, Option<Vec<String>>, Uuid) =
-        if let Some(ref irt) = in_resp_to {
-            if let Some((saved_idp, _relay)) = saml_repo::take_authn_state(pool, irt).await? {
-                (false, Some(vec![irt.clone()]), saved_idp)
-            } else {
-                tracing::warn!(target: "saml", in_response_to = %irt, "saml.assertions_failed.unknown_in_response_to");
-                return Err(AppError::invalid_input(
-                    "SAML: unknown or expired InResponseTo (re-run login from the app).",
-                ));
-            }
+    let (allow_idp, possible_ids, idp_id): (bool, Option<Vec<String>>, Uuid) = if let Some(
+        ref irt,
+    ) = in_resp_to
+    {
+        if let Some((saved_idp, _relay)) = saml_repo::take_authn_state(pool, irt).await? {
+            (false, Some(vec![irt.clone()]), saved_idp)
         } else {
-            let d = saml_repo::get_default_idp(pool).await?.ok_or_else(|| {
-                AppError::invalid_input("SAML: no IdP is configured; cannot complete sign-in.")
-            })?;
-            (true, None, d.id)
-        };
+            tracing::warn!(target: "saml", in_response_to = %irt, "saml.assertions_failed.unknown_in_response_to");
+            return Err(AppError::invalid_input(
+                "SAML: unknown or expired InResponseTo (re-run login from the app).",
+            ));
+        }
+    } else {
+        let d = saml_repo::get_default_idp(pool).await?.ok_or_else(|| {
+            AppError::invalid_input("SAML: no IdP is configured; cannot complete sign-in.")
+        })?;
+        (true, None, d.id)
+    };
 
     let idp_row = saml_repo::get_idp_by_id(pool, idp_id)
         .await?
@@ -262,9 +257,7 @@ pub async fn acs_post_form(
     let id_slice: Option<Vec<&str>> = possible_ids
         .as_ref()
         .map(|v| v.iter().map(String::as_str).collect());
-    let possible_ref: Option<&[&str]> = id_slice
-        .as_ref()
-        .map(|s| s.as_slice());
+    let possible_ref: Option<&[&str]> = id_slice.as_deref();
 
     let assertion = match svc.parse_xml_response(xmls, possible_ref) {
         Ok(a) => {
@@ -274,7 +267,9 @@ pub async fn acs_post_form(
         Err(e) => {
             let msg = saml_error_message(&e);
             tracing::warn!(target: "saml", idp = %idp_row.entity_id, error = %msg, "saml.assertions_failed");
-            return Err(AppError::invalid_input(format!("SAML: invalid assertion ({msg})")));
+            return Err(AppError::invalid_input(format!(
+                "SAML: invalid assertion ({msg})"
+            )));
         }
     };
 
@@ -369,10 +364,7 @@ pub async fn acs_post_form(
 }
 
 fn guess_teacher_from_assertion(assertion: &Assertion, idp: &SamlIdpConfigRow) -> bool {
-    let want = idp
-        .attribute_mapping
-        .get("role")
-        .and_then(|v| v.as_str());
+    let want = idp.attribute_mapping.get("role").and_then(|v| v.as_str());
     for stmt in assertion.attribute_statements.as_deref().unwrap_or(&[]) {
         for att in &stmt.attributes {
             let is_roleish = att
@@ -398,10 +390,7 @@ fn guess_teacher_from_assertion(assertion: &Assertion, idp: &SamlIdpConfigRow) -
             for v in &att.values {
                 if let Some(val) = v.value.as_deref() {
                     let t = val.to_ascii_lowercase();
-                    if t.contains("instructor")
-                        || t.contains("teacher")
-                        || t.contains("faculty")
-                    {
+                    if t.contains("instructor") || t.contains("teacher") || t.contains("faculty") {
                         return true;
                     }
                 }
@@ -491,34 +480,17 @@ fn get_map_str(m: &Value, key: &str) -> Option<String> {
     m.get(key).and_then(|v| v.as_str().map(String::from))
 }
 
-fn get_attr(
-    a: &Assertion,
-    wanted: &[String],
-) -> Result<String, AppError> {
-    let wanted: Vec<String> = wanted
-        .iter()
-        .map(|s| s.to_ascii_lowercase())
-        .collect();
+fn get_attr(a: &Assertion, wanted: &[String]) -> Result<String, AppError> {
+    let wanted: Vec<String> = wanted.iter().map(|s| s.to_ascii_lowercase()).collect();
     for stmt in a.attribute_statements.as_deref().unwrap_or(&[]) {
         for att in &stmt.attributes {
             let name_l = att.name.as_deref().map(|n| n.to_ascii_lowercase());
-            let friend_l = att
-                .friendly_name
-                .as_deref()
-                .map(|n| n.to_ascii_lowercase());
+            let friend_l = att.friendly_name.as_deref().map(|n| n.to_ascii_lowercase());
             for w in &wanted {
-                if name_l
-                    .as_ref()
-                    .is_some_and(|n| n == w)
-                    || friend_l
-                        .as_ref()
-                        .is_some_and(|f| f == w)
+                if name_l.as_ref().is_some_and(|n| n == w)
+                    || friend_l.as_ref().is_some_and(|f| f == w)
                 {
-                    if let Some(f) = att
-                        .values
-                        .first()
-                        .and_then(|v| v.value.as_ref())
-                    {
+                    if let Some(f) = att.values.first().and_then(|v| v.value.as_ref()) {
                         return Ok(f.clone());
                     }
                 }

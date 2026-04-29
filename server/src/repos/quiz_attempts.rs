@@ -267,12 +267,7 @@ pub async fn list_latest_submitted_attempts_for_course(
     )>,
     sqlx::Error,
 > {
-    let rows: Vec<(
-        Uuid,
-        Uuid,
-        Uuid,
-        DateTime<Utc>,
-    )> = sqlx::query_as(&format!(
+    let rows: Vec<(Uuid, Uuid, Uuid, DateTime<Utc>)> = sqlx::query_as(&format!(
         r#"
         SELECT DISTINCT ON (a.student_user_id, a.structure_item_id)
             a.student_user_id, a.structure_item_id, a.id, a.submitted_at

@@ -23,7 +23,14 @@ pub fn spawn_caption_job(
     media_id: Uuid,
 ) {
     tokio::spawn(async move {
-        if let Err(e) = run_caption_job(&pool, open_router.as_deref(), &course_files_root, &course_code, media_id).await
+        if let Err(e) = run_caption_job(
+            &pool,
+            open_router.as_deref(),
+            &course_files_root,
+            &course_code,
+            media_id,
+        )
+        .await
         {
             warn!(%media_id, error = %e, "feedback media caption job failed");
         }
@@ -47,7 +54,7 @@ async fn run_caption_job(
         return Ok(());
     }
 
-    let _ = feedback_media::set_caption_status(pool, media_id, "processing")
+    feedback_media::set_caption_status(pool, media_id, "processing")
         .await
         .map_err(|e| e.to_string())?;
 
@@ -83,7 +90,7 @@ async fn run_caption_job(
         match out {
             Some(t) => t,
             None => {
-                let _ = feedback_media::set_caption_status(pool, media_id, "failed")
+                feedback_media::set_caption_status(pool, media_id, "failed")
                     .await
                     .map_err(|e| e.to_string())?;
                 return Err(last_err);
@@ -95,10 +102,7 @@ async fn run_caption_job(
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| std::path::PathBuf::from("."));
-    let caption_key = format!(
-        "{}/captions.vtt",
-        parent.to_string_lossy()
-    );
+    let caption_key = format!("{}/captions.vtt", parent.to_string_lossy());
     let caption_path = feedback_blob_path(course_files_root, course_code, &caption_key);
     if let Some(parent) = caption_path.parent() {
         tokio::fs::create_dir_all(parent)

@@ -43,7 +43,8 @@ func TestGetCourse_Pg(t *testing.T) {
 		t.Fatalf("user: %v", err)
 	}
 	uid, _ := uuid.Parse(row.ID)
-	cc := fmt.Sprintf("C-D%04d", time.Now().UnixNano()%10000)
+	// course_code must match ^C-[A-Z0-9]{6}$ (migration 005).
+	cc := fmt.Sprintf("C-D%05d", time.Now().UnixNano()%100000)
 	var courseID uuid.UUID
 	if err := pool.QueryRow(ctx, `
 INSERT INTO course.courses (course_code, title, created_by_user_id) VALUES ($1, 'T', $2) RETURNING id

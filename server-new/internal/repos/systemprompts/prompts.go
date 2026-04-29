@@ -59,7 +59,7 @@ func Update(ctx context.Context, pool *pgxpool.Pool, key, content string, savedB
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck
 	var r Row
 	err = tx.QueryRow(ctx, `
 UPDATE settings.system_prompts

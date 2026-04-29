@@ -19,16 +19,13 @@ use crate::models::course_export::{
 };
 use crate::models::course_gradebook::{
     CourseGradebookGridColumn, CourseGradebookGridResponse, CourseGradebookGridStudent,
-    CourseMyGradesResponse, GradeHistoryEventOut, GradeHistoryResponse, GradingSchemeSummary,
-    GradebookImportConfirmRequest, GradebookImportValidateResponse, PatchCourseGradebookExcusedRequest,
-    PutCourseGradebookGradesRequest,
-};
-use crate::models::grading_scheme::{
-    CourseGradingSchemeEnvelope, GradingSchemeResponse, PutGradingSchemeRequest,
+    CourseMyGradesResponse, GradeHistoryEventOut, GradeHistoryResponse,
+    GradebookImportConfirmRequest, GradebookImportValidateResponse, GradingSchemeSummary,
+    PatchCourseGradebookExcusedRequest, PutCourseGradebookGradesRequest,
 };
 use crate::models::course_grading::{
-    CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest, PutCourseGradingSettingsRequest,
-    PutSbgConfig,
+    CourseGradingSettingsResponse, PatchItemAssignmentGroupRequest,
+    PutCourseGradingSettingsRequest, PutSbgConfig,
 };
 use crate::models::course_module_assignment::{
     validate_assignment_delivery_settings, validate_assignment_late_settings,
@@ -76,6 +73,9 @@ use crate::models::enrollment_group::{
     PatchEnrollmentGroupRequest, PatchEnrollmentGroupSetRequest,
     PutEnrollmentGroupMembershipRequest,
 };
+use crate::models::grading_scheme::{
+    CourseGradingSchemeEnvelope, GradingSchemeResponse, PutGradingSchemeRequest,
+};
 use crate::models::rbac::CourseScopedRolesResponse;
 use crate::models::settings_ai::{GenerateCourseImageRequest, GenerateCourseImageResponse};
 use crate::models::standards::CourseStandardsCoverageResponse;
@@ -86,10 +86,8 @@ use crate::repos::content_page_markups;
 use crate::repos::course;
 use crate::repos::course_files;
 use crate::repos::course_grades;
-use crate::repos::grade_audit_events;
 use crate::repos::course_grading;
 use crate::repos::course_grading::PutError;
-use crate::repos::grading_schemes;
 use crate::repos::course_grants;
 use crate::repos::course_module_assignments;
 use crate::repos::course_module_content;
@@ -100,19 +98,14 @@ use crate::repos::course_structure;
 use crate::repos::course_syllabus;
 use crate::repos::enrollment;
 use crate::repos::enrollment_groups;
-use crate::repos::moderated_grading as moderated_grading_repo;
 use crate::repos::enrollment_quiz_overrides;
+use crate::repos::grade_audit_events;
+use crate::repos::grading_schemes;
 use crate::repos::lti as lti_repo;
 use crate::repos::misconceptions as misconception_repo;
+use crate::repos::moderated_grading as moderated_grading_repo;
 use crate::repos::question_bank as qb_repo;
 use crate::repos::quiz_attempts;
-use crate::services::grading::assignment_groups::{item_drops_for_learner, GroupDropPolicy};
-use crate::services::grading::conversion::{
-    normalize_scheme_type_for_storage, parse_gradebook_cell, parse_scale, resolve_effective,
-    to_display_grade, validate_scale_json, DisplayGradingKind, ParsedScale,
-};
-use crate::services::grading::csv;
-use crate::services::grading::standards as sbg_grading;
 use crate::repos::rbac;
 use crate::repos::syllabus_acceptance;
 use crate::repos::syllabus_markups;
@@ -129,6 +122,13 @@ use crate::services::code_execution::{self, CodeExecutionResult, ExecuteCodeRequ
 use crate::services::competency_gating;
 use crate::services::course_export_import;
 use crate::services::enrollments as enrollments_service;
+use crate::services::grading::assignment_groups::{item_drops_for_learner, GroupDropPolicy};
+use crate::services::grading::conversion::{
+    normalize_scheme_type_for_storage, parse_gradebook_cell, parse_scale, resolve_effective,
+    to_display_grade, validate_scale_json, DisplayGradingKind, ParsedScale,
+};
+use crate::services::grading::csv;
+use crate::services::grading::standards as sbg_grading;
 use crate::services::hint_service;
 use crate::services::learner_state::{self, LearnerStateService, DEFAULT_LEARNER_STATE_SERVICE};
 use crate::services::originality::policy as originality_policy;
@@ -155,12 +155,13 @@ use axum::{
     Json, Router,
 };
 use chrono::{DateTime, Utc};
-use rust_decimal::prelude::ToPrimitive;
 use reqwest::Client;
+use rust_decimal::prelude::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use uuid::Uuid;
@@ -769,12 +770,11 @@ fn merge_assignment_body_write(
         }
     };
     let blind_grading = req.blind_grading.unwrap_or(cur.blind_grading);
-    let identities_revealed_at = if !blind_grading {
-        None
-    } else if !cur.blind_grading && blind_grading {
-        None
-    } else {
+    // None when turning off blind mode or when blind mode is first enabled; keep prior when still blind.
+    let identities_revealed_at = if blind_grading && cur.blind_grading {
         cur.identities_revealed_at
+    } else {
+        None
     };
     let moderated_grading = req.moderated_grading.unwrap_or(cur.moderated_grading);
     let moderation_threshold_pct = match req.moderation_threshold_pct {
@@ -791,22 +791,21 @@ fn merge_assignment_body_write(
     };
     provisional_grader_user_ids.sort();
     provisional_grader_user_ids.dedup();
-    let (moderated_grading, moderation_threshold_pct, moderator_user_id, provisional_grader_user_ids) =
-        if !moderated_grading {
-            (
-                false,
-                moderation_threshold_pct,
-                None,
-                Vec::new(),
-            )
-        } else {
-            (
-                moderated_grading,
-                moderation_threshold_pct,
-                moderator_user_id,
-                provisional_grader_user_ids,
-            )
-        };
+    let (
+        moderated_grading,
+        moderation_threshold_pct,
+        moderator_user_id,
+        provisional_grader_user_ids,
+    ) = if !moderated_grading {
+        (false, moderation_threshold_pct, None, Vec::new())
+    } else {
+        (
+            moderated_grading,
+            moderation_threshold_pct,
+            moderator_user_id,
+            provisional_grader_user_ids,
+        )
+    };
     let originality_detection = match &req.originality_detection {
         None => cur.originality_detection.clone(),
         Some(s) => originality_policy::normalize_detection_mode(s)?,
@@ -828,7 +827,7 @@ fn merge_assignment_body_write(
         }
     };
     if let Some(ref gt) = grading_type {
-        if DisplayGradingKind::from_str(gt).is_none() {
+        if DisplayGradingKind::from_str(gt).is_err() {
             return Err(AppError::invalid_input("Invalid grading_type."));
         }
     }
@@ -4176,9 +4175,12 @@ async fn gradebook_students_and_columns(
         })
         .collect();
 
-    let grading_type_by_item =
-        course_module_assignments::grading_types_for_structure_items(pool, course_id, &assignment_ids)
-            .await?;
+    let grading_type_by_item = course_module_assignments::grading_types_for_structure_items(
+        pool,
+        course_id,
+        &assignment_ids,
+    )
+    .await?;
     let posting_by_item = course_module_assignments::posting_settings_for_structure_items(
         pool,
         course_id,
@@ -4186,7 +4188,13 @@ async fn gradebook_students_and_columns(
     )
     .await?;
 
-    Ok((course_id, students, columns, grading_type_by_item, posting_by_item))
+    Ok((
+        course_id,
+        students,
+        columns,
+        grading_type_by_item,
+        posting_by_item,
+    ))
 }
 
 fn enrich_gradebook_columns(
@@ -4243,7 +4251,7 @@ fn scheme_summary_from_row(row: &grading_schemes::GradingSchemeRow) -> GradingSc
 }
 
 fn parsed_scale_from_row(row: &grading_schemes::GradingSchemeRow) -> Result<ParsedScale, AppError> {
-    let k = DisplayGradingKind::from_str(row.grading_display_type.trim()).ok_or_else(|| {
+    let k = DisplayGradingKind::from_str(row.grading_display_type.trim()).map_err(|_| {
         AppError::invalid_input("Stored grading scheme has an unknown display type.")
     })?;
     parse_scale(k, row.scale_json.as_ref().map(|j| &j.0)).map_err(AppError::invalid_input)
@@ -4340,7 +4348,13 @@ fn dropped_by_student_for_grid(
             if mf <= 0.0 {
                 return None;
             }
-            Some((c.id, c.assignment_group_id, mf, c.never_drop, c.replace_with_final))
+            Some((
+                c.id,
+                c.assignment_group_id,
+                mf,
+                c.never_drop,
+                c.replace_with_final,
+            ))
         })
         .collect();
     let mut out: HashMap<Uuid, HashMap<Uuid, bool>> = HashMap::new();
@@ -4377,9 +4391,7 @@ fn ensure_points_within_max(points: f64, max_points: Option<i32>) -> Result<(), 
     Ok(())
 }
 
-fn map_grade_audit_out(
-    e: grade_audit_events::GradeAuditEventRow,
-) -> GradeHistoryEventOut {
+fn map_grade_audit_out(e: grade_audit_events::GradeAuditEventRow) -> GradeHistoryEventOut {
     let grade_audit_events::GradeAuditEventRow {
         id,
         action,
@@ -4435,14 +4447,10 @@ async fn grade_cell_history_get_handler(
     let rows = grade_audit_events::list_for_cell(&state.pool, course_id, item_id, student_id)
         .await
         .map_err(AppError::from)?;
-    let posted = grade_audit_events::posted_at_for_cell(
-        &state.pool,
-        course_id,
-        item_id,
-        student_id,
-    )
-    .await
-    .map_err(AppError::from)?;
+    let posted =
+        grade_audit_events::posted_at_for_cell(&state.pool, course_id, item_id, student_id)
+            .await
+            .map_err(AppError::from)?;
     let mut events: Vec<GradeHistoryEventOut> = rows.into_iter().map(map_grade_audit_out).collect();
     if self_view && posted.is_none() {
         for e in &mut events {
@@ -4472,14 +4480,10 @@ async fn my_grade_item_history_get_handler(
     let rows = grade_audit_events::list_for_cell(&state.pool, course_id, item_id, student_id)
         .await
         .map_err(AppError::from)?;
-    let posted = grade_audit_events::posted_at_for_cell(
-        &state.pool,
-        course_id,
-        item_id,
-        student_id,
-    )
-    .await
-    .map_err(AppError::from)?;
+    let posted =
+        grade_audit_events::posted_at_for_cell(&state.pool, course_id, item_id, student_id)
+            .await
+            .map_err(AppError::from)?;
     let mut events: Vec<GradeHistoryEventOut> = rows.into_iter().map(map_grade_audit_out).collect();
     if posted.is_none() {
         for e in &mut events {
@@ -4531,31 +4535,21 @@ async fn gradebook_grid_get_handler(
     let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
     let course_kind = scheme_row
         .as_ref()
-        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()));
-    let parsed_scale: Option<ParsedScale> = scheme_row
-        .as_ref()
-        .map(parsed_scale_from_row)
-        .transpose()?;
+        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()).ok());
+    let parsed_scale: Option<ParsedScale> =
+        scheme_row.as_ref().map(parsed_scale_from_row).transpose()?;
 
     let columns = enrich_gradebook_columns(columns, &types_map, course_kind, &posting);
-    let drop_flags = course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
+    let drop_flags =
+        course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
     let columns = enrich_columns_with_drop_flags(columns, &drop_flags);
     let group_rows = course_grading::list_assignment_groups(&state.pool, course_id).await?;
     let gpol = group_drop_policy_map(&group_rows);
-    let dropped_grades = dropped_by_student_for_grid(
-        &students,
-        &columns,
-        &gpol,
-        &grades,
-        &excused_grades,
-    );
+    let dropped_grades =
+        dropped_by_student_for_grid(&students, &columns, &gpol, &grades, &excused_grades);
     let grading_scheme = scheme_row.as_ref().map(scheme_summary_from_row);
-    let display_grades = grid_display_grades(
-        &grades,
-        &columns,
-        parsed_scale.as_ref(),
-        &excused_grades,
-    );
+    let display_grades =
+        grid_display_grades(&grades, &columns, parsed_scale.as_ref(), &excused_grades);
 
     let mut grade_held: HashMap<Uuid, HashMap<Uuid, bool>> = HashMap::new();
     for (uid, by_item) in &grades {
@@ -4611,10 +4605,8 @@ async fn my_grades_get_handler(
         course_grades::list_for_course(&state.pool, course_id).await?;
     let all_row = all_grades.get(&user.user_id).cloned().unwrap_or_default();
     let posted_for_me = posted_at.get(&user.user_id).cloned().unwrap_or_default();
-    let my_excused: HashMap<Uuid, bool> = excused_all
-        .get(&user.user_id)
-        .cloned()
-        .unwrap_or_default();
+    let my_excused: HashMap<Uuid, bool> =
+        excused_all.get(&user.user_id).cloned().unwrap_or_default();
 
     let assignment_groups = course_grading::get_settings_for_course_code(&state.pool, &course_code)
         .await?
@@ -4624,14 +4616,13 @@ async fn my_grades_get_handler(
     let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
     let course_kind = scheme_row
         .as_ref()
-        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()));
-    let parsed_scale: Option<ParsedScale> = scheme_row
-        .as_ref()
-        .map(parsed_scale_from_row)
-        .transpose()?;
+        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()).ok());
+    let parsed_scale: Option<ParsedScale> =
+        scheme_row.as_ref().map(parsed_scale_from_row).transpose()?;
 
     let columns = enrich_gradebook_columns(columns, &types_map, course_kind, &posting);
-    let drop_flags = course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
+    let drop_flags =
+        course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
     let columns = enrich_columns_with_drop_flags(columns, &drop_flags);
     let grading_scheme = scheme_row.as_ref().map(scheme_summary_from_row);
 
@@ -4734,11 +4725,9 @@ async fn gradebook_grades_put_handler(
     let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
     let course_kind = scheme_row
         .as_ref()
-        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()));
-    let parsed_scale: Option<ParsedScale> = scheme_row
-        .as_ref()
-        .map(parsed_scale_from_row)
-        .transpose()?;
+        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()).ok());
+    let parsed_scale: Option<ParsedScale> =
+        scheme_row.as_ref().map(parsed_scale_from_row).transpose()?;
     let columns = enrich_gradebook_columns(columns, &types_map, course_kind, &posting);
 
     let student_ok: HashSet<Uuid> = students.iter().map(|s| s.user_id).collect();
@@ -4816,7 +4805,8 @@ async fn gradebook_grades_put_handler(
     }
 
     if state.moderated_grading_enabled {
-        let touched_items: HashSet<Uuid> = ops.iter().map(|(_, item_id, _, _, _)| *item_id).collect();
+        let touched_items: HashSet<Uuid> =
+            ops.iter().map(|(_, item_id, _, _, _)| *item_id).collect();
         for item_id in touched_items {
             let Some(asn) =
                 course_module_assignments::get_for_course_item(&state.pool, course_id, item_id)
@@ -4828,8 +4818,7 @@ async fn gradebook_grades_put_handler(
                 continue;
             }
             let is_creator =
-                enrollment::user_is_course_creator(&state.pool, &course_code, user.user_id)
-                    .await?;
+                enrollment::user_is_course_creator(&state.pool, &course_code, user.user_id).await?;
             let is_mod = asn.moderator_user_id == Some(user.user_id);
             if !is_creator && !is_mod {
                 return Err(AppError::Forbidden);
@@ -4857,26 +4846,16 @@ async fn gradebook_grades_put_handler(
         .as_deref()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty());
-    course_grades::upsert_and_delete(
-        &state.pool,
-        course_id,
-        &ops,
-        Some(user.user_id),
-        reason,
-    )
-    .await?;
+    course_grades::upsert_and_delete(&state.pool, course_id, &ops, Some(user.user_id), reason)
+        .await?;
     if let Some(c) = course::get_by_id(&state.pool, course_id).await? {
         if c.sbg_enabled {
             let students: std::collections::HashSet<Uuid> =
                 ops.iter().map(|(uid, _, _, _, _)| *uid).collect();
             for student_id in students {
-                let _ = sbg_grading::recompute_student_sbg(
-                    &state.pool,
-                    course_id,
-                    student_id,
-                    false,
-                )
-                .await;
+                let _ =
+                    sbg_grading::recompute_student_sbg(&state.pool, course_id, student_id, false)
+                        .await;
             }
         }
     }
@@ -4951,14 +4930,16 @@ async fn assert_ops_pass_moderated(
         touched.insert(*item_id);
     }
     for item_id in touched {
-        let Some(asn) = course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await? else {
+        let Some(asn) =
+            course_module_assignments::get_for_course_item(&state.pool, course_id, item_id).await?
+        else {
             continue;
         };
         if !asn.moderated_grading {
             continue;
         }
-        let is_creator = enrollment::user_is_course_creator(&state.pool, course_code, user_id)
-            .await?;
+        let is_creator =
+            enrollment::user_is_course_creator(&state.pool, course_code, user_id).await?;
         let is_mod = asn.moderator_user_id == Some(user_id);
         if !is_creator && !is_mod {
             return Err(AppError::Forbidden);
@@ -4992,7 +4973,9 @@ async fn gradebook_import_needs_blind_ack(
         return Ok(false);
     }
     for (_uid, item_id, _pts, _, _) in ops {
-        let Some(a) = course_module_assignments::get_for_course_item(pool, course_id, *item_id).await? else {
+        let Some(a) =
+            course_module_assignments::get_for_course_item(pool, course_id, *item_id).await?
+        else {
             continue;
         };
         if a.posting_policy == "manual" && a.blind_grading && a.identities_revealed_at.is_none() {
@@ -5018,17 +5001,17 @@ async fn gradebook_csv_get_handler(
 
     let (course_id, _students, columns, types_map, posting) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
-    let (grades, _, _posted, excused) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (grades, _, _posted, excused) =
+        course_grades::list_for_course(&state.pool, course_id).await?;
     let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
     let course_kind = scheme_row
         .as_ref()
-        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()));
-    let parsed_scale: Option<ParsedScale> = scheme_row
-        .as_ref()
-        .map(parsed_scale_from_row)
-        .transpose()?;
+        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()).ok());
+    let parsed_scale: Option<ParsedScale> =
+        scheme_row.as_ref().map(parsed_scale_from_row).transpose()?;
     let columns = enrich_gradebook_columns(columns, &types_map, course_kind, &posting);
-    let drop_flags = course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
+    let drop_flags =
+        course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
     let columns = enrich_columns_with_drop_flags(columns, &drop_flags);
     let assignment_groups = course_grading::list_assignment_groups(&state.pool, course_id).await?;
 
@@ -5084,17 +5067,17 @@ async fn gradebook_import_validate_post_handler(
     let (course_id, _grid_students, columns, types_map, posting) =
         gradebook_students_and_columns(&state.pool, &course_code).await?;
     let roster = enrollment::list_students_for_gradebook_csv(&state.pool, &course_code).await?;
-    let (grades, _, _posted, excused) = course_grades::list_for_course(&state.pool, course_id).await?;
+    let (grades, _, _posted, excused) =
+        course_grades::list_for_course(&state.pool, course_id).await?;
     let scheme_row = grading_schemes::get_active_for_course(&state.pool, course_id).await?;
     let course_kind = scheme_row
         .as_ref()
-        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()));
-    let parsed_scale: Option<ParsedScale> = scheme_row
-        .as_ref()
-        .map(parsed_scale_from_row)
-        .transpose()?;
+        .and_then(|r| DisplayGradingKind::from_str(r.grading_display_type.trim()).ok());
+    let parsed_scale: Option<ParsedScale> =
+        scheme_row.as_ref().map(parsed_scale_from_row).transpose()?;
     let mut columns = enrich_gradebook_columns(columns, &types_map, course_kind, &posting);
-    let drop_flags = course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
+    let drop_flags =
+        course_module_assignments::item_drop_flags_for_course(&state.pool, course_id).await?;
     columns = enrich_columns_with_drop_flags(columns, &drop_flags);
 
     let v = csv::validate_gradebook_import(
@@ -5109,14 +5092,7 @@ async fn gradebook_import_validate_post_handler(
     )
     .map_err(map_gradebook_csv_err)?;
     if !v.has_blocking_errors {
-        assert_ops_pass_moderated(
-            &state,
-            &course_code,
-            course_id,
-            user.user_id,
-            &v.ops,
-        )
-        .await?;
+        assert_ops_pass_moderated(&state, &course_code, course_id, user.user_id, &v.ops).await?;
     }
 
     let n_rows = v.rows.len() as f64;
@@ -5141,13 +5117,8 @@ async fn gradebook_import_validate_post_handler(
     let need_blind = if has_blocking_errors {
         false
     } else {
-        gradebook_import_needs_blind_ack(
-            &state.pool,
-            course_id,
-            state.blind_grading_enabled,
-            &ops,
-        )
-        .await?
+        gradebook_import_needs_blind_ack(&state.pool, course_id, state.blind_grading_enabled, &ops)
+            .await?
     };
     let confirmable = !has_blocking_errors && !ops.is_empty();
     let n_ops = ops.len();
@@ -5202,9 +5173,10 @@ async fn gradebook_import_confirm_post_handler(
 
     sweep_gradebook_import_pending(&state);
     let pending = {
-        let mut m = state.gradebook_import_pending.lock().map_err(|e| {
-            AppError::invalid_input(format!("Could not read import session: {e}"))
-        })?;
+        let mut m = state
+            .gradebook_import_pending
+            .lock()
+            .map_err(|e| AppError::invalid_input(format!("Could not read import session: {e}")))?;
         m.remove(&req.token)
             .ok_or_else(|| AppError::invalid_input("Import session expired or unknown token."))?
     };
@@ -5212,11 +5184,11 @@ async fn gradebook_import_confirm_post_handler(
         return Err(AppError::Forbidden);
     }
     if pending.expires_at < Utc::now() {
-        return Err(AppError::invalid_input("This import has expired. Validate the file again."));
+        return Err(AppError::invalid_input(
+            "This import has expired. Validate the file again.",
+        ));
     }
-    if pending.require_blind_ack
-        && !req.acknowledge_blind_manual_hold.unwrap_or(false)
-    {
+    if pending.require_blind_ack && !req.acknowledge_blind_manual_hold.unwrap_or(false) {
         return Err(AppError::invalid_input(
             "Confirm that you are importing to manual-hold, blind-graded work by checking the acknowledgement.",
         ));
@@ -5246,13 +5218,8 @@ async fn gradebook_import_confirm_post_handler(
         if c.sbg_enabled {
             let sids: HashSet<Uuid> = ops.iter().map(|(uid, _, _, _, _)| *uid).collect();
             for student_id in sids {
-                let _ = sbg_grading::recompute_student_sbg(
-                    &state.pool,
-                    c_id,
-                    student_id,
-                    false,
-                )
-                .await;
+                let _ =
+                    sbg_grading::recompute_student_sbg(&state.pool, c_id, student_id, false).await;
             }
         }
     }
@@ -5343,12 +5310,7 @@ async fn grading_put_handler(
 
     if let Some(ref r) = req.sbg_aggregation_rule {
         let t = r.trim();
-        if !t.is_empty()
-            && !matches!(
-                t,
-                "most_recent" | "highest" | "mean" | "decaying_average"
-            )
-        {
+        if !t.is_empty() && !matches!(t, "most_recent" | "highest" | "mean" | "decaying_average") {
             return Err(AppError::invalid_input(
                 "Invalid sbgAggregationRule (use most_recent, highest, mean, or decaying_average).",
             ));
@@ -5380,12 +5342,12 @@ async fn grading_put_handler(
     {
         Ok(Some(row)) => {
             for g in &req.assignment_groups {
-                if g.id.is_some()
-                    && (g.drop_lowest.is_some()
+                if let (Some(gid), true) = (
+                    g.id,
+                    g.drop_lowest.is_some()
                         || g.drop_highest.is_some()
-                        || g.replace_lowest_with_final.is_some())
-                {
-                    let gid = g.id.expect("id with is_some");
+                        || g.replace_lowest_with_final.is_some(),
+                ) {
                     tracing::info!(
                         event = "assignment_group_drop_policy_updated",
                         group_id = %gid,
@@ -5464,7 +5426,7 @@ async fn grading_scheme_put_handler(
         .map(|r| r.grading_display_type.clone());
 
     let kind = DisplayGradingKind::from_str(req.scheme_type.trim())
-        .ok_or_else(|| AppError::invalid_input("Invalid grading scheme type."))?;
+        .map_err(|_| AppError::invalid_input("Invalid grading scheme type."))?;
     let name = req.name.as_deref().unwrap_or("Default").trim();
     if name.is_empty() {
         return Err(AppError::invalid_input("Scheme name cannot be empty."));

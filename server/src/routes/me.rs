@@ -2,7 +2,8 @@ use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
     routing::delete,
-    routing::get, routing::post,
+    routing::get,
+    routing::post,
     Json, Router,
 };
 use serde::Deserialize;

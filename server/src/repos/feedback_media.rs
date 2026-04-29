@@ -198,10 +198,7 @@ pub async fn finalize_chunked_upload(
     .await
 }
 
-pub async fn get_by_id(
-    pool: &PgPool,
-    id: Uuid,
-) -> Result<Option<FeedbackMediaRow>, sqlx::Error> {
+pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<FeedbackMediaRow>, sqlx::Error> {
     sqlx::query_as::<_, FeedbackMediaRow>(&format!(
         r#"
         SELECT
@@ -241,10 +238,7 @@ pub async fn list_for_submission(
     .await
 }
 
-pub async fn soft_delete(
-    pool: &PgPool,
-    id: Uuid,
-) -> Result<bool, sqlx::Error> {
+pub async fn soft_delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
     let n = sqlx::query(&format!(
         r#"
         UPDATE {}
@@ -260,11 +254,7 @@ pub async fn soft_delete(
     Ok(n > 0)
 }
 
-pub async fn set_caption_status(
-    pool: &PgPool,
-    id: Uuid,
-    status: &str,
-) -> Result<(), sqlx::Error> {
+pub async fn set_caption_status(pool: &PgPool, id: Uuid, status: &str) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"UPDATE {} SET caption_status = $2 WHERE id = $1"#,
         schema::SUBMISSION_FEEDBACK_MEDIA

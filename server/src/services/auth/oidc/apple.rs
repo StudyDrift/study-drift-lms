@@ -32,7 +32,6 @@ pub fn client_secret_jwt(c: &AppleOidcCreds) -> Result<String, AppError> {
     let key = EncodingKey::from_ec_pem(c.private_key_pem.as_bytes()).map_err(|_| {
         AppError::invalid_input("OIDC_APPLE_PRIVATE_KEY_PEM is not a valid EC private key.")
     })?;
-    encode(&h, &claims, &key).map_err(|_| {
-        AppError::invalid_input("Could not sign Apple OIDC client secret JWT.")
-    })
+    encode(&h, &claims, &key)
+        .map_err(|_| AppError::invalid_input("Could not sign Apple OIDC client secret JWT."))
 }
