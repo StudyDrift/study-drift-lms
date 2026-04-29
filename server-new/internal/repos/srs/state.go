@@ -36,7 +36,7 @@ SELECT COUNT(*)::bigint
 FROM course.srs_item_states s
 INNER JOIN course.questions q ON q.id = s.question_id
 INNER JOIN course.courses c ON c.id = q.course_id
-INNER JOIN course.course_enrollments e ON e.course_id = q.course_id AND e.user_id = s.user_id
+INNER JOIN course.course_enrollments e ON e.course_id = q.course_id AND e.user_id = s.user_id AND e.active
 WHERE s.user_id = $1
   AND c.srs_enabled = TRUE
   AND q.srs_eligible = TRUE

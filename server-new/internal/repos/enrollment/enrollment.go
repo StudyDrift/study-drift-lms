@@ -18,7 +18,7 @@ SELECT EXISTS (
 	SELECT 1
 	FROM course.course_enrollments ce
 	INNER JOIN course.courses c ON c.id = ce.course_id
-	WHERE c.course_code = $1 AND ce.user_id = $2
+	WHERE c.course_code = $1 AND ce.user_id = $2 AND ce.active
 )
 `, courseCode, userID).Scan(&ok)
 	if err != nil {
@@ -31,7 +31,7 @@ SELECT EXISTS (
 func UserHasAccessByCourseID(ctx context.Context, pool *pgxpool.Pool, courseID, userID uuid.UUID) (bool, error) {
 	var ok bool
 	err := pool.QueryRow(ctx, `
-SELECT EXISTS (SELECT 1 FROM course.course_enrollments WHERE course_id = $1 AND user_id = $2)
+SELECT EXISTS (SELECT 1 FROM course.course_enrollments WHERE course_id = $1 AND user_id = $2 AND active)
 `, courseID, userID).Scan(&ok)
 	if err != nil {
 		return false, err
@@ -45,7 +45,7 @@ func GetStudentEnrollmentID(ctx context.Context, pool *pgxpool.Pool, courseID, u
 	err := pool.QueryRow(ctx, `
 SELECT id
 FROM course.course_enrollments
-WHERE course_id = $1 AND user_id = $2 AND role = 'student'
+WHERE course_id = $1 AND user_id = $2 AND role = 'student' AND active
 `, courseID, userID).Scan(&id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -78,7 +78,7 @@ SELECT EXISTS (
 	SELECT 1
 	FROM course.course_enrollments ce
 	INNER JOIN course.courses c ON c.id = ce.course_id
-	WHERE c.course_code = $1 AND ce.user_id = $2 AND ce.role = $3
+	WHERE c.course_code = $1 AND ce.user_id = $2 AND ce.role = $3 AND ce.active
 )
 `, courseCode, userID, role).Scan(&ok)
 	if err != nil {
@@ -93,7 +93,7 @@ func UserRolesInCourse(ctx context.Context, pool *pgxpool.Pool, courseCode strin
 SELECT ce.role
 FROM course.course_enrollments ce
 INNER JOIN course.courses c ON c.id = ce.course_id
-WHERE c.course_code = $1 AND ce.user_id = $2
+WHERE c.course_code = $1 AND ce.user_id = $2 AND ce.active
 ORDER BY
 	CASE ce.role
 		WHEN 'teacher' THEN 0
@@ -123,7 +123,7 @@ func ListCourseCodesWhereUserIsStaff(ctx context.Context, pool *pgxpool.Pool, us
 SELECT c.course_code
 FROM course.course_enrollments ce
 INNER JOIN course.courses c ON c.id = ce.course_id
-WHERE ce.user_id = $1 AND ce.role IN ('teacher', 'instructor')
+WHERE ce.user_id = $1 AND ce.role IN ('teacher', 'instructor') AND ce.active
 ORDER BY c.course_code ASC
 `, userID)
 	if err != nil {

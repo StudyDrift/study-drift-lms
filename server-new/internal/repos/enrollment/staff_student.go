@@ -20,6 +20,8 @@ SELECT EXISTS (
 	  AND ce_staff.role IN ('teacher', 'instructor')
 	  AND ce_stu.user_id = $2
 	  AND ce_stu.role = 'student'
+	  AND ce_staff.active
+	  AND ce_stu.active
 )`, staffUserID, studentUserID).Scan(&ok)
 	return ok, err
 }

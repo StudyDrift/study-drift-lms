@@ -41,7 +41,7 @@ func LoadForUser(ctx context.Context, pool *pgxpool.Pool, courseID, userID uuid.
 	err = pool.QueryRow(ctx, `
 		SELECT created_at
 		FROM course.course_enrollments
-		WHERE course_id = $1 AND user_id = $2 AND role = 'student'
+		WHERE course_id = $1 AND user_id = $2 AND role = 'student' AND active
 	`, courseID, userID).Scan(&enroll)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

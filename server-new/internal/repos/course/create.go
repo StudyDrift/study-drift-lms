@@ -102,6 +102,11 @@ ON CONFLICT (course_id, user_id, role) DO NOTHING
 	return &out, false, nil
 }
 
+// RandomCourseCode returns a new candidate `C-XXXXXX` segment (caller retries on unique violation).
+func RandomCourseCode() (string, error) {
+	return randomCourseCode()
+}
+
 func randomCourseCode() (string, error) {
 	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, courseCodeLength)
