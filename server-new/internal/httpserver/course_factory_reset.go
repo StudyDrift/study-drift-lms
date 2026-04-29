@@ -48,7 +48,7 @@ func (d Deps) handlePostFactoryResetCourse() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
 			return
 		}
-		coursefiles.RemoveStoredBlobs(d.Config.CourseFilesRoot, courseCode, outcome.RemovedCourseFileStorageKeys)
+		coursefiles.RemoveStoredBlobs(d.effectiveConfig().CourseFilesRoot, courseCode, outcome.RemovedCourseFileStorageKeys)
 		log.Printf(
 			"factory-reset: success course=%q viewer=%s removed_file_blobs=%d",
 			courseCode,

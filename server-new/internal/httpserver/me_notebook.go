@@ -24,7 +24,7 @@ func (d Deps) handleNotebookQuery() http.HandlerFunc {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
-		if d.OpenRouter == nil {
+		if d.openRouterClient() == nil {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeAiNotConfigured, "AI features are not configured on this server.")
 			return
@@ -47,7 +47,7 @@ func (d Deps) handleNotebookQuery() http.HandlerFunc {
 			})
 		}
 		docs = notebookrag.FilterDocs(docs)
-		resp, err := notebookrag.Answer(r.Context(), d.Pool, d.OpenRouter, userID, body.Question, docs)
+		resp, err := notebookrag.Answer(r.Context(), d.Pool, d.openRouterClient(), userID, body.Question, docs)
 		if err != nil {
 			if notebookrag.IsValidationError(err) {
 				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, err.Error())

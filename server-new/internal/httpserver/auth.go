@@ -96,7 +96,7 @@ func (d Deps) handleForgotPassword() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
 			return
 		}
-		res, err := authservice.RequestPasswordReset(r.Context(), d.Pool, d.Config, b.Email)
+		res, err := authservice.RequestPasswordReset(r.Context(), d.Pool, d.effectiveConfig(), b.Email)
 		if err != nil {
 			writeAuthErr(w, err)
 			return
@@ -140,7 +140,7 @@ func (d Deps) handleSAMLStatus() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		if !d.Config.SAMLSSOEnabled {
+		if !d.effectiveConfig().SAMLSSOEnabled {
 			_, _ = w.Write([]byte(`{"enabled":false}`))
 			return
 		}
@@ -184,7 +184,7 @@ func (d Deps) handleOIDCStatus() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		if !d.Config.OIDCSSOEnabled {
+		if !d.effectiveConfig().OIDCSSOEnabled {
 			_, _ = w.Write([]byte(`{"enabled":false,"providers":[],"custom":[]}`))
 			return
 		}
@@ -205,7 +205,7 @@ func (d Deps) handleOIDCStatus() http.HandlerFunc {
 		for _, c := range customRows {
 			custom = append(custom, customInfo{ID: c.ID, DisplayName: c.DisplayName})
 		}
-		base := strings.TrimRight(d.Config.OIDCPublicBaseURL, "/")
+		base := strings.TrimRight(d.effectiveConfig().OIDCPublicBaseURL, "/")
 		_ = json.NewEncoder(w).Encode(struct {
 			Enabled   bool   `json:"enabled"`
 			APIBase   string `json:"apiBase"`
@@ -216,9 +216,9 @@ func (d Deps) handleOIDCStatus() http.HandlerFunc {
 		}{
 			Enabled:   true,
 			APIBase:   base,
-			Google:    d.Config.OIDCGoogleConfigured(),
-			Microsoft: d.Config.OIDCMicrosoftConfigured(),
-			Apple:     d.Config.OIDCAppleConfigured(),
+			Google:    d.effectiveConfig().OIDCGoogleConfigured(),
+			Microsoft: d.effectiveConfig().OIDCMicrosoftConfigured(),
+			Apple:     d.effectiveConfig().OIDCAppleConfigured(),
 			Custom:    custom,
 		})
 	}
@@ -255,7 +255,7 @@ func (d Deps) handleOIDCLink() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
 			return
 		}
-		if !d.Config.OIDCSSOEnabled {
+		if !d.effectiveConfig().OIDCSSOEnabled {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "OpenID Connect is not enabled on this server.")
 			return
 		}
@@ -289,7 +289,7 @@ func (d Deps) handleOIDCLink() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInvalidInput, "Failed to start OIDC link flow.")
 			return
 		}
-		public := strings.TrimRight(d.Config.OIDCPublicBaseURL, "/")
+		public := strings.TrimRight(d.effectiveConfig().OIDCPublicBaseURL, "/")
 		var path string
 		if p == "custom" {
 			cid := *customID

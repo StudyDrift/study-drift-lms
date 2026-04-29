@@ -5,6 +5,7 @@ import { settingsViewFromPathname } from '../../components/layout/side-nav-path-
 import { ImageModelPicker } from '../../components/image-model-picker'
 import { RequirePermission } from '../../components/require-permission'
 import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-settings-panel'
+import { PlatformSettingsPanel } from '../../components/settings/platform-settings-panel'
 import { RolesPermissionsPanel } from '../../components/settings/roles-permissions-panel'
 import { usePermissions } from '../../context/use-permissions'
 import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
@@ -19,7 +20,11 @@ import { useUiDensityControls } from '../../context/ui-density-context'
 
 function isSystemSettingsPath(pathname: string): boolean {
   if (pathname.startsWith('/settings/ai/')) return true
-  return pathname === '/settings/roles' || pathname === '/settings/lti-tools'
+  return (
+    pathname === '/settings/roles' ||
+    pathname === '/settings/lti-tools' ||
+    pathname === '/settings/platform'
+  )
 }
 
 type SystemPromptItem = {
@@ -519,7 +524,7 @@ export default function Settings() {
     <LmsPage title="Settings" description="Account and learning preferences.">
       <div
         className={`mt-8 ${
-          activeView === 'roles' || activeView === 'lti-tools'
+          activeView === 'roles' || activeView === 'lti-tools' || activeView === 'platform'
             ? 'max-w-4xl'
             : activeView === 'ai-prompts'
               ? 'max-w-3xl'
@@ -553,9 +558,10 @@ export default function Settings() {
 
             {!modelsConfigured && !aiLoading && (
               <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Set <code className="rounded bg-amber-100/80 px-1.5 py-0.5 font-mono text-xs">OPENROUTER_API_KEY</code> or{' '}
-                <code className="rounded bg-amber-100/80 px-1.5 py-0.5 font-mono text-xs">OPEN_ROUTER_API_KEY</code> in the
-                server environment so AI image generation can call OpenRouter.
+                Configure an OpenRouter API key under{' '}
+                <span className="font-medium">Settings → Global platform</span>, or set{' '}
+                <code className="rounded bg-amber-100/80 px-1.5 py-0.5 font-mono text-xs">OPENROUTER_API_KEY</code> in the
+                server environment, so AI features can call OpenRouter.
               </p>
             )}
 
@@ -940,6 +946,23 @@ export default function Settings() {
           >
             <LtiToolsSettingsPanel />
           </RequirePermission>
+        )}
+
+        {activeView === 'platform' && (
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">Global platform</h2>
+            <RequirePermission
+              permission={PERM_RBAC_MANAGE}
+              fallback={
+                <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                  You need permission to edit platform configuration (
+                  <code className="font-mono text-xs">{PERM_RBAC_MANAGE}</code>).
+                </p>
+              }
+            >
+              <PlatformSettingsPanel />
+            </RequirePermission>
+          </div>
         )}
       </div>
 

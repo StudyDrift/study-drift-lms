@@ -333,7 +333,7 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 			DroppedGrades:        droppedByStudent,
 			ExcusedGrades:        excused,
 			GradingScheme:        schemePtr,
-			GradebookCsvEnabled: d.Config.GradebookCSVEnabled,
+			GradebookCsvEnabled: d.effectiveConfig().GradebookCSVEnabled,
 		})
 	}
 }

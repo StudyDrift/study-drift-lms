@@ -153,6 +153,7 @@ describe('buildSearchItems', () => {
     const allowed = (p: string) => p === PERM_RBAC_MANAGE
     const items = buildSearchItems([], [], allowed)
     expect(items.some((i) => i.path === '/settings/roles')).toBe(true)
+    expect(items.some((i) => i.path === '/settings/platform')).toBe(true)
     expect(items.some((i) => i.path === '/settings/ai/models')).toBe(true)
     expect(items.some((i) => i.path === '/settings/ai/system-prompts')).toBe(true)
   })
@@ -161,7 +162,7 @@ describe('buildSearchItems', () => {
     const items = buildSearchItems([], [], allowsNone)
     expect(items.some((i) => i.path === '/settings/roles')).toBe(false)
     expect(items.some((i) => i.path === '/settings/ai/models')).toBe(false)
-    expect(items.some((i) => i.path === '/settings/ai/system-prompts')).toBe(false)
+    expect(items.some((i) => i.path === '/settings/platform')).toBe(false)
   })
 
   it('adds Create course action when PERM_COURSE_CREATE is allowed', () => {
@@ -339,6 +340,7 @@ describe('buildSearchItems with full permissions', () => {
   it('includes rbac page and create course when allows returns true', () => {
     const items = buildSearchItems([], [], allowsAll)
     expect(items.some((i) => i.path === '/settings/roles')).toBe(true)
+    expect(items.some((i) => i.path === '/settings/platform')).toBe(true)
     expect(items.some((i) => i.path === '/settings/ai/models')).toBe(true)
     expect(items.some((i) => i.id === 'action:/courses/create')).toBe(true)
   })

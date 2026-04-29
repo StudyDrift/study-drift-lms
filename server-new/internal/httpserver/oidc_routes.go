@@ -25,7 +25,7 @@ func (d Deps) handleOIDCLogin() http.HandlerFunc {
 			return
 		}
 		if d.OIDC == nil {
-			d.OIDC = oidcauth.NewService(d.Config)
+			d.OIDC = oidcauth.NewService(d.effectiveConfig())
 		}
 		prov := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "provider")))
 		q := r.URL.Query()
@@ -83,7 +83,7 @@ func (d Deps) handleOIDCCallback() http.HandlerFunc {
 			return
 		}
 		if d.OIDC == nil {
-			d.OIDC = oidcauth.NewService(d.Config)
+			d.OIDC = oidcauth.NewService(d.effectiveConfig())
 		}
 		prov := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "provider")))
 		q := r.URL.Query()

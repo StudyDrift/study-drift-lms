@@ -6,6 +6,24 @@ import (
 	"testing"
 )
 
+func TestAdmin_PlatformSettings_Unauthorized(t *testing.T) {
+	h := NewHandler(Deps{Pool: nil, JWTSigner: nil})
+	for _, p := range []struct {
+		path   string
+		method string
+	}{
+		{"/api/v1/settings/platform", http.MethodGet},
+		{"/api/v1/settings/platform", http.MethodPut},
+	} {
+		srr := httptest.NewRecorder()
+		r := httptest.NewRequest(p.method, p.path, nil)
+		h.ServeHTTP(srr, r)
+		if srr.Code != http.StatusUnauthorized {
+			t.Fatalf("platform %s %s: %d", p.method, p.path, srr.Code)
+		}
+	}
+}
+
 func TestAdmin_OIDCList_Unauthorized(t *testing.T) {
 	h := NewHandler(Deps{Pool: nil, JWTSigner: nil})
 	rr := httptest.NewRecorder()

@@ -82,9 +82,9 @@ func (d Deps) handleGetCourse() http.HandlerFunc {
 			CoursePublic:                *crow,
 			ViewerEnrollmentRoles:        roles,
 			ViewerStudentEnrollmentID:    stuStr,
-			AnnotationsEnabled:            d.Config.AnnotationEnabled,
-			FeedbackMediaEnabled:          d.Config.FeedbackMediaEnabled,
-			ResubmissionWorkflowEnabled:  d.Config.ResubmissionWorkflowEnabled,
+			AnnotationsEnabled:            d.effectiveConfig().AnnotationEnabled,
+			FeedbackMediaEnabled:          d.effectiveConfig().FeedbackMediaEnabled,
+			ResubmissionWorkflowEnabled:  d.effectiveConfig().ResubmissionWorkflowEnabled,
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(resp)
