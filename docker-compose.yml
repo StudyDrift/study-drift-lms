@@ -48,29 +48,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Rust API (./server) — left here for reference; the running `server` service is Go (./server-new).
-  # server:
-  #   build:
-  #     context: ./server
-  #     dockerfile: Dockerfile
-  #   environment:
-  #     RUST_LOG: info
-  #     DATABASE_URL: postgres://studydrift:studydrift@postgres:5432/studydrift?sslmode=disable
-  #     MONGODB_URI: mongodb://studydrift:studydrift@mongo:27017/?authSource=admin
-  #     JWT_SECRET: change-me-in-production-use-a-long-random-string
-  #     RUN_MIGRATIONS: "true"
-  #     OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
-  #     COURSE_FILES_ROOT: /var/course-files
-  #   ports:
-  #     - "8080:8080"
-  #   volumes:
-  #     - ./data/course-files:/var/course-files
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     mongo:
-  #       condition: service_healthy
-
   server:
     build:
       context: ./server-new

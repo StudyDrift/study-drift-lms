@@ -56,7 +56,6 @@ jobs:
         id: images
         run: |
           REPO_LOWER="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
-          echo "server=ghcr.io/${REPO_LOWER}/server-demo:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           echo "server_go=ghcr.io/${REPO_LOWER}/server-go-demo:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           echo "web=ghcr.io/${REPO_LOWER}/web-demo:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
@@ -69,16 +68,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-
-      - name: Build and push server image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./server
-          file: ./server/Dockerfile
-          push: true
-          tags: ${{ steps.images.outputs.server }}
-          cache-from: type=gha,scope=deploy-demo-server
-          cache-to: type=gha,mode=max,scope=deploy-demo-server
 
       - name: Build and push Go server (server-new) image
         uses: docker/build-push-action@v6
@@ -250,7 +239,7 @@ jobs:
           DEMO_POSTGRES_PASSWORD: ${{ secrets.DEMO_POSTGRES_PASSWORD }}
           DEMO_JWT_SECRET: ${{ secrets.DEMO_JWT_SECRET }}
           OPEN_ROUTER_API_KEY: ${{ secrets.OPEN_ROUTER_API_KEY }}
-          LEXTURES_SERVER_IMAGE: ${{ steps.images.outputs.server }}
+          LEXTURES_SERVER_IMAGE: ${{ steps.images.outputs.server_go }}
           LEXTURES_WEB_IMAGE: ${{ steps.images.outputs.web }}
         run: |
           set -euo pipefail
@@ -308,7 +297,7 @@ jobs:
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ github.token }}
         run: |
-          # Pull immutable images built in CI so deploy avoids on-droplet Rust/Node compilation.
+          # Pull immutable images built in CI so deploy avoids on-droplet compilation.
           # --wait blocks until healthchecks pass (see docker-compose.deploy.yml); on failure we print ps + logs.
           ssh -i ~/.ssh/demo_ed25519 -o StrictHostKeyChecking=accept-new \
             "root@${DROPLET_IP}" \

@@ -3,7 +3,7 @@
 # Or from server-new/:
 #   docker compose up --build
 #
-# The API uses the same SQL migration tree as the Rust server (./migrations in this module).
+# Migrations live in ./migrations in this module.
 
 services:
   postgres:

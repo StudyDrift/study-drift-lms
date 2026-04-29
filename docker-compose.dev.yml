@@ -18,25 +18,6 @@ include:
   - docker-compose.yml
 
 services:
-  # Rust `server` (cargo-watch) — disabled. Base stack uses the Go `server` image from docker-compose.yml.
-  # server:
-  #   build:
-  #     context: ./server
-  #     dockerfile: Dockerfile.dev
-  #   volumes:
-  #     - ./server:/app
-  #     - server_target:/app/target
-  #     - server_cargo_registry:/usr/local/cargo/registry
-  #     - server_cargo_git:/usr/local/cargo/git
-  #     - ./data/course-files:/var/course-files
-  #   environment:
-  #     DATABASE_URL: postgres://studydrift:studydrift@postgres:5432/studydrift?sslmode=disable
-  #     RUST_LOG: debug
-  #     JWT_SECRET: dev-only-change-me-in-production
-  #     RUN_MIGRATIONS: true
-  #     OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
-  #     COURSE_FILES_ROOT: /var/course-files
-
   # Go `server` from docker-compose.yml: use Air + bind mount for live recompile.
   # Keep course-files and add module/build caches so dependency resolution stays fast in the container.
   server:
