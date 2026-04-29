@@ -167,7 +167,7 @@ jobs:
         run: go mod download
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           # v1.x binaries were built with Go < 1.25 and cannot load configs for go 1.25 modules.
           version: v2.11.4
