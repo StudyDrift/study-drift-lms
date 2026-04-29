@@ -1,6 +1,6 @@
 module github.com/lextures/lextures/server-new
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
@@ -12,7 +12,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.7.2
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/russellhaering/goxmldsig v1.6.0
 	golang.org/x/oauth2 v0.24.0
@@ -31,7 +31,6 @@ require (
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/mattermost/xml-roundtrip-validator v0.1.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
 	golang.org/x/crypto v0.42.0 // indirect
 	golang.org/x/net v0.45.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect

@@ -160,21 +160,27 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.25"
           cache-dependency-path: server-new/go.sum
 
       - name: go mod download
         run: go mod download
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: v1.64.2
+          # v1.x binaries were built with Go < 1.25 and cannot load configs for go 1.25 modules.
+          version: v2.11.4
           working-directory: server-new
           args: --timeout=4m
 
+      # Omit packages with no *_test.go files: Go 1.25 + -coverprofile can fail those with
+      # "go: no such tool covdata" (golang/go#75031).
       - name: go test (internal packages; Postgres-backed integration tests)
-        run: go test ./internal/... -count=1 -timeout=5m -coverprofile=coverage.out -covermode=atomic
+        run: |
+          FORMAT='{{if .TestGoFiles}}{{.ImportPath}}{{"\n"}}{{end}}'
+          pkgs=$(go list -f "$FORMAT" ./internal/...)
+          go test $pkgs -count=1 -timeout=5m -coverprofile=coverage.out -covermode=atomic
 
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

@@ -30,7 +30,7 @@ func RunWithFS(ctx context.Context, fsys fs.FS, dsn string) error {
 	if err != nil {
 		return fmt.Errorf("migrate: connect: %w", err)
 	}
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 	return runLocked(ctx, conn, fsys, "migrations")
 }
 

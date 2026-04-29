@@ -1,12 +1,20 @@
-run:
-  timeout: 4m
+# golangci-lint v2 schema (required for golangci-lint-action with v2.x binary).
+# gosimple is merged into staticcheck in v2 — see migration guide.
+version: "2"
+
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
+  exclusions:
+    rules:
+      # User-facing API messages intentionally use sentence-style punctuation.
+      - linters:
+          - staticcheck
+        text: "^ST1005:"
+
 issues:
   max-same-issues: 0

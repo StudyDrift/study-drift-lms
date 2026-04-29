@@ -197,7 +197,7 @@ func (d Deps) handleLtiProviderLaunch() http.HandlerFunc {
 		}
 		var expT time.Time
 		if claims.ExpiresAt != nil {
-			expT = claims.ExpiresAt.Time.UTC()
+			expT = claims.ExpiresAt.UTC()
 		} else {
 			expT = time.Now().UTC().Add(time.Hour)
 		}

@@ -102,10 +102,11 @@ WHERE s.course_id = $1 AND s.module_item_id = $2 AND g.student_user_id IS NULL
 }
 
 func ListForAssignment(ctx context.Context, pool *pgxpool.Pool, courseID, moduleItemID uuid.UUID, filter GradedFilter) ([]SubmissionRow, error) {
-	gradedClause := ""
-	if filter == GradedFilterGraded {
+	var gradedClause string
+	switch filter {
+	case GradedFilterGraded:
 		gradedClause = "AND g.student_user_id IS NOT NULL"
-	} else if filter == GradedFilterUngraded {
+	case GradedFilterUngraded:
 		gradedClause = "AND g.student_user_id IS NULL"
 	}
 	rows, err := pool.Query(ctx, `

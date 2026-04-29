@@ -53,7 +53,7 @@ func ListModelsByOutputModality(ctx context.Context, httpClient *http.Client, ba
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	b, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
