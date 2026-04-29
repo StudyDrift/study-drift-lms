@@ -11,7 +11,7 @@ func TestLMSDashboard_learnersStillUnimplementedForOtherPaths(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/learners/abc/xyz", nil)
 	h.ServeHTTP(rr, r)
-	if rr.Code != http.StatusNotImplemented {
+	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unrelated learners path: %d", rr.Code)
 	}
 }

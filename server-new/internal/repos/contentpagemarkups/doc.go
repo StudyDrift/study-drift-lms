@@ -1,3 +1,2 @@
-// Package contentpagemarkups is a placeholder for a port of repos/content_page_markups (see server-new/migration.md).
-// Types and query helpers are added as handlers are implemented.
+// Package contentpagemarkups implements server/src/repos/content_page_markups.rs against course.content_page_user_markups.
 package contentpagemarkups

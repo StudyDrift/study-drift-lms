@@ -49,7 +49,7 @@ describe('buildSearchItems', () => {
     expect(course?.haystack).toContain('intro')
     expect(course?.haystack).toContain('cs-101')
 
-    const person = items.find((i) => i.id === 'person:u1:CS-101')
+    const person = items.find((i) => i.id === 'person:u1:CS-101:student')
     expect(person).toMatchObject({
       group: 'person',
       path: '/courses/CS-101/enrollments',
@@ -59,18 +59,56 @@ describe('buildSearchItems', () => {
     const allowsGrade = (p: string) =>
       p === courseEnrollmentsReadPermission('CS-101') || p === courseGradebookViewPermission('CS-101')
     const itemsG = buildSearchItems(courses, people, allowsGrade)
-    const personG = itemsG.find((i) => i.id === 'person:u1:CS-101')
+    const personG = itemsG.find((i) => i.id === 'person:u1:CS-101:student')
     expect(personG?.path).toBe('/courses/CS-101/gradebook?student=u1')
 
-    const emailOnly = items.find((i) => i.id === 'person:u2:CS-101')
+    const emailOnly = items.find((i) => i.id === 'person:u2:CS-101:ta')
     expect(emailOnly?.title).toBe('b@x.com')
     expect(person?.subtitle).toBe('Intro · CS-101 · student')
+  })
+
+  it('uses distinct ids when the same user has multiple roles in one course', () => {
+    const dualRole: SearchPersonItem[] = [
+      {
+        userId: 'same',
+        email: 'x@x.com',
+        displayName: 'Pat',
+        role: 'Student',
+        courseCode: 'C-1',
+        courseTitle: 'Course',
+      },
+      {
+        userId: 'same',
+        email: 'x@x.com',
+        displayName: 'Pat',
+        role: 'Teacher',
+        courseCode: 'C-1',
+        courseTitle: 'Course',
+      },
+    ]
+    const allows = (p: string) => p === courseEnrollmentsReadPermission('C-1')
+    const items = buildSearchItems([], dualRole, allows)
+    const ids = items.filter((i) => i.group === 'person').map((i) => i.id)
+    expect(new Set(ids).size).toBe(2)
+    expect(ids).toContain('person:same:C-1:Student')
+    expect(ids).toContain('person:same:C-1:Teacher')
   })
 
   it('URL-encodes course codes in paths', () => {
     const items = buildSearchItems(courses, [], allowsNone)
     const enc = items.find((i) => i.id === 'course:a/b')
     expect(enc?.path).toBe('/courses/a%2Fb')
+  })
+
+  it('includes Ask AI as the first shortcut for every user', () => {
+    const items = buildSearchItems([], [], allowsNone)
+    const ask = items.find((i) => i.id === 'global:ask-ai')
+    expect(ask).toMatchObject({
+      group: 'ai',
+      path: '/ai',
+      title: 'Ask AI',
+    })
+    expect(ask?.haystack).toContain('ask ai')
   })
 
   it('adds global page entries for every user', () => {
@@ -260,6 +298,7 @@ describe('filterSearchItems', () => {
 
 describe('SEARCH_GROUP_LABEL', () => {
   it('has a label for each group', () => {
+    expect(SEARCH_GROUP_LABEL.ai).toBe('AI')
     expect(SEARCH_GROUP_LABEL.action).toBe('Actions')
     expect(SEARCH_GROUP_LABEL.course).toBe('Courses')
     expect(SEARCH_GROUP_LABEL.person).toBe('People')

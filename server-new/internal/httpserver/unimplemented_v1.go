@@ -13,11 +13,7 @@ func (d Deps) registerUnimplementedV1(r *chi.Mux) {
 	_ = d
 	h := http.HandlerFunc(http501Handler)
 	prefixes := []string{
-		// Not /api/v1/enrollments: accommodations uses /api/v1/enrollments/{id}/accommodation-summary
-		"/api/v1/learners",
-		"/api/v1/concepts",
-		"/api/v1/misconceptions",
-		"/api/v1/diagnostic-attempts",
+		// Intentionally empty: remaining legacy 501 areas register their own routes when ported.
 	}
 	for _, p := range prefixes {
 		r.Handle(p, h)

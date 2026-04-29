@@ -1,3 +1,3 @@
-// Package srs is a placeholder for a port of repos/srs (see server-new/migration.md).
+// Package srs implements spaced-repetition persistence (review queue counts and lists).
 // Types and query helpers are added as handlers are implemented.
 package srs

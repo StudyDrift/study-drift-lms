@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDown, ArrowUp, BookOpen, FileText, Navigation, Search, Users, Zap } from 'lucide-react'
+import { ArrowDown, ArrowUp, BookOpen, FileText, Navigation, Search, Users, Zap, Stars } from 'lucide-react'
 import { usePermissions } from '../../context/use-permissions'
 import {
   buildSearchItems,
@@ -21,6 +21,7 @@ const GROUP_ICONS: Record<SearchGroup, typeof BookOpen> = {
   course: BookOpen,
   person: Users,
   page: FileText,
+  ai: Stars
 }
 
 export function CommandPaletteDialog() {
@@ -101,7 +102,12 @@ export function CommandPaletteDialog() {
   }, [safeIndex, filtered])
 
   const go = (item: SearchListItem) => {
-    navigate(item.path)
+    if (item.id === 'global:ask-ai') {
+      const t = query.trim()
+      navigate(t ? `/ai?q=${encodeURIComponent(t)}` : '/ai')
+    } else {
+      navigate(item.path)
+    }
     close()
   }
 
@@ -206,20 +212,18 @@ export function CommandPaletteDialog() {
                     role="option"
                     aria-selected={selected}
                     ref={selected ? activeRowRef : undefined}
-                    className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                      selected
-                        ? 'bg-indigo-50 text-slate-900 dark:bg-indigo-950/70 dark:text-neutral-100'
-                        : 'text-slate-700 hover:bg-slate-50 dark:text-neutral-300 dark:hover:bg-neutral-800/80'
-                    }`}
+                    className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${selected
+                      ? 'bg-indigo-50 text-slate-900 dark:bg-indigo-950/70 dark:text-neutral-100'
+                      : 'text-slate-700 hover:bg-slate-50 dark:text-neutral-300 dark:hover:bg-neutral-800/80'
+                      }`}
                     onMouseEnter={() => setCursor(idx)}
                     onClick={() => go(item)}
                   >
                     <Icon
-                      className={`mt-0.5 h-4 w-4 shrink-0 ${
-                        selected
-                          ? 'text-indigo-600 dark:text-indigo-400'
-                          : 'text-slate-400 dark:text-neutral-500'
-                      }`}
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${selected
+                        ? 'text-indigo-600 dark:text-indigo-400'
+                        : 'text-slate-400 dark:text-neutral-500'
+                        }`}
                       aria-hidden
                     />
                     <span className="min-w-0 flex-1">

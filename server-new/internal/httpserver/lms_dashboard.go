@@ -3,6 +3,7 @@ package httpserver
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,17 +14,19 @@ import (
 	"github.com/lextures/lextures/server-new/internal/repos/coursefeed"
 	"github.com/lextures/lextures/server-new/internal/repos/coursestructure"
 	"github.com/lextures/lextures/server-new/internal/repos/enrollment"
+	"github.com/lextures/lextures/server-new/internal/repos/recommendations"
 	"github.com/lextures/lextures/server-new/internal/repos/rbac"
+	"github.com/lextures/lextures/server-new/internal/repos/srs"
 )
 
 // Stubs and thin reads for LMS dashboard until full ports (see migration.md).
 
 func (d Deps) handleLearnerReviewStats() http.HandlerFunc {
 	type resp struct {
-		Streak            int `json:"streak"`
-		DueToday          int `json:"dueToday"`
-		DueWeek           int `json:"dueWeek"`
-		RetentionEstimate int `json:"retentionEstimate"`
+		Streak            int     `json:"streak"`
+		DueToday          int64   `json:"dueToday"`
+		DueWeek           int64   `json:"dueWeek"`
+		RetentionEstimate float64 `json:"retentionEstimate"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
@@ -44,12 +47,129 @@ func (d Deps) handleLearnerReviewStats() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid learner id.")
 			return
 		}
-		if learner != viewer {
-			apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "Forbidden.")
+		can, err := assertCanReadLearnerState(r.Context(), d.Pool, viewer, learner)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify access.")
+			return
+		}
+		if !can {
+			writeLearnerAccessDenied(w)
+			return
+		}
+		streak, dueToday, dueWeek, retention, err := srs.ReviewStats(r.Context(), d.Pool, learner)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load review stats.")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_ = json.NewEncoder(w).Encode(resp{})
+		_ = json.NewEncoder(w).Encode(resp{
+			Streak:            streak,
+			DueToday:          dueToday,
+			DueWeek:           dueWeek,
+			RetentionEstimate: retention,
+		})
+	}
+}
+
+func (d Deps) handleLearnerReviewQueue() http.HandlerFunc {
+	type item struct {
+		StateID       string           `json:"stateId"`
+		QuestionID    string           `json:"questionId"`
+		CourseID      string           `json:"courseId"`
+		CourseCode    string           `json:"courseCode"`
+		CourseTitle   string           `json:"courseTitle"`
+		NextReviewAt  string           `json:"nextReviewAt"`
+		Stem          string           `json:"stem"`
+		QuestionType  string           `json:"questionType"`
+		Options       *json.RawMessage `json:"options,omitempty"`
+		CorrectAnswer *json.RawMessage `json:"correctAnswer,omitempty"`
+		Explanation   *string          `json:"explanation,omitempty"`
+	}
+	type resp struct {
+		Items    []item `json:"items"`
+		TotalDue int64  `json:"totalDue"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		viewer, ok := d.meUserID(w, r)
+		if !ok {
+			return
+		}
+		learner, err := uuid.Parse(chi.URLParam(r, "user_id"))
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid learner id.")
+			return
+		}
+		can, err := assertCanReadLearnerState(r.Context(), d.Pool, viewer, learner)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify access.")
+			return
+		}
+		if !can {
+			writeLearnerAccessDenied(w)
+			return
+		}
+		limit := int64(50)
+		if v := r.URL.Query().Get("limit"); v != "" {
+			if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
+				limit = parsed
+			}
+		}
+		if limit < 1 {
+			limit = 1
+		}
+		if limit > 200 {
+			limit = 200
+		}
+		offset := int64(0)
+		if v := r.URL.Query().Get("offset"); v != "" {
+			if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
+				offset = parsed
+			}
+		}
+		total, err := srs.CountDueForUser(r.Context(), d.Pool, learner)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load review queue.")
+			return
+		}
+		rows, err := srs.ListReviewQueue(r.Context(), d.Pool, learner, limit, offset)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load review queue.")
+			return
+		}
+		items := make([]item, 0, len(rows))
+		for _, row := range rows {
+			it := item{
+				StateID:      row.StateID.String(),
+				QuestionID:   row.QuestionID.String(),
+				CourseID:     row.CourseID.String(),
+				CourseCode:   row.CourseCode,
+				CourseTitle:  row.CourseTitle,
+				NextReviewAt: row.NextReviewAt.UTC().Format(time.RFC3339),
+				Stem:         row.Stem,
+				QuestionType: row.QuestionType,
+				Explanation:  row.Explanation,
+			}
+			if len(row.Options) > 0 {
+				raw := json.RawMessage(append([]byte(nil), row.Options...))
+				it.Options = &raw
+			}
+			if len(row.CorrectAnswer) > 0 {
+				raw := json.RawMessage(append([]byte(nil), row.CorrectAnswer...))
+				it.CorrectAnswer = &raw
+			}
+			items = append(items, it)
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(resp{Items: items, TotalDue: total})
 	}
 }
 
@@ -64,6 +184,7 @@ func (d Deps) handleLearnerRecommendations() http.HandlerFunc {
 	}
 	type resp struct {
 		Recommendations []item `json:"recommendations"`
+		Degraded        bool   `json:"degraded,omitempty"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
@@ -84,13 +205,79 @@ func (d Deps) handleLearnerRecommendations() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid learner id.")
 			return
 		}
-		if learner != viewer {
-			apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "Forbidden.")
+		can, err := assertCanReadLearnerState(r.Context(), d.Pool, viewer, learner)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify access.")
 			return
 		}
-		// Query params courseId, surface, limit are reserved for a full engine.
+		if !can {
+			writeLearnerAccessDenied(w)
+			return
+		}
+		courseIDStr := strings.TrimSpace(r.URL.Query().Get("courseId"))
+		if courseIDStr == "" {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "courseId is required.")
+			return
+		}
+		courseID, err := uuid.Parse(courseIDStr)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid courseId.")
+			return
+		}
+		surface := strings.TrimSpace(r.URL.Query().Get("surface"))
+		if surface == "" {
+			surface = "continue"
+		}
+		if surface != "continue" && surface != "strengthen" && surface != "challenge" && surface != "review" {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "surface must be continue, strengthen, challenge, or review.")
+			return
+		}
+		okAccess, err := enrollment.UserHasAccessByCourseID(r.Context(), d.Pool, courseID, learner)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify course access.")
+			return
+		}
+		if !okAccess {
+			writeLearnerAccessDenied(w)
+			return
+		}
+		limit := 10
+		if v := r.URL.Query().Get("limit"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				limit = n
+			}
+		}
+		if limit < 1 {
+			limit = 1
+		}
+		if limit > 10 {
+			limit = 10
+		}
+		cached, expired, err := recommendations.GetCache(r.Context(), d.Pool, learner, courseID, surface)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load recommendations.")
+			return
+		}
+		out := resp{Recommendations: []item{}, Degraded: false}
+		if cached != nil && !expired {
+			for _, raw := range cached.Recommendations {
+				var it item
+				if err := json.Unmarshal(raw, &it); err != nil {
+					continue
+				}
+				out.Recommendations = append(out.Recommendations, it)
+			}
+			if cached.Degraded {
+				out.Degraded = true
+			}
+		} else {
+			out.Degraded = true
+		}
+		if len(out.Recommendations) > limit {
+			out.Recommendations = out.Recommendations[:limit]
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_ = json.NewEncoder(w).Encode(resp{Recommendations: []item{}})
+		_ = json.NewEncoder(w).Encode(out)
 	}
 }
 

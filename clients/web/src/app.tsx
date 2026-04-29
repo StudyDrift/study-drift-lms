@@ -30,6 +30,7 @@ import CourseStandardsGradebook from './pages/lms/course-standards-gradebook'
 import CourseSyllabus from './pages/lms/course-syllabus'
 import Courses from './pages/lms/courses'
 import Dashboard from './pages/lms/dashboard'
+import AskAiPage from './pages/lms/ask-ai-page'
 import ReviewSessionPage from './pages/lms/review-session-page'
 import Inbox from './pages/lms/inbox'
 import MyNotebooksPage from './pages/lms/my-notebooks-page'
@@ -86,6 +87,7 @@ export default function App() {
           }
         >
           <Route path="/" element={<Dashboard />} />
+          <Route path="/ai" element={<AskAiPage />} />
           <Route path="/review" element={<ReviewSessionPage />} />
           <Route path="/courses" element={<Courses />} />
           <Route path="/notebooks" element={<MyNotebooksPage />} />

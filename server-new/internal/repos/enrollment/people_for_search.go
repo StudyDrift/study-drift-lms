@@ -17,12 +17,13 @@ SELECT
     u.id AS user_id,
     u.email,
     u.display_name,
-    ce.role,
+    COALESCE(er.display_name, initcap(ce.role)) AS role_label,
     c.course_code,
     c.title AS course_title
 FROM course.course_enrollments ce
 INNER JOIN course.courses c ON c.id = ce.course_id
 INNER JOIN "user".users u ON u.id = ce.user_id
+LEFT JOIN course.enrollment_roles er ON er.role_key = ce.role
 WHERE c.archived = false
   AND c.id IN (
     SELECT ce2.course_id
@@ -31,11 +32,7 @@ WHERE c.archived = false
   )
 ORDER BY
     c.title ASC,
-    CASE ce.role
-        WHEN 'teacher' THEN 0
-        WHEN 'instructor' THEN 1
-        ELSE 2
-    END,
+    COALESCE(er.sort_order, 999),
     COALESCE(NULLIF(TRIM(u.display_name), ''), u.email) ASC
 LIMIT 2000
 `, requesterUserID)
@@ -47,29 +44,16 @@ LIMIT 2000
 	for rows.Next() {
 		var it search.PersonItem
 		var display sql.NullString
-		var roleRaw string
-		if err := rows.Scan(&it.UserID, &it.Email, &display, &roleRaw, &it.CourseCode, &it.CourseTitle); err != nil {
+		var roleLabel string
+		if err := rows.Scan(&it.UserID, &it.Email, &display, &roleLabel, &it.CourseCode, &it.CourseTitle); err != nil {
 			return nil, err
 		}
 		if display.Valid {
 			s := display.String
 			it.DisplayName = &s
 		}
-		it.Role = displayRoleForSearch(roleRaw)
+		it.Role = roleLabel
 		out = append(out, it)
 	}
 	return out, rows.Err()
-}
-
-func displayRoleForSearch(role string) string {
-	switch role {
-	case "teacher":
-		return "Teacher"
-	case "instructor":
-		return "Instructor"
-	case "student":
-		return "Student"
-	default:
-		return "Student"
-	}
 }

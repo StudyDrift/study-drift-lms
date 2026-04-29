@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/lextures/lextures/server-new/internal/models/contentpagemarkups"
 )
 
@@ -42,29 +44,8 @@ func ValidateMarkupRequest(kind, quoteText string, notebookPageID, commentText *
 	return nil
 }
 
-type dbtx interface {
-	Query(context.Context, string, ...any) (rows pgxRows, err error)
-	QueryRow(context.Context, string, ...any) pgxRow
-	Exec(context.Context, string, ...any) (pgxTag, error)
-}
-
-type pgxRows interface {
-	Next() bool
-	Scan(dest ...any) error
-	Close()
-	Err() error
-}
-
-type pgxRow interface {
-	Scan(dest ...any) error
-}
-
-type pgxTag interface {
-	RowsAffected() int64
-}
-
-func ListForUserItem(ctx context.Context, q dbtx, userID, courseID, structureItemID uuid.UUID) ([]contentpagemarkups.ContentPageMarkupResponse, error) {
-	rows, err := q.Query(ctx, `
+func ListForUserItem(ctx context.Context, pool *pgxpool.Pool, userID, courseID, structureItemID uuid.UUID) ([]contentpagemarkups.ContentPageMarkupResponse, error) {
+	rows, err := pool.Query(ctx, `
 SELECT id, kind, quote_text, notebook_page_id, comment_text, created_at
 FROM course.content_page_user_markups
 WHERE user_id = $1 AND course_id = $2 AND structure_item_id = $3
@@ -85,9 +66,9 @@ ORDER BY created_at ASC
 	return out, rows.Err()
 }
 
-func Insert(ctx context.Context, q dbtx, userID, courseID, structureItemID uuid.UUID, structureKind, kind, quoteText string, notebookPageID, commentText *string) (*contentpagemarkups.ContentPageMarkupResponse, error) {
+func Insert(ctx context.Context, pool *pgxpool.Pool, userID, courseID, structureItemID uuid.UUID, structureKind, kind, quoteText string, notebookPageID, commentText *string) (*contentpagemarkups.ContentPageMarkupResponse, error) {
 	var r contentpagemarkups.ContentPageMarkupResponse
-	err := q.QueryRow(ctx, `
+	err := pool.QueryRow(ctx, `
 INSERT INTO course.content_page_user_markups (
 	user_id, course_id, structure_item_id, kind, quote_text, notebook_page_id, comment_text
 )
@@ -104,8 +85,8 @@ RETURNING id, kind, quote_text, notebook_page_id, comment_text, created_at
 	return &r, nil
 }
 
-func DeleteOwned(ctx context.Context, q dbtx, userID, courseID, structureItemID, markupID uuid.UUID) (bool, error) {
-	tag, err := q.Exec(ctx, `
+func DeleteOwned(ctx context.Context, pool *pgxpool.Pool, userID, courseID, structureItemID, markupID uuid.UUID) (bool, error) {
+	tag, err := pool.Exec(ctx, `
 DELETE FROM course.content_page_user_markups
 WHERE id = $1 AND user_id = $2 AND course_id = $3 AND structure_item_id = $4
 `, markupID, userID, courseID, structureItemID)

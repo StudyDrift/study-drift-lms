@@ -14,3 +14,11 @@ func TestSendPasswordResetEmail_NoSMTP(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSendPasswordResetEmail_NoToEmail(t *testing.T) {
+	t.Parallel()
+	c := config.Config{}
+	if err := SendPasswordResetEmail(c, "", "http://x/y"); err == nil {
+		t.Fatal("Expected fatal error for invalid email address")
+	}
+}

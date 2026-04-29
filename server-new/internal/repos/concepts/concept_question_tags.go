@@ -39,3 +39,23 @@ WHERE question_id = ANY($1::uuid[])
 	}
 	return m, nil
 }
+
+func InsertQuestionTag(ctx context.Context, pool *pgxpool.Pool, conceptID, questionID uuid.UUID) error {
+	_, err := pool.Exec(ctx, `
+INSERT INTO course.concept_question_tags (concept_id, question_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`, conceptID, questionID)
+	return err
+}
+
+func DeleteQuestionTag(ctx context.Context, pool *pgxpool.Pool, conceptID, questionID uuid.UUID) (bool, error) {
+	tag, err := pool.Exec(ctx, `
+DELETE FROM course.concept_question_tags
+WHERE concept_id = $1 AND question_id = $2
+`, conceptID, questionID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}

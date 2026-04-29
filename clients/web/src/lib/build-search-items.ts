@@ -6,7 +6,7 @@ import {
 import type { SearchCourseItem, SearchPersonItem } from './search-api'
 import { PERM_COURSE_CREATE, PERM_RBAC_MANAGE, PERM_REPORTS_VIEW } from './rbac-api'
 
-export type SearchGroup = 'course' | 'person' | 'page' | 'action' | 'goto'
+export type SearchGroup = 'course' | 'person' | 'page' | 'action' | 'goto' | 'ai'
 
 export type SearchListItem = {
   id: string
@@ -38,7 +38,17 @@ export function buildSearchItems(
   people: SearchPersonItem[],
   allows: (perm: string) => boolean,
 ): SearchListItem[] {
-  const items: SearchListItem[] = []
+  const items: SearchListItem[] = [
+    // The first item will be Ask AI
+    {
+      id: 'global:ask-ai',
+      group: 'ai',
+      title: 'Ask AI',
+      subtitle: 'Ask the AI any question you have permissions to',
+      path: '/ai',
+      haystack: 'ask ai assistant tutor help chat questions',
+    },
+  ]
 
   for (const c of courses) {
     const path = `/courses/${enc(c.courseCode)}`
@@ -64,7 +74,7 @@ export function buildSearchItems(
       ? `/courses/${enc(p.courseCode)}/gradebook?student=${enc(p.userId)}`
       : `/courses/${enc(p.courseCode)}/enrollments`
     items.push({
-      id: `person:${p.userId}:${p.courseCode}`,
+      id: `person:${p.userId}:${p.courseCode}:${enc(p.role)}`,
       group: 'person',
       title: label,
       subtitle,
@@ -156,55 +166,55 @@ export function buildSearchItems(
     /** If set, omit when the course has turned off this tool. */
     whenCourse?: (c: SearchCourseItem) => boolean
   }[] = [
-    { suffix: '', title: 'Course dashboard', hint: 'dashboard overview' },
-    {
-      suffix: '/feed',
-      title: 'Feed',
-      hint: 'feed chat channels messages discussion',
-      whenCourse: (c) => c.feedEnabled !== false,
-    },
-    { suffix: '/syllabus', title: 'Syllabus', hint: 'syllabus outline' },
-    {
-      suffix: '/modules',
-      title: 'Modules',
-      hint: 'modules lessons content pages assignments quizzes external links',
-    },
-    {
-      suffix: '/notebook',
-      title: 'Notebook',
-      hint: 'notes journal thoughts',
-      whenCourse: (c) => c.notebookEnabled !== false,
-    },
-    {
-      suffix: '/calendar',
-      title: 'Course calendar',
-      hint: 'calendar schedule',
-      whenCourse: (c) => c.calendarEnabled !== false,
-    },
-    {
-      suffix: '/my-grades',
-      title: 'My grades',
-      hint: 'grades scores student your grades',
-    },
-    {
-      suffix: '/gradebook',
-      title: 'Gradebook',
-      hint: 'gradebook grades scores',
-      requiredPermission: courseGradebookViewPermission,
-    },
-    {
-      suffix: '/enrollments',
-      title: 'Enrollments',
-      hint: 'enrollments people roster students',
-      requiredPermission: courseEnrollmentsReadPermission,
-    },
-    {
-      suffix: '/settings/general',
-      title: 'Course settings',
-      hint: 'settings configuration title description dates schedule hero branding',
-      requiredPermission: courseItemCreatePermission,
-    },
-  ]
+      { suffix: '', title: 'Course dashboard', hint: 'dashboard overview' },
+      {
+        suffix: '/feed',
+        title: 'Feed',
+        hint: 'feed chat channels messages discussion',
+        whenCourse: (c) => c.feedEnabled !== false,
+      },
+      { suffix: '/syllabus', title: 'Syllabus', hint: 'syllabus outline' },
+      {
+        suffix: '/modules',
+        title: 'Modules',
+        hint: 'modules lessons content pages assignments quizzes external links',
+      },
+      {
+        suffix: '/notebook',
+        title: 'Notebook',
+        hint: 'notes journal thoughts',
+        whenCourse: (c) => c.notebookEnabled !== false,
+      },
+      {
+        suffix: '/calendar',
+        title: 'Course calendar',
+        hint: 'calendar schedule',
+        whenCourse: (c) => c.calendarEnabled !== false,
+      },
+      {
+        suffix: '/my-grades',
+        title: 'My grades',
+        hint: 'grades scores student your grades',
+      },
+      {
+        suffix: '/gradebook',
+        title: 'Gradebook',
+        hint: 'gradebook grades scores',
+        requiredPermission: courseGradebookViewPermission,
+      },
+      {
+        suffix: '/enrollments',
+        title: 'Enrollments',
+        hint: 'enrollments people roster students',
+        requiredPermission: courseEnrollmentsReadPermission,
+      },
+      {
+        suffix: '/settings/general',
+        title: 'Course settings',
+        hint: 'settings configuration title description dates schedule hero branding',
+        requiredPermission: courseItemCreatePermission,
+      },
+    ]
 
   for (const c of courses) {
     const base = `/courses/${enc(c.courseCode)}`
@@ -233,37 +243,37 @@ export function buildSearchItems(
     hint: string
     requiredPermission?: (courseCode: string) => string
   }[] = [
-    {
-      suffix: '/settings/grading',
-      title: 'Grading settings',
-      hint: 'grading scale assignment groups weights categories',
-      requiredPermission: courseGradebookViewPermission,
-    },
-    {
-      suffix: '/settings/outcomes',
-      title: 'Course outcomes',
-      hint: 'learning outcomes objectives alignment evidence quiz questions progress',
-      requiredPermission: courseItemCreatePermission,
-    },
-    {
-      suffix: '/settings/features',
-      title: 'Course features',
-      hint: 'features tools notebook feed calendar enable disable toggles',
-      requiredPermission: courseItemCreatePermission,
-    },
-    {
-      suffix: '/settings/import-export',
-      title: 'Import / export',
-      hint: 'export import backup canvas migrate course package',
-      requiredPermission: courseItemCreatePermission,
-    },
-    {
-      suffix: '/settings/archive',
-      title: 'Archived modules',
-      hint: 'archived deleted restore trash unarchive structure',
-      requiredPermission: courseItemCreatePermission,
-    },
-  ]
+      {
+        suffix: '/settings/grading',
+        title: 'Grading settings',
+        hint: 'grading scale assignment groups weights categories',
+        requiredPermission: courseGradebookViewPermission,
+      },
+      {
+        suffix: '/settings/outcomes',
+        title: 'Course outcomes',
+        hint: 'learning outcomes objectives alignment evidence quiz questions progress',
+        requiredPermission: courseItemCreatePermission,
+      },
+      {
+        suffix: '/settings/features',
+        title: 'Course features',
+        hint: 'features tools notebook feed calendar enable disable toggles',
+        requiredPermission: courseItemCreatePermission,
+      },
+      {
+        suffix: '/settings/import-export',
+        title: 'Import / export',
+        hint: 'export import backup canvas migrate course package',
+        requiredPermission: courseItemCreatePermission,
+      },
+      {
+        suffix: '/settings/archive',
+        title: 'Archived modules',
+        hint: 'archived deleted restore trash unarchive structure',
+        requiredPermission: courseItemCreatePermission,
+      },
+    ]
 
   for (const c of courses) {
     const base = `/courses/${enc(c.courseCode)}`
@@ -334,7 +344,7 @@ export function filterSearchItems(items: SearchListItem[], query: string): Searc
   return sortSearchItems(filtered)
 }
 
-const GROUP_ORDER: SearchGroup[] = ['goto', 'action', 'course', 'person', 'page']
+const GROUP_ORDER: SearchGroup[] = ['ai', 'goto', 'action', 'course', 'person', 'page']
 
 export const SEARCH_GROUP_LABEL: Record<SearchGroup, string> = {
   goto: 'Go to',
@@ -342,4 +352,5 @@ export const SEARCH_GROUP_LABEL: Record<SearchGroup, string> = {
   course: 'Courses',
   person: 'People',
   page: 'Pages',
+  ai: 'AI'
 }

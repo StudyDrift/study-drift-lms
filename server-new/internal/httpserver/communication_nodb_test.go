@@ -30,3 +30,48 @@ func TestCommWS_NoCommHub_DoesNot503(t *testing.T) {
 		t.Fatalf("comm ws: unexpected 503 when hub is nil (use read loop without pubsub): %d", rr.Code)
 	}
 }
+
+func TestValidateListFolder_ValidFolders(t *testing.T) {
+	t.Parallel()
+	vals := []string{"inbox", "starred", "sent", "drafts", "trash"}
+
+	for _, val := range vals {
+		if got := validateListFolder(val); !got {
+			t.Fatalf("Expected true, but got false %s", val)
+		}
+	}
+}
+
+func TestValidateListFolder_InvalidFolders(t *testing.T) {
+	t.Parallel()
+	vals := []string{"test", "this", "out", ""}
+
+	for _, val := range vals {
+		if got := validateListFolder(val); got {
+			t.Fatalf("Expected false, but got true %s", val)
+		}
+	}
+}
+
+func TestValidatePatchFolder_ValidFolders(t *testing.T) {
+	t.Parallel()
+
+	vals := []string{"inbox", "sent", "drafts", "trash"}
+
+	for _, val := range vals {
+		if got := validatePatchFolder(val); !got {
+			t.Fatalf("Expected true, but got false %s", val)
+		}
+	}
+}
+
+func TestValidatePatchFolder_InvalidFolders(t *testing.T) {
+	t.Parallel()
+	vals := []string{"test", "this", "out", ""}
+
+	for _, val := range vals {
+		if got := validateListFolder(val); got {
+			t.Fatalf("Expected false, but got true %s", val)
+		}
+	}
+}

@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/lextures/lextures/server-new/internal/models/coursemodulequiz"
 	"github.com/lextures/lextures/server-new/internal/repos/enrollment"
 	"github.com/lextures/lextures/server-new/internal/repos/rbac"
 	"github.com/lextures/lextures/server-new/internal/repos/user"
@@ -107,12 +108,12 @@ func (d Deps) handleCourseImportCanvasWS() http.HandlerFunc {
 }
 
 type canvasImportWSFirstMessage struct {
-	AuthToken     string              `json:"authToken"`
-	Mode          string              `json:"mode"`
-	CanvasBaseURL string              `json:"canvasBaseUrl"`
-	CanvasCourseID string             `json:"canvasCourseId"`
-	AccessToken   string              `json:"accessToken"`
-	Include       canvasImportInclude `json:"include"`
+	AuthToken      string              `json:"authToken"`
+	Mode           string              `json:"mode"`
+	CanvasBaseURL  string              `json:"canvasBaseUrl"`
+	CanvasCourseID string              `json:"canvasCourseId"`
+	AccessToken    string              `json:"accessToken"`
+	Include        canvasImportInclude `json:"include"`
 }
 
 type canvasImportInclude struct {
@@ -314,13 +315,23 @@ func (d Deps) runCanvasImport(
 					}
 				case "quiz":
 					markdown := ""
+					var questions []coursemodulequiz.QuizQuestion
 					if cid := int64At(it, "content_id"); cid > 0 {
 						obj, e := canvasGetObject(ctx, client, canvasBase, accessToken, fmt.Sprintf("courses/%d/quizzes/%d", canvasCourseID, cid), nil)
 						if e == nil {
 							markdown = markdownFromHTML(strAt(obj, "description", ""))
 						}
+						qq, qe := canvasImportQuizQuestions(ctx, client, canvasBase, accessToken, canvasCourseID, cid)
+						if qe != nil {
+							return fmt.Errorf("Failed to load quiz questions from Canvas (quiz id %d): %w", cid, qe)
+						}
+						questions = qq
 					}
-					if _, err = tx.Exec(ctx, `INSERT INTO course.module_quizzes (structure_item_id, markdown, questions_json) VALUES ($1, $2, '[]'::jsonb)`, itemID, markdown); err != nil {
+					qJSON, mj := json.Marshal(questions)
+					if mj != nil {
+						return errors.New("Failed to encode imported quiz questions.")
+					}
+					if _, err = tx.Exec(ctx, `INSERT INTO course.module_quizzes (structure_item_id, markdown, questions_json) VALUES ($1, $2, $3)`, itemID, markdown, qJSON); err != nil {
 						return errors.New("Failed to save imported quiz.")
 					}
 				case "external":
@@ -583,9 +594,9 @@ func markdownFromHTML(s string) string {
 }
 
 var (
-	htmlBRTagRe   = regexp.MustCompile(`(?i)<br\s*/?>`)
-	htmlPCloseRe  = regexp.MustCompile(`(?i)</p\s*>`)
-	htmlAnyTagRe  = regexp.MustCompile(`<[^>]+>`)
+	htmlBRTagRe  = regexp.MustCompile(`(?i)<br\s*/?>`)
+	htmlPCloseRe = regexp.MustCompile(`(?i)</p\s*>`)
+	htmlAnyTagRe = regexp.MustCompile(`<[^>]+>`)
 )
 
 func htmlToPlainText(html string) string {
@@ -629,4 +640,3 @@ func mapCanvasTypeToKind(t string) (kind string, bodyTable string) {
 		return "", ""
 	}
 }
-

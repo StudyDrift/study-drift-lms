@@ -6,12 +6,21 @@ import (
 	"log"
 	"net/smtp"
 	"strings"
+	"errors"
 
 	"github.com/lextures/lextures/server-new/internal/config"
 )
 
+var (
+	ErrInvalidToEmail = errors.New("invalid to email address")
+)
+
 // SendPasswordResetEmail sends a reset link when SMTP is configured; if SMTP_HOST is empty, logs the URL and returns nil (Rust parity).
 func SendPasswordResetEmail(c config.Config, toEmail, resetURL string) error {
+	if len(toEmail) == 0 {
+		return ErrInvalidToEmail
+	}
+
 	host := strings.TrimSpace(c.SMTPHost)
 	if host == "" {
 		log.Printf("mail: password reset for %q (SMTP not configured; set SMTP_HOST to send email) url=%q", toEmail, resetURL)

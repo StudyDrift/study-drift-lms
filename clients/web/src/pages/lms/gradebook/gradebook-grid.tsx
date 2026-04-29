@@ -244,7 +244,6 @@ export function GradebookGrid({
   students,
   initialGrades,
   assignmentGroups = [],
-  footerNote,
   readOnly = false,
   onGradesChange,
   onRubricClick,
@@ -776,15 +775,15 @@ export function GradebookGrid({
         const hit = pickGradebookCellFromPoint(ev.clientX, ev.clientY)
         const next =
           hit != null &&
-          hit.row >= cur.src.row0 &&
-          hit.row < rowCount &&
-          hit.col >= cur.src.col0 &&
-          hit.col < colCount
+            hit.row >= cur.src.row0 &&
+            hit.row < rowCount &&
+            hit.col >= cur.src.col0 &&
+            hit.col < colCount
             ? {
-                ...cur,
-                destRow1: Math.max(cur.src.row1, hit.row),
-                destCol1: Math.max(cur.src.col1, hit.col),
-              }
+              ...cur,
+              destRow1: Math.max(cur.src.row1, hit.row),
+              destCol1: Math.max(cur.src.col1, hit.col),
+            }
             : cur
         if (next.destRow1 !== cur.destRow1 || next.destCol1 !== cur.destCol1) {
           fillDragRef.current = next
@@ -1177,461 +1176,458 @@ export function GradebookGrid({
       )}
 
       {rowCount > 0 && baseColCount > 0 && (
-      <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
-        <table
-          role="grid"
-          aria-label="Grades by student and assignment"
-          aria-rowcount={rowCount + 2}
-          aria-colcount={2 + colCount}
-          className="w-full min-w-max border-collapse text-left"
-        >
-          <thead>
-            <tr
-              ref={headerRowRef}
-              className="border-b border-slate-200 bg-slate-50 dark:border-neutral-700 dark:bg-neutral-800"
-            >
-              <th
-                scope="col"
-                className={`sticky top-0 left-0 z-30 ${STICKY_NAME_WIDTH_CLASS} ${pad} border-b border-r border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
-              >
-                <button
-                  type="button"
-                  className={menuButtonClass(studentHeaderActive)}
-                  aria-expanded={headerMenu?.kind === 'student'}
-                  aria-haspopup="menu"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (headerMenu?.kind === 'student') {
-                      setHeaderMenu(null)
-                      return
-                    }
-                    openHeaderMenu({ kind: 'student' }, e.currentTarget)
-                  }}
-                >
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
-                    Student
-                  </span>
-                  <ChevronDown className="size-3.5 shrink-0 opacity-70" aria-hidden />
-                </button>
-              </th>
-              <th
-                scope="col"
-                className={`sticky top-0 left-[12rem] z-25 min-w-[5.5rem] ${pad} border-b border-r border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
-              >
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
-                  Final
-                </span>
-              </th>
-              {visibleColumns.map((col) => {
-                const colActive = activeSort?.kind === 'grade' && activeSort.columnId === col.id
-                return (
-                  <th
-                    key={col.id}
-                    scope="col"
-                    className={`sticky top-0 z-20 ${pad} min-w-[9rem] border-b border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
-                  >
-                    <button
-                      type="button"
-                      className={`${menuButtonClass(colActive)} max-w-full`}
-                      aria-expanded={headerMenu?.kind === 'column' && headerMenu.columnId === col.id}
-                      aria-haspopup="menu"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        if (headerMenu?.kind === 'column' && headerMenu.columnId === col.id) {
-                          setHeaderMenu(null)
-                          return
-                        }
-                        openHeaderMenu({ kind: 'column', columnId: col.id }, e.currentTarget)
-                      }}
-                    >
-                      <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
-                        <span className="text-xs font-semibold text-slate-800 dark:text-neutral-200">{col.title}</span>
-                        <span className="text-[0.65rem] font-normal text-slate-500 dark:text-neutral-400">
-                          {col.maxPoints != null ? `Out of ${col.maxPoints}` : 'Max points not set'}
-                        </span>
-                        {col.kind === 'assignment' &&
-                        col.postingPolicy === 'manual' &&
-                        onPostAssignmentGrades &&
-                        !readOnly ? (
-                          <button
-                            type="button"
-                            className="mt-1 inline-flex max-w-full items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[0.65rem] font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
-                            aria-label={`Post grades for ${col.title}`}
-                            disabled={postGradesPending === col.id}
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              onPostAssignmentGrades(col.id)
-                            }}
-                          >
-                            {postGradesPending === col.id ? 'Posting…' : 'Post grades'}
-                          </button>
-                        ) : null}
-                      </span>
-                      <ChevronDown className="size-3.5 shrink-0 self-start opacity-70" aria-hidden />
-                    </button>
-                  </th>
-                )
-              })}
-            </tr>
-            <tr className="border-b border-slate-200 bg-slate-100 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
-              <th
-                scope="row"
-                className={`sticky left-0 z-[28] ${STICKY_NAME_WIDTH_CLASS} ${pad} border-b border-r border-slate-200 bg-slate-100 align-top text-left font-medium shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
-                style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
-              >
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
-                  Class avg / med
-                </span>
-              </th>
-              <th
-                scope="col"
-                className={`sticky left-[12rem] z-[27] min-w-[5.5rem] ${pad} border-b border-r border-slate-200 bg-slate-100 text-right align-top font-normal shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
-                style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
-              >
-                <div className="flex flex-col items-end gap-0.5 text-[11px] tabular-nums leading-snug">
-                  <span>
-                    <span className="text-slate-500 dark:text-neutral-400">Avg </span>
-                    {classSummaryStats.finalAvg != null ? `${formatStat(classSummaryStats.finalAvg)}%` : '—'}
-                  </span>
-                  <span>
-                    <span className="text-slate-500 dark:text-neutral-400">Med </span>
-                    {classSummaryStats.finalMed != null ? `${formatStat(classSummaryStats.finalMed)}%` : '—'}
-                  </span>
-                </div>
-              </th>
-              {visibleColumns.map((col, colIndex) => {
-                const st = classSummaryStats.columns[colIndex]!
-                return (
-                  <th
-                    key={`stats-${col.id}`}
-                    scope="col"
-                    className={`sticky z-[26] ${pad} min-w-[9rem] border-b border-slate-200 bg-slate-100 text-right align-top font-normal shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
-                    style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
-                  >
-                    <div className="flex flex-col items-end gap-0.5 text-[11px] tabular-nums leading-snug">
-                      <span title={col.maxPoints != null ? `Average of entered scores (out of ${col.maxPoints})` : 'Average of entered scores'}>
-                        <span className="text-slate-500 dark:text-neutral-400">Avg </span>
-                        {st.avg != null ? formatStat(st.avg) : '—'}
-                      </span>
-                      <span title={col.maxPoints != null ? `Median of entered scores (out of ${col.maxPoints})` : 'Median of entered scores'}>
-                        <span className="text-slate-500 dark:text-neutral-400">Med </span>
-                        {st.med != null ? formatStat(st.med) : '—'}
-                      </span>
-                    </div>
-                  </th>
-                )
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredStudents.map((student, row) => (
+        <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+          <table
+            role="grid"
+            aria-label="Grades by student and assignment"
+            aria-rowcount={rowCount + 2}
+            aria-colcount={2 + colCount}
+            className="w-full min-w-max border-collapse text-left"
+          >
+            <thead>
               <tr
-                key={student.id}
-                id={`gradebook-row-${student.id}`}
-                className={`border-b border-slate-100 last:border-b-0 dark:border-neutral-700/80 ${
-                  highlightStudentId && highlightStudentId === student.id
-                    ? 'bg-amber-50/90 ring-2 ring-inset ring-amber-300/90 dark:bg-amber-950/25 dark:ring-amber-500/50'
-                    : ''
-                }`}
+                ref={headerRowRef}
+                className="border-b border-slate-200 bg-slate-50 dark:border-neutral-700 dark:bg-neutral-800"
               >
                 <th
-                  scope="row"
-                  title={student.name}
-                  className={`sticky left-0 z-10 ${STICKY_NAME_WIDTH_CLASS} ${pad} truncate border-r border-slate-200 bg-slate-100 text-left font-medium text-slate-950 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100`}
+                  scope="col"
+                  className={`sticky top-0 left-0 z-30 ${STICKY_NAME_WIDTH_CLASS} ${pad} border-b border-r border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
                 >
-                  {student.name}
+                  <button
+                    type="button"
+                    className={menuButtonClass(studentHeaderActive)}
+                    aria-expanded={headerMenu?.kind === 'student'}
+                    aria-haspopup="menu"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (headerMenu?.kind === 'student') {
+                        setHeaderMenu(null)
+                        return
+                      }
+                      openHeaderMenu({ kind: 'student' }, e.currentTarget)
+                    }}
+                  >
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                      Student
+                    </span>
+                    <ChevronDown className="size-3.5 shrink-0 opacity-70" aria-hidden />
+                  </button>
                 </th>
-                <td
-                  role="gridcell"
-                  tabIndex={-1}
-                  aria-label={`Final course percentage for ${student.name}`}
-                  className={`sticky left-[12rem] z-[9] ${pad} min-w-[5.5rem] border-r border-slate-200 bg-slate-50 text-right tabular-nums text-slate-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200`}
+                <th
+                  scope="col"
+                  className={`sticky top-0 left-[12rem] z-25 min-w-[5.5rem] ${pad} border-b border-r border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
                 >
-                  {formatFinalPercent(finalPercentByStudentId[student.id] ?? null)}
-                </td>
-                {visibleColumns.map((col, colIndex) => {
-                  const inRect =
-                    selectionRect != null &&
-                    row >= selectionRect.row0 &&
-                    row <= selectionRect.row1 &&
-                    colIndex >= selectionRect.col0 &&
-                    colIndex <= selectionRect.col1
-                  const isFocusCell = focusRow === row && focusCol === colIndex
-                  const isActive = isFocusCell && !editing
-                  const showEditor = editing != null && row === focusRow && colIndex === focusCol
-                  const inEditBand = editing != null && inRect && !showEditor
-                  const val = displayValue(row, colIndex)
-                  const isExcused = Boolean(gradeExcused?.[student.id]?.[col.id])
-                  const cellHeld = Boolean(gradeHeld?.[student.id]?.[col.id])
-                  const cellDropped = Boolean(droppedGrades?.[student.id]?.[col.id])
-                  const singleCellEdit =
-                    editing != null &&
-                    editing.rowMin === editing.rowMax &&
-                    editing.colMin === editing.colMax
-                  const selectOpts =
-                    showEditor && singleCellEdit ? gradingSelectOptions(col, gradingScheme) : []
-                  const showSelectEditor = showEditor && selectOpts.length > 0
-
-                  const ringActive =
-                    'relative z-[1] bg-indigo-50 ring-2 ring-inset ring-indigo-500 dark:bg-indigo-950/50 dark:ring-indigo-400'
-                  const ringBand = 'bg-indigo-50/70 ring-1 ring-inset ring-indigo-400/70 dark:bg-indigo-950/40 dark:ring-indigo-500/50'
-                  const ringBandEdit = 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400/80 dark:bg-indigo-950/35 dark:ring-indigo-500/60'
-
-                  const inFillDest =
-                    fillDrag != null &&
-                    row >= fillDrag.src.row0 &&
-                    row <= fillDrag.destRow1 &&
-                    colIndex >= fillDrag.src.col0 &&
-                    colIndex <= fillDrag.destCol1
-                  const inFillSource =
-                    fillDrag != null &&
-                    row >= fillDrag.src.row0 &&
-                    row <= fillDrag.src.row1 &&
-                    colIndex >= fillDrag.src.col0 &&
-                    colIndex <= fillDrag.src.col1
-                  const inFillExtension = inFillDest && !inFillSource
-
-                  const heatT =
-                    colorScaleEnabled && !isExcused
-                      ? heatPercentForCell(colIndex, val === 'EX' ? '' : val)
-                      : null
-                  const heatSurface =
-                    heatT != null && !showEditor && !inFillDest ? heatMapCellClass(heatT) : null
-
-                  const droppedSurface = cellDropped ? 'opacity-65 dark:opacity-70' : ''
-                  const cellSurface = showEditor
-                    ? ringActive
-                    : inEditBand
-                      ? ringBandEdit
-                      : inRect && isFocusCell && !editing
-                        ? ringActive
-                        : inRect
-                          ? ringBand
-                          : isFocusCell && !editing
-                            ? ringActive
-                            : (heatSurface ?? 'bg-white dark:bg-neutral-900/80')
-
-                  const fillExtSurface = inFillExtension
-                    ? 'bg-indigo-100/45 ring-1 ring-inset ring-dashed ring-indigo-400/80 dark:bg-indigo-950/35 dark:ring-indigo-500/70'
-                    : ''
-
-                  const showFillKnob =
-                    !readOnly &&
-                    !editing &&
-                    !fillDrag &&
-                    activeSelectionBounds != null &&
-                    row === activeSelectionBounds.row1 &&
-                    colIndex === activeSelectionBounds.col1
-
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                    Final
+                  </span>
+                </th>
+                {visibleColumns.map((col) => {
+                  const colActive = activeSort?.kind === 'grade' && activeSort.columnId === col.id
                   return (
-                    <td
+                    <th
                       key={col.id}
-                      ref={(el) => setCellRef(row, colIndex, el)}
-                      role="gridcell"
-                      data-gradebook-cell="1"
-                      data-gradebook-row={String(row)}
-                      data-gradebook-col={String(colIndex)}
-                      tabIndex={isActive ? 0 : -1}
-                      aria-selected={
-                        inRect || showEditor || (isFocusCell && !editing && selectionRect == null)
-                      }
-                      className={`relative ${pad} min-w-[5.5rem] border-l border-slate-100 text-right tabular-nums outline-none transition dark:border-neutral-700/80 ${cellSurface} ${fillExtSurface} ${droppedSurface}`}
-                      title={
-                        cellDropped
-                          ? 'This score is excluded from the course total by the group’s drop or replace policy.'
-                          : undefined
-                      }
-                      aria-label={
-                        isExcused
-                          ? `Assignment ${col.title}: Excused — not counted toward grade for ${student.name}`
-                          : cellDropped
-                            ? `${val || 'Empty'}, score dropped by group policy for ${col.title} — ${student.name}`
-                            : undefined
-                      }
-                      onKeyDown={(e) => handleGradeCellKeyDown(e, row, colIndex)}
-                      onPaste={(e) => {
-                        if (readOnly) return
-                        if (editing) return
-                        if (row !== focusRow || colIndex !== focusCol) return
-                        const text = e.clipboardData.getData('text/plain')
-                        if (text === '') return
-                        e.preventDefault()
-                        applyBulkPaste(text, focusRow, focusCol)
-                      }}
-                      onPointerDown={(e) => {
-                        if (e.button !== 0) return
-                        if (fillDragRef.current != null) return
-                        dragSelectStartRef.current = { row, col: colIndex }
-                        dragDidMoveRef.current = false
-                      }}
-                      onPointerEnter={(e) => {
-                        if (fillDragRef.current != null) return
-                        if ((e.buttons & 1) === 0) return
-                        const start = dragSelectStartRef.current
-                        if (!start) return
-                        if (row === start.row && colIndex === start.col) return
-                        dragDidMoveRef.current = true
-                        setSelectionAnchor({ row: start.row, col: start.col })
-                        focusCell(row, colIndex, { clearSelectionAnchor: false })
-                      }}
-                      onClick={(e) => {
-                        if (skipNextCellClickRef.current) {
-                          skipNextCellClickRef.current = false
-                          dragSelectStartRef.current = null
-                          return
-                        }
-                        if (editing && (row !== focusRow || colIndex !== focusCol)) {
-                          commitEdit()
-                        }
-                        if (e.shiftKey) {
-                          setSelectionAnchor((a) => a ?? { row: focusRow, col: focusCol })
-                          focusCell(row, colIndex, { clearSelectionAnchor: false })
-                        } else if (!dragDidMoveRef.current) {
-                          focusCell(row, colIndex)
-                        }
-                        dragSelectStartRef.current = null
-                      }}
-                      onDoubleClick={() => beginEdit(row, colIndex, { range: 'single' })}
+                      scope="col"
+                      className={`sticky top-0 z-20 ${pad} min-w-[9rem] border-b border-slate-200 bg-slate-50 align-bottom dark:border-neutral-700 dark:bg-neutral-800`}
                     >
-                      {showEditor ? (
-                        showSelectEditor ? (
-                          <select
-                            ref={editSelectRef}
-                            aria-label={`Grade for ${student.name}, ${col.title}`}
-                            className="m-0 w-full min-w-0 border-0 bg-transparent p-0 text-right text-sm text-slate-950 shadow-none outline-none ring-0 focus:ring-0 dark:text-neutral-100"
-                            value={draft}
-                            onChange={(e) => setDraft(e.target.value)}
-                            onKeyDown={handleInputKeyDown}
-                            onBlur={handleEditInputBlur}
-                          >
-                            <option value="">—</option>
-                            {selectOpts.map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            ref={editInputRef}
-                            type="text"
-                            inputMode="decimal"
-                            autoComplete="off"
-                            aria-label={`Grade for ${student.name}, ${col.title}`}
-                            className="m-0 w-full min-w-0 border-0 bg-transparent p-0 text-right text-sm tabular-nums text-slate-950 shadow-none outline-none ring-0 focus:ring-0 dark:text-neutral-100"
-                            value={draft}
-                            onChange={(e) => setDraft(e.target.value)}
-                            onPaste={(e) => {
-                              const text = e.clipboardData.getData('text/plain')
-                              if (!text.includes('\n') && !text.includes('\t')) return
-                              e.preventDefault()
-                              skipCommitOnBlurRef.current = true
-                              setEditing(null)
-                              applyBulkPaste(text, focusRow, focusCol)
-                            }}
-                            onKeyDown={handleInputKeyDown}
-                            onBlur={handleEditInputBlur}
-                          />
-                        )
-                      ) : (
-                        <div className="flex flex-col items-end gap-0.5">
-                          <span className="inline-flex max-w-full items-center justify-end gap-1">
-                            {cellHeld ? (
-                              <Lock
-                                className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
-                                aria-hidden
-                              />
-                            ) : null}
-                            <span
-                              className={
-                                val
-                                  ? isExcused
-                                    ? 'font-semibold text-slate-700 dark:text-neutral-200'
-                                    : 'text-slate-950 dark:text-neutral-100'
-                                  : 'text-neutral-400 dark:text-neutral-500'
-                              }
-                              aria-label={
-                                isExcused
-                                  ? 'Excused — not counted toward grade'
-                                  : cellHeld
-                                    ? 'Grade pending release'
-                                    : undefined
-                              }
+                      <button
+                        type="button"
+                        className={`${menuButtonClass(colActive)} max-w-full`}
+                        aria-expanded={headerMenu?.kind === 'column' && headerMenu.columnId === col.id}
+                        aria-haspopup="menu"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          if (headerMenu?.kind === 'column' && headerMenu.columnId === col.id) {
+                            setHeaderMenu(null)
+                            return
+                          }
+                          openHeaderMenu({ kind: 'column', columnId: col.id }, e.currentTarget)
+                        }}
+                      >
+                        <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
+                          <span className="text-xs font-semibold text-slate-800 dark:text-neutral-200">{col.title}</span>
+                          <span className="text-[0.65rem] font-normal text-slate-500 dark:text-neutral-400">
+                            {col.maxPoints != null ? `Out of ${col.maxPoints}` : 'Max points not set'}
+                          </span>
+                          {col.kind === 'assignment' &&
+                            col.postingPolicy === 'manual' &&
+                            onPostAssignmentGrades &&
+                            !readOnly ? (
+                            <button
+                              type="button"
+                              className="mt-1 inline-flex max-w-full items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[0.65rem] font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                              aria-label={`Post grades for ${col.title}`}
+                              disabled={postGradesPending === col.id}
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                onPostAssignmentGrades(col.id)
+                              }}
                             >
-                              {val || '—'}
-                            </span>
-                          </span>
-                          <span className="inline-flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5">
-                            {!readOnly && col.rubric && onRubricClick ? (
-                              <button
-                                type="button"
-                                className="text-[11px] font-medium text-indigo-600 hover:underline dark:text-indigo-400"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  onRubricClick(student.id, col.id)
-                                }}
-                              >
-                                Rubric
-                              </button>
-                            ) : null}
-                            {onOpenGradeHistory &&
-                            (col.kind === 'assignment' || col.kind === 'quiz' || col.kind === 'quiz_comprehensive') ? (
-                              <button
-                                type="button"
-                                tabIndex={isActive ? 0 : -1}
-                                aria-hidden={!isActive}
-                                className={`text-[11px] font-medium text-slate-600 hover:underline dark:text-neutral-400 ${
-                                  !isActive ? 'invisible pointer-events-none' : ''
-                                }`}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  onOpenGradeHistory(student.id, col.id)
-                                }}
-                              >
-                                History
-                              </button>
-                            ) : null}
-                            {!readOnly &&
-                            onToggleExcused &&
-                            (col.kind === 'assignment' ||
-                              col.kind === 'quiz' ||
-                              col.kind === 'quiz_comprehensive') ? (
-                              <button
-                                type="button"
-                                tabIndex={isActive ? 0 : -1}
-                                aria-hidden={!isActive}
-                                className={`text-[11px] font-medium text-slate-600 hover:underline dark:text-neutral-400 ${
-                                  !isActive ? 'invisible pointer-events-none' : ''
-                                }`}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  void onToggleExcused(student.id, col.id, !isExcused)
-                                }}
-                              >
-                                {isExcused ? 'Unexcuse' : 'Excuse'}
-                              </button>
-                            ) : null}
-                          </span>
-                        </div>
-                      )}
-                      {showFillKnob && activeSelectionBounds != null && (
-                        <button
-                          type="button"
-                          tabIndex={-1}
-                          aria-label="Fill — drag to copy the selection down or across"
-                          className="absolute -bottom-px -right-px z-[3] h-2.5 w-2.5 cursor-crosshair border border-white bg-indigo-600 shadow-sm hover:bg-indigo-500 dark:border-neutral-900 dark:bg-indigo-500 dark:hover:bg-indigo-400 touch-none"
-                          onPointerDown={(e) => handleFillKnobPointerDown(e, activeSelectionBounds)}
-                        />
-                      )}
-                    </td>
+                              {postGradesPending === col.id ? 'Posting…' : 'Post grades'}
+                            </button>
+                          ) : null}
+                        </span>
+                        <ChevronDown className="size-3.5 shrink-0 self-start opacity-70" aria-hidden />
+                      </button>
+                    </th>
                   )
                 })}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+              <tr className="border-b border-slate-200 bg-slate-100 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
+                <th
+                  scope="row"
+                  className={`sticky left-0 z-[28] ${STICKY_NAME_WIDTH_CLASS} ${pad} border-b border-r border-slate-200 bg-slate-100 align-top text-left font-medium shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
+                  style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
+                >
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                    Class avg / med
+                  </span>
+                </th>
+                <th
+                  scope="col"
+                  className={`sticky left-[12rem] z-[27] min-w-[5.5rem] ${pad} border-b border-r border-slate-200 bg-slate-100 text-right align-top font-normal shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
+                  style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
+                >
+                  <div className="flex flex-col items-end gap-0.5 text-[11px] tabular-nums leading-snug">
+                    <span>
+                      <span className="text-slate-500 dark:text-neutral-400">Avg </span>
+                      {classSummaryStats.finalAvg != null ? `${formatStat(classSummaryStats.finalAvg)}%` : '—'}
+                    </span>
+                    <span>
+                      <span className="text-slate-500 dark:text-neutral-400">Med </span>
+                      {classSummaryStats.finalMed != null ? `${formatStat(classSummaryStats.finalMed)}%` : '—'}
+                    </span>
+                  </div>
+                </th>
+                {visibleColumns.map((col, colIndex) => {
+                  const st = classSummaryStats.columns[colIndex]!
+                  return (
+                    <th
+                      key={`stats-${col.id}`}
+                      scope="col"
+                      className={`sticky z-[26] ${pad} min-w-[9rem] border-b border-slate-200 bg-slate-100 text-right align-top font-normal shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)] dark:border-neutral-700 dark:bg-neutral-800`}
+                      style={{ top: `${headerStickyPx > 0 ? headerStickyPx : 72}px` }}
+                    >
+                      <div className="flex flex-col items-end gap-0.5 text-[11px] tabular-nums leading-snug">
+                        <span title={col.maxPoints != null ? `Average of entered scores (out of ${col.maxPoints})` : 'Average of entered scores'}>
+                          <span className="text-slate-500 dark:text-neutral-400">Avg </span>
+                          {st.avg != null ? formatStat(st.avg) : '—'}
+                        </span>
+                        <span title={col.maxPoints != null ? `Median of entered scores (out of ${col.maxPoints})` : 'Median of entered scores'}>
+                          <span className="text-slate-500 dark:text-neutral-400">Med </span>
+                          {st.med != null ? formatStat(st.med) : '—'}
+                        </span>
+                      </div>
+                    </th>
+                  )
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredStudents.map((student, row) => (
+                <tr
+                  key={student.id}
+                  id={`gradebook-row-${student.id}`}
+                  className={`border-b border-slate-100 last:border-b-0 dark:border-neutral-700/80 ${highlightStudentId && highlightStudentId === student.id
+                      ? 'bg-amber-50/90 ring-2 ring-inset ring-amber-300/90 dark:bg-amber-950/25 dark:ring-amber-500/50'
+                      : ''
+                    }`}
+                >
+                  <th
+                    scope="row"
+                    title={student.name}
+                    className={`sticky left-0 z-10 ${STICKY_NAME_WIDTH_CLASS} ${pad} truncate border-r border-slate-200 bg-slate-100 text-left font-medium text-slate-950 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100`}
+                  >
+                    {student.name}
+                  </th>
+                  <td
+                    role="gridcell"
+                    tabIndex={-1}
+                    aria-label={`Final course percentage for ${student.name}`}
+                    className={`sticky left-[12rem] z-[9] ${pad} min-w-[5.5rem] border-r border-slate-200 bg-slate-50 text-right tabular-nums text-slate-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200`}
+                  >
+                    {formatFinalPercent(finalPercentByStudentId[student.id] ?? null)}
+                  </td>
+                  {visibleColumns.map((col, colIndex) => {
+                    const inRect =
+                      selectionRect != null &&
+                      row >= selectionRect.row0 &&
+                      row <= selectionRect.row1 &&
+                      colIndex >= selectionRect.col0 &&
+                      colIndex <= selectionRect.col1
+                    const isFocusCell = focusRow === row && focusCol === colIndex
+                    const isActive = isFocusCell && !editing
+                    const showEditor = editing != null && row === focusRow && colIndex === focusCol
+                    const inEditBand = editing != null && inRect && !showEditor
+                    const val = displayValue(row, colIndex)
+                    const isExcused = Boolean(gradeExcused?.[student.id]?.[col.id])
+                    const cellHeld = Boolean(gradeHeld?.[student.id]?.[col.id])
+                    const cellDropped = Boolean(droppedGrades?.[student.id]?.[col.id])
+                    const singleCellEdit =
+                      editing != null &&
+                      editing.rowMin === editing.rowMax &&
+                      editing.colMin === editing.colMax
+                    const selectOpts =
+                      showEditor && singleCellEdit ? gradingSelectOptions(col, gradingScheme) : []
+                    const showSelectEditor = showEditor && selectOpts.length > 0
+
+                    const ringActive =
+                      'relative z-[1] bg-indigo-50 ring-2 ring-inset ring-indigo-500 dark:bg-indigo-950/50 dark:ring-indigo-400'
+                    const ringBand = 'bg-indigo-50/70 ring-1 ring-inset ring-indigo-400/70 dark:bg-indigo-950/40 dark:ring-indigo-500/50'
+                    const ringBandEdit = 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400/80 dark:bg-indigo-950/35 dark:ring-indigo-500/60'
+
+                    const inFillDest =
+                      fillDrag != null &&
+                      row >= fillDrag.src.row0 &&
+                      row <= fillDrag.destRow1 &&
+                      colIndex >= fillDrag.src.col0 &&
+                      colIndex <= fillDrag.destCol1
+                    const inFillSource =
+                      fillDrag != null &&
+                      row >= fillDrag.src.row0 &&
+                      row <= fillDrag.src.row1 &&
+                      colIndex >= fillDrag.src.col0 &&
+                      colIndex <= fillDrag.src.col1
+                    const inFillExtension = inFillDest && !inFillSource
+
+                    const heatT =
+                      colorScaleEnabled && !isExcused
+                        ? heatPercentForCell(colIndex, val === 'EX' ? '' : val)
+                        : null
+                    const heatSurface =
+                      heatT != null && !showEditor && !inFillDest ? heatMapCellClass(heatT) : null
+
+                    const droppedSurface = cellDropped ? 'opacity-65 dark:opacity-70' : ''
+                    const cellSurface = showEditor
+                      ? ringActive
+                      : inEditBand
+                        ? ringBandEdit
+                        : inRect && isFocusCell && !editing
+                          ? ringActive
+                          : inRect
+                            ? ringBand
+                            : isFocusCell && !editing
+                              ? ringActive
+                              : (heatSurface ?? 'bg-white dark:bg-neutral-900/80')
+
+                    const fillExtSurface = inFillExtension
+                      ? 'bg-indigo-100/45 ring-1 ring-inset ring-dashed ring-indigo-400/80 dark:bg-indigo-950/35 dark:ring-indigo-500/70'
+                      : ''
+
+                    const showFillKnob =
+                      !readOnly &&
+                      !editing &&
+                      !fillDrag &&
+                      activeSelectionBounds != null &&
+                      row === activeSelectionBounds.row1 &&
+                      colIndex === activeSelectionBounds.col1
+
+                    return (
+                      <td
+                        key={col.id}
+                        ref={(el) => setCellRef(row, colIndex, el)}
+                        role="gridcell"
+                        data-gradebook-cell="1"
+                        data-gradebook-row={String(row)}
+                        data-gradebook-col={String(colIndex)}
+                        tabIndex={isActive ? 0 : -1}
+                        aria-selected={
+                          inRect || showEditor || (isFocusCell && !editing && selectionRect == null)
+                        }
+                        className={`relative ${pad} min-w-[5.5rem] border-l border-slate-100 text-right tabular-nums outline-none transition dark:border-neutral-700/80 ${cellSurface} ${fillExtSurface} ${droppedSurface}`}
+                        title={
+                          cellDropped
+                            ? 'This score is excluded from the course total by the group’s drop or replace policy.'
+                            : undefined
+                        }
+                        aria-label={
+                          isExcused
+                            ? `Assignment ${col.title}: Excused — not counted toward grade for ${student.name}`
+                            : cellDropped
+                              ? `${val || 'Empty'}, score dropped by group policy for ${col.title} — ${student.name}`
+                              : undefined
+                        }
+                        onKeyDown={(e) => handleGradeCellKeyDown(e, row, colIndex)}
+                        onPaste={(e) => {
+                          if (readOnly) return
+                          if (editing) return
+                          if (row !== focusRow || colIndex !== focusCol) return
+                          const text = e.clipboardData.getData('text/plain')
+                          if (text === '') return
+                          e.preventDefault()
+                          applyBulkPaste(text, focusRow, focusCol)
+                        }}
+                        onPointerDown={(e) => {
+                          if (e.button !== 0) return
+                          if (fillDragRef.current != null) return
+                          dragSelectStartRef.current = { row, col: colIndex }
+                          dragDidMoveRef.current = false
+                        }}
+                        onPointerEnter={(e) => {
+                          if (fillDragRef.current != null) return
+                          if ((e.buttons & 1) === 0) return
+                          const start = dragSelectStartRef.current
+                          if (!start) return
+                          if (row === start.row && colIndex === start.col) return
+                          dragDidMoveRef.current = true
+                          setSelectionAnchor({ row: start.row, col: start.col })
+                          focusCell(row, colIndex, { clearSelectionAnchor: false })
+                        }}
+                        onClick={(e) => {
+                          if (skipNextCellClickRef.current) {
+                            skipNextCellClickRef.current = false
+                            dragSelectStartRef.current = null
+                            return
+                          }
+                          if (editing && (row !== focusRow || colIndex !== focusCol)) {
+                            commitEdit()
+                          }
+                          if (e.shiftKey) {
+                            setSelectionAnchor((a) => a ?? { row: focusRow, col: focusCol })
+                            focusCell(row, colIndex, { clearSelectionAnchor: false })
+                          } else if (!dragDidMoveRef.current) {
+                            focusCell(row, colIndex)
+                          }
+                          dragSelectStartRef.current = null
+                        }}
+                        onDoubleClick={() => beginEdit(row, colIndex, { range: 'single' })}
+                      >
+                        {showEditor ? (
+                          showSelectEditor ? (
+                            <select
+                              ref={editSelectRef}
+                              aria-label={`Grade for ${student.name}, ${col.title}`}
+                              className="m-0 w-full min-w-0 border-0 bg-transparent p-0 text-right text-sm text-slate-950 shadow-none outline-none ring-0 focus:ring-0 dark:text-neutral-100"
+                              value={draft}
+                              onChange={(e) => setDraft(e.target.value)}
+                              onKeyDown={handleInputKeyDown}
+                              onBlur={handleEditInputBlur}
+                            >
+                              <option value="">—</option>
+                              {selectOpts.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              ref={editInputRef}
+                              type="text"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              aria-label={`Grade for ${student.name}, ${col.title}`}
+                              className="m-0 w-full min-w-0 border-0 bg-transparent p-0 text-right text-sm tabular-nums text-slate-950 shadow-none outline-none ring-0 focus:ring-0 dark:text-neutral-100"
+                              value={draft}
+                              onChange={(e) => setDraft(e.target.value)}
+                              onPaste={(e) => {
+                                const text = e.clipboardData.getData('text/plain')
+                                if (!text.includes('\n') && !text.includes('\t')) return
+                                e.preventDefault()
+                                skipCommitOnBlurRef.current = true
+                                setEditing(null)
+                                applyBulkPaste(text, focusRow, focusCol)
+                              }}
+                              onKeyDown={handleInputKeyDown}
+                              onBlur={handleEditInputBlur}
+                            />
+                          )
+                        ) : (
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="inline-flex max-w-full items-center justify-end gap-1">
+                              {cellHeld ? (
+                                <Lock
+                                  className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                                  aria-hidden
+                                />
+                              ) : null}
+                              <span
+                                className={
+                                  val
+                                    ? isExcused
+                                      ? 'font-semibold text-slate-700 dark:text-neutral-200'
+                                      : 'text-slate-950 dark:text-neutral-100'
+                                    : 'text-neutral-400 dark:text-neutral-500'
+                                }
+                                aria-label={
+                                  isExcused
+                                    ? 'Excused — not counted toward grade'
+                                    : cellHeld
+                                      ? 'Grade pending release'
+                                      : undefined
+                                }
+                              >
+                                {val || '—'}
+                              </span>
+                            </span>
+                            <span className="inline-flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5">
+                              {!readOnly && col.rubric && onRubricClick ? (
+                                <button
+                                  type="button"
+                                  className="text-[11px] font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onRubricClick(student.id, col.id)
+                                  }}
+                                >
+                                  Rubric
+                                </button>
+                              ) : null}
+                              {onOpenGradeHistory &&
+                                (col.kind === 'assignment' || col.kind === 'quiz' || col.kind === 'quiz_comprehensive') ? (
+                                <button
+                                  type="button"
+                                  tabIndex={isActive ? 0 : -1}
+                                  aria-hidden={!isActive}
+                                  className={`text-[11px] font-medium text-slate-600 hover:underline dark:text-neutral-400 ${!isActive ? 'invisible pointer-events-none' : ''
+                                    }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onOpenGradeHistory(student.id, col.id)
+                                  }}
+                                >
+                                  History
+                                </button>
+                              ) : null}
+                              {!readOnly &&
+                                onToggleExcused &&
+                                (col.kind === 'assignment' ||
+                                  col.kind === 'quiz' ||
+                                  col.kind === 'quiz_comprehensive') ? (
+                                <button
+                                  type="button"
+                                  tabIndex={isActive ? 0 : -1}
+                                  aria-hidden={!isActive}
+                                  className={`text-[11px] font-medium text-slate-600 hover:underline dark:text-neutral-400 ${!isActive ? 'invisible pointer-events-none' : ''
+                                    }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void onToggleExcused(student.id, col.id, !isExcused)
+                                  }}
+                                >
+                                  {isExcused ? 'Unexcuse' : 'Excuse'}
+                                </button>
+                              ) : null}
+                            </span>
+                          </div>
+                        )}
+                        {showFillKnob && activeSelectionBounds != null && (
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            aria-label="Fill — drag to copy the selection down or across"
+                            className="absolute -bottom-px -right-px z-[3] h-2.5 w-2.5 cursor-crosshair border border-white bg-indigo-600 shadow-sm hover:bg-indigo-500 dark:border-neutral-900 dark:bg-indigo-500 dark:hover:bg-indigo-400 touch-none"
+                            onPointerDown={(e) => handleFillKnobPointerDown(e, activeSelectionBounds)}
+                          />
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {headerMenu?.kind === 'student' && (
@@ -1709,19 +1705,6 @@ export function GradebookGrid({
           </button>
         </HeaderSortMenuPortal>
       )}
-
-      <p className="text-xs text-slate-500 dark:text-neutral-400">
-        <span className="font-medium text-slate-600 dark:text-neutral-300">Shortcuts:</span> click or arrows move
-        the active cell; Home / End jump to the start or end of the row; Ctrl+Home / Ctrl+End (⌘ on Mac) jump to the
-        first or last row; drag or Shift+arrows / Shift+click extends a rectangular selection; Delete or Backspace clears
-        scores for the selection; Enter or F2 edits (filling every selected cell); Escape collapses a multi-cell
-        selection or cancels editing; Tab / Shift+Tab moves to the next or previous cell; double-click edits one
-        cell only. Paste from Excel or Google Sheets starting at the active cell: rows follow line breaks and
-        columns follow tabs. Drag the small square at the bottom-right of the selection (like Excel) to copy values
-        down or across — a multi-cell selection repeats as a tiled pattern. Click a column header to open sort
-        options.
-        {footerNote ? ` ${footerNote}` : ''}
-      </p>
     </div>
   )
 }

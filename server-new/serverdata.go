@@ -4,7 +4,7 @@ package serverdata
 
 import "embed"
 
-// Migrations is the SQLx 001–115 tree (a byte-for-byte copy of server/migrations).
+// Migrations is the SQLx 001–116 tree (a byte-for-byte copy of server/migrations).
 //
 //go:embed all:migrations
 var Migrations embed.FS

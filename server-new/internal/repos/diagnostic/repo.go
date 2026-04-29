@@ -12,17 +12,17 @@ import (
 )
 
 type CourseDiagnosticRow struct {
-	ID             uuid.UUID
-	CourseID       uuid.UUID
-	ConceptIDs     []uuid.UUID
-	MaxItems       int32
-	StoppingRule   string
-	SEThreshold    float64
-	RetakePolicy   string
-	PlacementRules json.RawMessage
-	ThetaCutScores json.RawMessage
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID             uuid.UUID       `json:"id"`
+	CourseID       uuid.UUID       `json:"courseId"`
+	ConceptIDs     []uuid.UUID     `json:"conceptIds"`
+	MaxItems       int32           `json:"maxItems"`
+	StoppingRule   string          `json:"stoppingRule"`
+	SEThreshold    float64         `json:"seThreshold"`
+	RetakePolicy   string          `json:"retakePolicy"`
+	PlacementRules json.RawMessage `json:"placementRules"`
+	ThetaCutScores json.RawMessage `json:"thetaCutScores,omitempty"`
+	CreatedAt      time.Time       `json:"createdAt"`
+	UpdatedAt      time.Time       `json:"updatedAt"`
 }
 
 type DiagnosticAttemptRow struct {
@@ -82,7 +82,7 @@ WHERE course_id = $1
 	return r, err
 }
 
-func UpsertCourseDiagnostic(ctx context.Context, pool *pgxpool.Pool, courseID uuid.UUID, conceptIDs []uuid.UUID, maxItems int32, stoppingRule string, seThreshold float64, retakePolicy string, placementRules json.RawMessage, thetaCutScores json.RawMessage) (*CourseDiagnosticRow, error) {
+func UpsertCourseDiagnostic(ctx context.Context, pool *pgxpool.Pool, courseID uuid.UUID, conceptIDs []uuid.UUID, maxItems int32, stoppingRule string, seThreshold float64, retakePolicy string, placementRules json.RawMessage, thetaCutScores *json.RawMessage) (*CourseDiagnosticRow, error) {
 	return scanDiag(pool.QueryRow(ctx, `
 INSERT INTO course.course_diagnostics (
 	course_id, concept_ids, max_items, stopping_rule, se_threshold, retake_policy, placement_rules, theta_cut_scores
