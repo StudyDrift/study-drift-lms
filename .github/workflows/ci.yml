@@ -136,6 +136,8 @@ jobs:
     name: Server (Go) — server-new
     runs-on: ubuntu-latest
     env:
+      # Go 1.25 auto toolchain can miss `covdata`, breaking `go test -coverprofile` (golang/go#75031).
+      GOTOOLCHAIN: go1.25.0+auto
       DATABASE_URL: postgres://test:test@localhost:5432/studydrift_test
       RUN_MIGRATIONS: "true"
     services:
