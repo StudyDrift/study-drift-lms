@@ -42,7 +42,8 @@ func TestListForCourseWithEnrichment_Pg(t *testing.T) {
 	}
 	uid, _ := uuid.Parse(row.ID)
 	var courseID uuid.UUID
-	cc := fmt.Sprintf("C-S%04d", time.Now().UnixNano()%10000)
+	// course_code must match ^C-[A-Z0-9]{6}$ (migration 005).
+	cc := fmt.Sprintf("C-S%05d", time.Now().UnixNano()%100000)
 	if err := pool.QueryRow(ctx, `
 INSERT INTO course.courses (course_code, title, created_by_user_id) VALUES ($1, 'Struct', $2) RETURNING id
 `, cc, uid).Scan(&courseID); err != nil {
