@@ -292,7 +292,7 @@ func Answer(ctx context.Context, pool *pgxpool.Pool, or *openrouter.Client, user
 	var context strings.Builder
 	for i, ch := range chunks {
 		context.WriteString("\n\n--- Excerpt ")
-		context.WriteString(fmt.Sprint(i + 1))
+		_, _ = fmt.Fprintf(&context, "%d", i+1)
 		context.WriteString(" — ")
 		context.WriteString(ch.courseTitle)
 		context.WriteString(" (")

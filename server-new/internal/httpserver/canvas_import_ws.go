@@ -485,7 +485,7 @@ func canvasGetJSON(ctx context.Context, client *http.Client, base, token, path s
 	if err != nil {
 		return nil, errors.New("Could not reach Canvas (network error). Check the base URL and try again.")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, errors.New("Canvas rejected the access token (401). Create a token with read access and try again.")

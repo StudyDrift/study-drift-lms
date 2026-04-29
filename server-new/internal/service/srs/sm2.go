@@ -58,11 +58,12 @@ func Sm2Step(prev Sm2State, quality float64) Sm2State {
 	}
 
 	var interval float64
-	if repetition == 0 {
+	switch repetition {
+	case 0:
 		interval = 1
-	} else if repetition == 1 {
+	case 1:
 		interval = 6
-	} else {
+	default:
 		interval = prev.IntervalDays * ef
 		if interval < 1 {
 			interval = 1

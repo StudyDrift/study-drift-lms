@@ -386,7 +386,7 @@ func trueFalseCorrectChoiceIndex(answers []map[string]any) *uint {
 		}
 	}
 	// Fallback: first weighted answer index mapped onto [0,1] if there are exactly two answers.
-	var idx int = -1
+	idx := -1
 	for i, a := range answers {
 		if canvasAnswerWeight(a) > 0 {
 			idx = i
