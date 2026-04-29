@@ -28,8 +28,9 @@ WHERE c.archived = false
   AND c.id IN (
     SELECT ce2.course_id
     FROM course.course_enrollments ce2
-    WHERE ce2.user_id = $1
+    WHERE ce2.user_id = $1 AND ce2.active
   )
+  AND ce.active
 ORDER BY
     c.title ASC,
     COALESCE(er.sort_order, 999),

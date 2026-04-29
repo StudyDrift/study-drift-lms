@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,6 +24,8 @@ type Row struct {
 	AvatarURL    *string
 	UITheme      string
 	Sid          *string
+	LoginBlocked bool
+	DeactivatedAt *time.Time
 }
 
 func strPtr(ns sql.NullString) *string {
@@ -35,12 +38,15 @@ func strPtr(ns sql.NullString) *string {
 
 // FindByEmail returns a user by exact email (already normalized) or nil if missing.
 func FindByEmail(ctx context.Context, pool *pgxpool.Pool, email string) (*Row, error) {
-	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid
+	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
+       login_blocked, deactivated_at
 FROM "user".users WHERE email = $1`
 	var r Row
 	var displayName, firstName, lastName, avatar, sid sql.NullString
+	var deactivatedAt sql.NullTime
 	err := pool.QueryRow(ctx, q, email).Scan(
 		&r.ID, &r.Email, &r.PasswordHash, &displayName, &firstName, &lastName, &avatar, &r.UITheme, &sid,
+		&r.LoginBlocked, &deactivatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -53,17 +59,24 @@ FROM "user".users WHERE email = $1`
 	r.LastName = strPtr(lastName)
 	r.AvatarURL = strPtr(avatar)
 	r.Sid = strPtr(sid)
+	if deactivatedAt.Valid {
+		t := deactivatedAt.Time
+		r.DeactivatedAt = &t
+	}
 	return &r, nil
 }
 
 // FindByID returns a user by primary key or nil.
 func FindByID(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Row, error) {
-	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid
+	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
+       login_blocked, deactivated_at
 FROM "user".users WHERE id = $1`
 	var r Row
 	var displayName, firstName, lastName, avatar, sid sql.NullString
+	var deactivatedAt sql.NullTime
 	err := pool.QueryRow(ctx, q, id).Scan(
 		&r.ID, &r.Email, &r.PasswordHash, &displayName, &firstName, &lastName, &avatar, &r.UITheme, &sid,
+		&r.LoginBlocked, &deactivatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -76,6 +89,10 @@ FROM "user".users WHERE id = $1`
 	r.LastName = strPtr(lastName)
 	r.AvatarURL = strPtr(avatar)
 	r.Sid = strPtr(sid)
+	if deactivatedAt.Valid {
+		t := deactivatedAt.Time
+		r.DeactivatedAt = &t
+	}
 	return &r, nil
 }
 
@@ -83,11 +100,14 @@ FROM "user".users WHERE id = $1`
 func InsertUser(ctx context.Context, pool *pgxpool.Pool, email, passwordHash string, displayName *string) (*Row, error) {
 	const q = `INSERT INTO "user".users (email, password_hash, display_name)
 VALUES ($1, $2, $3)
-RETURNING id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid`
+RETURNING id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
+  login_blocked, deactivated_at`
 	var r Row
 	var dn, fn, ln, av, sid sql.NullString
+	var deactivatedAt sql.NullTime
 	err := pool.QueryRow(ctx, q, email, passwordHash, displayName).Scan(
 		&r.ID, &r.Email, &r.PasswordHash, &dn, &fn, &ln, &av, &r.UITheme, &sid,
+		&r.LoginBlocked, &deactivatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -97,6 +117,10 @@ RETURNING id::text, email, password_hash, display_name, first_name, last_name, a
 	r.LastName = strPtr(ln)
 	r.AvatarURL = strPtr(av)
 	r.Sid = strPtr(sid)
+	if deactivatedAt.Valid {
+		t := deactivatedAt.Time
+		r.DeactivatedAt = &t
+	}
 	return &r, nil
 }
 
@@ -111,12 +135,15 @@ func FindByEmailCI(ctx context.Context, pool *pgxpool.Pool, email string) (*Row,
 	if em == "" {
 		return nil, nil
 	}
-	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid
+	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
+       login_blocked, deactivated_at
 FROM "user".users WHERE lower(email) = lower($1)`
 	var r Row
 	var displayName, firstName, lastName, avatar, sid sql.NullString
+	var deactivatedAt sql.NullTime
 	err := pool.QueryRow(ctx, q, em).Scan(
 		&r.ID, &r.Email, &r.PasswordHash, &displayName, &firstName, &lastName, &avatar, &r.UITheme, &sid,
+		&r.LoginBlocked, &deactivatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -129,5 +156,9 @@ FROM "user".users WHERE lower(email) = lower($1)`
 	r.LastName = strPtr(lastName)
 	r.AvatarURL = strPtr(avatar)
 	r.Sid = strPtr(sid)
+	if deactivatedAt.Valid {
+		t := deactivatedAt.Time
+		r.DeactivatedAt = &t
+	}
 	return &r, nil
 }

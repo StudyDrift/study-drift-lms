@@ -28,7 +28,7 @@ SELECT
 FROM course.course_enrollments ce
 INNER JOIN course.courses c ON c.id = ce.course_id
 INNER JOIN "user".users u ON u.id = ce.user_id
-WHERE c.course_code = $1
+WHERE c.course_code = $1 AND ce.active
 ORDER BY
 	CASE ce.role
 		WHEN 'teacher' THEN 0
@@ -77,7 +77,7 @@ SELECT DISTINCT ON (u.id)
 FROM course.course_enrollments ce
 INNER JOIN course.courses c ON c.id = ce.course_id
 INNER JOIN "user".users u ON u.id = ce.user_id
-WHERE c.course_code = $1
+WHERE c.course_code = $1 AND ce.active
 ORDER BY
 	u.id,
 	CASE ce.role

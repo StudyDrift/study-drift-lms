@@ -399,7 +399,48 @@ const spec = `{
         "responses": { "200": { "description": "id" }, "401": { "description": "Not signed in" }, "403": { "description": "Forbidden" } }
       }
     },
-    "/api/v1/settings/permissions": {
+    "/api/v1/admin/provisioning/oneroster/upload": {
+      "post": {
+        "tags": ["admin"],
+        "summary": "Upload OneRoster CSV bundle (multipart; ONEROSTER_ENABLED=1)",
+        "security": [ { "bearerAuth": [] } ],
+        "responses": { "201": { "description": "syncRunId" }, "400": {}, "401": {}, "403": {}, "404": { "description": "Feature off" } }
+      }
+    },
+    "/api/v1/admin/provisioning/oneroster/sync-runs": {
+      "get": {
+        "tags": ["admin"],
+        "summary": "List OneRoster sync runs for an institution",
+        "security": [ { "bearerAuth": [] } ],
+        "responses": { "200": { "description": "syncRuns" }, "401": {}, "403": {}, "404": {} }
+      }
+    },
+    "/api/v1/admin/provisioning/oneroster/sync-runs/{id}": {
+      "get": {
+        "tags": ["admin"],
+        "summary": "OneRoster sync run event log",
+        "security": [ { "bearerAuth": [] } ],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": { "200": { "description": "events" }, "401": {}, "403": {}, "404": {} }
+      }
+    },
+    "/api/v1/admin/provisioning/oneroster/bearer-credentials": {
+      "post": {
+        "tags": ["admin"],
+        "summary": "Register hashed bearer token for GET /oneroster/v1p2/*",
+        "security": [ { "bearerAuth": [] } ],
+        "responses": { "200": { "description": "ok" }, "401": {}, "403": {}, "404": {} }
+      }
+    },
+    "/oneroster/v1p2/users": {
+      "get": {
+        "tags": ["admin"],
+        "summary": "OneRoster-style users collection (Bearer token from admin credential)",
+        "responses": { "200": {}, "401": {} }
+      }
+    },
       "get": {
         "tags": ["settings"],
         "summary": "List all permission rows",

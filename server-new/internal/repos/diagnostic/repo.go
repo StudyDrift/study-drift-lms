@@ -183,7 +183,7 @@ LEFT JOIN LATERAL (
 	ORDER BY a.started_at DESC
 	LIMIT 1
 ) da ON TRUE
-WHERE e.course_id = $2 AND e.role = 'student'
+WHERE e.course_id = $2 AND e.role = 'student' AND e.active
 ORDER BY COALESCE(u.display_name, u.email, u.id::text) ASC
 `, diagnosticID, courseID)
 	if err != nil {

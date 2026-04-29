@@ -19,7 +19,7 @@ func ListStudentUsersForCourseCode(ctx context.Context, pool *pgxpool.Pool, cour
 		FROM course.course_enrollments ce
 		INNER JOIN course.courses c ON c.id = ce.course_id
 		INNER JOIN "user".users u ON u.id = ce.user_id
-		WHERE c.course_code = $1 AND ce.role = 'student'
+		WHERE c.course_code = $1 AND ce.role = 'student' AND ce.active
 		ORDER BY display_label ASC, ce.user_id ASC
 	`, courseCode)
 	if err != nil {

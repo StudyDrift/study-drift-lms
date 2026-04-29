@@ -27,7 +27,7 @@ SELECT
     c.misconception_detection_enabled
 FROM course.courses c
 LEFT JOIN course.user_course_catalog_order o ON o.user_id = $1 AND o.course_id = c.id
-WHERE c.id IN (SELECT e.course_id FROM course.course_enrollments e WHERE e.user_id = $1)
+WHERE c.id IN (SELECT e.course_id FROM course.course_enrollments e WHERE e.user_id = $1 AND e.active)
   AND c.archived = false
 ORDER BY o.sort_order NULLS LAST, c.title ASC
 `, userID)

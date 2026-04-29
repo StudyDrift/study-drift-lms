@@ -71,6 +71,10 @@ type Config struct {
 	OIDCAppleTeamID           string
 	OIDCAppleKeyID            string
 	OIDCApplePrivateKeyPEM    string
+
+	OneRosterEnabled             bool
+	OneRosterBearerFallbackToken string
+	OneRosterBearerFallbackInst  string // UUID string; used with fallback token when DB has no match
 }
 
 // Load reads configuration from the environment.
@@ -152,6 +156,10 @@ func Load() Config {
 		OIDCAppleTeamID:           firstNonEmptyTrimmed("OIDC_APPLE_TEAM_ID"),
 		OIDCAppleKeyID:            firstNonEmptyTrimmed("OIDC_APPLE_KEY_ID"),
 		OIDCApplePrivateKeyPEM:    firstNonEmptyTrimmedOrFile("OIDC_APPLE_PRIVATE_KEY_PEM", "OIDC_APPLE_PRIVATE_KEY_PATH"),
+
+		OneRosterEnabled:             boolEnv("ONEROSTER_ENABLED"),
+		OneRosterBearerFallbackToken: firstNonEmptyTrimmed("ONEROSTER_BEARER_FALLBACK_TOKEN"),
+		OneRosterBearerFallbackInst:  strings.TrimSpace(os.Getenv("ONEROSTER_BEARER_FALLBACK_INSTITUTION_ID")),
 	}
 }
 

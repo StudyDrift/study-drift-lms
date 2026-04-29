@@ -99,6 +99,9 @@ func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, req Lo
 	if row == nil {
 		return AuthResponse{}, ErrInvalidCredentials
 	}
+	if row.LoginBlocked {
+		return AuthResponse{}, ErrInvalidCredentials
+	}
 	ok, err := pauth.VerifyPassword(req.Password, row.PasswordHash)
 	if err != nil || !ok {
 		return AuthResponse{}, ErrInvalidCredentials
