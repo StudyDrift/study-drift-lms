@@ -28,7 +28,6 @@ func TestAdmin_SAMLGet_Unauthorized(t *testing.T) {
 
 func TestAdmin_SettingsAI_Unauthorized(t *testing.T) {
 	h := NewHandler(Deps{Pool: nil, JWTSigner: nil})
-	rr := httptest.NewRecorder()
 	for _, p := range []struct {
 		path   string
 		method string
@@ -36,11 +35,11 @@ func TestAdmin_SettingsAI_Unauthorized(t *testing.T) {
 		{"/api/v1/settings/ai", http.MethodGet},
 		{"/api/v1/settings/ai/models?kind=text", http.MethodGet},
 	} {
-		rr = httptest.NewRecorder()
+		srr := httptest.NewRecorder()
 		r := httptest.NewRequest(p.method, p.path, nil)
-		h.ServeHTTP(rr, r)
-		if rr.Code != http.StatusUnauthorized {
-			t.Fatalf("settings AI %s %s: %d", p.method, p.path, rr.Code)
+		h.ServeHTTP(srr, r)
+		if srr.Code != http.StatusUnauthorized {
+			t.Fatalf("settings AI %s %s: %d", p.method, p.path, srr.Code)
 		}
 	}
 }

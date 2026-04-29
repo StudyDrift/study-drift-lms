@@ -102,7 +102,9 @@ async fn oidc_status_handler(
         })
         .collect();
     if state.oidc.is_none() {
-        return Ok(Json(json!({ "enabled": false, "providers": [], "custom": [] })));
+        return Ok(Json(
+            json!({ "enabled": false, "providers": [], "custom": [] }),
+        ));
     }
     let o = state.oidc.as_ref().unwrap();
     Ok(Json(json!({
@@ -136,23 +138,23 @@ async fn oidc_link_intent_handler(
     }
     if p == "custom" {
         if req.config_id.is_none() {
-            return Err(AppError::invalid_input("configId is required for custom OIDC."));
+            return Err(AppError::invalid_input(
+                "configId is required for custom OIDC.",
+            ));
         }
     } else if req.config_id.is_some() {
         return Err(AppError::invalid_input("configId is only for custom OIDC."));
     }
     if state.oidc.is_none() {
-        return Err(AppError::invalid_input("OpenID Connect is not enabled on this server."));
+        return Err(AppError::invalid_input(
+            "OpenID Connect is not enabled on this server.",
+        ));
     }
     let id = oidc_repo::insert_link_intent(
         &state.pool,
         u.user_id,
         &p,
-        if p == "custom" {
-            req.config_id
-        } else {
-            None
-        },
+        if p == "custom" { req.config_id } else { None },
     )
     .await?;
     let o = state.oidc.as_ref().unwrap();
@@ -168,4 +170,3 @@ async fn oidc_link_intent_handler(
         json!({ "ok": true, "linkId": id, "loginUrl": login_url }),
     ))
 }
-

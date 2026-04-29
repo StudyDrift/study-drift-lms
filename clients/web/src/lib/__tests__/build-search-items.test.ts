@@ -49,7 +49,10 @@ describe('buildSearchItems', () => {
     expect(course?.haystack).toContain('intro')
     expect(course?.haystack).toContain('cs-101')
 
-    const person = items.find((i) => i.id === 'person:u1:CS-101:student')
+    const e = encodeURIComponent
+    const person = items.find(
+      (i) => i.id === `person:${e('u1')}:${e('CS-101')}:${e('student')}`,
+    )
     expect(person).toMatchObject({
       group: 'person',
       path: '/courses/CS-101/enrollments',
@@ -59,12 +62,37 @@ describe('buildSearchItems', () => {
     const allowsGrade = (p: string) =>
       p === courseEnrollmentsReadPermission('CS-101') || p === courseGradebookViewPermission('CS-101')
     const itemsG = buildSearchItems(courses, people, allowsGrade)
-    const personG = itemsG.find((i) => i.id === 'person:u1:CS-101:student')
+    const personG = itemsG.find(
+      (i) => i.id === `person:${e('u1')}:${e('CS-101')}:${e('student')}`,
+    )
     expect(personG?.path).toBe('/courses/CS-101/gradebook?student=u1')
 
-    const emailOnly = items.find((i) => i.id === 'person:u2:CS-101:ta')
+    const emailOnly = items.find(
+      (i) => i.id === `person:${e('u2')}:${e('CS-101')}:${e('ta')}`,
+    )
     expect(emailOnly?.title).toBe('b@x.com')
     expect(person?.subtitle).toBe('Intro · CS-101 · student')
+  })
+
+  it('URL-encodes person item ids so colons in user id or course code cannot collide with id delimiters', () => {
+    const people: SearchPersonItem[] = [
+      {
+        userId: 'user:with:colons',
+        email: 'edge@x.com',
+        displayName: 'Edge',
+        role: 'ta',
+        courseCode: 'C/S',
+        courseTitle: 'Slash course',
+      },
+    ]
+    const allows = (p: string) => p === courseEnrollmentsReadPermission('C/S')
+    const items = buildSearchItems([], people, allows)
+    const p = items.find((i) => i.group === 'person' && i.title === 'Edge')
+    expect(p).toBeDefined()
+    const enc = encodeURIComponent
+    expect(p?.id).toBe(
+      `person:${enc('user:with:colons')}:${enc('C/S')}:${enc('ta')}`,
+    )
   })
 
   it('uses distinct ids when the same user has multiple roles in one course', () => {
@@ -88,10 +116,11 @@ describe('buildSearchItems', () => {
     ]
     const allows = (p: string) => p === courseEnrollmentsReadPermission('C-1')
     const items = buildSearchItems([], dualRole, allows)
+    const e = encodeURIComponent
     const ids = items.filter((i) => i.group === 'person').map((i) => i.id)
     expect(new Set(ids).size).toBe(2)
-    expect(ids).toContain('person:same:C-1:Student')
-    expect(ids).toContain('person:same:C-1:Teacher')
+    expect(ids).toContain(`person:${e('same')}:${e('C-1')}:${e('Student')}`)
+    expect(ids).toContain(`person:${e('same')}:${e('C-1')}:${e('Teacher')}`)
   })
 
   it('URL-encodes course codes in paths', () => {

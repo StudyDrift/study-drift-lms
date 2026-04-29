@@ -10,8 +10,8 @@ use axum::{
     routing::{get, patch, post},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -26,13 +26,13 @@ use crate::repos::grade_audit_events;
 use crate::repos::module_assignment_submissions::{self, GradedFilter, SubmissionRow};
 use crate::repos::submission_annotations::{self, AnnotationRow, AnnotationUpsertWrite};
 use crate::repos::submission_versions;
+use crate::routes::blind_grading_redaction;
 use crate::services::course_image_upload::{
     course_file_content_path, ingest_multipart_submission_document_field,
     persist_course_submission_attachment,
 };
 use crate::services::grading::resubmission;
 use crate::services::originality::spawn_originality_detection_job;
-use crate::routes::blind_grading_redaction;
 use crate::services::submission_annotated_pdf;
 use crate::state::AppState;
 
@@ -215,9 +215,12 @@ async fn reveal_identities_handler(
         })));
     }
 
-    let ungraded =
-        module_assignment_submissions::count_ungraded_for_assignment(&state.pool, course_id, item_id)
-            .await?;
+    let ungraded = module_assignment_submissions::count_ungraded_for_assignment(
+        &state.pool,
+        course_id,
+        item_id,
+    )
+    .await?;
     if ungraded > 0 && !body.force {
         return Err(AppError::invalid_input(format!(
             "{ungraded} submission(s) are still ungraded. Resubmit with {{ \"force\": true }} after confirming."
@@ -328,33 +331,33 @@ async fn persist_submission_file(
     )
     .await?;
     if !state.resubmission_workflow_enabled {
-        return Ok(
-            module_assignment_submissions::upsert_attachment(
-                &state.pool,
-                course_id,
-                item_id,
-                submitted_by,
-                new_file_id,
-            )
-            .await?,
-        );
+        return Ok(module_assignment_submissions::upsert_attachment(
+            &state.pool,
+            course_id,
+            item_id,
+            submitted_by,
+            new_file_id,
+        )
+        .await?);
     }
     let Some(ex) = existing else {
-        return Ok(
-            module_assignment_submissions::upsert_attachment(
-                &state.pool,
-                course_id,
-                item_id,
-                submitted_by,
-                new_file_id,
-            )
-            .await?,
-        );
+        return Ok(module_assignment_submissions::upsert_attachment(
+            &state.pool,
+            course_id,
+            item_id,
+            submitted_by,
+            new_file_id,
+        )
+        .await?);
     };
     resubmission::student_may_resubmit(now, &ex)?;
     let mut tx = state.pool.begin().await?;
     let opt = module_assignment_submissions::resubmit_versioned_in_transaction(
-        &mut tx, now, course_id, ex.id, new_file_id,
+        &mut tx,
+        now,
+        course_id,
+        ex.id,
+        new_file_id,
     )
     .await?;
     let Some(row) = opt else {
@@ -363,7 +366,7 @@ async fn persist_submission_file(
         });
     };
     grade_audit_events::insert(
-        &mut *tx,
+        &mut tx,
         course_id,
         item_id,
         submitted_by,
@@ -846,14 +849,8 @@ async fn list_submission_versions_handler(
         &course_code,
     ));
     versions.sort_by(|a, b| {
-        let na = a
-            .get("versionNumber")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-        let nb = b
-            .get("versionNumber")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
+        let na = a.get("versionNumber").and_then(|v| v.as_i64()).unwrap_or(0);
+        let nb = b.get("versionNumber").and_then(|v| v.as_i64()).unwrap_or(0);
         na.cmp(&nb)
     });
     Ok(Json(json!({ "versions": versions })))

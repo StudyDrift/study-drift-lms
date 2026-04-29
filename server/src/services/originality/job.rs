@@ -54,7 +54,8 @@ async fn run_detection_job(
     };
 
     let Some(asn) =
-        course_module_assignments::get_for_course_item(pool, sub.course_id, sub.module_item_id).await?
+        course_module_assignments::get_for_course_item(pool, sub.course_id, sub.module_item_id)
+            .await?
     else {
         return Ok(());
     };
@@ -72,15 +73,7 @@ async fn run_detection_job(
         originality_reports::insert_pending_if_missing(pool, submission_id, "internal").await?;
         originality_reports::mark_processing(pool, submission_id, "internal").await?;
         info!(target: "detection.job_enqueued", %submission_id, provider = "internal", "originality_internal_started");
-        match run_internal_provider(
-            pool,
-            course_files_root,
-            course_code,
-            open_router,
-            &sub,
-        )
-        .await
-        {
+        match run_internal_provider(pool, course_files_root, course_code, open_router, &sub).await {
             Ok((ai_pct, snapshot, model)) => {
                 let rep_id = originality_reports::mark_done(
                     pool,
@@ -128,8 +121,13 @@ async fn run_detection_job(
                 "{}/about-originality-placeholder",
                 public_web_origin.trim_end_matches('/')
             );
-            let snap = match storage::read_submission_file_plain(pool, course_files_root, course_code, &sub)
-                .await
+            let snap = match storage::read_submission_file_plain(
+                pool,
+                course_files_root,
+                course_code,
+                &sub,
+            )
+            .await
             {
                 Ok(s) => storage::cap_submission_text_for_storage(&s),
                 Err(e) => {
@@ -148,13 +146,7 @@ async fn run_detection_job(
                 Some("stub-scan"),
             )
             .await?;
-            let full = storage::build_external_stub_json(
-                &report_url,
-                ext,
-                "stub-scan",
-                sim,
-                &snap,
-            );
+            let full = storage::build_external_stub_json(&report_url, ext, "stub-scan", sim, &snap);
             storage::best_effort_store_from_parts(
                 pool,
                 course_files_root,
@@ -194,7 +186,9 @@ async fn run_internal_provider(
         return Err("OpenRouter is not configured; internal AI originality is unavailable.".into());
     };
     if sub.attachment_file_id.is_none() {
-        return Err("No attachment; internal originality requires extractable document text.".into());
+        return Err(
+            "No attachment; internal originality requires extractable document text.".into(),
+        );
     }
     let text = storage::read_submission_file_plain(pool, course_files_root, course_code, sub)
         .await

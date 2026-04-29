@@ -1,5 +1,7 @@
 //! Pure helpers: map stored points to display strings and labeled inputs back to points.
 
+use std::str::FromStr;
+
 use serde_json::{json, Value};
 
 const EPS: f64 = 1e-6;
@@ -15,19 +17,23 @@ pub enum DisplayGradingKind {
     CompleteIncomplete,
 }
 
-impl DisplayGradingKind {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for DisplayGradingKind {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "points" => Some(Self::Points),
-            "percentage" => Some(Self::Percentage),
-            "letter" => Some(Self::Letter),
-            "gpa" => Some(Self::Gpa),
-            "pass_fail" => Some(Self::PassFail),
-            "complete_incomplete" => Some(Self::CompleteIncomplete),
-            _ => None,
+            "points" => Ok(Self::Points),
+            "percentage" => Ok(Self::Percentage),
+            "letter" => Ok(Self::Letter),
+            "gpa" => Ok(Self::Gpa),
+            "pass_fail" => Ok(Self::PassFail),
+            "complete_incomplete" => Ok(Self::CompleteIncomplete),
+            _ => Err(()),
         }
     }
+}
 
+impl DisplayGradingKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Points => "points",
@@ -67,7 +73,10 @@ pub fn default_letter_scale_json() -> Value {
     ])
 }
 
-pub fn normalize_scheme_type_for_storage(kind: DisplayGradingKind, scale_json: Option<Value>) -> Value {
+pub fn normalize_scheme_type_for_storage(
+    kind: DisplayGradingKind,
+    scale_json: Option<Value>,
+) -> Value {
     match kind {
         DisplayGradingKind::Letter | DisplayGradingKind::Gpa => match scale_json {
             Some(v) if !v.is_null() => v,
@@ -78,12 +87,18 @@ pub fn normalize_scheme_type_for_storage(kind: DisplayGradingKind, scale_json: O
 }
 
 /// Validates `scale_json` for the given scheme kind. Letter/GPA require non-overlapping contiguous bands on [0, 100].
-pub fn validate_scale_json(kind: DisplayGradingKind, scale_json: Option<&Value>) -> Result<(), String> {
+pub fn validate_scale_json(
+    kind: DisplayGradingKind,
+    scale_json: Option<&Value>,
+) -> Result<(), String> {
     let _ = parse_scale(kind, scale_json)?;
     Ok(())
 }
 
-pub fn parse_scale(kind: DisplayGradingKind, scale_json: Option<&Value>) -> Result<ParsedScale, String> {
+pub fn parse_scale(
+    kind: DisplayGradingKind,
+    scale_json: Option<&Value>,
+) -> Result<ParsedScale, String> {
     match kind {
         DisplayGradingKind::Points | DisplayGradingKind::Percentage => Ok(ParsedScale {
             kind,
@@ -92,9 +107,10 @@ pub fn parse_scale(kind: DisplayGradingKind, scale_json: Option<&Value>) -> Resu
             complete_min_pct: 50.0,
         }),
         DisplayGradingKind::Letter | DisplayGradingKind::Gpa => {
-            let arr = scale_json
-                .and_then(|v| v.as_array())
-                .ok_or_else(|| "Letter and GPA schemes need scaleJson as an array of {label, min_pct, gpa?}.".to_string())?;
+            let arr = scale_json.and_then(|v| v.as_array()).ok_or_else(|| {
+                "Letter and GPA schemes need scaleJson as an array of {label, min_pct, gpa?}."
+                    .to_string()
+            })?;
             if arr.is_empty() {
                 return Err("Letter scale must include at least one band.".into());
             }
@@ -113,7 +129,7 @@ pub fn parse_scale(kind: DisplayGradingKind, scale_json: Option<&Value>) -> Resu
                     .get("min_pct")
                     .and_then(|v| v.as_f64())
                     .ok_or_else(|| format!("Band {i}: min_pct must be a number"))?;
-                if !min_pct.is_finite() || min_pct < 0.0 || min_pct > 100.0 + EPS {
+                if !min_pct.is_finite() || !(0.0..=100.0 + EPS).contains(&min_pct) {
                     return Err(format!("Band {i}: min_pct must be between 0 and 100"));
                 }
                 let gpa = row.get("gpa").and_then(|v| v.as_f64());
@@ -133,7 +149,7 @@ pub fn parse_scale(kind: DisplayGradingKind, scale_json: Option<&Value>) -> Resu
                     .partial_cmp(&a.min_pct)
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
-            let mut ascending: Vec<LetterTier> = tiers.iter().cloned().collect();
+            let mut ascending: Vec<LetterTier> = tiers.to_vec();
             ascending.sort_by(|a, b| {
                 a.min_pct
                     .partial_cmp(&b.min_pct)
@@ -159,7 +175,7 @@ pub fn parse_scale(kind: DisplayGradingKind, scale_json: Option<&Value>) -> Resu
                 .and_then(|o| o.get("pass_min_pct"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(60.0);
-            if !pass_min.is_finite() || pass_min < 0.0 || pass_min > 100.0 + EPS {
+            if !pass_min.is_finite() || !(0.0..=100.0 + EPS).contains(&pass_min) {
                 return Err("pass_min_pct must be between 0 and 100.".into());
             }
             Ok(ParsedScale {
@@ -174,7 +190,7 @@ pub fn parse_scale(kind: DisplayGradingKind, scale_json: Option<&Value>) -> Resu
                 .and_then(|o| o.get("complete_min_pct"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(50.0);
-            if !cmin.is_finite() || cmin < 0.0 || cmin > 100.0 + EPS {
+            if !cmin.is_finite() || !(0.0..=100.0 + EPS).contains(&cmin) {
                 return Err("complete_min_pct must be between 0 and 100.".into());
             }
             Ok(ParsedScale {
@@ -196,7 +212,7 @@ pub fn resolve_effective(
         if t.is_empty() {
             None
         } else {
-            DisplayGradingKind::from_str(t)
+            DisplayGradingKind::from_str(t).ok()
         }
     }) {
         return s;
@@ -297,7 +313,11 @@ pub fn to_display_grade(
                 return format_points(points);
             };
             let Some(m) = max else {
-                return if points >= EPS { "Pass".into() } else { "Fail".into() };
+                return if points >= EPS {
+                    "Pass".into()
+                } else {
+                    "Fail".into()
+                };
             };
             let pct = pct_from_points(points, m);
             if pct + EPS >= scale.pass_min_pct {
@@ -311,7 +331,11 @@ pub fn to_display_grade(
                 return format_points(points);
             };
             let Some(m) = max else {
-                return if points >= EPS { "Complete".into() } else { "Incomplete".into() };
+                return if points >= EPS {
+                    "Complete".into()
+                } else {
+                    "Incomplete".into()
+                };
             };
             let pct = pct_from_points(points, m);
             if pct + EPS >= scale.complete_min_pct {
@@ -337,7 +361,10 @@ pub fn parse_gradebook_cell(
     let max = max_points.filter(|m| *m > EPS);
 
     // Numeric entry always allowed when it parses.
-    let cleaned: String = t.chars().filter(|c| *c != ',' && !c.is_whitespace()).collect();
+    let cleaned: String = t
+        .chars()
+        .filter(|c| *c != ',' && !c.is_whitespace())
+        .collect();
     if let Ok(n) = cleaned.parse::<f64>() {
         if !n.is_finite() || n < 0.0 {
             return Err("Each score must be a non-negative number.".into());
@@ -465,11 +492,21 @@ mod tests {
     fn complete_incomplete_column() {
         let s = parse_scale(DisplayGradingKind::CompleteIncomplete, Some(&json!({}))).unwrap();
         assert_eq!(
-            to_display_grade(80.0, Some(100.0), Some(&s), DisplayGradingKind::CompleteIncomplete),
+            to_display_grade(
+                80.0,
+                Some(100.0),
+                Some(&s),
+                DisplayGradingKind::CompleteIncomplete
+            ),
             "Complete"
         );
         assert_eq!(
-            to_display_grade(40.0, Some(100.0), Some(&s), DisplayGradingKind::CompleteIncomplete),
+            to_display_grade(
+                40.0,
+                Some(100.0),
+                Some(&s),
+                DisplayGradingKind::CompleteIncomplete
+            ),
             "Incomplete"
         );
     }

@@ -19,10 +19,13 @@ pub struct OidcFlowRow {
 
 pub async fn delete_stale_flow_state(pool: &PgPool) -> Result<(), sqlx::Error> {
     let cutoff = Utc::now() - chrono::Duration::minutes(10);
-    sqlx::query(&format!("DELETE FROM {} WHERE created_at < $1", schema::OIDC_FLOW_STATE))
-        .bind(cutoff)
-        .execute(pool)
-        .await?;
+    sqlx::query(&format!(
+        "DELETE FROM {} WHERE created_at < $1",
+        schema::OIDC_FLOW_STATE
+    ))
+    .bind(cutoff)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -208,9 +211,7 @@ pub async fn get_custom_config(
     .await
 }
 
-pub async fn list_custom_configs(
-    pool: &PgPool,
-) -> Result<Vec<OidcProviderConfigRow>, sqlx::Error> {
+pub async fn list_custom_configs(pool: &PgPool) -> Result<Vec<OidcProviderConfigRow>, sqlx::Error> {
     sqlx::query_as::<_, OidcProviderConfigRow>(&format!(
         r#"
         SELECT id, institution_id, display_name, client_id, client_secret, discovery_url, hd_restriction, attribute_mapping
@@ -323,8 +324,11 @@ pub async fn take_link_intent(
 }
 
 pub async fn delete_stale_link_intents(pool: &PgPool) -> Result<(), sqlx::Error> {
-    sqlx::query(&format!("DELETE FROM {} WHERE expires_at < NOW()", schema::OIDC_LINK_INTENTS))
-        .execute(pool)
-        .await?;
+    sqlx::query(&format!(
+        "DELETE FROM {} WHERE expires_at < NOW()",
+        schema::OIDC_LINK_INTENTS
+    ))
+    .execute(pool)
+    .await?;
     Ok(())
 }

@@ -2,7 +2,12 @@ use lopdf::Document;
 
 /// Best-effort plaintext for academic integrity checks (MVP: PDF + UTF-8 text-like MIME).
 pub fn submission_bytes_to_plaintext(mime_type: &str, bytes: &[u8]) -> Result<String, String> {
-    let mt = mime_type.split(';').next().unwrap_or(mime_type).trim().to_ascii_lowercase();
+    let mt = mime_type
+        .split(';')
+        .next()
+        .unwrap_or(mime_type)
+        .trim()
+        .to_ascii_lowercase();
     if mt == "application/pdf" || mt.ends_with("/pdf") {
         return pdf_to_text(bytes);
     }
@@ -13,7 +18,9 @@ pub fn submission_bytes_to_plaintext(mime_type: &str, bytes: &[u8]) -> Result<St
     {
         return String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string());
     }
-    Err(format!("MIME type not supported for originality text extraction: {mime_type}"))
+    Err(format!(
+        "MIME type not supported for originality text extraction: {mime_type}"
+    ))
 }
 
 fn pdf_to_text(bytes: &[u8]) -> Result<String, String> {

@@ -8,8 +8,8 @@ use base64::Engine as _;
 use openidconnect::core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata};
 use openidconnect::url::Url;
 use openidconnect::{
-    AccessTokenHash, AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, OAuth2TokenResponse,
-    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
+    AccessTokenHash, AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce,
+    OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
 };
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
@@ -26,7 +26,6 @@ use crate::state::OidcState;
 use self::apple::client_secret_jwt as apple_client_secret;
 
 const CACHE_TTL: Duration = Duration::from_secs(3600);
-
 
 /// Build redirect URL for a named path segment.
 pub fn redirect_uri_for(public_base: &str, path_provider: &str) -> String {
@@ -106,15 +105,18 @@ pub async fn build_authorize_redirect_url(
             .await?
             .ok_or_else(|| AppError::invalid_input("Sign-in link expired or was already used."))?;
         if intent.1 != path_provider {
-            return Err(AppError::invalid_input("This sign-in link is for a different provider."));
+            return Err(AppError::invalid_input(
+                "This sign-in link is for a different provider.",
+            ));
         }
         if path_provider == "custom" {
-            let ccid = custom_config
-                .as_ref()
-                .map(|c| c.id)
-                .ok_or_else(|| AppError::invalid_input("Missing custom configuration for this link."))?;
+            let ccid = custom_config.as_ref().map(|c| c.id).ok_or_else(|| {
+                AppError::invalid_input("Missing custom configuration for this link.")
+            })?;
             if intent.2 != Some(ccid) {
-                return Err(AppError::invalid_input("This sign-in link is for a different custom provider."));
+                return Err(AppError::invalid_input(
+                    "This sign-in link is for a different custom provider.",
+                ));
             }
         } else if intent.2.is_some() {
             return Err(AppError::invalid_input("Invalid sign-in link."));
@@ -129,22 +131,33 @@ pub async fn build_authorize_redirect_url(
             };
             let iss = IssuerUrl::new("https://accounts.google.com".to_string())
                 .map_err(|e| AppError::invalid_input(format!("Invalid issuer: {e}")))?;
-            (iss, cred.client_id.as_str(), Some(cred.client_secret.as_str()), hd.clone())
+            (
+                iss,
+                cred.client_id.as_str(),
+                Some(cred.client_secret.as_str()),
+                hd.clone(),
+            )
         }
         "microsoft" => {
             let Some((ref cred, ref tenant)) = oidc.microsoft else {
-                return Err(AppError::invalid_input("Microsoft sign-in is not configured."));
+                return Err(AppError::invalid_input(
+                    "Microsoft sign-in is not configured.",
+                ));
             };
             let iss = IssuerUrl::new(format!(
                 "https://login.microsoftonline.com/{}/v2.0",
                 tenant.trim()
             ))
             .map_err(|e| AppError::invalid_input(format!("Invalid issuer: {e}")))?;
-            (iss, cred.client_id.as_str(), Some(cred.client_secret.as_str()), None)
+            (
+                iss,
+                cred.client_id.as_str(),
+                Some(cred.client_secret.as_str()),
+                None,
+            )
         }
         "apple" => {
-            oidc
-                .apple
+            oidc.apple
                 .as_ref()
                 .ok_or_else(|| AppError::invalid_input("Apple sign-in is not configured."))?;
             let iss = IssuerUrl::new("https://appleid.apple.com".to_string())
@@ -153,11 +166,16 @@ pub async fn build_authorize_redirect_url(
             (iss, cid, None, None)
         }
         "custom" => {
-            let row = custom_config
-                .as_ref()
-                .ok_or_else(|| AppError::invalid_input("A custom OIDC configuration is required here."))?;
+            let row = custom_config.as_ref().ok_or_else(|| {
+                AppError::invalid_input("A custom OIDC configuration is required here.")
+            })?;
             let iss = issuer_for_custom_discovery(&row.discovery_url)?;
-            (iss, row.client_id.as_str(), Some(row.client_secret.as_str()), row.hd_restriction.clone())
+            (
+                iss,
+                row.client_id.as_str(),
+                Some(row.client_secret.as_str()),
+                row.hd_restriction.clone(),
+            )
         }
         _ => return Err(AppError::invalid_input("Unknown OIDC provider.")),
     };
@@ -166,7 +184,9 @@ pub async fn build_authorize_redirect_url(
         ("apple", None) => None,
         (_, Some(s)) => Some(ClientSecret::new(s.to_string())),
         _ => {
-            return Err(AppError::invalid_input("Missing OIDC client secret configuration."));
+            return Err(AppError::invalid_input(
+                "Missing OIDC client secret configuration.",
+            ));
         }
     };
 
@@ -174,12 +194,9 @@ pub async fn build_authorize_redirect_url(
     let redirect = RedirectUrl::new(redirect_uri_for(&oidc.public_base, path_provider))
         .map_err(|e| AppError::invalid_input(format!("Invalid redirect: {e}")))?;
 
-    let client = CoreClient::from_provider_metadata(
-        metadata,
-        ClientId::new(client_id.to_string()),
-        secret,
-    )
-    .set_redirect_uri(redirect);
+    let client =
+        CoreClient::from_provider_metadata(metadata, ClientId::new(client_id.to_string()), secret)
+            .set_redirect_uri(redirect);
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
     let state_str = random_token();
@@ -240,72 +257,80 @@ pub async fn complete_oidc_login(
     let next_path = flow.next_path.clone();
     if flow.provider != path_provider {
         tracing::warn!(target: "oidc", "oidc.login_failed (state provider mismatch, CSRF)");
-        return Err(AppError::invalid_input("Invalid sign-in state. Please start again from the login page."));
+        return Err(AppError::invalid_input(
+            "Invalid sign-in state. Please start again from the login page.",
+        ));
     }
 
-    let custom_row: Option<oidc_repo::OidcProviderConfigRow> = if let Some(cid) = flow.custom_config_id {
-        Some(
-            oidc_repo::get_custom_config(pool, cid)
-                .await?
-                .ok_or_else(|| AppError::invalid_input("The OIDC configuration no longer exists."))?,
-        )
-    } else {
-        None
-    };
+    let custom_row: Option<oidc_repo::OidcProviderConfigRow> =
+        if let Some(cid) = flow.custom_config_id {
+            Some(
+                oidc_repo::get_custom_config(pool, cid)
+                    .await?
+                    .ok_or_else(|| {
+                        AppError::invalid_input("The OIDC configuration no longer exists.")
+                    })?,
+            )
+        } else {
+            None
+        };
 
-    let (issuer, client_id, secret): (IssuerUrl, String, Option<ClientSecret>) = match path_provider
-    {
-        "google" => {
-            let (cred, _) = oidc
-                .google
-                .as_ref()
-                .ok_or_else(|| AppError::invalid_input("Google sign-in is not configured."))?;
-            let iss = IssuerUrl::new("https://accounts.google.com".to_string())
+    let (issuer, client_id, secret): (IssuerUrl, String, Option<ClientSecret>) =
+        match path_provider {
+            "google" => {
+                let (cred, _) = oidc
+                    .google
+                    .as_ref()
+                    .ok_or_else(|| AppError::invalid_input("Google sign-in is not configured."))?;
+                let iss = IssuerUrl::new("https://accounts.google.com".to_string())
+                    .map_err(|e| AppError::invalid_input(e.to_string()))?;
+                (
+                    iss,
+                    cred.client_id.clone(),
+                    Some(ClientSecret::new(cred.client_secret.clone())),
+                )
+            }
+            "microsoft" => {
+                let (cred, tenant) = oidc.microsoft.as_ref().ok_or_else(|| {
+                    AppError::invalid_input("Microsoft sign-in is not configured.")
+                })?;
+                let iss = IssuerUrl::new(format!(
+                    "https://login.microsoftonline.com/{}/v2.0",
+                    tenant.trim()
+                ))
                 .map_err(|e| AppError::invalid_input(e.to_string()))?;
-            (
-                iss,
-                cred.client_id.clone(),
-                Some(ClientSecret::new(cred.client_secret.clone())),
-            )
-        }
-        "microsoft" => {
-            let (cred, tenant) = oidc
-                .microsoft
-                .as_ref()
-                .ok_or_else(|| AppError::invalid_input("Microsoft sign-in is not configured."))?;
-            let iss = IssuerUrl::new(format!(
-                "https://login.microsoftonline.com/{}/v2.0",
-                tenant.trim()
-            ))
-            .map_err(|e| AppError::invalid_input(e.to_string()))?;
-            (
-                iss,
-                cred.client_id.clone(),
-                Some(ClientSecret::new(cred.client_secret.clone())),
-            )
-        }
-        "apple" => {
-            let a = oidc
-                .apple
-                .as_ref()
-                .ok_or_else(|| AppError::invalid_input("Apple sign-in is not configured."))?;
-            let iss = IssuerUrl::new("https://appleid.apple.com".to_string())
-                .map_err(|e| AppError::invalid_input(e.to_string()))?;
-            (iss, a.client_id.clone(), Some(ClientSecret::new(apple_client_secret(a)?)))
-        }
-        "custom" => {
-            let row = custom_row
-                .as_ref()
-                .ok_or_else(|| AppError::invalid_input("Missing custom OIDC configuration."))?;
-            let iss = issuer_for_custom_discovery(&row.discovery_url)?;
-            (
-                iss,
-                row.client_id.clone(),
-                Some(ClientSecret::new(row.client_secret.clone())),
-            )
-        }
-        _ => return Err(AppError::invalid_input("Unknown OIDC provider.")),
-    };
+                (
+                    iss,
+                    cred.client_id.clone(),
+                    Some(ClientSecret::new(cred.client_secret.clone())),
+                )
+            }
+            "apple" => {
+                let a = oidc
+                    .apple
+                    .as_ref()
+                    .ok_or_else(|| AppError::invalid_input("Apple sign-in is not configured."))?;
+                let iss = IssuerUrl::new("https://appleid.apple.com".to_string())
+                    .map_err(|e| AppError::invalid_input(e.to_string()))?;
+                (
+                    iss,
+                    a.client_id.clone(),
+                    Some(ClientSecret::new(apple_client_secret(a)?)),
+                )
+            }
+            "custom" => {
+                let row = custom_row
+                    .as_ref()
+                    .ok_or_else(|| AppError::invalid_input("Missing custom OIDC configuration."))?;
+                let iss = issuer_for_custom_discovery(&row.discovery_url)?;
+                (
+                    iss,
+                    row.client_id.clone(),
+                    Some(ClientSecret::new(row.client_secret.clone())),
+                )
+            }
+            _ => return Err(AppError::invalid_input("Unknown OIDC provider.")),
+        };
 
     let secret = if path_provider == "apple" {
         let a = oidc
@@ -320,12 +345,8 @@ pub async fn complete_oidc_login(
     let metadata = discover_cached(oidc, issuer).await?;
     let redirect = RedirectUrl::new(redirect_uri_for(&oidc.public_base, path_provider))
         .map_err(|e| AppError::invalid_input(e.to_string()))?;
-    let client = CoreClient::from_provider_metadata(
-        metadata,
-        ClientId::new(client_id),
-        secret,
-    )
-    .set_redirect_uri(redirect.clone());
+    let client = CoreClient::from_provider_metadata(metadata, ClientId::new(client_id), secret)
+        .set_redirect_uri(redirect.clone());
     let pkv = PkceCodeVerifier::new(flow.code_verifier);
     let code = AuthorizationCode::new(code.to_string());
     let token = client
@@ -339,9 +360,9 @@ pub async fn complete_oidc_login(
             AppError::invalid_input("Could not complete sign-in with the identity provider.")
         })?;
 
-    let id_tok = token
-        .id_token()
-        .ok_or_else(|| AppError::invalid_input("The identity provider did not return an ID token."))?;
+    let id_tok = token.id_token().ok_or_else(|| {
+        AppError::invalid_input("The identity provider did not return an ID token.")
+    })?;
     let nonce = Nonce::new(flow.nonce);
     let idv = client.id_token_verifier();
     let claims = id_tok
@@ -349,9 +370,9 @@ pub async fn complete_oidc_login(
         .map_err(|e| AppError::invalid_input(format!("Invalid ID token: {e}")))?;
 
     if let Some(expected) = claims.access_token_hash() {
-        let alg = id_tok.signing_alg().map_err(|e| {
-            AppError::invalid_input(format!("ID token: {e}"))
-        })?;
+        let alg = id_tok
+            .signing_alg()
+            .map_err(|e| AppError::invalid_input(format!("ID token: {e}")))?;
         let key = id_tok
             .signing_key(&idv)
             .map_err(|e| AppError::invalid_input(format!("ID token: {e}")))?;
@@ -366,7 +387,7 @@ pub async fn complete_oidc_login(
 
     let sub = claims.subject().to_string();
     let email_in = {
-        let Some(ref em) = claims.email() else {
+        let Some(em) = claims.email() else {
             return Err(AppError::invalid_input(
                 "The identity provider did not return an email address.",
             ));
@@ -381,15 +402,15 @@ pub async fn complete_oidc_login(
     };
 
     if path_provider == "google" {
-        if let Some((_, mhd)) = &oidc.google {
-            if let Some(want) = mhd {
-                if !want.is_empty()
-                    && !email_in.to_lowercase().ends_with(&format!("@{}", want.trim().to_lowercase()))
-                {
-                    return Err(AppError::invalid_input(
-                        "Your account is not in the allowed Google Workspace domain for this app.",
-                    ));
-                }
+        if let Some((_, Some(want))) = &oidc.google {
+            if !want.is_empty()
+                && !email_in
+                    .to_lowercase()
+                    .ends_with(&format!("@{}", want.trim().to_lowercase()))
+            {
+                return Err(AppError::invalid_input(
+                    "Your account is not in the allowed Google Workspace domain for this app.",
+                ));
             }
         }
     }
@@ -426,15 +447,13 @@ pub async fn complete_oidc_login(
                 "The signed-in account email does not match the account you are connecting.",
             ));
         }
-        oidc_repo::try_insert_identity(pool, u.id, path_provider, &sub, Some(&email_in))
-            .await?;
+        oidc_repo::try_insert_identity(pool, u.id, path_provider, &sub, Some(&email_in)).await?;
         tracing::info!(target: "oidc", provider = path_provider, sub_hash = %sub_log_hash(&sub), "oidc.login_success");
         return Ok((finish(jwt, u)?, next_path.clone()));
     }
 
     if let Some(u) = user::find_by_email_ci(pool, &email_in).await? {
-        oidc_repo::try_insert_identity(pool, u.id, path_provider, &sub, Some(&email_in))
-            .await?;
+        oidc_repo::try_insert_identity(pool, u.id, path_provider, &sub, Some(&email_in)).await?;
         tracing::info!(target: "oidc", provider = path_provider, sub_hash = %sub_log_hash(&sub), "oidc.login_success");
         return Ok((finish(jwt, u)?, next_path.clone()));
     }
@@ -442,8 +461,7 @@ pub async fn complete_oidc_login(
     let h = hash_placeholder_password()?;
     let disp: Option<String> = None;
     let u = user::insert_user(pool, &email_in, &h, disp.as_deref()).await?;
-    oidc_repo::try_insert_identity(pool, u.id, path_provider, &sub, Some(&email_in))
-        .await?;
+    oidc_repo::try_insert_identity(pool, u.id, path_provider, &sub, Some(&email_in)).await?;
     rbac::assign_user_role_by_name(pool, u.id, "Student").await?;
     tracing::info!(target: "oidc", provider = path_provider, sub_hash = %sub_log_hash(&sub), "oidc.login_success (jit)");
     Ok((finish(jwt, u)?, next_path))
@@ -466,4 +484,3 @@ fn finish(jwt: &JwtSigner, u: user::UserRow) -> Result<AuthResponse, AppError> {
         },
     })
 }
-

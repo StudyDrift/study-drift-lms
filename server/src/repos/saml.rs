@@ -218,10 +218,7 @@ pub async fn take_authn_state(
     Ok(row)
 }
 
-pub async fn record_replay(
-    pool: &PgPool,
-    correlation_id: &str,
-) -> Result<bool, sqlx::Error> {
+pub async fn record_replay(pool: &PgPool, correlation_id: &str) -> Result<bool, sqlx::Error> {
     let r = sqlx::query(&format!(
         r#"
         INSERT INTO {} (correlation_id) VALUES ($1)

@@ -271,9 +271,8 @@ pub async fn mark_done_by_provider_report(
     report_url: Option<&str>,
     report_token: Option<&str>,
 ) -> Result<Vec<(Uuid, Uuid)>, sqlx::Error> {
-    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
-        &format!(
-            r#"
+    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(&format!(
+        r#"
             UPDATE {}
             SET status = 'done',
                 similarity_pct = COALESCE($2, similarity_pct),
@@ -284,9 +283,8 @@ pub async fn mark_done_by_provider_report(
             WHERE provider = $1 AND provider_report_id = $5
             RETURNING id, submission_id
             "#,
-            schema::ORIGINALITY_REPORTS
-        )
-    )
+        schema::ORIGINALITY_REPORTS
+    ))
     .bind(provider)
     .bind(similarity_pct)
     .bind(report_url)

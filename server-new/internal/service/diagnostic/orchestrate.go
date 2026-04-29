@@ -226,9 +226,6 @@ func pickNextQuestionID(
 		}
 	}
 	catOn := irt.CatModeEnabled() && calibratedAny
-	if irt.CatModeEnabled() && !calibratedAny {
-		// parity: Rust logs a warning; keep silent in Go
-	}
 	if catOn {
 		thetaHat, _ := irt.EapTheta2pl(history)
 		cands := make([]struct {

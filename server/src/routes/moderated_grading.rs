@@ -50,7 +50,11 @@ async fn can_reconcile(
     Ok(moderator_id == Some(user_id))
 }
 
-async fn assert_staff(pool: &sqlx::PgPool, course_code: &str, user_id: Uuid) -> Result<(), AppError> {
+async fn assert_staff(
+    pool: &sqlx::PgPool,
+    course_code: &str,
+    user_id: Uuid,
+) -> Result<(), AppError> {
     if !enrollment::user_is_course_staff(pool, course_code, user_id).await? {
         return Err(AppError::Forbidden);
     }
@@ -151,7 +155,9 @@ async fn post_provisional_grade_handler(
         return Err(AppError::Forbidden);
     }
     if !body.score.is_finite() || body.score < 0.0 {
-        return Err(AppError::invalid_input("Score must be a non-negative number."));
+        return Err(AppError::invalid_input(
+            "Score must be a non-negative number.",
+        ));
     }
     if let Some(m) = asn.points_worth {
         if m > 0 && body.score > m as f64 + 1e-6 {
@@ -172,14 +178,9 @@ async fn post_provisional_grade_handler(
         return Err(AppError::NotFound);
     }
 
-    let row = provisional_grades::upsert(
-        &state.pool,
-        submission_id,
-        user.user_id,
-        body.score,
-        None,
-    )
-    .await?;
+    let row =
+        provisional_grades::upsert(&state.pool, submission_id, user.user_id, body.score, None)
+            .await?;
 
     Ok(Json(json!({
         "ok": true,
@@ -234,8 +235,13 @@ async fn get_reconciliation_handler(
         return Err(AppError::Forbidden);
     }
 
-    let subs =
-        module_assignment_submissions::list_for_assignment(&state.pool, course_id, item_id, module_assignment_submissions::GradedFilter::All).await?;
+    let subs = module_assignment_submissions::list_for_assignment(
+        &state.pool,
+        course_id,
+        item_id,
+        module_assignment_submissions::GradedFilter::All,
+    )
+    .await?;
     let all_pg = provisional_grades::list_for_assignment(&state.pool, course_id, item_id).await?;
     let mut by_sub: HashMap<Uuid, Vec<&crate::repos::provisional_grades::ProvisionalGradeRow>> =
         HashMap::new();
@@ -267,7 +273,12 @@ async fn get_reconciliation_handler(
                 (a.min(p.score), b.max(p.score))
             });
         let flagged = pv.len() >= 2
-            && mod_service::provisional_scores_exceed_threshold(mn, mx, asn.points_worth, asn.moderation_threshold_pct);
+            && mod_service::provisional_scores_exceed_threshold(
+                mn,
+                mx,
+                asn.points_worth,
+                asn.moderation_threshold_pct,
+            );
 
         let final_score = grades_map
             .get(&s.submitted_by)
@@ -365,7 +376,8 @@ async fn post_reconcile_handler(
         return Err(AppError::NotFound);
     }
 
-    let prov = provisional_grades::list_for_submission(&state.pool, course_id, submission_id).await?;
+    let prov =
+        provisional_grades::list_for_submission(&state.pool, course_id, submission_id).await?;
     if prov.is_empty() {
         return Err(AppError::invalid_input(
             "No provisional grades exist for this submission yet.",
@@ -400,7 +412,9 @@ async fn post_reconcile_handler(
                 ));
             };
             if !s.is_finite() || s < 0.0 {
-                return Err(AppError::invalid_input("overrideScore must be non-negative."));
+                return Err(AppError::invalid_input(
+                    "overrideScore must be non-negative.",
+                ));
             }
             if max_pts > 0.0 && s > max_pts + 1e-6 {
                 return Err(AppError::invalid_input(format!(
@@ -446,13 +460,9 @@ async fn post_reconcile_handler(
     .await?;
     if let Some(c) = course::get_by_id(&state.pool, course_id).await? {
         if c.sbg_enabled {
-            let _ = sbg_grading::recompute_student_sbg(
-                &state.pool,
-                course_id,
-                sub.submitted_by,
-                false,
-            )
-            .await;
+            let _ =
+                sbg_grading::recompute_student_sbg(&state.pool, course_id, sub.submitted_by, false)
+                    .await;
         }
     }
 
