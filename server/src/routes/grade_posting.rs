@@ -1,12 +1,7 @@
 //! Per-assignment grade post / retract (plan 3.8).
 
 use axum::{
-    extract::Path,
-    extract::State,
-    http::HeaderMap,
-    http::StatusCode,
-    routing::post,
-    Json, Router,
+    extract::Path, extract::State, http::HeaderMap, http::StatusCode, routing::post, Json, Router,
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -107,14 +102,7 @@ async fn delete_retract_all_handler(
     let Some(course_id) = course::get_id_by_course_code(&state.pool, &course_code).await? else {
         return Err(AppError::NotFound);
     };
-    posting::mark_unposted_instructor(
-        &state.pool,
-        course_id,
-        item_id,
-        None,
-        user.user_id,
-    )
-    .await?;
+    posting::mark_unposted_instructor(&state.pool, course_id, item_id, None, user.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

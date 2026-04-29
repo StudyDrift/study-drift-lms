@@ -19,7 +19,17 @@ mod tests {
 
     #[test]
     fn threshold_15_percent_of_100_points() {
-        assert!(!provisional_scores_exceed_threshold(70.0, 84.0, Some(100), 15));
-        assert!(provisional_scores_exceed_threshold(70.0, 90.0, Some(100), 15));
+        assert!(!provisional_scores_exceed_threshold(
+            70.0,
+            84.0,
+            Some(100),
+            15
+        ));
+        assert!(provisional_scores_exceed_threshold(
+            70.0,
+            90.0,
+            Some(100),
+            15
+        ));
     }
 }

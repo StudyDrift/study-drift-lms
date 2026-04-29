@@ -32,17 +32,36 @@ struct ProficiencyScale {
 
 fn default_scale() -> Vec<ScaleLevel> {
     vec![
-        ScaleLevel { level: 4.0, label: "Exceeds".into(), min_score: 3.5 },
-        ScaleLevel { level: 3.0, label: "Meets".into(), min_score: 2.5 },
-        ScaleLevel { level: 2.0, label: "Approaching".into(), min_score: 1.5 },
-        ScaleLevel { level: 1.0, label: "Not yet".into(), min_score: 0.0 },
+        ScaleLevel {
+            level: 4.0,
+            label: "Exceeds".into(),
+            min_score: 3.5,
+        },
+        ScaleLevel {
+            level: 3.0,
+            label: "Meets".into(),
+            min_score: 2.5,
+        },
+        ScaleLevel {
+            level: 2.0,
+            label: "Approaching".into(),
+            min_score: 1.5,
+        },
+        ScaleLevel {
+            level: 1.0,
+            label: "Not yet".into(),
+            min_score: 0.0,
+        },
     ]
 }
 
 /// Parses course `sbg_proficiency_scale_json` or built-in 4-bucket scale.
 fn parse_scale(json: &Option<Value>) -> Vec<ScaleLevel> {
     if let Some(v) = json {
-        if let Ok(ProficiencyScale { levels: Some(mut lvls) }) = serde_json::from_value(v.clone()) {
+        if let Ok(ProficiencyScale {
+            levels: Some(mut lvls),
+        }) = serde_json::from_value(v.clone())
+        {
             if !lvls.is_empty() {
                 lvls.sort_by(|a, b| b.min_score.partial_cmp(&a.min_score).unwrap());
                 return lvls;
@@ -68,7 +87,7 @@ pub(crate) fn level_label_for_score(levels: &[ScaleLevel], score: f64) -> String
 }
 
 fn ratio_to_sbg(ratio: f64) -> f64 {
-    (1.0 + 3.0 * ratio.clamp(0.0, 1.0)).min(4.0).max(1.0)
+    (1.0 + 3.0 * ratio.clamp(0.0, 1.0)).clamp(1.0, 4.0)
 }
 
 #[derive(Clone)]
@@ -78,11 +97,7 @@ struct Event {
     weight: f64,
 }
 
-fn rubric_criterion_sbg(
-    r: &RubricDefinition,
-    criterion: Uuid,
-    earned: f64,
-) -> Option<f64> {
+fn rubric_criterion_sbg(r: &RubricDefinition, criterion: Uuid, earned: f64) -> Option<f64> {
     for c in &r.criteria {
         if c.id == criterion {
             let max_p: f64 = c.levels.iter().map(|l| l.points).fold(0.0_f64, f64::max);
@@ -110,7 +125,7 @@ fn aggregate(rule: &str, events: &mut [Event], decay: f64) -> Option<(f64, DateT
             Some((best.sbg_score, best.at))
         }
         "most_recent" => {
-            events.sort_by(|a, b| b.at.cmp(&a.at));
+            events.sort_by_key(|b| std::cmp::Reverse(b.at));
             let e = events.first()?;
             Some((e.sbg_score, e.at))
         }
@@ -124,7 +139,7 @@ fn aggregate(rule: &str, events: &mut [Event], decay: f64) -> Option<(f64, DateT
             Some((sum / w, t))
         }
         "decaying_average" => {
-            events.sort_by(|a, b| b.at.cmp(&a.at));
+            events.sort_by_key(|b| std::cmp::Reverse(b.at));
             let mut wsum = 0.0_f64;
             let mut num = 0.0_f64;
             for (i, e) in events.iter().enumerate() {
@@ -140,7 +155,7 @@ fn aggregate(rule: &str, events: &mut [Event], decay: f64) -> Option<(f64, DateT
         }
         _ => {
             // Unknown rule — treat as most-recent
-            events.sort_by(|a, b| b.at.cmp(&a.at));
+            events.sort_by_key(|b| std::cmp::Reverse(b.at));
             let e = events.first()?;
             Some((e.sbg_score, e.at))
         }
@@ -186,21 +201,21 @@ pub async fn recompute_student_sbg(
         .collect();
     asgn_items.sort();
     asgn_items.dedup();
-    let rubric_map: HashMap<Uuid, Option<RubricDefinition>> =
-        if asgn_items.is_empty() {
-            HashMap::new()
-        } else {
-            let raw = course_module_assignments::rubrics_for_structure_items(pool, course_id, &asgn_items)
+    let rubric_map: HashMap<Uuid, Option<RubricDefinition>> = if asgn_items.is_empty() {
+        HashMap::new()
+    } else {
+        let raw =
+            course_module_assignments::rubrics_for_structure_items(pool, course_id, &asgn_items)
                 .await?;
-            raw.iter()
-                .map(|(id, j)| {
-                    let r: Option<RubricDefinition> = j
-                        .as_ref()
-                        .and_then(|v| serde_json::from_value(v.clone()).ok());
-                    (*id, r)
-                })
-                .collect()
-        };
+        raw.iter()
+            .map(|(id, j)| {
+                let r: Option<RubricDefinition> = j
+                    .as_ref()
+                    .and_then(|v| serde_json::from_value(v.clone()).ok());
+                (*id, r)
+            })
+            .collect()
+    };
     // Grade cells for this student
     let grade_cells =
         course_grades::list_raw_for_student_sbg(pool, course_id, student_id, exclude_unposted)
@@ -233,8 +248,13 @@ pub async fn recompute_student_sbg(
                 else {
                     continue;
                 };
-                let Some(earned) = rm.get(&a.alignable_id) else { continue };
-                let Some(def) = rubric_map.get(&a.structure_item_id).and_then(|d| d.as_ref()) else {
+                let Some(earned) = rm.get(&a.alignable_id) else {
+                    continue;
+                };
+                let Some(def) = rubric_map
+                    .get(&a.structure_item_id)
+                    .and_then(|d| d.as_ref())
+                else {
                     continue;
                 };
                 if let Some(sbg) = rubric_criterion_sbg(def, a.alignable_id, *earned) {
@@ -274,8 +294,16 @@ pub async fn recompute_student_sbg(
         };
         if let Some((s, t)) = ev {
             let label = level_label_for_score(&levels, s);
-            sbg::upsert_proficiency(pool, course_id, student_id, st.id, Some(s), Some(&label), Some(t))
-                .await?;
+            sbg::upsert_proficiency(
+                pool,
+                course_id,
+                student_id,
+                st.id,
+                Some(s),
+                Some(&label),
+                Some(t),
+            )
+            .await?;
         } else {
             sbg::delete_proficiency(pool, course_id, student_id, st.id).await?;
         }
@@ -289,8 +317,8 @@ pub async fn recompute_course_sbg(
     course_id: Uuid,
     course_code: &str,
 ) -> Result<(), sqlx::Error> {
-    let rosters = crate::repos::enrollment::list_student_users_for_course_code(pool, course_code)
-        .await?;
+    let rosters =
+        crate::repos::enrollment::list_student_users_for_course_code(pool, course_code).await?;
     for (uid, _label) in rosters {
         recompute_student_sbg(pool, course_id, uid, false).await?;
     }

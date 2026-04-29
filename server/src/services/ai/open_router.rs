@@ -172,7 +172,10 @@ impl OpenRouterClient {
         let form = Form::new()
             .text("model", "openai/whisper-1")
             .part("file", part);
-        let url = format!("{}/audio/transcriptions", self.base_url.trim_end_matches('/'));
+        let url = format!(
+            "{}/audio/transcriptions",
+            self.base_url.trim_end_matches('/')
+        );
         let res = self
             .http
             .post(url)
@@ -193,7 +196,9 @@ impl OpenRouterClient {
             .get("text")
             .and_then(|t| t.as_str())
             .map(String::from)
-            .ok_or_else(|| OpenRouterError::ApiStatus(500, "no text in transcription response".into()))?;
+            .ok_or_else(|| {
+                OpenRouterError::ApiStatus(500, "no text in transcription response".into())
+            })?;
         Ok(out)
     }
 }

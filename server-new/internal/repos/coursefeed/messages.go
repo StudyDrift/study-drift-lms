@@ -208,7 +208,7 @@ func CreateMessage(ctx context.Context, pool *pgxpool.Pool, channelID, authorID 
 	if err != nil {
 		return uuid.Nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck
 	var id uuid.UUID
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO course.feed_messages (channel_id, author_user_id, parent_message_id, body, mentions_everyone)

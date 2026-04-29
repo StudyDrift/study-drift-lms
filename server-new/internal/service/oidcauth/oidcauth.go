@@ -65,9 +65,7 @@ func randomURLToken() string {
 
 func issuerForCustomDiscovery(discoveryURL string) (string, error) {
 	t := strings.TrimSpace(discoveryURL)
-	if strings.HasSuffix(t, "/.well-known/openid-configuration") {
-		t = strings.TrimSuffix(t, "/.well-known/openid-configuration")
-	}
+	t = strings.TrimSuffix(t, "/.well-known/openid-configuration")
 	t = strings.TrimRight(t, "/")
 	if t == "" {
 		return "", fmt.Errorf("empty discovery URL")

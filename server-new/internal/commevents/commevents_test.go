@@ -13,14 +13,12 @@ func TestHub_Broadcast_Filters_By_Receiver(t *testing.T) {
 	recv, unsub := h.Subscribe()
 	defer unsub()
 	h.Broadcast(a, `{"type":"mailbox_updated"}`)
-	select {
-	case ev := <-recv:
-		if ev.UserID != a {
-			t.Fatalf("userId: %v", ev.UserID)
-		}
-		if ev.JSON != `{"type":"mailbox_updated"}` {
-			t.Fatalf("json: %s", ev.JSON)
-		}
+	ev := <-recv
+	if ev.UserID != a {
+		t.Fatalf("userId: %v", ev.UserID)
+	}
+	if ev.JSON != `{"type":"mailbox_updated"}` {
+		t.Fatalf("json: %s", ev.JSON)
 	}
 }
 

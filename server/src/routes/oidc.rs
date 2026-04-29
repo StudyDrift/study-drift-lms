@@ -113,15 +113,8 @@ async fn oidc_callback_handler(
         .state
         .ok_or_else(|| AppError::invalid_input("Missing state parameter."))?;
 
-    let (res, post_next) = oidc::complete_oidc_login(
-        &state.pool,
-        oidc.as_ref(),
-        &state.jwt,
-        &p,
-        &code,
-        &st,
-    )
-    .await?;
+    let (res, post_next) =
+        oidc::complete_oidc_login(&state.pool, oidc.as_ref(), &state.jwt, &p, &code, &st).await?;
     let token = encode(&res.access_token);
     let next = post_next
         .as_deref()

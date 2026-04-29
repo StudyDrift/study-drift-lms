@@ -257,11 +257,7 @@ impl Config {
             Err(_) => true,
             Ok(v) => {
                 let t = v.trim().to_ascii_lowercase();
-                t.is_empty()
-                    || matches!(
-                        t.as_str(),
-                        "1" | "true" | "yes" | "on"
-                    )
+                t.is_empty() || matches!(t.as_str(), "1" | "true" | "yes" | "on")
             }
         };
 
@@ -293,11 +289,7 @@ impl Config {
             Err(_) => true,
             Ok(v) => {
                 let t = v.trim().to_ascii_lowercase();
-                t.is_empty()
-                    || matches!(
-                        t.as_str(),
-                        "1" | "true" | "yes" | "on"
-                    )
+                t.is_empty() || matches!(t.as_str(), "1" | "true" | "yes" | "on")
             }
         };
 
@@ -336,19 +328,25 @@ impl Config {
             .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| {
-                format!("{saml_public_base_url}/auth/saml/metadata")
-            });
+            .unwrap_or_else(|| format!("{saml_public_base_url}/auth/saml/metadata"));
 
         let saml_sp_x509_pem = env::var("SAML_SP_X509_PEM")
             .ok()
-            .or_else(|| env::var("SAML_SP_X509_PATH").ok().and_then(|p| std::fs::read_to_string(p).ok()))
+            .or_else(|| {
+                env::var("SAML_SP_X509_PATH")
+                    .ok()
+                    .and_then(|p| std::fs::read_to_string(p).ok())
+            })
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
 
         let saml_sp_private_key_pem = env::var("SAML_SP_PRIVATE_KEY_PEM")
             .ok()
-            .or_else(|| env::var("SAML_SP_PRIVATE_KEY_PATH").ok().and_then(|p| std::fs::read_to_string(p).ok()))
+            .or_else(|| {
+                env::var("SAML_SP_PRIVATE_KEY_PATH")
+                    .ok()
+                    .and_then(|p| std::fs::read_to_string(p).ok())
+            })
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
 
@@ -416,7 +414,11 @@ impl Config {
             .filter(|s| !s.is_empty());
         let oidc_apple_private_key_pem = env::var("OIDC_APPLE_PRIVATE_KEY_PEM")
             .ok()
-            .or_else(|| env::var("OIDC_APPLE_PRIVATE_KEY_PATH").ok().and_then(|p| std::fs::read_to_string(p).ok()))
+            .or_else(|| {
+                env::var("OIDC_APPLE_PRIVATE_KEY_PATH")
+                    .ok()
+                    .and_then(|p| std::fs::read_to_string(p).ok())
+            })
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
 

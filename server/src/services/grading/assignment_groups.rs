@@ -183,10 +183,7 @@ pub fn item_drops_for_learner(
         };
         by_group.entry(g.unwrap()).or_default().push(line);
     }
-    let mut out: HashMap<Uuid, bool> = col_meta
-        .iter()
-        .map(|(id, ..)| (*id, false))
-        .collect();
+    let mut out: HashMap<Uuid, bool> = col_meta.iter().map(|(id, ..)| (*id, false)).collect();
     for (gid, lines) in by_group {
         let Some(pol) = group_policies.get(&gid) else {
             continue;
@@ -242,11 +239,7 @@ pub fn compute_course_final_percent(
         if col.max_points <= 0.0 || !col.max_points.is_finite() {
             continue;
         }
-        if excused_by_item
-            .get(&col.item_id)
-            .copied()
-            .unwrap_or(false)
-        {
+        if excused_by_item.get(&col.item_id).copied().unwrap_or(false) {
             continue;
         }
         let earned = earned_by_item
@@ -267,12 +260,8 @@ pub fn compute_course_final_percent(
                 });
             }
             _ => {
-                *max_by_bucket
-                    .entry(UNGROUPED.to_string())
-                    .or_insert(0.0) += col.max_points;
-                *earned_by_bucket
-                    .entry(UNGROUPED.to_string())
-                    .or_insert(0.0) += earned;
+                *max_by_bucket.entry(UNGROUPED.to_string()).or_insert(0.0) += col.max_points;
+                *earned_by_bucket.entry(UNGROUPED.to_string()).or_insert(0.0) += earned;
             }
         }
     }
@@ -400,13 +389,7 @@ mod tests {
         }
     }
 
-    fn line(
-        n: u128,
-        max: f64,
-        earned: f64,
-        never_drop: bool,
-        is_final: bool,
-    ) -> GroupScoreLine {
+    fn line(n: u128, max: f64, earned: f64, never_drop: bool, is_final: bool) -> GroupScoreLine {
         line_ex(n, max, earned, never_drop, is_final, false)
     }
 
@@ -451,7 +434,10 @@ mod tests {
 
     #[test]
     fn ac3_drop_more_than_count_all_gone() {
-        let g = [line(1, 100.0, 50.0, false, false), line(2, 100.0, 60.0, false, false)];
+        let g = [
+            line(1, 100.0, 50.0, false, false),
+            line(2, 100.0, 60.0, false, false),
+        ];
         let pol = GroupDropPolicy {
             drop_lowest: 3,
             drop_highest: 0,

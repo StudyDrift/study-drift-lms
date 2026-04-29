@@ -255,7 +255,10 @@ pub async fn upsert_proficiency(
     Ok(())
 }
 
-pub async fn clear_proficiencies_for_course(pool: &PgPool, course_id: Uuid) -> Result<(), sqlx::Error> {
+pub async fn clear_proficiencies_for_course(
+    pool: &PgPool,
+    course_id: Uuid,
+) -> Result<(), sqlx::Error> {
     sqlx::query(&format!(
         r#"DELETE FROM {} WHERE course_id = $1"#,
         schema::STUDENT_STANDARD_PROFICIENCIES

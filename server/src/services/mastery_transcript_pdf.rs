@@ -18,7 +18,7 @@ pub fn build_mastery_transcript_pdf(
     let mut y = 280.0;
     let left = 20.0;
     layer_ref.use_text(
-        &format!("Mastery transcript — {course_title}"),
+        format!("Mastery transcript — {course_title}"),
         14.0,
         Mm(left),
         Mm(y),
@@ -26,7 +26,7 @@ pub fn build_mastery_transcript_pdf(
     );
     y -= 8.0;
     layer_ref.use_text(
-        &format!("Course: {course_code}  |  Learner: {student_label}"),
+        format!("Course: {course_code}  |  Learner: {student_label}"),
         10.0,
         Mm(left),
         Mm(y),

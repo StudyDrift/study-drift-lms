@@ -15,19 +15,16 @@ use crate::services::course_image_upload::course_file_content_path;
 use crate::state::AppState;
 
 fn notify_user_mailbox(state: &AppState, user_id: Uuid) {
-    if let Err(e) = state.comm_events.send((
-        user_id,
-        r#"{"type":"mailbox_updated"}"#.to_string(),
-    )) {
+    if let Err(e) = state
+        .comm_events
+        .send((user_id, r#"{"type":"mailbox_updated"}"#.to_string()))
+    {
         tracing::warn!(error = %e, %user_id, "mailbox_realtime_notify_failed");
     }
 }
 
 /// Whether the student may change their file when the resubmission workflow is enabled.
-pub fn student_may_resubmit(
-    now: DateTime<Utc>,
-    existing: &SubmissionRow,
-) -> Result<(), AppError> {
+pub fn student_may_resubmit(now: DateTime<Utc>, existing: &SubmissionRow) -> Result<(), AppError> {
     if !existing.resubmission_requested {
         return Err(AppError::UnprocessableEntity {
             message: "Resubmission is not open for this assignment. Your instructor must request a revision first.".into(),
@@ -89,7 +86,7 @@ pub async fn request_revision(
     .ok_or(AppError::NotFound)?;
 
     grade_audit_events::insert(
-        &mut *tx,
+        &mut tx,
         course_id,
         assignment_id,
         student_user_id,
@@ -134,15 +131,9 @@ pub async fn request_revision(
             state.public_web_origin, course_code, assignment_id
         );
         body.push_str(&format!("\nOpen: {link}\n"));
-        if communication::send_message(
-            pool,
-            actor_user_id,
-            &profile.email,
-            SUB,
-            &body,
-        )
-        .await?
-        .is_some()
+        if communication::send_message(pool, actor_user_id, &profile.email, SUB, &body)
+            .await?
+            .is_some()
         {
             notify_user_mailbox(state, student_user_id);
         }

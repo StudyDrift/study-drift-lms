@@ -28,7 +28,7 @@ func EnableEnrollmentGroups(ctx context.Context, pool *pgxpool.Pool, courseID uu
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck
 	if _, err := tx.Exec(ctx, `
 UPDATE course.courses
 SET enrollment_groups_enabled = true, updated_at = NOW()
