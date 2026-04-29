@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -10,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/lextures/lextures/server-new/internal/auth"
 	"github.com/lextures/lextures/server-new/internal/background"
@@ -43,7 +46,13 @@ func Run(ctx context.Context, fsys fs.FS) error {
 
 	dbPlatform, err := platformconfig.Get(ctx, pool)
 	if err != nil {
-		return fmt.Errorf("app: platform settings: %w", err)
+		// Integration tests (and some local workflows) set RUN_MIGRATIONS=false against an
+		// empty database, so migration 118 never creates settings.platform_app_settings.
+		// Treat a missing table like "no DB overrides" instead of failing startup.
+		if cfg.RunMigrations || !isUndefinedTable(err) {
+			return fmt.Errorf("app: platform settings: %w", err)
+		}
+		dbPlatform = nil
 	}
 	merged := platformconfig.Merge(cfg, dbPlatform)
 	if err := merged.Validate(); err != nil {
@@ -82,4 +91,9 @@ func Run(ctx context.Context, fsys fs.FS) error {
 		}
 		return nil
 	}
+}
+
+func isUndefinedTable(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "42P01"
 }
