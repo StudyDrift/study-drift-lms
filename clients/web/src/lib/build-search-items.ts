@@ -73,8 +73,9 @@ export function buildSearchItems(
     const path = allows(courseGradebookViewPermission(p.courseCode))
       ? `/courses/${enc(p.courseCode)}/gradebook?student=${enc(p.userId)}`
       : `/courses/${enc(p.courseCode)}/enrollments`
+    // Encode segments so colons in ids/roles (or odd course codes) cannot collide with delimiters.
     items.push({
-      id: `person:${p.userId}:${p.courseCode}:${enc(p.role)}`,
+      id: `person:${enc(p.userId)}:${enc(p.courseCode)}:${enc(p.role)}`,
       group: 'person',
       title: label,
       subtitle,
