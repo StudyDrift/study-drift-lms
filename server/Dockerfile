@@ -20,13 +20,14 @@ COPY src ./src
 RUN cargo build --release
 
 FROM debian:bookworm-slim AS runtime
-# Dynamic libs linked by samael / xmlsec at build time.
+# Dynamic libs linked by samael / xmlsec at build time (openssl backend is a separate package).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     libxml2 \
     libxslt1.1 \
     libxmlsec1 \
+    libxmlsec1-openssl \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
