@@ -3,15 +3,16 @@ package background
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lextures/lextures/server-new/internal/config"
+	"github.com/lextures/lextures/server-new/internal/service/quizautosubmit"
 )
 
-// Start launches quiz auto-submit and (when enabled) grade-posting sweeps. Both are
-// no-ops in Go until quiz_attempts / course_grades repos and services are ported; the
-// tickers and cancellation mirror the Rust `tokio::spawn` loops.
+// Start launches quiz auto-submit and (when enabled) grade-posting sweeps on a 30s ticker
+// (Rust `server/src/lib.rs`).
 func Start(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) {
 	if pool == nil {
 		return
@@ -40,12 +41,13 @@ func runEvery(ctx context.Context, d time.Duration, fn func()) {
 	}
 }
 
-func sweepExpiredQuizAttempts(ctx context.Context, _ *pgxpool.Pool, _ config.Config, _ time.Time) {
-	_ = ctx
-	// Full parity: services::quiz_auto_submit::sweep_expired_attempts (server/src/services/quiz_auto_submit.rs)
-}
-
-func sweepScheduledReleases(ctx context.Context, _ *pgxpool.Pool, _ config.Config, _ time.Time) {
-	_ = ctx
-	// Full parity: services::grading::posting::sweep_scheduled_releases
+func sweepExpiredQuizAttempts(ctx context.Context, pool *pgxpool.Pool, _ config.Config, now time.Time) {
+	n, err := quizautosubmit.SweepExpiredAttempts(ctx, pool, now, 200)
+	if err != nil {
+		slog.Warn("auto-submit sweep failed", "err", err)
+		return
+	}
+	if n > 0 {
+		slog.Info("auto-submit sweep completed", "count", n)
+	}
 }

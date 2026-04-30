@@ -2,9 +2,11 @@ package quizattempts
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -27,8 +29,11 @@ SELECT id, course_id, structure_item_id, student_user_id, status, attempt_number
 FROM course.quiz_attempts
 WHERE id = $1
 `, attemptID).Scan(&r.ID, &r.CourseID, &r.StructureItemID, &r.StudentUserID, &r.Status, &r.AttemptNumber, &r.StartedAt, &r.SubmittedAt, &r.CurrentQuestionIndex)
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 	return &r, nil
 }
