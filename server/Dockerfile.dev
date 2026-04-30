@@ -1,41 +1,16 @@
-# Development image: cargo-watch recompiles and restarts the server when sources change.
-FROM rust:1-bookworm
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  pkg-config \
-  libssl-dev \
-  libxml2-dev \
-  libxslt1-dev \
-  libxmlsec1-dev \
-  clang \
-  libclang-dev \
-  && rm -rf /var/lib/apt/lists/* \
-  && test -x /usr/bin/xmlsec1-config
-
-RUN cargo install cargo-watch
-
+# syntax=docker/dockerfile:1
+# Development image: [Air](https://github.com/air-verse/air) rebuilds and restarts ./cmd/server on .go changes.
+# Used by docker compose -f docker-compose.dev.yml (source is bind-mounted at /app at runtime).
+FROM golang:1.25-bookworm
 WORKDIR /app
 
-# Warm the dependency cache (real sources come from the bind mount at runtime).
-COPY Cargo.toml Cargo.lock ./
-COPY migrations ./migrations
-# Stubs must match every [[bin]] / [lib] in Cargo.toml (see migrate_question_bank) for dependency caching.
-RUN mkdir -p src/bin \
-    && printf '#![allow(dead_code)]\npub fn dummy() {}\n' > src/lib.rs \
-    && printf 'fn main() {}\n' > src/main.rs \
-    && printf 'fn main() {}\n' > src/bin/migrate_question_bank.rs \
-    && cargo build \
-    && rm -f target/debug/study_drift_server \
-    && rm -rf src
+ENV CGO_ENABLED=0
+# Pinned: @latest can require a newer Go than the app image; bump when upgrading the base `golang` image.
+RUN go install github.com/air-verse/air@v1.61.0
 
-ENV RUST_LOG=debug
+# Warm module cache; full tree comes from the host via bind mount when the container runs.
+COPY go.mod go.sum* ./
+RUN go mod download
+
 EXPOSE 8080
-
-COPY docker-entrypoint.dev.sh /usr/local/bin/docker-entrypoint.dev.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.dev.sh
-
-# --poll: reliable file events when the project is bind-mounted (e.g. Docker Desktop on macOS).
-# The named volume `server_target` is first populated from the image's `target/`. Remove the stub
-# `study_drift_server` (empty main) so the next `cargo` run always links the real `main.rs` from
-# the bind mount; otherwise a no-op build can re-run the wrong binary and nothing listens on 8080.
-CMD ["/usr/local/bin/docker-entrypoint.dev.sh"]
+CMD ["air", "-c", ".air.toml"]

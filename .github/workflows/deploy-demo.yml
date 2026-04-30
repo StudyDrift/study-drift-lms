@@ -69,11 +69,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Build and push Go server (server-new) image
+      - name: Build and push Go server image
         uses: docker/build-push-action@v6
         with:
-          context: ./server-new
-          file: ./server-new/Dockerfile
+          context: ./server
+          file: ./server/Dockerfile
           push: true
           tags: ${{ steps.images.outputs.server_go }}
           cache-from: type=gha,scope=deploy-demo-server-go

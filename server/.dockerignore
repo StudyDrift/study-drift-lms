@@ -1,4 +1,5 @@
-target
-.git
-.gitignore
-*.md
+# Keep build context small; migrations are included (not ignored).
+**/.git
+**/coverage
+**/*.out
+**/*.test
