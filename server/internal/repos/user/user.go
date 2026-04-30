@@ -124,6 +124,19 @@ RETURNING id::text, email, password_hash, display_name, first_name, last_name, a
 	return &r, nil
 }
 
+// SetPasswordHash updates the user's password hash (Argon2id PHC string).
+func SetPasswordHash(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, passwordHash string) error {
+	const q = `UPDATE "user".users SET password_hash = $2 WHERE id = $1::uuid`
+	tag, err := pool.Exec(ctx, q, userID.String(), passwordHash)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("user: not found for password update")
+	}
+	return nil
+}
+
 // NormalizeEmail trims and lowercases an email (parity with services/auth/credentials.rs).
 func NormalizeEmail(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))

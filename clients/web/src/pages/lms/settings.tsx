@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from 'react'
+import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { ImageIcon, Save, Upload, X } from 'lucide-react'
 import { settingsViewFromPathname } from '../../components/layout/side-nav-path-utils'
@@ -12,8 +12,9 @@ import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
 import { OidcConnectedAccountsPanel } from '../../components/oidc-connected-accounts-panel'
 import { LmsPage } from './lms-page'
 import { FALLBACK_IMAGE_MODEL_OPTIONS, FALLBACK_TEXT_MODEL_OPTIONS } from '../../lib/ai-models'
-import { authorizedFetch } from '../../lib/api'
+import { apiUrl, authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
+import { passwordStrengthEnglish, passwordStrengthKey, type PasswordStrengthKey } from '../../lib/password-strength'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { applyUiTheme, parseUiTheme, type UiTheme } from '../../lib/ui-theme'
 import { useUiDensityControls } from '../../context/ui-density-context'
@@ -154,6 +155,25 @@ export default function Settings() {
   const [avatarGenMessage, setAvatarGenMessage] = useState<string | null>(null)
   const [uiTheme, setUiTheme] = useState<UiTheme>('light')
   const [studentId, setStudentId] = useState<string | null>(null)
+
+  const [pwPolicy, setPwPolicy] = useState<{
+    minLength: number
+    requireUpper: boolean
+    requireLower: boolean
+    requireDigit: boolean
+    requireSpecial: boolean
+    checkHibp: boolean
+  } | null>(null)
+  const [cpCurrent, setCpCurrent] = useState('')
+  const [cpNew, setCpNew] = useState('')
+  const [cpConfirm, setCpConfirm] = useState('')
+  const [cpBusy, setCpBusy] = useState(false)
+  const [cpErr, setCpErr] = useState<string | null>(null)
+  const [cpOk, setCpOk] = useState<string | null>(null)
+
+  const pwMinLen = pwPolicy?.minLength ?? 8
+  const cpStrengthKey: PasswordStrengthKey = passwordStrengthKey(cpNew)
+  const cpStrengthLabel = useMemo(() => passwordStrengthEnglish(cpStrengthKey), [cpStrengthKey])
 
   const loadModels = useCallback(async () => {
     setModelsError(null)
@@ -319,6 +339,39 @@ export default function Settings() {
   }, [activeView, loadAccount])
 
   useEffect(() => {
+    if (activeView !== 'account') return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/v1/auth/password-policy'))
+        const raw: unknown = await res.json().catch(() => ({}))
+        if (!res.ok || cancelled) return
+        const p = raw as {
+          minLength?: number
+          requireUpper?: boolean
+          requireLower?: boolean
+          requireDigit?: boolean
+          requireSpecial?: boolean
+          checkHibp?: boolean
+        }
+        setPwPolicy({
+          minLength: typeof p.minLength === 'number' ? p.minLength : 8,
+          requireUpper: !!p.requireUpper,
+          requireLower: !!p.requireLower,
+          requireDigit: !!p.requireDigit,
+          requireSpecial: !!p.requireSpecial,
+          checkHibp: p.checkHibp !== false,
+        })
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeView])
+
+  useEffect(() => {
     if (!avatarModalOpen) return
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
@@ -421,6 +474,43 @@ export default function Settings() {
       setUiTheme(prev)
       applyUiTheme(prev)
       setAccountError('Could not save appearance.')
+    }
+  }
+
+  async function onChangePassword(e: FormEvent) {
+    e.preventDefault()
+    setCpErr(null)
+    setCpOk(null)
+    if (cpNew !== cpConfirm) {
+      setCpErr('New passwords do not match.')
+      return
+    }
+    if (cpNew.length < pwMinLen) {
+      setCpErr(`New password must be at least ${pwMinLen} characters.`)
+      return
+    }
+    setCpBusy(true)
+    try {
+      const res = await authorizedFetch('/api/v1/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: cpCurrent, new_password: cpNew }),
+      })
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setCpErr(readApiErrorMessage(raw))
+        return
+      }
+      setCpCurrent('')
+      setCpNew('')
+      setCpConfirm('')
+      setCpOk('Password updated.')
+      toastSaveOk('Password updated')
+    } catch {
+      setCpErr('Could not update password.')
+      toastMutationError('Could not update password.')
+    } finally {
+      setCpBusy(false)
     }
   }
 
@@ -817,6 +907,100 @@ export default function Settings() {
                   <p className="mt-1 text-xs text-slate-500">
                     Assigned by your institution. Contact an administrator if this should be updated.
                   </p>
+                </div>
+
+                <div className="border-t border-slate-200 pt-6 dark:border-neutral-700">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Change password</h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+                    Use a unique password you do not reuse on other sites.
+                  </p>
+                  <form className="mt-4 space-y-4" onSubmit={onChangePassword}>
+                    <ul id="account-password-requirements" className="list-inside list-disc text-xs text-slate-600 dark:text-neutral-400">
+                      <li>At least {pwMinLen} characters</li>
+                      {pwPolicy?.requireUpper ? <li>One uppercase letter</li> : null}
+                      {pwPolicy?.requireLower ? <li>One lowercase letter</li> : null}
+                      {pwPolicy?.requireDigit ? <li>One digit</li> : null}
+                      {pwPolicy?.requireSpecial ? <li>One symbol or punctuation character</li> : null}
+                      {pwPolicy == null || pwPolicy.checkHibp ? (
+                        <li>Must not appear in known public breach lists (checked securely)</li>
+                      ) : null}
+                    </ul>
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-neutral-200">
+                        Current password
+                      </span>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={cpCurrent}
+                        onChange={(e) => setCpCurrent(e.target.value)}
+                        aria-invalid={cpErr != null}
+                        aria-describedby="account-password-requirements account-password-strength"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-neutral-200">
+                        New password
+                      </span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={cpNew}
+                        minLength={pwMinLen}
+                        onChange={(e) => setCpNew(e.target.value)}
+                        aria-describedby="account-password-requirements account-password-strength"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                      />
+                    </label>
+                    <div id="account-password-strength" className="flex items-center gap-2" aria-live="polite">
+                      <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">Strength:</span>
+                      <span className="text-xs font-semibold text-slate-800 dark:text-neutral-100">
+                        {cpStrengthLabel}
+                      </span>
+                      <div className="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-neutral-700" aria-hidden>
+                        <div
+                          className={`h-full rounded-full ${
+                            cpStrengthKey === 'password.strength.weak'
+                              ? 'w-1/3 bg-rose-500'
+                              : cpStrengthKey === 'password.strength.fair'
+                                ? 'w-2/3 bg-amber-500'
+                                : 'w-full bg-emerald-600'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-neutral-200">
+                        Confirm new password
+                      </span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={cpConfirm}
+                        minLength={pwMinLen}
+                        onChange={(e) => setCpConfirm(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                      />
+                    </label>
+                    {cpErr ? (
+                      <p className="text-sm text-rose-600 dark:text-rose-400" role="status">
+                        {cpErr}
+                      </p>
+                    ) : null}
+                    {cpOk ? (
+                      <p className="text-sm text-emerald-700 dark:text-emerald-400" role="status">
+                        {cpOk}
+                      </p>
+                    ) : null}
+                    <button
+                      type="submit"
+                      disabled={cpBusy}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-indigo-400 dark:hover:bg-neutral-800"
+                    >
+                      {cpBusy ? 'Updating…' : 'Update password'}
+                    </button>
+                  </form>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">

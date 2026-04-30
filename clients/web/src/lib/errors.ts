@@ -1,5 +1,12 @@
 /** Parses JSON error bodies returned by the StudyDrift API. */
 export function readApiErrorMessage(raw: unknown): string {
+  if (raw && typeof raw === 'object' && 'type' in raw) {
+    const t = (raw as { type?: unknown }).type
+    if (t === 'password_policy_violation') {
+      const d = (raw as { detail?: unknown }).detail
+      if (typeof d === 'string' && d.trim()) return d
+    }
+  }
   if (raw && typeof raw === 'object' && 'error' in raw) {
     const err = (raw as { error?: { message?: string } }).error
     if (err?.message) return err.message

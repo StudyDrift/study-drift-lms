@@ -23,9 +23,12 @@ import (
 	"github.com/lextures/lextures/server/internal/config"
 	"github.com/lextures/lextures/server/internal/mail"
 	"github.com/lextures/lextures/server/internal/repos/communication"
+	"github.com/lextures/lextures/server/internal/repos/passwordcreditevents"
 	"github.com/lextures/lextures/server/internal/repos/passwordreset"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
 	"github.com/lextures/lextures/server/internal/repos/user"
+
+	"github.com/lextures/lextures/server/internal/auth/hibp"
 )
 
 // LoginRequest mirrors models/auth LoginRequest.
@@ -75,6 +78,15 @@ type ResetPasswordRequest struct {
 // ResetPasswordResponse .
 type ResetPasswordResponse struct{ Message string }
 
+// ChangePasswordRequest is authenticated password rotation.
+type ChangePasswordRequest struct {
+	CurrentPassword string
+	NewPassword     string
+}
+
+// ChangePasswordResponse .
+type ChangePasswordResponse struct{ Message string }
+
 // ErrInvalidCredentials is returned for bad login.
 var ErrInvalidCredentials = errors.New("invalid credentials")
 
@@ -110,8 +122,12 @@ func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, req Lo
 }
 
 // Signup .
-func Signup(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, req SignupRequest) (AuthResponse, error) {
+func Signup(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, checker hibp.Checker, req SignupRequest) (AuthResponse, error) {
 	if err := validateSignup(&req); err != nil {
+		return AuthResponse{}, err
+	}
+	hibpRes, err := enforceNewPassword(ctx, pool, nil, req.Password, checker)
+	if err != nil {
 		return AuthResponse{}, err
 	}
 	email := user.NormalizeEmail(req.Email)
@@ -136,6 +152,7 @@ func Signup(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, req S
 	if err := rbac.AssignUserRoleByName(ctx, pool, uid, "Teacher"); err != nil {
 		return AuthResponse{}, err
 	}
+	_ = passwordcreditevents.Insert(ctx, pool, uid, passwordcreditevents.KindSignup, hibpRes.BreachFound, hibpRes.HIBPAvailable)
 	communication.SendWelcomeMessage(ctx, pool, email)
 	return responseFromRow(jwt, row)
 }
@@ -176,13 +193,10 @@ func RequestPasswordReset(ctx context.Context, pool *pgxpool.Pool, cfg config.Co
 }
 
 // ResetPassword completes a reset with a one-time token.
-func ResetPassword(ctx context.Context, pool *pgxpool.Pool, req ResetPasswordRequest) (ResetPasswordResponse, error) {
+func ResetPassword(ctx context.Context, pool *pgxpool.Pool, checker hibp.Checker, req ResetPasswordRequest) (ResetPasswordResponse, error) {
 	tok := strings.TrimSpace(req.Token)
 	if tok == "" {
 		return ResetPasswordResponse{}, ErrInvalidResetToken
-	}
-	if len(req.Password) < 8 {
-		return ResetPasswordResponse{}, FieldError{Message: "Password must be at least 8 characters."}
 	}
 	h := sha256.Sum256([]byte(tok))
 	row, err := passwordreset.FindByTokenHash(ctx, pool, h[:])
@@ -197,6 +211,10 @@ func ResetPassword(ctx context.Context, pool *pgxpool.Pool, req ResetPasswordReq
 	}
 	if time.Now().UTC().After(row.ExpiresAt) {
 		return ResetPasswordResponse{}, ErrInvalidResetToken
+	}
+	hibpRes, err := enforceNewPassword(ctx, pool, nil, req.Password, checker)
+	if err != nil {
+		return ResetPasswordResponse{}, err
 	}
 	ph, err := pauth.HashPassword(req.Password)
 	if err != nil {
@@ -217,7 +235,41 @@ func ResetPassword(ctx context.Context, pool *pgxpool.Pool, req ResetPasswordReq
 	if !ok {
 		return ResetPasswordResponse{}, ErrInvalidResetToken
 	}
+	_ = passwordcreditevents.Insert(ctx, pool, uid, passwordcreditevents.KindPasswordReset, hibpRes.BreachFound, hibpRes.HIBPAvailable)
 	return ResetPasswordResponse{Message: "Your password has been updated. You can sign in now."}, nil
+}
+
+// ChangePassword updates the password for a signed-in user.
+func ChangePassword(ctx context.Context, pool *pgxpool.Pool, checker hibp.Checker, userID uuid.UUID, req ChangePasswordRequest) (ChangePasswordResponse, error) {
+	cur := strings.TrimSpace(req.CurrentPassword)
+	newp := req.NewPassword
+	if cur == "" || newp == "" {
+		return ChangePasswordResponse{}, FieldError{Message: "Current password and new password are required."}
+	}
+	row, err := user.FindByID(ctx, pool, userID)
+	if err != nil {
+		return ChangePasswordResponse{}, err
+	}
+	if row == nil {
+		return ChangePasswordResponse{}, FieldError{Message: "User not found."}
+	}
+	ok, err := pauth.VerifyPassword(cur, row.PasswordHash)
+	if err != nil || !ok {
+		return ChangePasswordResponse{}, FieldError{Message: "Current password is incorrect."}
+	}
+	hibpRes, err := enforceNewPassword(ctx, pool, nil, newp, checker)
+	if err != nil {
+		return ChangePasswordResponse{}, err
+	}
+	ph, err := pauth.HashPassword(newp)
+	if err != nil {
+		return ChangePasswordResponse{}, err
+	}
+	if err := user.SetPasswordHash(ctx, pool, userID, ph); err != nil {
+		return ChangePasswordResponse{}, err
+	}
+	_ = passwordcreditevents.Insert(ctx, pool, userID, passwordcreditevents.KindPasswordChange, hibpRes.BreachFound, hibpRes.HIBPAvailable)
+	return ChangePasswordResponse{Message: "Your password has been updated."}, nil
 }
 
 // ErrInvalidResetToken is returned when the reset link is wrong, used, or expired.
@@ -292,8 +344,8 @@ func validateSignup(req *SignupRequest) error {
 	if email == "" || !containsAt(email) || len(email) > 254 {
 		return FieldError{Message: "Enter a valid email address."}
 	}
-	if len(req.Password) < 8 {
-		return FieldError{Message: "Password must be at least 8 characters."}
+	if req.Password == "" {
+		return FieldError{Message: "Password is required."}
 	}
 	return nil
 }

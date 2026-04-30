@@ -77,8 +77,8 @@ func TestValidateLoginSignup(t *testing.T) {
 	if err := validateSignup(&SignupRequest{Email: "bad", Password: "12345678"}); err == nil {
 		t.Fatal("want err for email")
 	}
-	if err := validateSignup(&SignupRequest{Email: "a@b.com", Password: "short"}); err == nil {
-		t.Fatal("want err for short password")
+	if err := validateSignup(&SignupRequest{Email: "a@b.com", Password: ""}); err == nil {
+		t.Fatal("want err for empty password")
 	}
 	if err := validateSignup(&SignupRequest{Email: "a@b.com", Password: "12345678"}); err != nil {
 		t.Fatal(err)

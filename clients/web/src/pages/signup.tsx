@@ -1,10 +1,11 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { BrandLogo } from '../components/brand-logo'
 import { OidcSignInButtons } from '../components/oidc-sign-in-buttons'
 import { getAccessToken, setAccessToken } from '../lib/auth'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
+import { passwordStrengthEnglish, passwordStrengthKey, type PasswordStrengthKey } from '../lib/password-strength'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
 import { markPostLoginShortcutTip } from '../lib/post-login-shortcut-tip'
 
@@ -15,6 +16,50 @@ export default function Signup() {
   const [password, setPassword] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
+  const [policy, setPolicy] = useState<{
+    minLength: number
+    requireUpper: boolean
+    requireLower: boolean
+    requireDigit: boolean
+    requireSpecial: boolean
+    checkHibp: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/v1/auth/password-policy'))
+        const raw: unknown = await res.json().catch(() => ({}))
+        if (!res.ok || cancelled) return
+        const p = raw as {
+          minLength?: number
+          requireUpper?: boolean
+          requireLower?: boolean
+          requireDigit?: boolean
+          requireSpecial?: boolean
+          checkHibp?: boolean
+        }
+        setPolicy({
+          minLength: typeof p.minLength === 'number' ? p.minLength : 8,
+          requireUpper: !!p.requireUpper,
+          requireLower: !!p.requireLower,
+          requireDigit: !!p.requireDigit,
+          requireSpecial: !!p.requireSpecial,
+          checkHibp: p.checkHibp !== false,
+        })
+      } catch {
+        /* ignore — server enforces policy */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const minLen = policy?.minLength ?? 8
+  const strengthKey: PasswordStrengthKey = passwordStrengthKey(password)
+  const strengthLabel = passwordStrengthEnglish(strengthKey)
 
   if (getAccessToken()) {
     return <Navigate to="/" replace />
@@ -109,18 +154,45 @@ export default function Signup() {
               <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
                 Password
               </label>
+              <ul id="password-requirements" className="mb-2 list-inside list-disc text-xs text-slate-600">
+                <li>At least {minLen} characters</li>
+                {policy?.requireUpper ? <li>One uppercase letter</li> : null}
+                {policy?.requireLower ? <li>One lowercase letter</li> : null}
+                {policy?.requireDigit ? <li>One digit</li> : null}
+                {policy?.requireSpecial ? <li>One symbol or punctuation character</li> : null}
+                {policy == null || policy.checkHibp ? (
+                  <li>Must not appear in known public breach lists (checked securely)</li>
+                ) : null}
+              </ul>
               <input
                 id="password"
                 name="password"
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={minLen}
+                aria-invalid={status === 'error' && message != null}
+                aria-describedby="password-requirements password-strength"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none ring-indigo-500/20 transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
-                placeholder="At least 8 characters"
+                placeholder={`At least ${minLen} characters`}
               />
+              <div id="password-strength" className="mt-2 flex items-center gap-2" aria-live="polite">
+                <span className="text-xs font-medium text-slate-600">Strength:</span>
+                <span className="text-xs font-semibold text-slate-800">{strengthLabel}</span>
+                <div className="h-1.5 flex-1 rounded-full bg-slate-200" aria-hidden>
+                  <div
+                    className={`h-full rounded-full ${
+                      strengthKey === 'password.strength.weak'
+                        ? 'w-1/3 bg-rose-500'
+                        : strengthKey === 'password.strength.fair'
+                          ? 'w-2/3 bg-amber-500'
+                          : 'w-full bg-emerald-600'
+                    }`}
+                  />
+                </div>
+              </div>
             </div>
 
             {message && (
