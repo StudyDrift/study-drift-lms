@@ -1,6 +1,6 @@
 # Development stack: live reload without restarting containers.
 #
-# Go API (`server`) uses [Air](https://github.com/air-verse/air): edit `.go` files under ./server-new
+# Go API (`server`) uses [Air](https://github.com/air-verse/air): edit `.go` files under ./server
 # and the binary rebuilds; no image rebuild required after the first `up --build`.
 # If the API never listens on 8080, rebuild:  docker compose -f docker-compose.dev.yml up --build
 #
@@ -11,8 +11,8 @@
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 #
 # - web: Vite dev server (HMR) → http://localhost:5173
-# - server: Go API (./server-new) → http://localhost:8080
-# - postgres / mongo: from docker-compose.yml (required for DATABASE_URL; mongo unused by server-new today)
+# - server: Go API (./server) → http://localhost:8080
+# - postgres / mongo: from docker-compose.yml (required for DATABASE_URL; mongo unused by the Go API today)
 
 include:
   - docker-compose.yml
@@ -22,12 +22,12 @@ services:
   # Keep course-files and add module/build caches so dependency resolution stays fast in the container.
   server:
     build:
-      context: ./server-new
+      context: ./server
       dockerfile: Dockerfile.dev
     environment:
       JWT_SECRET: dev-only-change-me-in-production
     volumes:
-      - ./server-new:/app
+      - ./server:/app
       - ./data/course-files:/var/course-files
       - go_mod_cache:/go/pkg/mod
       - go_build_cache:/root/.cache/go-build

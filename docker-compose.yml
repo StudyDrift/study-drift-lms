@@ -50,7 +50,7 @@ services:
 
   server:
     build:
-      context: ./server-new
+      context: ./server
       dockerfile: Dockerfile
     environment:
       # sslmode=disable avoids TLS negotiation issues with the local Postgres container.
