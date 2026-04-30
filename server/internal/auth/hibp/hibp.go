@@ -81,7 +81,11 @@ func (s *Service) Check(ctx context.Context, password string) Result {
 		slog.Warn("hibp: request failed (fail open)", "err", err)
 		return Result{BreachFound: false, HIBPAvailable: false}
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Warn("hibp: close response body", "err", cerr)
+		}
+	}()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil || resp.StatusCode != http.StatusOK {
 		if err != nil {
