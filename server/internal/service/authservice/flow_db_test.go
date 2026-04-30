@@ -9,6 +9,7 @@ import (
 
 	serverdata "github.com/lextures/lextures/server"
 	"github.com/lextures/lextures/server/internal/auth"
+	"github.com/lextures/lextures/server/internal/auth/hibp"
 	"github.com/lextures/lextures/server/internal/config"
 	"github.com/lextures/lextures/server/internal/db"
 	"github.com/lextures/lextures/server/internal/migrate"
@@ -34,19 +35,21 @@ func TestAuthFlow_Pg(t *testing.T) {
 	}
 	defer pool.Close()
 	jwt := auth.NewJWTSigner("01234567890123456789012345678901")
+	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
+	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
 	email := "e2e-" + time.Now().Format("20060102150405.000000000") + "@example.com"
-	_, err = Signup(ctx, pool, jwt, SignupRequest{Email: email, Password: "12345678", DisplayName: displayName("T")})
+	_, err = Signup(ctx, pool, jwt, stub, SignupRequest{Email: email, Password: pass, DisplayName: displayName("T")})
 	if err != nil {
 		t.Fatalf("signup: %v", err)
 	}
-	_, err = Signup(ctx, pool, jwt, SignupRequest{Email: email, Password: "12345678"})
+	_, err = Signup(ctx, pool, jwt, stub, SignupRequest{Email: email, Password: pass})
 	if !errors.Is(err, ErrEmailTaken) {
 		t.Fatalf("second signup: %v", err)
 	}
 	if _, err := Login(ctx, pool, jwt, LoginRequest{Email: email, Password: "wrong"}); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("login bad pass: %v", err)
 	}
-	res, err := Login(ctx, pool, jwt, LoginRequest{Email: email, Password: "12345678"})
+	res, err := Login(ctx, pool, jwt, LoginRequest{Email: email, Password: pass})
 	if err != nil {
 		t.Fatalf("login: %v", err)
 	}
@@ -58,7 +61,7 @@ func TestAuthFlow_Pg(t *testing.T) {
 		t.Fatalf("forgot: %v", err)
 	}
 	// full reset would need the raw token; wrong token path is covered
-	if _, err := ResetPassword(ctx, pool, ResetPasswordRequest{Token: "nope", Password: "12345678"}); !errors.Is(err, ErrInvalidResetToken) {
+	if _, err := ResetPassword(ctx, pool, stub, ResetPasswordRequest{Token: "nope", Password: pass}); !errors.Is(err, ErrInvalidResetToken) {
 		t.Fatalf("reset bad token: %v", err)
 	}
 }

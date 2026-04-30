@@ -62,6 +62,22 @@ export const handlers = [
   http.get('http://localhost:8080/api/v1/auth/saml/status', () => {
     return HttpResponse.json({ enabled: false })
   }),
+  http.get('http://localhost:8080/api/v1/auth/oidc/status', () => {
+    return HttpResponse.json({ enabled: false, providers: [], custom: [] })
+  }),
+  http.get('http://localhost:8080/api/v1/auth/password-policy', () => {
+    return HttpResponse.json({
+      minLength: 8,
+      requireUpper: false,
+      requireLower: false,
+      requireDigit: false,
+      requireSpecial: false,
+      checkHibp: true,
+    })
+  }),
+  http.post('http://localhost:8080/api/v1/auth/change-password', () => {
+    return HttpResponse.json({ message: 'Your password has been updated.' })
+  }),
   http.post('http://localhost:8080/api/v1/auth/login', async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string }
     return HttpResponse.json({

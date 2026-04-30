@@ -8,7 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/auth"
+	pp "github.com/lextures/lextures/server/internal/auth/passwordpolicy"
 	"github.com/lextures/lextures/server/internal/repos/oidc"
+	"github.com/lextures/lextures/server/internal/repos/passwordpolicy"
 	"github.com/lextures/lextures/server/internal/repos/samlidp"
 	"github.com/lextures/lextures/server/internal/service/authservice"
 )
@@ -70,7 +72,7 @@ func (d Deps) handleSignup() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
 			return
 		}
-		res, err := authservice.Signup(r.Context(), d.Pool, d.JWTSigner, authservice.SignupRequest{
+		res, err := authservice.Signup(r.Context(), d.Pool, d.JWTSigner, d.passwordChecker(), authservice.SignupRequest{
 			Email:       b.Email,
 			Password:    b.Password,
 			DisplayName: b.DisplayName,
@@ -118,7 +120,7 @@ func (d Deps) handleResetPassword() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
 			return
 		}
-		res, err := authservice.ResetPassword(r.Context(), d.Pool, authservice.ResetPasswordRequest{
+		res, err := authservice.ResetPassword(r.Context(), d.Pool, d.passwordChecker(), authservice.ResetPasswordRequest{
 			Token:    b.Token,
 			Password: b.Password,
 		})
@@ -160,7 +162,7 @@ func (d Deps) handleSAMLStatus() http.HandlerFunc {
 		}
 		if idp != nil {
 			_ = json.NewEncoder(w).Encode(struct {
-				Enabled bool   `json:"enabled"`
+				Enabled bool    `json:"enabled"`
 				Idp     idpInfo `json:"idp"`
 			}{
 				Enabled: true,
@@ -207,11 +209,11 @@ func (d Deps) handleOIDCStatus() http.HandlerFunc {
 		}
 		base := strings.TrimRight(d.effectiveConfig().OIDCPublicBaseURL, "/")
 		_ = json.NewEncoder(w).Encode(struct {
-			Enabled   bool   `json:"enabled"`
-			APIBase   string `json:"apiBase"`
-			Google    bool   `json:"google"`
-			Microsoft bool   `json:"microsoft"`
-			Apple     bool   `json:"apple"`
+			Enabled   bool         `json:"enabled"`
+			APIBase   string       `json:"apiBase"`
+			Google    bool         `json:"google"`
+			Microsoft bool         `json:"microsoft"`
+			Apple     bool         `json:"apple"`
 			Custom    []customInfo `json:"custom"`
 		}{
 			Enabled:   true,
@@ -308,6 +310,94 @@ func (d Deps) handleOIDCLink() http.HandlerFunc {
 }
 
 func writeAuthErr(w http.ResponseWriter, err error) {
+	if p, ok := authservice.IsPasswordPolicyViolation(err); ok {
+		apierr.WritePasswordPolicyViolation(w, p.Detail, p.Violations)
+		return
+	}
 	st, code, msg := authservice.HTTPErrorFor(err)
 	apierr.WriteJSON(w, st, code, msg)
+}
+
+func (d Deps) handleGetPublicPasswordPolicy() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		if d.Pool == nil {
+			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
+			return
+		}
+		row, err := passwordpolicy.LoadEffective(r.Context(), d.Pool, nil)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Could not load password policy.")
+			return
+		}
+		pol := pp.FromDBRow(row)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(struct {
+			MinLength      int  `json:"minLength"`
+			RequireUpper   bool `json:"requireUpper"`
+			RequireLower   bool `json:"requireLower"`
+			RequireDigit   bool `json:"requireDigit"`
+			RequireSpecial bool `json:"requireSpecial"`
+			CheckHIBP      bool `json:"checkHibp"`
+		}{
+			MinLength:      pol.MinLength,
+			RequireUpper:   pol.RequireUpper,
+			RequireLower:   pol.RequireLower,
+			RequireDigit:   pol.RequireDigit,
+			RequireSpecial: pol.RequireSpecial,
+			CheckHIBP:      pol.CheckHIBP,
+		})
+	}
+}
+
+type changePasswordBody struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+func (d Deps) handleChangePassword() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		if d.JWTSigner == nil {
+			apierr.WriteJSON(w, http.StatusUnauthorized, apierr.CodeUnauthorized, "Sign in required.")
+			return
+		}
+		u, err := auth.UserFromRequest(r, d.JWTSigner)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusUnauthorized, apierr.CodeUnauthorized, "Sign in required.")
+			return
+		}
+		uid, err := uuid.Parse(u.UserID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusUnauthorized, apierr.CodeUnauthorized, "Sign in required.")
+			return
+		}
+		if d.Pool == nil {
+			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
+			return
+		}
+		var b changePasswordBody
+		if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
+			return
+		}
+		res, err := authservice.ChangePassword(r.Context(), d.Pool, d.passwordChecker(), uid, authservice.ChangePasswordRequest{
+			CurrentPassword: b.CurrentPassword,
+			NewPassword:     b.NewPassword,
+		})
+		if err != nil {
+			writeAuthErr(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(res)
+	}
 }

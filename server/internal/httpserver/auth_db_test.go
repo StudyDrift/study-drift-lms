@@ -14,6 +14,7 @@ import (
 
 	serverdata "github.com/lextures/lextures/server"
 	"github.com/lextures/lextures/server/internal/auth"
+	"github.com/lextures/lextures/server/internal/auth/hibp"
 	"github.com/lextures/lextures/server/internal/config"
 	"github.com/lextures/lextures/server/internal/db"
 	"github.com/lextures/lextures/server/internal/migrate"
@@ -37,12 +38,14 @@ func TestAuthRoutes_Pg(t *testing.T) {
 	}
 	defer pool.Close()
 	cfg := config.Config{PublicWebOrigin: "http://localhost:5173"}
-	d := Deps{Pool: pool, JWTSigner: auth.NewJWTSigner("01234567890123456789012345678901"), Config: cfg}
+	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
+	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
+	d := Deps{Pool: pool, JWTSigner: auth.NewJWTSigner("01234567890123456789012345678901"), Config: cfg, PasswordChecker: stub}
 	h := NewHandler(d)
 	email := "ht-" + time.Now().Format("20060102150405") + "@e.com"
 	body, _ := json.Marshal(map[string]any{
 		"email":        email,
-		"password":     "12345678",
+		"password":     pass,
 		"display_name": "H",
 	})
 	rr := httptest.NewRecorder()
@@ -53,7 +56,7 @@ func TestAuthRoutes_Pg(t *testing.T) {
 		t.Fatalf("signup: %d %s", rr.Code, rr.Body.String())
 	}
 	rr = httptest.NewRecorder()
-	body2, _ := json.Marshal(map[string]string{"email": email, "password": "12345678"})
+	body2, _ := json.Marshal(map[string]string{"email": email, "password": pass})
 	r = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body2))
 	r = r.WithContext(ctx)
 	h.ServeHTTP(rr, r)
@@ -61,7 +64,7 @@ func TestAuthRoutes_Pg(t *testing.T) {
 		t.Fatalf("login: %d", rr.Code)
 	}
 	rr = httptest.NewRecorder()
-	bad, _ := json.Marshal(authservice.ResetPasswordRequest{Token: "x", Password: "12345678"})
+	bad, _ := json.Marshal(authservice.ResetPasswordRequest{Token: "x", Password: pass})
 	r = httptest.NewRequest(http.MethodPost, "/api/v1/auth/reset-password", bytes.NewReader(bad))
 	r = r.WithContext(ctx)
 	h.ServeHTTP(rr, r)
@@ -110,7 +113,7 @@ func TestAuthRoutes_Pg(t *testing.T) {
 	}
 	// sign-in for OIDC link test
 	rr = httptest.NewRecorder()
-	loginB, _ := json.Marshal(map[string]string{"email": email, "password": "12345678"})
+	loginB, _ := json.Marshal(map[string]string{"email": email, "password": pass})
 	r = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginB))
 	r = r.WithContext(ctx)
 	h.ServeHTTP(rr, r)
@@ -128,7 +131,7 @@ func TestAuthRoutes_Pg(t *testing.T) {
 	oidcOn.OIDCPublicBaseURL = "https://oidc.example"
 	oidcOn.OIDCGoogleClientID = "g"
 	oidcOn.OIDCGoogleClientSecret = "s"
-	d2 := Deps{Pool: pool, JWTSigner: auth.NewJWTSigner("01234567890123456789012345678901"), Config: oidcOn}
+	d2 := Deps{Pool: pool, JWTSigner: auth.NewJWTSigner("01234567890123456789012345678901"), Config: oidcOn, PasswordChecker: stub}
 	h2 := NewHandler(d2)
 	rr = httptest.NewRecorder()
 	bodyLink, _ := json.Marshal(map[string]string{"provider": "google"})

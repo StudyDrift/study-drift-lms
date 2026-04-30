@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lextures/lextures/server/internal/auth"
+	"github.com/lextures/lextures/server/internal/auth/hibp"
 	"github.com/lextures/lextures/server/internal/commevents"
 	"github.com/lextures/lextures/server/internal/config"
 	"github.com/lextures/lextures/server/internal/lti"
@@ -29,6 +30,8 @@ type Deps struct {
 	OIDC     *oidcauth.Service
 	Comm     *commevents.Hub
 	Lti      *lti.Runtime
+	// PasswordChecker overrides HIBP / password breach checks (tests). When nil, a production checker is built from Pool.
+	PasswordChecker hibp.Checker
 }
 
 func (d Deps) effectiveConfig() config.Config {
@@ -65,9 +68,11 @@ func NewHandler(d Deps) http.Handler {
 	r.Get("/auth/oidc/{provider}/login", d.handleOIDCLogin())
 	r.Get("/auth/oidc/{provider}/callback", d.handleOIDCCallback())
 	r.Post("/api/v1/auth/login", d.handleLogin())
+	r.Get("/api/v1/auth/password-policy", d.handleGetPublicPasswordPolicy())
 	r.Post("/api/v1/auth/signup", d.handleSignup())
 	r.Post("/api/v1/auth/forgot-password", d.handleForgotPassword())
 	r.Post("/api/v1/auth/reset-password", d.handleResetPassword())
+	r.Post("/api/v1/auth/change-password", d.handleChangePassword())
 	r.Get("/api/v1/auth/saml/status", d.handleSAMLStatus())
 	r.Get("/api/v1/auth/oidc/status", d.handleOIDCStatus())
 	r.Post("/api/v1/auth/oidc/link", d.handleOIDCLink())
@@ -170,6 +175,8 @@ func NewHandler(d Deps) http.Handler {
 	r.Get("/api/v1/admin/provisioning/oneroster/sync-runs", d.handleAdminOneRosterSyncRunsList())
 	r.Get("/api/v1/admin/provisioning/oneroster/sync-runs/{id}", d.handleAdminOneRosterSyncRunDetail())
 	r.Post("/api/v1/admin/provisioning/oneroster/bearer-credentials", d.handleAdminOneRosterBearerPost())
+	r.Get("/api/v1/admin/password-policy", d.handleAdminPasswordPolicyGet())
+	r.Put("/api/v1/admin/password-policy", d.handleAdminPasswordPolicyPut())
 	r.Get("/oneroster/v1p2/*", d.handleOneRosterV1P2())
 	r.Get("/api/v1/standards/search", d.handleSearchStandards())
 	r.Get("/api/v1/standards/{id}", d.handleGetStandard())
