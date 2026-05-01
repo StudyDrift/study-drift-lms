@@ -1,9 +1,11 @@
--- Plan 4.4 — Clever / ClassLink: external IDs, minor flag, district Clever config, OIDC providers.
+-- Plan 4.4 — Clever / ClassLink: external IDs, minor flag, connected_via, district Clever config,
+-- PKCE flow state, and partial unique indexes for nullable Clever/ClassLink ids.
 
 ALTER TABLE "user".users
     ADD COLUMN IF NOT EXISTS clever_id TEXT,
     ADD COLUMN IF NOT EXISTS classlink_id TEXT,
-    ADD COLUMN IF NOT EXISTS is_minor BOOLEAN NOT NULL DEFAULT FALSE;
+    ADD COLUMN IF NOT EXISTS is_minor BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS connected_via TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_clever_id_unique
     ON "user".users (clever_id) WHERE clever_id IS NOT NULL AND trim(clever_id) <> '';
@@ -14,6 +16,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_classlink_id_unique
 COMMENT ON COLUMN "user".users.clever_id IS 'Clever multi-role user id (v3.0); plan 4.4.';
 COMMENT ON COLUMN "user".users.classlink_id IS 'ClassLink OIDC subject; plan 4.4.';
 COMMENT ON COLUMN "user".users.is_minor IS 'COPPA-style minor flag (e.g. Clever is_under_13); plan 4.4.';
+COMMENT ON COLUMN "user".users.connected_via IS 'K-12 middleware used for first provisioning: clever or classlink.';
+
+ALTER TABLE "user".users
+    ADD CONSTRAINT users_connected_via_check CHECK (
+        connected_via IS NULL OR connected_via IN ('clever', 'classlink')
+    ) NOT VALID;
+
+ALTER TABLE "user".users VALIDATE CONSTRAINT users_connected_via_check;
 
 CREATE TABLE settings.clever_district_configurations (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
