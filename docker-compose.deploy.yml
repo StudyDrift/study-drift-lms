@@ -28,6 +28,8 @@ services:
       DATABASE_URL: postgres://studydrift:${POSTGRES_PASSWORD}@postgres:5432/studydrift?sslmode=disable
       JWT_SECRET: ${JWT_SECRET}
       RUN_MIGRATIONS: "true"
+      # Demo DB may retain checksum from migration 120 after an abbreviated deploy; align before migrate.
+      MIGRATE_REPAIR_CHECKSUMS: "1"
       PORT: "8080"
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       COURSE_FILES_ROOT: /mnt/lextures-db/course-files

@@ -54,6 +54,9 @@ func runLocked(ctx context.Context, conn *pgx.Conn, fsys fs.FS, dir string) erro
 	if err := checkNotDirty(ctx, conn); err != nil {
 		return err
 	}
+	if err := repairMigration120DemoChecksum(ctx, conn, fsys, dir); err != nil {
+		return err
+	}
 	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return fmt.Errorf("migrate: readdir: %w", err)
