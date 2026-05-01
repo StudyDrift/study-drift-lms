@@ -61,6 +61,26 @@ describe('Login', () => {
     })
   })
 
+  it('shows Log in with Clever when the API reports Clever SSO is available', async () => {
+    server.use(
+      http.get('http://localhost:8080/api/v1/auth/oidc/status', () =>
+        HttpResponse.json({
+          enabled: true,
+          clever: true,
+          classlink: false,
+        }),
+      ),
+    )
+
+    renderWithRouter(<Login />, { route: '/login', path: '/login' })
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('link', { name: /sign in using your clever account/i }),
+      ).toBeInTheDocument()
+    })
+  })
+
   it('shows a friendly error when the request fails at the network layer', async () => {
     server.use(
       http.post('http://localhost:8080/api/v1/auth/login', () => HttpResponse.error()),

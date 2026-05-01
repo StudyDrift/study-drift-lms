@@ -72,19 +72,19 @@ type Config struct {
 	OIDCAppleKeyID            string
 	OIDCApplePrivateKeyPEM    string
 
-	OneRosterEnabled             bool
-	OneRosterBearerFallbackToken string
-	OneRosterBearerFallbackInst  string // UUID string; used with fallback token when DB has no match
-
 	CleverSSOEnabled   bool
 	CleverClientID     string
 	CleverClientSecret string
 	CleverDistrictID   string // optional; skips Clever school picker when set
 
-	ClassLinkSSOEnabled            bool
-	ClassLinkOIDCIssuer            string // e.g. https://launchpad.classlink.com/v2_0/sis/{tenant}
-	ClassLinkOIDCClientID        string
-	ClassLinkOIDCClientSecret    string
+	ClassLinkSSOEnabled         bool
+	ClassLinkOIDCIssuer         string // e.g. https://launchpad.classlink.com/v2_0/sis/{tenant}
+	ClassLinkOIDCClientID       string
+	ClassLinkOIDCClientSecret   string
+
+	OneRosterEnabled             bool
+	OneRosterBearerFallbackToken string
+	OneRosterBearerFallbackInst  string // UUID string; used with fallback token when DB has no match
 }
 
 // Load reads configuration from the environment.
@@ -167,19 +167,19 @@ func Load() Config {
 		OIDCAppleKeyID:            firstNonEmptyTrimmed("OIDC_APPLE_KEY_ID"),
 		OIDCApplePrivateKeyPEM:    firstNonEmptyTrimmedOrFile("OIDC_APPLE_PRIVATE_KEY_PEM", "OIDC_APPLE_PRIVATE_KEY_PATH"),
 
+		CleverSSOEnabled:   boolEnv("CLEVER_SSO_ENABLED"),
+		CleverClientID:     firstNonEmptyTrimmed("CLEVER_CLIENT_ID", "CLEVER_OIDC_CLIENT_ID"),
+		CleverClientSecret: firstNonEmptyTrimmed("CLEVER_CLIENT_SECRET", "CLEVER_OIDC_CLIENT_SECRET"),
+		CleverDistrictID:   firstNonEmptyTrimmed("CLEVER_DISTRICT_ID"),
+
+		ClassLinkSSOEnabled:       boolEnv("CLASSLINK_SSO_ENABLED"),
+		ClassLinkOIDCIssuer:       strings.TrimRight(firstNonEmptyTrimmed("CLASSLINK_OIDC_ISSUER"), "/"),
+		ClassLinkOIDCClientID:     firstNonEmptyTrimmed("CLASSLINK_OIDC_CLIENT_ID"),
+		ClassLinkOIDCClientSecret: firstNonEmptyTrimmed("CLASSLINK_OIDC_CLIENT_SECRET"),
+
 		OneRosterEnabled:             boolEnv("ONEROSTER_ENABLED"),
 		OneRosterBearerFallbackToken: firstNonEmptyTrimmed("ONEROSTER_BEARER_FALLBACK_TOKEN"),
 		OneRosterBearerFallbackInst:  strings.TrimSpace(os.Getenv("ONEROSTER_BEARER_FALLBACK_INSTITUTION_ID")),
-
-		CleverSSOEnabled:   boolEnv("CLEVER_SSO_ENABLED"),
-		CleverClientID:     firstNonEmptyTrimmed("CLEVER_CLIENT_ID"),
-		CleverClientSecret: firstNonEmptyTrimmed("CLEVER_CLIENT_SECRET"),
-		CleverDistrictID:   firstNonEmptyTrimmed("CLEVER_DISTRICT_ID"),
-
-		ClassLinkSSOEnabled:         boolEnv("CLASSLINK_SSO_ENABLED"),
-		ClassLinkOIDCIssuer:         strings.TrimRight(firstNonEmptyTrimmed("CLASSLINK_OIDC_ISSUER"), "/"),
-		ClassLinkOIDCClientID:       firstNonEmptyTrimmed("CLASSLINK_OIDC_CLIENT_ID"),
-		ClassLinkOIDCClientSecret:   firstNonEmptyTrimmed("CLASSLINK_OIDC_CLIENT_SECRET"),
 	}
 }
 
@@ -204,6 +204,11 @@ func (c Config) OIDCAppleConfigured() bool {
 // CleverConfigured is true when Clever OAuth client credentials are present.
 func (c Config) CleverConfigured() bool {
 	return strings.TrimSpace(c.CleverClientID) != "" && strings.TrimSpace(c.CleverClientSecret) != ""
+}
+
+// CleverOIDCConfigured is an alias for CleverConfigured (Clever Instant Login uses the same env vars as OAuth PKCE).
+func (c Config) CleverOIDCConfigured() bool {
+	return c.CleverConfigured()
 }
 
 // ClassLinkOIDCConfigured is true when ClassLink OIDC issuer and client credentials are present.
