@@ -10,9 +10,10 @@ func TestOIDCFlowAllowed_K12WithoutGlobalOIDC(t *testing.T) {
 	s := NewService(config.Config{
 		OIDCSSOEnabled:            false,
 		CleverSSOEnabled:          true,
-		CleverOIDCClientID:        "id",
-		CleverOIDCClientSecret:    "sec",
+		CleverClientID:            "id",
+		CleverClientSecret:        "sec",
 		ClassLinkSSOEnabled:       true,
+		ClassLinkOIDCIssuer:       "https://launchpad.classlink.com/v2_0/sis/t",
 		ClassLinkOIDCClientID:     "id2",
 		ClassLinkOIDCClientSecret: "sec2",
 	})

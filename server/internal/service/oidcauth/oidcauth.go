@@ -92,6 +92,134 @@ func (s *Service) providerForIssuer(ctx context.Context, issuer string) (*oidc.P
 	return p, nil
 }
 
+func (s *Service) completeClassLinkLogin(
+	ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner,
+	subj, emailIn string, flow *oidcrepo.FlowStateRow,
+) (authservice.AuthResponse, *string, error) {
+	if u, err := user.FindByClassLinkID(ctx, pool, subj); err != nil {
+		return authservice.AuthResponse{}, nil, err
+	} else if u != nil {
+		uid, err := uuid.Parse(u.ID)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, "classlink", subj, &emailIn); err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		u2, err := user.FindByID(ctx, pool, uid)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		res, err := authservice.AuthResponseForUser(jwt, u2)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		return res, flow.NextPath, nil
+	}
+
+	ident, err := oidcrepo.FindIdentityByProviderAndSub(ctx, pool, "classlink", subj)
+	if err != nil {
+		return authservice.AuthResponse{}, nil, err
+	}
+	if ident != nil {
+		u, err := user.FindByID(ctx, pool, ident.UserID)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		if u == nil {
+			return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
+		}
+		if err := user.SetClassLinkID(ctx, pool, ident.UserID, subj); err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		u2, err := user.FindByID(ctx, pool, ident.UserID)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		res, err := authservice.AuthResponseForUser(jwt, u2)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		return res, flow.NextPath, nil
+	}
+
+	if flow.ForUserID != nil {
+		u, err := user.FindByID(ctx, pool, *flow.ForUserID)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		if u == nil {
+			return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
+		}
+		if user.NormalizeEmail(u.Email) != emailIn {
+			return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "The signed-in account email does not match the account you are connecting."}
+		}
+		uid, err := uuid.Parse(u.ID)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		if err := user.SetClassLinkID(ctx, pool, uid, subj); err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, "classlink", subj, &emailIn); err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		res, err := authservice.AuthResponseForUser(jwt, u)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		return res, flow.NextPath, nil
+	}
+
+	if u, err := user.FindByEmail(ctx, pool, emailIn); err != nil {
+		return authservice.AuthResponse{}, nil, err
+	} else if u != nil {
+		uid, err := uuid.Parse(u.ID)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		if err := user.SetClassLinkID(ctx, pool, uid, subj); err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, "classlink", subj, &emailIn); err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		u2, err := user.FindByID(ctx, pool, uid)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		res, err := authservice.AuthResponseForUser(jwt, u2)
+		if err != nil {
+			return authservice.AuthResponse{}, nil, err
+		}
+		return res, flow.NextPath, nil
+	}
+
+	ph, err := authservice.PlaceholderPasswordHash()
+	if err != nil {
+		return authservice.AuthResponse{}, nil, err
+	}
+	nu, err := user.InsertUserWithClassLink(ctx, pool, emailIn, ph, nil, subj)
+	if err != nil {
+		return authservice.AuthResponse{}, nil, err
+	}
+	uid, err := uuid.Parse(nu.ID)
+	if err != nil {
+		return authservice.AuthResponse{}, nil, err
+	}
+	if err := rbac.AssignUserRoleByName(ctx, pool, uid, "Student"); err != nil {
+		return authservice.AuthResponse{}, nil, err
+	}
+	if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, "classlink", subj, &emailIn); err != nil {
+		return authservice.AuthResponse{}, nil, err
+	}
+	res, err := authservice.AuthResponseForUser(jwt, nu)
+	if err != nil {
+		return authservice.AuthResponse{}, nil, err
+	}
+	return res, flow.NextPath, nil
+}
+
 // BuildAuthorizeRedirectURL returns a temporary redirect target for the IdP (GET /auth/oidc/{provider}/login).
 func (s *Service) BuildAuthorizeRedirectURL(
 	ctx context.Context, pool *pgxpool.Pool,
@@ -99,10 +227,10 @@ func (s *Service) BuildAuthorizeRedirectURL(
 	configID, linkID *uuid.UUID,
 	next *string,
 ) (string, error) {
+	pv := strings.ToLower(strings.TrimSpace(pathProvider))
 	if !s.oidcFlowAllowed(pathProvider) {
 		return "", authservice.FieldError{Message: "OpenID Connect is not enabled on this server."}
 	}
-	pv := strings.ToLower(strings.TrimSpace(pathProvider))
 	_ = oidcrepo.DeleteStaleFlowState(ctx, pool)
 	_ = oidcrepo.DeleteStaleLinkIntents(ctx, pool)
 
@@ -219,15 +347,16 @@ func (s *Service) resolveClient(pathProvider string, custom *oidcrepo.CustomProv
 		}
 		return iss, custom.ClientID, custom.ClientSecret, hdVal, nil
 	case "clever":
-		if !s.Cfg.CleverSSOEnabled || s.Cfg.CleverOIDCClientID == "" || s.Cfg.CleverOIDCClientSecret == "" {
+		if !s.Cfg.CleverSSOEnabled || !s.Cfg.CleverConfigured() {
 			return "", "", "", "", authservice.FieldError{Message: "Clever sign-in is not configured."}
 		}
-		return "https://clever.com", s.Cfg.CleverOIDCClientID, s.Cfg.CleverOIDCClientSecret, "", nil
+		return "https://clever.com", s.Cfg.CleverClientID, s.Cfg.CleverClientSecret, "", nil
 	case "classlink":
-		if !s.Cfg.ClassLinkSSOEnabled || s.Cfg.ClassLinkOIDCClientID == "" || s.Cfg.ClassLinkOIDCClientSecret == "" {
-			return "", "", "", "", authservice.FieldError{Message: "ClassLink sign-in is not configured."}
+		if !s.Cfg.ClassLinkSSOEnabled || !s.Cfg.ClassLinkOIDCConfigured() {
+			return "", "", "", "", authservice.FieldError{Message: "ClassLink OIDC is not configured."}
 		}
-		return "https://launchpad.classlink.com", s.Cfg.ClassLinkOIDCClientID, s.Cfg.ClassLinkOIDCClientSecret, "", nil
+		iss := strings.TrimRight(strings.TrimSpace(s.Cfg.ClassLinkOIDCIssuer), "/")
+		return iss, s.Cfg.ClassLinkOIDCClientID, s.Cfg.ClassLinkOIDCClientSecret, "", nil
 	default:
 		return "", "", "", "", authservice.FieldError{Message: "Unknown OIDC provider."}
 	}
@@ -238,11 +367,11 @@ func (s *Service) CompleteLogin(
 	ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner,
 	pathProvider, code, state string,
 ) (authservice.AuthResponse, *string, error) {
+	pv := strings.ToLower(strings.TrimSpace(pathProvider))
 	if !s.oidcFlowAllowed(pathProvider) {
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "OpenID Connect is not enabled on this server."}
 	}
 	_ = oidcrepo.DeleteStaleFlowState(ctx, pool)
-	pv := strings.ToLower(strings.TrimSpace(pathProvider))
 	flow, err := oidcrepo.TakeFlowState(ctx, pool, state)
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
@@ -330,6 +459,10 @@ func (s *Service) CompleteLogin(
 	subj := c.Sub
 	if subj == "" {
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "The identity provider did not return a subject."}
+	}
+
+	if pv == "classlink" {
+		return s.completeClassLinkLogin(ctx, pool, jwt, subj, emailIn, flow)
 	}
 
 	ident, err := oidcrepo.FindIdentityByProviderAndSub(ctx, pool, pv, subj)

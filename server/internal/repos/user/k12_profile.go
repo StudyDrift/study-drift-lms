@@ -8,30 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// FindByCleverID returns a user with the given Clever user id, or nil.
-func FindByCleverID(ctx context.Context, pool *pgxpool.Pool, cleverID string) (*Row, error) {
-	cleverID = strings.TrimSpace(cleverID)
-	if cleverID == "" {
-		return nil, nil
-	}
-	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
-       login_blocked, deactivated_at
-FROM "user".users WHERE clever_id = $1`
-	return scanUserRow(ctx, pool, q, cleverID)
-}
-
-// FindByClassLinkID returns a user with the given ClassLink sourced id, or nil.
-func FindByClassLinkID(ctx context.Context, pool *pgxpool.Pool, classlinkID string) (*Row, error) {
-	classlinkID = strings.TrimSpace(classlinkID)
-	if classlinkID == "" {
-		return nil, nil
-	}
-	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
-       login_blocked, deactivated_at
-FROM "user".users WHERE classlink_id = $1`
-	return scanUserRow(ctx, pool, q, classlinkID)
-}
-
 // UpdateK12ProfileAfterOIDC sets Clever/ClassLink identifiers, COPPA minor flag, and optional names after SSO.
 func UpdateK12ProfileAfterOIDC(
 	ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID,

@@ -186,18 +186,23 @@ func (d Deps) handleOIDCStatus() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		oidcOn := d.effectiveConfig().OIDCSSOEnabled
-		cleverOn := d.effectiveConfig().CleverSSOEnabled && d.effectiveConfig().CleverOIDCConfigured()
-		classOn := d.effectiveConfig().ClassLinkSSOEnabled && d.effectiveConfig().ClassLinkOIDCConfigured()
+		cfg := d.effectiveConfig()
+		oidcOn := cfg.OIDCSSOEnabled
+		cleverOn := cfg.CleverSSOEnabled && cfg.CleverConfigured()
+		classOn := cfg.ClassLinkSSOEnabled && cfg.ClassLinkOIDCConfigured()
 		if !oidcOn && !cleverOn && !classOn {
-			_, _ = w.Write([]byte(`{"enabled":false,"providers":[],"custom":[]}`))
+			_, _ = w.Write([]byte(`{"enabled":false,"cleverEnabled":false,"classlinkEnabled":false,"providers":[],"custom":[]}`))
 			return
 		}
-		if d.Pool == nil {
+		if d.Pool == nil && cfg.OIDCSSOEnabled {
 			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
 			return
 		}
-		customRows, err := oidc.ListCustomConfigs(r.Context(), d.Pool)
+		var customRows []oidc.CustomProviderRow
+		var err error
+		if d.Pool != nil && cfg.OIDCSSOEnabled {
+			customRows, err = oidc.ListCustomConfigs(r.Context(), d.Pool)
+		}
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInvalidInput, "Failed to list OIDC providers.")
 			return
@@ -210,25 +215,29 @@ func (d Deps) handleOIDCStatus() http.HandlerFunc {
 		for _, c := range customRows {
 			custom = append(custom, customInfo{ID: c.ID, DisplayName: c.DisplayName})
 		}
-		base := strings.TrimRight(d.effectiveConfig().OIDCPublicBaseURL, "/")
+		base := strings.TrimRight(cfg.OIDCPublicBaseURL, "/")
 		_ = json.NewEncoder(w).Encode(struct {
-			Enabled    bool         `json:"enabled"`
-			APIBase    string       `json:"apiBase"`
-			Google     bool         `json:"google"`
-			Microsoft  bool         `json:"microsoft"`
-			Apple      bool         `json:"apple"`
-			Clever     bool         `json:"clever"`
-			ClassLink  bool         `json:"classlink"`
-			Custom     []customInfo `json:"custom"`
+			Enabled          bool         `json:"enabled"`
+			CleverEnabled    bool         `json:"cleverEnabled"`
+			ClassLinkEnabled bool         `json:"classlinkEnabled"`
+			Clever           bool         `json:"clever"`
+			ClassLink        bool         `json:"classlink"`
+			APIBase          string       `json:"apiBase"`
+			Google           bool         `json:"google"`
+			Microsoft        bool         `json:"microsoft"`
+			Apple            bool         `json:"apple"`
+			Custom           []customInfo `json:"custom"`
 		}{
-			Enabled:   true,
-			APIBase:   base,
-			Google:    oidcOn && d.effectiveConfig().OIDCGoogleConfigured(),
-			Microsoft: oidcOn && d.effectiveConfig().OIDCMicrosoftConfigured(),
-			Apple:     oidcOn && d.effectiveConfig().OIDCAppleConfigured(),
-			Clever:    cleverOn,
-			ClassLink: classOn,
-			Custom:    custom,
+			Enabled:          oidcOn || cleverOn || classOn,
+			CleverEnabled:    cleverOn,
+			ClassLinkEnabled: classOn,
+			Clever:           cleverOn,
+			ClassLink:        classOn,
+			APIBase:          base,
+			Google:           oidcOn && cfg.OIDCGoogleConfigured(),
+			Microsoft:        oidcOn && cfg.OIDCMicrosoftConfigured(),
+			Apple:            oidcOn && cfg.OIDCAppleConfigured(),
+			Custom:           custom,
 		})
 	}
 }
@@ -264,9 +273,11 @@ func (d Deps) handleOIDCLink() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
 			return
 		}
-		if !d.effectiveConfig().OIDCSSOEnabled &&
-			(!d.effectiveConfig().CleverSSOEnabled || !d.effectiveConfig().CleverOIDCConfigured()) &&
-			(!d.effectiveConfig().ClassLinkSSOEnabled || !d.effectiveConfig().ClassLinkOIDCConfigured()) {
+		cfg := d.effectiveConfig()
+		p := strings.TrimSpace(strings.ToLower(b.Provider))
+		if !cfg.OIDCSSOEnabled &&
+			(!cfg.CleverSSOEnabled || !cfg.CleverConfigured()) &&
+			(!cfg.ClassLinkSSOEnabled || !cfg.ClassLinkOIDCConfigured()) {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "OpenID Connect is not enabled on this server.")
 			return
 		}
@@ -274,22 +285,21 @@ func (d Deps) handleOIDCLink() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
 			return
 		}
-		p := strings.TrimSpace(strings.ToLower(b.Provider))
 		if p != "google" && p != "microsoft" && p != "apple" && p != "custom" && p != "clever" && p != "classlink" {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Unknown OIDC provider.")
 			return
 		}
 		if p == "google" || p == "microsoft" || p == "apple" || p == "custom" {
-			if !d.effectiveConfig().OIDCSSOEnabled {
+			if !cfg.OIDCSSOEnabled {
 				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "OpenID Connect is not enabled on this server.")
 				return
 			}
 		}
-		if p == "clever" && (!d.effectiveConfig().CleverSSOEnabled || !d.effectiveConfig().CleverOIDCConfigured()) {
+		if p == "clever" && (!cfg.CleverSSOEnabled || !cfg.CleverConfigured()) {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Clever sign-in is not configured on this server.")
 			return
 		}
-		if p == "classlink" && (!d.effectiveConfig().ClassLinkSSOEnabled || !d.effectiveConfig().ClassLinkOIDCConfigured()) {
+		if p == "classlink" && (!cfg.ClassLinkSSOEnabled || !cfg.ClassLinkOIDCConfigured()) {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "ClassLink sign-in is not configured on this server.")
 			return
 		}
@@ -314,7 +324,7 @@ func (d Deps) handleOIDCLink() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInvalidInput, "Failed to start OIDC link flow.")
 			return
 		}
-		public := strings.TrimRight(d.effectiveConfig().OIDCPublicBaseURL, "/")
+		public := strings.TrimRight(cfg.OIDCPublicBaseURL, "/")
 		var path string
 		if p == "custom" {
 			cid := *customID

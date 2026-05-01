@@ -324,10 +324,14 @@ func TestOIDCProviderConfiguredHelpers(t *testing.T) {
 	if (Config{OIDCAppleClientID: "a"}).OIDCAppleConfigured() != false {
 		t.Fatal("expected apple false")
 	}
-	if (Config{CleverOIDCClientID: "a", CleverOIDCClientSecret: "b"}).CleverOIDCConfigured() != true {
+	if (Config{CleverClientID: "a", CleverClientSecret: "b"}).CleverOIDCConfigured() != true {
 		t.Fatal("expected clever true")
 	}
-	if (Config{ClassLinkOIDCClientID: "a", ClassLinkOIDCClientSecret: "b"}).ClassLinkOIDCConfigured() != true {
+	if (Config{
+		ClassLinkOIDCIssuer: "https://launchpad.classlink.com/v2_0/sis/x",
+		ClassLinkOIDCClientID:     "a",
+		ClassLinkOIDCClientSecret: "b",
+	}).ClassLinkOIDCConfigured() != true {
 		t.Fatal("expected classlink true")
 	}
 }

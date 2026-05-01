@@ -21,10 +21,10 @@ func (s *Service) oidcFlowAllowed(pathProvider string) bool {
 	if s.Cfg.OIDCSSOEnabled {
 		return true
 	}
-	if pv == "clever" && s.Cfg.CleverSSOEnabled {
+	if pv == "clever" && s.Cfg.CleverSSOEnabled && s.Cfg.CleverConfigured() {
 		return true
 	}
-	if pv == "classlink" && s.Cfg.ClassLinkSSOEnabled {
+	if pv == "classlink" && s.Cfg.ClassLinkSSOEnabled && s.Cfg.ClassLinkOIDCConfigured() {
 		return true
 	}
 	return false
