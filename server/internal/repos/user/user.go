@@ -41,10 +41,14 @@ func FindByEmail(ctx context.Context, pool *pgxpool.Pool, email string) (*Row, e
 	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
        login_blocked, deactivated_at
 FROM "user".users WHERE email = $1`
+	return scanUserRow(ctx, pool, q, email)
+}
+
+func scanUserRow(ctx context.Context, pool *pgxpool.Pool, query string, arg any) (*Row, error) {
 	var r Row
 	var displayName, firstName, lastName, avatar, sid sql.NullString
 	var deactivatedAt sql.NullTime
-	err := pool.QueryRow(ctx, q, email).Scan(
+	err := pool.QueryRow(ctx, query, arg).Scan(
 		&r.ID, &r.Email, &r.PasswordHash, &displayName, &firstName, &lastName, &avatar, &r.UITheme, &sid,
 		&r.LoginBlocked, &deactivatedAt,
 	)
@@ -71,29 +75,7 @@ func FindByID(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Row, erro
 	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
        login_blocked, deactivated_at
 FROM "user".users WHERE id = $1`
-	var r Row
-	var displayName, firstName, lastName, avatar, sid sql.NullString
-	var deactivatedAt sql.NullTime
-	err := pool.QueryRow(ctx, q, id).Scan(
-		&r.ID, &r.Email, &r.PasswordHash, &displayName, &firstName, &lastName, &avatar, &r.UITheme, &sid,
-		&r.LoginBlocked, &deactivatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	r.DisplayName = strPtr(displayName)
-	r.FirstName = strPtr(firstName)
-	r.LastName = strPtr(lastName)
-	r.AvatarURL = strPtr(avatar)
-	r.Sid = strPtr(sid)
-	if deactivatedAt.Valid {
-		t := deactivatedAt.Time
-		r.DeactivatedAt = &t
-	}
-	return &r, nil
+	return scanUserRow(ctx, pool, q, id)
 }
 
 // InsertUser creates a new user; email must be normalized. Returns the full row.
@@ -151,27 +133,5 @@ func FindByEmailCI(ctx context.Context, pool *pgxpool.Pool, email string) (*Row,
 	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
        login_blocked, deactivated_at
 FROM "user".users WHERE lower(email) = lower($1)`
-	var r Row
-	var displayName, firstName, lastName, avatar, sid sql.NullString
-	var deactivatedAt sql.NullTime
-	err := pool.QueryRow(ctx, q, em).Scan(
-		&r.ID, &r.Email, &r.PasswordHash, &displayName, &firstName, &lastName, &avatar, &r.UITheme, &sid,
-		&r.LoginBlocked, &deactivatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	r.DisplayName = strPtr(displayName)
-	r.FirstName = strPtr(firstName)
-	r.LastName = strPtr(lastName)
-	r.AvatarURL = strPtr(avatar)
-	r.Sid = strPtr(sid)
-	if deactivatedAt.Valid {
-		t := deactivatedAt.Time
-		r.DeactivatedAt = &t
-	}
-	return &r, nil
+	return scanUserRow(ctx, pool, q, em)
 }
