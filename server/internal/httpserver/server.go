@@ -15,6 +15,7 @@ import (
 	"github.com/lextures/lextures/server/internal/lti"
 	"github.com/lextures/lextures/server/internal/openapi"
 	"github.com/lextures/lextures/server/internal/platformstate"
+	"github.com/lextures/lextures/server/internal/service/cleverauth"
 	"github.com/lextures/lextures/server/internal/service/oidcauth"
 	"github.com/lextures/lextures/server/internal/service/openrouter"
 )
@@ -28,6 +29,7 @@ type Deps struct {
 	Config   config.Config
 	Platform *platformstate.Platform
 	OIDC     *oidcauth.Service
+	Clever   *cleverauth.Service
 	Comm     *commevents.Hub
 	Lti      *lti.Runtime
 	// PasswordChecker overrides HIBP / password breach checks (tests). When nil, a production checker is built from Pool.
@@ -67,6 +69,8 @@ func NewHandler(d Deps) http.Handler {
 	d.registerLTIHTTPRoutes(r)
 	r.Get("/auth/oidc/{provider}/login", d.handleOIDCLogin())
 	r.Get("/auth/oidc/{provider}/callback", d.handleOIDCCallback())
+	r.Get("/auth/clever/login", d.handleCleverLogin())
+	r.Get("/auth/clever/callback", d.handleCleverCallback())
 	r.Post("/api/v1/auth/login", d.handleLogin())
 	r.Get("/api/v1/auth/password-policy", d.handleGetPublicPasswordPolicy())
 	r.Post("/api/v1/auth/signup", d.handleSignup())

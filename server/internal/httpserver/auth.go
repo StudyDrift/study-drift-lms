@@ -186,15 +186,20 @@ func (d Deps) handleOIDCStatus() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		if !d.effectiveConfig().OIDCSSOEnabled {
-			_, _ = w.Write([]byte(`{"enabled":false,"providers":[],"custom":[]}`))
+		cfg := d.effectiveConfig()
+		if !cfg.OIDCSSOEnabled && !cfg.CleverSSOEnabled && !cfg.ClassLinkSSOEnabled {
+			_, _ = w.Write([]byte(`{"enabled":false,"cleverEnabled":false,"classlinkEnabled":false,"providers":[],"custom":[]}`))
 			return
 		}
-		if d.Pool == nil {
+		if d.Pool == nil && cfg.OIDCSSOEnabled {
 			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
 			return
 		}
-		customRows, err := oidc.ListCustomConfigs(r.Context(), d.Pool)
+		var customRows []oidc.CustomProviderRow
+		var err error
+		if d.Pool != nil && cfg.OIDCSSOEnabled {
+			customRows, err = oidc.ListCustomConfigs(r.Context(), d.Pool)
+		}
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInvalidInput, "Failed to list OIDC providers.")
 			return
@@ -207,21 +212,26 @@ func (d Deps) handleOIDCStatus() http.HandlerFunc {
 		for _, c := range customRows {
 			custom = append(custom, customInfo{ID: c.ID, DisplayName: c.DisplayName})
 		}
-		base := strings.TrimRight(d.effectiveConfig().OIDCPublicBaseURL, "/")
+		base := strings.TrimRight(cfg.OIDCPublicBaseURL, "/")
+		oidcOn := cfg.OIDCSSOEnabled
 		_ = json.NewEncoder(w).Encode(struct {
-			Enabled   bool         `json:"enabled"`
-			APIBase   string       `json:"apiBase"`
-			Google    bool         `json:"google"`
-			Microsoft bool         `json:"microsoft"`
-			Apple     bool         `json:"apple"`
-			Custom    []customInfo `json:"custom"`
+			Enabled            bool         `json:"enabled"`
+			CleverEnabled      bool         `json:"cleverEnabled"`
+			ClassLinkEnabled   bool         `json:"classlinkEnabled"`
+			APIBase            string       `json:"apiBase"`
+			Google             bool         `json:"google"`
+			Microsoft          bool         `json:"microsoft"`
+			Apple              bool         `json:"apple"`
+			Custom             []customInfo `json:"custom"`
 		}{
-			Enabled:   true,
-			APIBase:   base,
-			Google:    d.effectiveConfig().OIDCGoogleConfigured(),
-			Microsoft: d.effectiveConfig().OIDCMicrosoftConfigured(),
-			Apple:     d.effectiveConfig().OIDCAppleConfigured(),
-			Custom:    custom,
+			Enabled:          oidcOn,
+			CleverEnabled:    cfg.CleverSSOEnabled && cfg.CleverConfigured(),
+			ClassLinkEnabled: cfg.ClassLinkSSOEnabled && cfg.ClassLinkOIDCConfigured(),
+			APIBase:          base,
+			Google:           oidcOn && cfg.OIDCGoogleConfigured(),
+			Microsoft:        oidcOn && cfg.OIDCMicrosoftConfigured(),
+			Apple:            oidcOn && cfg.OIDCAppleConfigured(),
+			Custom:           custom,
 		})
 	}
 }
@@ -257,7 +267,14 @@ func (d Deps) handleOIDCLink() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
 			return
 		}
-		if !d.effectiveConfig().OIDCSSOEnabled {
+		cfg := d.effectiveConfig()
+		p := strings.TrimSpace(strings.ToLower(b.Provider))
+		if p == "classlink" {
+			if !cfg.ClassLinkSSOEnabled || !cfg.ClassLinkOIDCConfigured() {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "ClassLink sign-in is not enabled on this server.")
+				return
+			}
+		} else if !cfg.OIDCSSOEnabled {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "OpenID Connect is not enabled on this server.")
 			return
 		}
@@ -265,8 +282,7 @@ func (d Deps) handleOIDCLink() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
 			return
 		}
-		p := strings.TrimSpace(strings.ToLower(b.Provider))
-		if p != "google" && p != "microsoft" && p != "apple" && p != "custom" {
+		if p != "google" && p != "microsoft" && p != "apple" && p != "custom" && p != "classlink" {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Unknown OIDC provider.")
 			return
 		}

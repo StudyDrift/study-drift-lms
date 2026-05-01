@@ -3,6 +3,8 @@ import { apiUrl } from '../lib/api'
 
 type OidcStatus = {
   enabled: boolean
+  cleverEnabled?: boolean
+  classlinkEnabled?: boolean
   google?: boolean
   microsoft?: boolean
   apple?: boolean
@@ -37,14 +39,32 @@ export function OidcSignInButtons({ nextPath }: Props) {
     }
   }, [])
 
-  if (!s?.enabled) return null
+  if (!s?.enabled && !s?.cleverEnabled && !s?.classlinkEnabled) return null
 
   const nextQ = `next=${encodeURIComponent(nextPath)}`
   const p = (path: string) => apiUrl(path.includes('?') ? `${path}&${nextQ}` : `${path}?${nextQ}`)
 
   return (
     <div className="mb-6 space-y-2">
-      {s.google && (
+      {s.cleverEnabled && (
+        <a
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#436CF6] bg-[#436CF6] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3a5fd9]"
+          href={p('/auth/clever/login')}
+          aria-label="Sign in using your Clever account"
+        >
+          Log in with Clever
+        </a>
+      )}
+      {s.classlinkEnabled && (
+        <a
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          href={p('/auth/oidc/classlink/login')}
+          aria-label="Sign in with ClassLink"
+        >
+          Log in with ClassLink
+        </a>
+      )}
+      {s.enabled && s.google && (
         <a
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
           href={p('/auth/oidc/google/login')}
@@ -54,7 +74,7 @@ export function OidcSignInButtons({ nextPath }: Props) {
           Sign in with Google
         </a>
       )}
-      {s.microsoft && (
+      {s.enabled && s.microsoft && (
         <a
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
           href={p('/auth/oidc/microsoft/login')}
@@ -64,7 +84,7 @@ export function OidcSignInButtons({ nextPath }: Props) {
           Sign in with Microsoft
         </a>
       )}
-      {s.apple && (
+      {s.enabled && s.apple && (
         <a
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-900 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
           href={p('/auth/oidc/apple/login')}
@@ -73,16 +93,17 @@ export function OidcSignInButtons({ nextPath }: Props) {
           Sign in with Apple
         </a>
       )}
-      {s.custom?.map((c) => (
-        <a
-          key={c.id}
-          className="flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-indigo-300 hover:bg-slate-50"
-          href={p(`/auth/oidc/custom/login?configId=${encodeURIComponent(c.id)}`)}
-          aria-label={`Sign in with ${c.displayName}`}
-        >
-          Sign in with {c.displayName}
-        </a>
-      ))}
+      {s.enabled &&
+        s.custom?.map((c) => (
+          <a
+            key={c.id}
+            className="flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-indigo-300 hover:bg-slate-50"
+            href={p(`/auth/oidc/custom/login?configId=${encodeURIComponent(c.id)}`)}
+            aria-label={`Sign in with ${c.displayName}`}
+          >
+            Sign in with {c.displayName}
+          </a>
+        ))}
     </div>
   )
 }
