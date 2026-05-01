@@ -39,6 +39,12 @@ var configEnvKeys = []string{
 	"OIDC_MICROSOFT_TENANT",
 	"OIDC_PUBLIC_BASE_URL",
 	"OIDC_SSO_ENABLED",
+	"CLEVER_SSO_ENABLED",
+	"CLEVER_OIDC_CLIENT_ID",
+	"CLEVER_OIDC_CLIENT_SECRET",
+	"CLASSLINK_SSO_ENABLED",
+	"CLASSLINK_OIDC_CLIENT_ID",
+	"CLASSLINK_OIDC_CLIENT_SECRET",
 	"OPEN_ROUTER_API_KEY",
 	"OPENROUTER_API_KEY",
 	"ORIGINALITY_DETECTION_ENABLED",
@@ -317,5 +323,11 @@ func TestOIDCProviderConfiguredHelpers(t *testing.T) {
 	}
 	if (Config{OIDCAppleClientID: "a"}).OIDCAppleConfigured() != false {
 		t.Fatal("expected apple false")
+	}
+	if (Config{CleverOIDCClientID: "a", CleverOIDCClientSecret: "b"}).CleverOIDCConfigured() != true {
+		t.Fatal("expected clever true")
+	}
+	if (Config{ClassLinkOIDCClientID: "a", ClassLinkOIDCClientSecret: "b"}).ClassLinkOIDCConfigured() != true {
+		t.Fatal("expected classlink true")
 	}
 }

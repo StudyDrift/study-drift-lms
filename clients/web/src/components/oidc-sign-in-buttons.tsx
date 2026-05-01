@@ -6,6 +6,8 @@ type OidcStatus = {
   google?: boolean
   microsoft?: boolean
   apple?: boolean
+  clever?: boolean
+  classlink?: boolean
   custom?: { id: string; displayName: string }[]
 }
 
@@ -71,6 +73,24 @@ export function OidcSignInButtons({ nextPath }: Props) {
           aria-label="Sign in with Apple"
         >
           Sign in with Apple
+        </a>
+      )}
+      {s.clever && (
+        <a
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#436CF2] bg-[#436CF2] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3558d4]"
+          href={p('/auth/oidc/clever/login')}
+          aria-label="Sign in using your Clever account"
+        >
+          Log in with Clever
+        </a>
+      )}
+      {s.classlink && (
+        <a
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#0B5FFF] bg-[#0B5FFF] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#094bcc]"
+          href={p('/auth/oidc/classlink/login')}
+          aria-label="Sign in using your ClassLink account"
+        >
+          Log in with ClassLink
         </a>
       )}
       {s.custom?.map((c) => (

@@ -9,6 +9,9 @@ func TestRedirectURIFor(t *testing.T) {
 	if got := redirectURIFor("http://api:8080/", "custom"); got != "http://api:8080/auth/oidc/custom/callback" {
 		t.Fatalf("custom: %q", got)
 	}
+	if got := redirectURIFor("http://api:8080", "clever"); got != "http://api:8080/auth/oidc/clever/callback" {
+		t.Fatalf("clever: %q", got)
+	}
 }
 
 func TestIssuerForCustomDiscovery(t *testing.T) {

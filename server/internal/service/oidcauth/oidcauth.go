@@ -99,7 +99,7 @@ func (s *Service) BuildAuthorizeRedirectURL(
 	configID, linkID *uuid.UUID,
 	next *string,
 ) (string, error) {
-	if !s.Cfg.OIDCSSOEnabled {
+	if !s.oidcFlowAllowed(pathProvider) {
 		return "", authservice.FieldError{Message: "OpenID Connect is not enabled on this server."}
 	}
 	pv := strings.ToLower(strings.TrimSpace(pathProvider))
@@ -218,6 +218,16 @@ func (s *Service) resolveClient(pathProvider string, custom *oidcrepo.CustomProv
 			hdVal = *custom.HDRestriction
 		}
 		return iss, custom.ClientID, custom.ClientSecret, hdVal, nil
+	case "clever":
+		if !s.Cfg.CleverSSOEnabled || s.Cfg.CleverOIDCClientID == "" || s.Cfg.CleverOIDCClientSecret == "" {
+			return "", "", "", "", authservice.FieldError{Message: "Clever sign-in is not configured."}
+		}
+		return "https://clever.com", s.Cfg.CleverOIDCClientID, s.Cfg.CleverOIDCClientSecret, "", nil
+	case "classlink":
+		if !s.Cfg.ClassLinkSSOEnabled || s.Cfg.ClassLinkOIDCClientID == "" || s.Cfg.ClassLinkOIDCClientSecret == "" {
+			return "", "", "", "", authservice.FieldError{Message: "ClassLink sign-in is not configured."}
+		}
+		return "https://launchpad.classlink.com", s.Cfg.ClassLinkOIDCClientID, s.Cfg.ClassLinkOIDCClientSecret, "", nil
 	default:
 		return "", "", "", "", authservice.FieldError{Message: "Unknown OIDC provider."}
 	}
@@ -228,7 +238,7 @@ func (s *Service) CompleteLogin(
 	ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner,
 	pathProvider, code, state string,
 ) (authservice.AuthResponse, *string, error) {
-	if !s.Cfg.OIDCSSOEnabled {
+	if !s.oidcFlowAllowed(pathProvider) {
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "OpenID Connect is not enabled on this server."}
 	}
 	_ = oidcrepo.DeleteStaleFlowState(ctx, pool)
@@ -281,6 +291,9 @@ func (s *Service) CompleteLogin(
 	tok, err := o2.Exchange(ctx2, code, oauth2.VerifierOption(flow.CodeVerifier))
 	if err != nil {
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "Could not complete sign-in with the identity provider."}
+	}
+	if pv == "clever" || pv == "classlink" {
+		return s.completeK12OIDCLogin(ctx, pool, jwt, pv, flow, prov, o2, tok)
 	}
 	raw, ok := tok.Extra("id_token").(string)
 	if !ok || raw == "" {

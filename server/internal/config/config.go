@@ -72,6 +72,13 @@ type Config struct {
 	OIDCAppleKeyID            string
 	OIDCApplePrivateKeyPEM    string
 
+	CleverSSOEnabled         bool
+	CleverOIDCClientID       string
+	CleverOIDCClientSecret   string
+	ClassLinkSSOEnabled      bool
+	ClassLinkOIDCClientID    string
+	ClassLinkOIDCClientSecret string
+
 	OneRosterEnabled             bool
 	OneRosterBearerFallbackToken string
 	OneRosterBearerFallbackInst  string // UUID string; used with fallback token when DB has no match
@@ -157,6 +164,13 @@ func Load() Config {
 		OIDCAppleKeyID:            firstNonEmptyTrimmed("OIDC_APPLE_KEY_ID"),
 		OIDCApplePrivateKeyPEM:    firstNonEmptyTrimmedOrFile("OIDC_APPLE_PRIVATE_KEY_PEM", "OIDC_APPLE_PRIVATE_KEY_PATH"),
 
+		CleverSSOEnabled:          boolEnv("CLEVER_SSO_ENABLED"),
+		CleverOIDCClientID:      firstNonEmptyTrimmed("CLEVER_OIDC_CLIENT_ID"),
+		CleverOIDCClientSecret:  firstNonEmptyTrimmed("CLEVER_OIDC_CLIENT_SECRET"),
+		ClassLinkSSOEnabled:     boolEnv("CLASSLINK_SSO_ENABLED"),
+		ClassLinkOIDCClientID:   firstNonEmptyTrimmed("CLASSLINK_OIDC_CLIENT_ID"),
+		ClassLinkOIDCClientSecret: firstNonEmptyTrimmed("CLASSLINK_OIDC_CLIENT_SECRET"),
+
 		OneRosterEnabled:             boolEnv("ONEROSTER_ENABLED"),
 		OneRosterBearerFallbackToken: firstNonEmptyTrimmed("ONEROSTER_BEARER_FALLBACK_TOKEN"),
 		OneRosterBearerFallbackInst:  strings.TrimSpace(os.Getenv("ONEROSTER_BEARER_FALLBACK_INSTITUTION_ID")),
@@ -179,6 +193,16 @@ func (c Config) OIDCAppleConfigured() bool {
 		strings.TrimSpace(c.OIDCAppleTeamID) != "" &&
 		strings.TrimSpace(c.OIDCAppleKeyID) != "" &&
 		strings.TrimSpace(c.OIDCApplePrivateKeyPEM) != ""
+}
+
+// CleverOIDCConfigured is true when Clever Instant Login client credentials are present.
+func (c Config) CleverOIDCConfigured() bool {
+	return strings.TrimSpace(c.CleverOIDCClientID) != "" && strings.TrimSpace(c.CleverOIDCClientSecret) != ""
+}
+
+// ClassLinkOIDCConfigured is true when ClassLink OIDC client credentials are present.
+func (c Config) ClassLinkOIDCConfigured() bool {
+	return strings.TrimSpace(c.ClassLinkOIDCClientID) != "" && strings.TrimSpace(c.ClassLinkOIDCClientSecret) != ""
 }
 
 // Validate returns an error if required values are missing for a full server start.
