@@ -5,6 +5,10 @@ type OidcStatus = {
   enabled: boolean
   cleverEnabled?: boolean
   classlinkEnabled?: boolean
+  /** Legacy alias from API for Clever SSO (same meaning as cleverEnabled). */
+  clever?: boolean
+  /** Legacy alias from API for ClassLink SSO (same meaning as classlinkEnabled). */
+  classlink?: boolean
   google?: boolean
   microsoft?: boolean
   apple?: boolean
@@ -39,14 +43,17 @@ export function OidcSignInButtons({ nextPath }: Props) {
     }
   }, [])
 
-  if (!s?.enabled && !s?.cleverEnabled && !s?.classlinkEnabled) return null
+  const cleverOn = !!(s?.cleverEnabled || s?.clever)
+  const classlinkOn = !!(s?.classlinkEnabled || s?.classlink)
+
+  if (!s?.enabled && !cleverOn && !classlinkOn) return null
 
   const nextQ = `next=${encodeURIComponent(nextPath)}`
   const p = (path: string) => apiUrl(path.includes('?') ? `${path}&${nextQ}` : `${path}?${nextQ}`)
 
   return (
     <div className="mb-6 space-y-2">
-      {s.cleverEnabled && (
+      {cleverOn && (
         <a
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#436CF6] bg-[#436CF6] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3a5fd9]"
           href={p('/auth/clever/login')}
@@ -55,7 +62,7 @@ export function OidcSignInButtons({ nextPath }: Props) {
           Log in with Clever
         </a>
       )}
-      {s.classlinkEnabled && (
+      {classlinkOn && (
         <a
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
           href={p('/auth/oidc/classlink/login')}

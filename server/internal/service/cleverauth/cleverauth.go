@@ -306,7 +306,7 @@ func (s *Service) exchangeCode(ctx context.Context, code, verifier string) (stri
 	if err != nil {
 		return "", authservice.FieldError{Message: "Could not reach Clever to complete sign-in."}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", authservice.FieldError{Message: "Clever rejected the sign-in token exchange."}
@@ -335,7 +335,7 @@ func (s *Service) fetchMe(ctx context.Context, access string) (userID, districtI
 	if err != nil {
 		return "", "", authservice.FieldError{Message: "Could not load your Clever profile."}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", "", authservice.FieldError{Message: "Clever /me request failed."}
@@ -365,7 +365,7 @@ func (s *Service) fetchUserProfile(ctx context.Context, access, cleverUserID str
 	if err != nil {
 		return cleverProfile{}, authservice.FieldError{Message: "Could not load Clever user details."}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Fall back to minimal profile from /me only
