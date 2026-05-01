@@ -60,7 +60,7 @@ func FetchCleverMe(ctx context.Context, hc *http.Client, accessToken string) (*C
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	if err != nil {
 		return nil, err

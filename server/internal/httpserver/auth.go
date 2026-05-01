@@ -265,8 +265,8 @@ func (d Deps) handleOIDCLink() http.HandlerFunc {
 			return
 		}
 		if !d.effectiveConfig().OIDCSSOEnabled &&
-			!(d.effectiveConfig().CleverSSOEnabled && d.effectiveConfig().CleverOIDCConfigured()) &&
-			!(d.effectiveConfig().ClassLinkSSOEnabled && d.effectiveConfig().ClassLinkOIDCConfigured()) {
+			(!d.effectiveConfig().CleverSSOEnabled || !d.effectiveConfig().CleverOIDCConfigured()) &&
+			(!d.effectiveConfig().ClassLinkSSOEnabled || !d.effectiveConfig().ClassLinkOIDCConfigured()) {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "OpenID Connect is not enabled on this server.")
 			return
 		}
