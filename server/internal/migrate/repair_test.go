@@ -1,16 +1,20 @@
 package migrate
 
 import (
-	"encoding/hex"
 	"testing"
 )
 
-func TestChecksumMigration120ShortB3302c2HexDecodesTo48Bytes(t *testing.T) {
-	b, err := hex.DecodeString(checksumMigration120ShortB3302c2Hex)
-	if err != nil {
-		t.Fatal(err)
+func TestMigrateRepairChecksumsEnabled(t *testing.T) {
+	t.Setenv("MIGRATE_REPAIR_CHECKSUMS", "")
+	if migrateRepairChecksumsEnabled() {
+		t.Fatal("expected disabled when unset")
 	}
-	if len(b) != 48 {
-		t.Fatalf("want 48-byte SHA-384 digest, got %d", len(b))
+	t.Setenv("MIGRATE_REPAIR_CHECKSUMS", "1")
+	if !migrateRepairChecksumsEnabled() {
+		t.Fatal("expected enabled for 1")
+	}
+	t.Setenv("MIGRATE_REPAIR_CHECKSUMS", "TRUE")
+	if !migrateRepairChecksumsEnabled() {
+		t.Fatal("expected enabled for TRUE")
 	}
 }
