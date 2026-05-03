@@ -12,6 +12,8 @@ const (
 	CodeInvalidCredentials = "INVALID_CREDENTIALS"
 	CodeEmailTaken         = "EMAIL_TAKEN"
 	CodeInvalidResetToken  = "INVALID_RESET_TOKEN"
+	CodeMagicLinkGone       = "MAGIC_LINK_GONE"
+	CodeRateLimited         = "RATE_LIMITED"
 	CodeUnauthorized       = "UNAUTHORIZED"
 	CodeNotFound            = "NOT_FOUND"
 	// CodeNotImplementedInGo: no chi route; path still on Rust in migration.

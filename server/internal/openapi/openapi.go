@@ -67,6 +67,25 @@ const spec = `{
         "responses": { "200": { "description": "Password updated" }, "400": { "description": "Invalid or expired token" } }
       }
     },
+    "/api/v1/auth/magic-link/request": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Request a one-time email sign-in link (MAGIC_LINK_ENABLED)",
+        "responses": { "200": { "description": "Generic message (enumeration-safe)" }, "404": { "description": "Feature disabled" }, "429": { "description": "Rate limited" } }
+      }
+    },
+    "/api/v1/auth/magic-link/consume": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Consume magic link token from email (query: token, optional redirect_to for SPA)",
+        "responses": { "200": { "description": "Access token or MFA pending" }, "410": { "description": "Used or expired token" } }
+      },
+      "post": {
+        "tags": ["auth"],
+        "summary": "Consume magic link token (JSON body: token)",
+        "responses": { "200": { "description": "Access token or MFA pending" }, "410": { "description": "Used or expired token" } }
+      }
+    },
     "/api/v1/auth/saml/status": {
       "get": {
         "tags": ["auth"],

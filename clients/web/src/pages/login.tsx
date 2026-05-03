@@ -8,6 +8,7 @@ import { readApiErrorMessage } from '../lib/errors'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
 import { markPostLoginShortcutTip } from '../lib/post-login-shortcut-tip'
 import { setMfaFlow } from '../lib/mfa-flow-storage'
+import { MagicLinkRequestForm } from '../components/auth/magic-link-request-form'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -19,7 +20,8 @@ export default function Login() {
     from === '/signup' ||
     from === '/forgot-password' ||
     from === '/reset-password' ||
-    from.startsWith('/login/mfa')
+    from.startsWith('/login/mfa') ||
+    from.startsWith('/login/magic-link')
   ) {
     from = '/'
   }
@@ -209,6 +211,10 @@ export default function Login() {
               {status === 'loading' ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+          )}
+
+          {!saml?.idp?.forceSaml && (
+            <MagicLinkRequestForm redirectTo={from} defaultEmail={email} />
           )}
 
           {!saml?.idp?.forceSaml && (
