@@ -183,7 +183,7 @@ func ConsumeMagicLink(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSig
 		return AuthResponse{}, ErrMagicLinkGone
 	}
 	magicLinkMetrics.consumed.Add(1)
-	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, urow, meta)
+	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, urow, MergeClientMeta(meta, "magic_link"))
 }
 
 // issueAuthAfterCredentialSuccess issues MFA pending or access token after password/magic-link verification.

@@ -10,13 +10,14 @@ import (
 )
 
 type accountProfileResponse struct {
-	Email       string  `json:"email"`
-	DisplayName *string `json:"displayName"`
-	FirstName   *string `json:"firstName"`
-	LastName    *string `json:"lastName"`
-	AvatarURL   *string `json:"avatarUrl"`
-	UITheme     string  `json:"uiTheme"`
-	Sid         *string `json:"sid"`
+	Email                        string  `json:"email"`
+	DisplayName                  *string `json:"displayName"`
+	FirstName                    *string `json:"firstName"`
+	LastName                     *string `json:"lastName"`
+	AvatarURL                    *string `json:"avatarUrl"`
+	UITheme                      string  `json:"uiTheme"`
+	Sid                          *string `json:"sid"`
+	SessionManagementUIEnabled   bool    `json:"sessionManagementUiEnabled"`
 }
 
 type patchAccountBody struct {
@@ -97,13 +98,14 @@ func (d Deps) handleGetSettingsAccount() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, accountProfileResponse{
-			Email:       row.Email,
-			DisplayName: row.DisplayName,
-			FirstName:   row.FirstName,
-			LastName:    row.LastName,
-			AvatarURL:   row.AvatarURL,
-			UITheme:     row.UITheme,
-			Sid:         row.Sid,
+			Email:                      row.Email,
+			DisplayName:                row.DisplayName,
+			FirstName:                  row.FirstName,
+			LastName:                   row.LastName,
+			AvatarURL:                  row.AvatarURL,
+			UITheme:                    row.UITheme,
+			Sid:                        row.Sid,
+			SessionManagementUIEnabled: d.effectiveConfig().SessionManagementUIEnabled,
 		})
 	}
 }
@@ -154,13 +156,14 @@ func (d Deps) handlePatchSettingsAccount() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, accountProfileResponse{
-			Email:       row.Email,
-			DisplayName: row.DisplayName,
-			FirstName:   row.FirstName,
-			LastName:    row.LastName,
-			AvatarURL:   row.AvatarURL,
-			UITheme:     row.UITheme,
-			Sid:         row.Sid,
+			Email:                      row.Email,
+			DisplayName:                row.DisplayName,
+			FirstName:                  row.FirstName,
+			LastName:                   row.LastName,
+			AvatarURL:                  row.AvatarURL,
+			UITheme:                    row.UITheme,
+			Sid:                        row.Sid,
+			SessionManagementUIEnabled: d.effectiveConfig().SessionManagementUIEnabled,
 		})
 	}
 }

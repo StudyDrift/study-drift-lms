@@ -37,6 +37,8 @@ var (
 type AuthUser struct {
 	UserID string
 	Email  string
+	// RefreshTokenSessionID is the refresh_tokens row id that issued this access token (optional; plan 4.9).
+	RefreshTokenSessionID *uuid.UUID
 }
 
 // MFAPendingUser is the identity encoded in a short-lived MFA pending JWT.
@@ -78,9 +80,12 @@ func NewJWTSignerWithPool(secret string, pool *pgxpool.Pool) *JWTSigner {
 	return j
 }
 
-// Sign creates a login JWT containing sub, email, exp, and optional session version (revocation).
-func (s *JWTSigner) Sign(ctx context.Context, userID, email string) (string, error) {
+// Sign creates a login JWT containing sub, email, exp, optional session version (revocation), and optional refresh-token session id (rti).
+func (s *JWTSigner) Sign(ctx context.Context, userID, email string, refreshTokenSessionID *uuid.UUID) (string, error) {
 	if !isUUID(userID) || strings.TrimSpace(email) == "" {
+		return "", ErrInvalidToken
+	}
+	if refreshTokenSessionID != nil && *refreshTokenSessionID == uuid.Nil {
 		return "", ErrInvalidToken
 	}
 	var sv int64
@@ -95,6 +100,11 @@ func (s *JWTSigner) Sign(ctx context.Context, userID, email string) (string, err
 		}
 	}
 	jti := uuid.NewString()
+	var rti *string
+	if refreshTokenSessionID != nil {
+		s := refreshTokenSessionID.String()
+		rti = &s
+	}
 	return s.sign(loginClaims{
 		Typ:            "login",
 		Subject:        userID,
@@ -102,6 +112,7 @@ func (s *JWTSigner) Sign(ctx context.Context, userID, email string) (string, err
 		SessionVersion: sv,
 		Issued:         unixSeconds(s.now()),
 		JTI:            jti,
+		RTI:            rti,
 		Expires:        unixSeconds(s.now().Add(s.ttl)),
 	})
 }
@@ -144,7 +155,15 @@ func (s *JWTSigner) Verify(ctx context.Context, token string) (AuthUser, error) 
 			}
 		}
 	}
-	return AuthUser{UserID: claims.Subject, Email: claims.Email}, nil
+	var rti *uuid.UUID
+	if claims.RTI != nil && strings.TrimSpace(*claims.RTI) != "" {
+		id, err := uuid.Parse(strings.TrimSpace(*claims.RTI))
+		if err != nil {
+			return AuthUser{}, ErrInvalidToken
+		}
+		rti = &id
+	}
+	return AuthUser{UserID: claims.Subject, Email: claims.Email, RefreshTokenSessionID: rti}, nil
 }
 
 // SignMFAPending issues a 60-second token used after password verification and before MFA completion.
@@ -307,6 +326,7 @@ type loginClaims struct {
 	SessionVersion int64  `json:"sv,omitempty"`
 	Issued         int64  `json:"iat,omitempty"`
 	JTI            string `json:"jti,omitempty"`
+	RTI            *string `json:"rti,omitempty"`
 	Expires        int64  `json:"exp"`
 }
 

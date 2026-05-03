@@ -97,6 +97,9 @@ type Config struct {
 	MagicLinkEnabled bool
 	// MagicLinkEnrolledOnly when true: only users with an active course enrollment receive a link.
 	MagicLinkEnrolledOnly bool
+
+	// SessionManagementUIEnabled gates /api/v1/me/sessions and related UI (plan 4.9).
+	SessionManagementUIEnabled bool
 }
 
 // Load reads configuration from the environment.
@@ -200,6 +203,8 @@ func Load() Config {
 
 		MagicLinkEnabled:      boolEnv("MAGIC_LINK_ENABLED"),
 		MagicLinkEnrolledOnly: boolEnv("MAGIC_LINK_ENROLLED_ONLY"),
+
+		SessionManagementUIEnabled: boolEnv("SESSION_MANAGEMENT_UI_ENABLED"),
 	}
 }
 

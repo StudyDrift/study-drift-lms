@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	pauth "github.com/lextures/lextures/server/internal/auth"
+	"github.com/lextures/lextures/server/internal/geoip"
 	"github.com/lextures/lextures/server/internal/repos/refreshtoken"
 	"github.com/lextures/lextures/server/internal/repos/user"
 )
@@ -27,8 +28,9 @@ const (
 
 // ClientMeta captures optional HTTP client hints for refresh token rows.
 type ClientMeta struct {
-	UserAgent string
-	IP        net.IP
+	UserAgent  string
+	IP         net.IP
+	AuthMethod string // e.g. password, oidc, saml, totp (stored on new refresh rows; plan 4.9)
 }
 
 // RefreshTokenResponse is returned by Refresh and Logout (rotation).
@@ -69,9 +71,48 @@ func ClientMetaFromRequest(r *http.Request) *ClientMeta {
 	return &ClientMeta{UserAgent: ua, IP: ip}
 }
 
+func authAndLocForNewToken(meta *ClientMeta, rotatedFrom *refreshtoken.Row) (ua string, auth *string, city *string, country *string) {
+	if meta != nil && strings.TrimSpace(meta.UserAgent) != "" {
+		ua = strings.TrimSpace(meta.UserAgent)
+	} else if rotatedFrom != nil && rotatedFrom.UserAgent != nil && strings.TrimSpace(*rotatedFrom.UserAgent) != "" {
+		ua = strings.TrimSpace(*rotatedFrom.UserAgent)
+	}
+	if rotatedFrom != nil {
+		return ua, rotatedFrom.AuthMethod, rotatedFrom.LocationCity, rotatedFrom.LocationCountry
+	}
+	if meta != nil {
+		if s := strings.TrimSpace(meta.AuthMethod); s != "" {
+			auth = &s
+		}
+	}
+	var c, co string
+	if meta != nil {
+		c, co = geoip.CityCountry(meta.IP)
+	}
+	if c != "" {
+		city = &c
+	}
+	if co != "" {
+		country = &co
+	}
+	return ua, auth, city, country
+}
+
+// MergeClientMeta returns a copy of meta with authMethod set when non-empty (for SSO/MFA callers).
+func MergeClientMeta(meta *ClientMeta, authMethod string) *ClientMeta {
+	out := ClientMeta{}
+	if meta != nil {
+		out = *meta
+	}
+	if s := strings.TrimSpace(authMethod); s != "" {
+		out.AuthMethod = s
+	}
+	return &out
+}
+
 func issueAccessAndRefresh(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, row *user.Row, meta *ClientMeta) (access, refresh string, err error) {
 	if pool == nil {
-		tok, err := jwt.Sign(ctx, row.ID, row.Email)
+		tok, err := jwt.Sign(ctx, row.ID, row.Email, nil)
 		return tok, "", err
 	}
 	tx, err := pool.Begin(ctx)
@@ -79,7 +120,7 @@ func issueAccessAndRefresh(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.J
 		return "", "", err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	a, ref, err := issueAccessAndRefreshTx(ctx, tx, jwt, row, meta)
+	a, ref, err := issueAccessAndRefreshTx(ctx, tx, jwt, row, meta, nil)
 	if err != nil {
 		return "", "", err
 	}
@@ -89,11 +130,7 @@ func issueAccessAndRefresh(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.J
 	return a, ref, nil
 }
 
-func issueAccessAndRefreshTx(ctx context.Context, tx pgx.Tx, jwt *pauth.JWTSigner, row *user.Row, meta *ClientMeta) (access, refresh string, err error) {
-	tok, err := jwt.Sign(ctx, row.ID, row.Email)
-	if err != nil {
-		return "", "", err
-	}
+func issueAccessAndRefreshTx(ctx context.Context, tx pgx.Tx, jwt *pauth.JWTSigner, row *user.Row, meta *ClientMeta, rotatedFrom *refreshtoken.Row) (access, refresh string, err error) {
 	raw := make([]byte, refreshTokenRawBytes)
 	if _, err := rand.Read(raw); err != nil {
 		return "", "", err
@@ -101,17 +138,28 @@ func issueAccessAndRefreshTx(ctx context.Context, tx pgx.Tx, jwt *pauth.JWTSigne
 	plain := base64.RawURLEncoding.EncodeToString(raw)
 	h := sha256.Sum256([]byte(plain))
 	exp := time.Now().UTC().Add(refreshTokenTTL)
-	var ua string
 	var ip net.IP
 	if meta != nil {
-		ua = meta.UserAgent
 		ip = meta.IP
 	}
 	uid, err := uuid.Parse(row.ID)
 	if err != nil {
 		return "", "", err
 	}
-	if _, err := refreshtoken.InsertTx(ctx, tx, uid, h[:], exp, ua, ip); err != nil {
+	ua, authPtr, cityPtr, countryPtr := authAndLocForNewToken(meta, rotatedFrom)
+	now := time.Now().UTC()
+	var refID uuid.UUID
+	if rotatedFrom != nil {
+		refID, err = refreshtoken.InsertTxWithLastRefreshed(ctx, tx, uid, h[:], exp, ua, ip, authPtr, cityPtr, countryPtr, now)
+	} else {
+		refID, err = refreshtoken.InsertTx(ctx, tx, uid, h[:], exp, ua, ip, authPtr, cityPtr, countryPtr)
+	}
+	if err != nil {
+		return "", "", err
+	}
+	rtid := refID
+	tok, err := jwt.Sign(ctx, row.ID, row.Email, &rtid)
+	if err != nil {
 		return "", "", err
 	}
 	return tok, plain, nil
@@ -146,10 +194,13 @@ func Refresh(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, rawR
 	if urow == nil || urow.LoginBlocked || urow.DeactivatedAt != nil {
 		return RefreshTokenResponse{}, ErrRefreshInvalid
 	}
+	if err := refreshtoken.TouchLastRefreshed(ctx, tx, row.ID, now, now); err != nil {
+		return RefreshTokenResponse{}, err
+	}
 	if err := refreshtoken.MarkRevoked(ctx, tx, row.ID, now); err != nil {
 		return RefreshTokenResponse{}, err
 	}
-	access, newRefresh, err := issueAccessAndRefreshTx(ctx, tx, jwt, urow, meta)
+	access, newRefresh, err := issueAccessAndRefreshTx(ctx, tx, jwt, urow, meta, row)
 	if err != nil {
 		return RefreshTokenResponse{}, err
 	}

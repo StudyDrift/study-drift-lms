@@ -1,6 +1,6 @@
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { ImageIcon, Save, Upload, X } from 'lucide-react'
+import { ImageIcon, Monitor, Save, Upload, X } from 'lucide-react'
 import { settingsViewFromPathname } from '../../components/layout/side-nav-path-utils'
 import { ImageModelPicker } from '../../components/image-model-picker'
 import { RequirePermission } from '../../components/require-permission'
@@ -79,6 +79,17 @@ type AccountProfile = {
   avatarUrl?: string | null
   uiTheme?: string | null
   sid?: string | null
+  sessionManagementUiEnabled?: boolean
+}
+
+type ActiveSessionRow = {
+  id: string
+  createdAt: string
+  lastUsedAt: string
+  deviceLabel: string
+  location: string
+  authMethod: string
+  isCurrent: boolean
 }
 
 function defaultAvatarPrompt(firstName: string, lastName: string): string {
@@ -158,6 +169,10 @@ export default function Settings() {
   const [avatarGenMessage, setAvatarGenMessage] = useState<string | null>(null)
   const [uiTheme, setUiTheme] = useState<UiTheme>('light')
   const [studentId, setStudentId] = useState<string | null>(null)
+  const [sessionManagementUiEnabled, setSessionManagementUiEnabled] = useState(false)
+  const [sessions, setSessions] = useState<ActiveSessionRow[]>([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [sessionsError, setSessionsError] = useState<string | null>(null)
 
   const [pwPolicy, setPwPolicy] = useState<{
     minLength: number
@@ -329,6 +344,7 @@ export default function Settings() {
       setAvatarPreviewUrl(currentAvatar || null)
       setUiTheme(parseUiTheme(data.uiTheme))
       setStudentId(data.sid?.trim() ? data.sid.trim() : null)
+      setSessionManagementUiEnabled(data.sessionManagementUiEnabled === true)
     } catch {
       setAccountError('Could not load account settings.')
     } finally {
@@ -336,10 +352,37 @@ export default function Settings() {
     }
   }, [])
 
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true)
+    setSessionsError(null)
+    try {
+      const res = await authorizedFetch('/api/v1/me/sessions')
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSessionsError(readApiErrorMessage(raw))
+        return
+      }
+      const data = raw as { sessions?: ActiveSessionRow[] }
+      setSessions(data.sessions ?? [])
+    } catch {
+      setSessionsError('Could not load active sessions.')
+    } finally {
+      setSessionsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (activeView !== 'account') return
     void loadAccount()
   }, [activeView, loadAccount])
+
+  useEffect(() => {
+    if (activeView !== 'account' || !sessionManagementUiEnabled) {
+      if (!sessionManagementUiEnabled) setSessions([])
+      return
+    }
+    void loadSessions()
+  }, [activeView, sessionManagementUiEnabled, loadSessions])
 
   useEffect(() => {
     if (activeView !== 'account') return
@@ -517,6 +560,52 @@ export default function Settings() {
     }
   }
 
+  async function revokeSession(id: string) {
+    if (!window.confirm('Sign out this session? You will be logged out on that device the next time it refreshes.')) {
+      return
+    }
+    setSessionsError(null)
+    try {
+      const res = await authorizedFetch(`/api/v1/me/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSessionsError(readApiErrorMessage(raw))
+        toastMutationError(readApiErrorMessage(raw))
+        return
+      }
+      toastSaveOk('Session signed out')
+      await loadSessions()
+    } catch {
+      setSessionsError('Could not revoke session.')
+      toastMutationError('Could not revoke session.')
+    }
+  }
+
+  async function revokeAllOtherSessions() {
+    if (
+      !window.confirm(
+        'Sign out all other sessions? Other browsers and devices will need to sign in again. This device stays signed in.',
+      )
+    ) {
+      return
+    }
+    setSessionsError(null)
+    try {
+      const res = await authorizedFetch('/api/v1/me/sessions', { method: 'DELETE' })
+      const raw: unknown = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSessionsError(readApiErrorMessage(raw))
+        toastMutationError(readApiErrorMessage(raw))
+        return
+      }
+      toastSaveOk('Other sessions signed out')
+      await loadSessions()
+    } catch {
+      setSessionsError('Could not sign out other sessions.')
+      toastMutationError('Could not sign out other sessions.')
+    }
+  }
+
   async function onSaveAccount(e: FormEvent) {
     e.preventDefault()
     setAccountSaving(true)
@@ -542,6 +631,7 @@ export default function Settings() {
       setFirstName(data.firstName ?? '')
       setLastName(data.lastName ?? '')
       setStudentId(data.sid?.trim() ? data.sid.trim() : null)
+      setSessionManagementUiEnabled(data.sessionManagementUiEnabled === true)
       const nextAvatar = data.avatarUrl ?? ''
       setAvatarUrl(nextAvatar)
       setAvatarPreviewUrl(nextAvatar || null)
@@ -1087,6 +1177,122 @@ export default function Settings() {
                   <Save className="h-4 w-4" aria-hidden />
                   {accountSaving ? 'Saving…' : 'Save'}
                 </button>
+
+                {sessionManagementUiEnabled && (
+                  <div className="border-t border-slate-200 pt-8 dark:border-neutral-700">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-neutral-100">
+                          <Monitor className="h-4 w-4 shrink-0 text-slate-500 dark:text-neutral-400" aria-hidden />
+                          Active sessions
+                        </h3>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+                          Where you are signed in. Location is approximate when shown.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void revokeAllOtherSessions()}
+                        disabled={sessionsLoading || sessions.filter((s) => !s.isCurrent).length === 0}
+                        className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-rose-500/50 dark:hover:bg-rose-950/40"
+                      >
+                        Sign out everywhere else
+                      </button>
+                    </div>
+                    {sessionsError && (
+                      <p className="mt-3 text-sm text-rose-600 dark:text-rose-400" role="alert">
+                        {sessionsError}
+                      </p>
+                    )}
+                    {sessionsLoading && <p className="mt-4 text-sm text-slate-500">Loading sessions…</p>}
+                    {!sessionsLoading && sessions.length === 0 && (
+                      <p className="mt-4 text-sm text-slate-500">No active sessions found.</p>
+                    )}
+                    {!sessionsLoading && sessions.length > 0 && (
+                      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 dark:border-neutral-600">
+                        <table
+                          className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-neutral-600"
+                          aria-label="Active sessions"
+                        >
+                          <thead className="bg-slate-50 dark:bg-neutral-800/80">
+                            <tr>
+                              <th scope="col" className="px-3 py-2 font-medium text-slate-700 dark:text-neutral-200">
+                                Device
+                              </th>
+                              <th scope="col" className="px-3 py-2 font-medium text-slate-700 dark:text-neutral-200">
+                                Location
+                              </th>
+                              <th scope="col" className="px-3 py-2 font-medium text-slate-700 dark:text-neutral-200">
+                                Signed in
+                              </th>
+                              <th scope="col" className="px-3 py-2 font-medium text-slate-700 dark:text-neutral-200">
+                                Last active
+                              </th>
+                              <th scope="col" className="px-3 py-2 font-medium text-slate-700 dark:text-neutral-200">
+                                Method
+                              </th>
+                              <th scope="col" className="px-3 py-2 font-medium text-slate-700 dark:text-neutral-200">
+                                Action
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 bg-white dark:divide-neutral-600 dark:bg-neutral-900">
+                            {sessions.map((s) => (
+                              <tr
+                                key={s.id}
+                                className={
+                                  s.isCurrent
+                                    ? 'bg-indigo-50/60 dark:bg-indigo-950/25'
+                                    : 'hover:bg-slate-50 dark:hover:bg-neutral-800/60'
+                                }
+                              >
+                                <th
+                                  scope="row"
+                                  className="whitespace-nowrap px-3 py-2.5 font-normal text-slate-900 dark:text-neutral-100"
+                                >
+                                  <span className="flex flex-wrap items-center gap-2">
+                                    {s.deviceLabel}
+                                    {s.isCurrent ? (
+                                      <span className="rounded-md bg-indigo-100 px-1.5 py-0.5 text-xs font-semibold text-indigo-900 dark:bg-indigo-900/60 dark:text-indigo-100">
+                                        This device
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                </th>
+                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-600 dark:text-neutral-300">
+                                  {s.location}
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-600 dark:text-neutral-300">
+                                  {new Date(s.createdAt).toLocaleString()}
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-600 dark:text-neutral-300">
+                                  {new Date(s.lastUsedAt).toLocaleString()}
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-600 dark:text-neutral-300">
+                                  {s.authMethod}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  {s.isCurrent ? (
+                                    <span className="text-xs text-slate-400 dark:text-neutral-500">—</span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => void revokeSession(s.id)}
+                                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-900 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-rose-500/50"
+                                      aria-label={`Sign out session on ${s.deviceLabel}`}
+                                    >
+                                      Sign out
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </form>
             )}
             {!accountLoading && <OidcConnectedAccountsPanel />}

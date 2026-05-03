@@ -242,7 +242,7 @@ func HandleACS(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, signe
 		_ = rbac.AssignUserRoleByName(ctx, pool, uid, role)
 	}
 
-	res, err := authservice.AuthResponseForUser(ctx, pool, signer, cfg, urow, authservice.ClientMetaFromRequest(r))
+		res, err := authservice.AuthResponseForUser(ctx, pool, signer, cfg, urow, authservice.ClientMetaFromRequest(r), "saml")
 	if err != nil {
 		return err
 	}

@@ -190,7 +190,7 @@ func (d Deps) handleMFATOTPChallenge() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
 			return
 		}
-		res, err := authservice.AuthResponseForUser(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), row, authservice.ClientMetaFromRequest(r))
+		res, err := authservice.AuthResponseForUser(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), row, authservice.ClientMetaFromRequest(r), "totp")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
 			return
@@ -248,7 +248,7 @@ func (d Deps) handleMFABackupChallenge() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
 			return
 		}
-		res, err := authservice.AuthResponseForUser(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), row, authservice.ClientMetaFromRequest(r))
+		res, err := authservice.AuthResponseForUser(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), row, authservice.ClientMetaFromRequest(r), "backup_code")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
 			return
@@ -459,7 +459,7 @@ func (d Deps) handleMFAWebAuthnAuthComplete() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
 			return
 		}
-		res, err := authservice.AuthResponseForUser(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), row, authservice.ClientMetaFromRequest(r))
+		res, err := authservice.AuthResponseForUser(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), row, authservice.ClientMetaFromRequest(r), "webauthn")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
 			return
@@ -513,7 +513,7 @@ func (d Deps) handleMFASetupComplete() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
 			return
 		}
-		res, err := authservice.AuthResponseForUser(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), row, authservice.ClientMetaFromRequest(r))
+		res, err := authservice.AuthResponseForUser(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), row, authservice.ClientMetaFromRequest(r), "mfa_setup")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
 			return

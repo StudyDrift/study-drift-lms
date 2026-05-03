@@ -129,7 +129,7 @@ func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg co
 	if err != nil || !ok {
 		return AuthResponse{}, ErrInvalidCredentials
 	}
-	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row, req.Client)
+	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row, MergeClientMeta(req.Client, "password"))
 }
 
 // Signup .
@@ -193,7 +193,7 @@ WHERE id <> $1::uuid`, communication.PlatformInboxSenderID.String()).Scan(&human
 
 	_ = passwordcreditevents.Insert(ctx, pool, uid, passwordcreditevents.KindSignup, hibpRes.BreachFound, hibpRes.HIBPAvailable)
 	communication.SendWelcomeMessage(ctx, pool, email)
-	return responseFromRow(ctx, pool, jwt, row, req.Client)
+	return responseFromRow(ctx, pool, jwt, row, MergeClientMeta(req.Client, "password"))
 }
 
 // RequestPasswordReset always returns the same public message; persists token when user exists.
@@ -373,8 +373,9 @@ func PlaceholderPasswordHash() (string, error) {
 }
 
 // AuthResponseForUser builds a bearer (or MFA-pending) response from a user row after SSO / MFA completion.
-func AuthResponseForUser(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, row *user.Row, meta *ClientMeta) (AuthResponse, error) {
-	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row, meta)
+// authMethod is stored on the new refresh token (e.g. "oidc", "saml", "totp"); merged into meta.
+func AuthResponseForUser(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, row *user.Row, meta *ClientMeta, authMethod string) (AuthResponse, error) {
+	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row, MergeClientMeta(meta, authMethod))
 }
 
 func responseFromRow(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, row *user.Row, meta *ClientMeta) (AuthResponse, error) {

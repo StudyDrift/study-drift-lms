@@ -98,6 +98,9 @@ func NewHandler(d Deps) http.Handler {
 	r.Get("/api/v1/me/mfa", d.handleListMyMFA())
 	r.Delete("/api/v1/me/mfa/{id}", d.handleDeleteMyMFA())
 	r.Get("/api/v1/me/permissions", d.handleMyPermissions())
+	r.Get("/api/v1/me/sessions", d.handleListMySessions())
+	r.Delete("/api/v1/me/sessions", d.handleDeleteMyOtherSessions())
+	r.Delete("/api/v1/me/sessions/{id}", d.handleDeleteMySession())
 	r.Get("/api/v1/courses", d.handleListCourses())
 	r.Post("/api/v1/courses", d.handleCreateCourse())
 	// One Route for /api/v1/courses/{course_code} so GET and PATCH /markdown-theme share the same chi subtree
