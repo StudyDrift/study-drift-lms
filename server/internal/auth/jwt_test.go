@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -18,11 +19,11 @@ const (
 func TestJWTSignerSignVerifyRoundTrip(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
 
-	token, err := signer.Sign(userID, "a@b.com")
+	token, err := signer.Sign(context.Background(), userID, "a@b.com")
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
-	user, err := signer.Verify(token)
+	user, err := signer.Verify(context.Background(), token)
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
@@ -35,24 +36,24 @@ func TestJWTSignerWrongSecretFailsVerify(t *testing.T) {
 	a := newTestSigner("secret-a")
 	b := newTestSigner("secret-b")
 
-	token, err := a.Sign(userID, "x@y.z")
+	token, err := a.Sign(context.Background(), userID, "x@y.z")
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
-	if _, err := b.Verify(token); !errors.Is(err, ErrInvalidToken) {
+	if _, err := b.Verify(context.Background(), token); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("Verify with wrong secret: %v", err)
 	}
 }
 
 func TestJWTSignerRejectsExpiredToken(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
-	token, err := signer.Sign(userID, "a@b.com")
+	token, err := signer.Sign(context.Background(), userID, "a@b.com")
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
 
 	signer.now = func() time.Time { return fixedNow().Add(defaultTokenTTL + jwtExpiryLeeway + time.Second) }
-	if _, err := signer.Verify(token); !errors.Is(err, ErrExpiredToken) {
+	if _, err := signer.Verify(context.Background(), token); !errors.Is(err, ErrExpiredToken) {
 		t.Fatalf("Verify expired: %v", err)
 	}
 }
@@ -68,14 +69,14 @@ func TestJWTSignerRejectsMalformedLoginClaims(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sign raw claims: %v", err)
 	}
-	if _, err := signer.Verify(token); !errors.Is(err, ErrInvalidToken) {
+	if _, err := signer.Verify(context.Background(), token); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("Verify malformed claims: %v", err)
 	}
 }
 
 func TestJWTSignerRejectsUnsupportedAlgorithm(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
-	token, err := signer.Sign(userID, "a@b.com")
+	token, err := signer.Sign(context.Background(), userID, "a@b.com")
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
@@ -87,7 +88,7 @@ func TestJWTSignerRejectsUnsupportedAlgorithm(t *testing.T) {
 	parts[0] = base64.RawURLEncoding.EncodeToString(header)
 	parts[2] = signer.signature(parts[0] + "." + parts[1])
 
-	if _, err := signer.Verify(strings.Join(parts, ".")); !errors.Is(err, ErrInvalidToken) {
+	if _, err := signer.Verify(context.Background(), strings.Join(parts, ".")); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("Verify unsupported alg: %v", err)
 	}
 }
@@ -110,7 +111,7 @@ func TestJWTSignerLTIEmbedTicketRoundTrip(t *testing.T) {
 
 func TestJWTSignerLoginTokenIsNotLTIEmbedTicket(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
-	token, err := signer.Sign(userID, "a@b.com")
+	token, err := signer.Sign(context.Background(), userID, "a@b.com")
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
@@ -123,17 +124,44 @@ func TestJWTSignerLoginTokenIsNotLTIEmbedTicket(t *testing.T) {
 func TestJWTSignerRejectsInvalidInput(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
 
-	if _, err := signer.Sign("not-a-uuid", "a@b.com"); !errors.Is(err, ErrInvalidToken) {
+	if _, err := signer.Sign(context.Background(), "not-a-uuid", "a@b.com"); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("Sign invalid user id: %v", err)
 	}
-	if _, err := signer.Sign(userID, " "); !errors.Is(err, ErrInvalidToken) {
+	if _, err := signer.Sign(context.Background(), userID, " "); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("Sign invalid email: %v", err)
 	}
 	if _, err := signer.SignLTIEmbedTicket(userID, courseID, "not-a-uuid"); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("SignLTIEmbedTicket invalid item id: %v", err)
 	}
-	if _, err := signer.Verify("not.a.jwt"); !errors.Is(err, ErrInvalidToken) {
+	if _, err := signer.Verify(context.Background(), "not.a.jwt"); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("Verify malformed token: %v", err)
+	}
+}
+
+func TestJWTSignerLoginClaimsOmitemptySessionVersion(t *testing.T) {
+	signer := newTestSigner("unit-test-secret")
+	token, err := signer.sign(loginClaims{
+		Subject: userID,
+		Email:   "a@b.com",
+		Expires: unixSeconds(fixedNow().Add(time.Hour)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("jwt parts: %d", len(parts))
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["sv"]; ok {
+		t.Fatalf("expected sv omitted when zero, got %s", raw["sv"])
 	}
 }
 

@@ -28,5 +28,5 @@ func UserFromRequest(r *http.Request, signer *JWTSigner) (AuthUser, error) {
 	if !ok {
 		return AuthUser{}, ErrInvalidToken
 	}
-	return signer.Verify(token)
+	return signer.Verify(r.Context(), token)
 }

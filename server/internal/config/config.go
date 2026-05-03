@@ -85,6 +85,8 @@ type Config struct {
 	OneRosterEnabled             bool
 	OneRosterBearerFallbackToken string
 	OneRosterBearerFallbackInst  string // UUID string; used with fallback token when DB has no match
+
+	ScimEnabled bool
 }
 
 // Load reads configuration from the environment.
@@ -180,6 +182,8 @@ func Load() Config {
 		OneRosterEnabled:             boolEnv("ONEROSTER_ENABLED"),
 		OneRosterBearerFallbackToken: firstNonEmptyTrimmed("ONEROSTER_BEARER_FALLBACK_TOKEN"),
 		OneRosterBearerFallbackInst:  strings.TrimSpace(os.Getenv("ONEROSTER_BEARER_FALLBACK_INSTITUTION_ID")),
+
+		ScimEnabled: boolEnv("SCIM_ENABLED"),
 	}
 }
 

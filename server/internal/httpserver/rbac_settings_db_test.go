@@ -46,8 +46,8 @@ func TestRBACSettings_ListRoles_OK_Pg(t *testing.T) {
 	if err := rbac.AssignUserRoleByName(ctx, pool, uid, "Global Admin"); err != nil {
 		t.Fatalf("ga: %v", err)
 	}
-	signer := auth.NewJWTSigner("01234567890123456789012345678901")
-	tok, err := signer.Sign(row.ID, em)
+	signer := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
+	tok, err := signer.Sign(ctx, row.ID, em)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}

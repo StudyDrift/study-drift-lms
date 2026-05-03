@@ -46,6 +46,7 @@ type platformSettingsJSON struct {
 	ResubmissionWorkflowEnabled bool `json:"resubmissionWorkflowEnabled"`
 	LTIEnabled                  bool `json:"ltiEnabled"`
 	OneRosterEnabled            bool `json:"oneRosterEnabled"`
+	ScimEnabled                 bool `json:"scimEnabled"`
 
 	Sources platformSourcesJSON `json:"sources"`
 }
@@ -70,6 +71,7 @@ type platformSourcesJSON struct {
 	ResubmissionWorkflowEnabled string `json:"resubmissionWorkflowEnabled"`
 	LTIEnabled                  string `json:"ltiEnabled"`
 	OneRosterEnabled            string `json:"oneRosterEnabled"`
+	ScimEnabled                 string `json:"scimEnabled"`
 }
 
 func src(s platformconfig.Source) string {
@@ -117,6 +119,7 @@ func (d Deps) handleGetPlatformSettings() http.HandlerFunc {
 			ResubmissionWorkflowEnabled: merged.ResubmissionWorkflowEnabled,
 			LTIEnabled:                  merged.LTIEnabled,
 			OneRosterEnabled:            merged.OneRosterEnabled,
+			ScimEnabled:                 merged.ScimEnabled,
 			Sources: platformSourcesJSON{
 				OpenRouterAPIKey:            src(sources.OpenRouterAPIKey),
 				SAMLSSOEnabled:              src(sources.SAMLSSOEnabled),
@@ -135,6 +138,7 @@ func (d Deps) handleGetPlatformSettings() http.HandlerFunc {
 				ResubmissionWorkflowEnabled: src(sources.ResubmissionWorkflowEnabled),
 				LTIEnabled:                  src(sources.LTIEnabled),
 				OneRosterEnabled:            src(sources.OneRosterEnabled),
+				ScimEnabled:                 src(sources.ScimEnabled),
 			},
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -163,6 +167,7 @@ type putPlatformBody struct {
 	ResubmissionWorkflowEnabled *bool `json:"resubmissionWorkflowEnabled"`
 	LTIEnabled                  *bool `json:"ltiEnabled"`
 	OneRosterEnabled            *bool `json:"oneRosterEnabled"`
+	ScimEnabled                 *bool `json:"scimEnabled"`
 
 	UpdateMask []string `json:"updateMask"`
 }
@@ -304,6 +309,10 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 			v := *body.OneRosterEnabled
 			wr.OneRosterEnabled = &v
 		})
+		set("scimenabled", body.ScimEnabled != nil, func() {
+			v := *body.ScimEnabled
+			wr.ScimEnabled = &v
+		})
 
 		dbRow, err := platformconfig.Upsert(r.Context(), d.Pool, wr)
 		if err != nil {
@@ -317,9 +326,6 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 		}
 		if d.Platform != nil {
 			d.Platform.Reload(merged)
-		}
-		if d.OIDC != nil {
-			d.OIDC = nil
 		}
 
 		sources := platformconfig.ResolveSources(d.Config, dbRow)
@@ -341,6 +347,7 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 			ResubmissionWorkflowEnabled: merged.ResubmissionWorkflowEnabled,
 			LTIEnabled:                  merged.LTIEnabled,
 			OneRosterEnabled:            merged.OneRosterEnabled,
+			ScimEnabled:                 merged.ScimEnabled,
 			Sources: platformSourcesJSON{
 				OpenRouterAPIKey:            src(sources.OpenRouterAPIKey),
 				SAMLSSOEnabled:              src(sources.SAMLSSOEnabled),
@@ -359,6 +366,7 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 				ResubmissionWorkflowEnabled: src(sources.ResubmissionWorkflowEnabled),
 				LTIEnabled:                  src(sources.LTIEnabled),
 				OneRosterEnabled:            src(sources.OneRosterEnabled),
+				ScimEnabled:                 src(sources.ScimEnabled),
 			},
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")

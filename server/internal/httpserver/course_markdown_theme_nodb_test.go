@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,7 +21,7 @@ func TestPatchMarkdownTheme_Not404NoRoute(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/courses/C-TEST/markdown-theme", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	// any bearer so meUserID runs; db nil will 500 on access check, not 404
-	tok, _ := signer.Sign("00000000-0000-0000-0000-000000000001", "u@test.com")
+	tok, _ := signer.Sign(context.Background(), "00000000-0000-0000-0000-000000000001", "u@test.com")
 	req.Header.Set("Authorization", "Bearer "+tok)
 	h.ServeHTTP(rr, req)
 	if rr.Code == http.StatusNotFound {

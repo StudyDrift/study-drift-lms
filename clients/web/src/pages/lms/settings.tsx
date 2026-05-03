@@ -6,6 +6,7 @@ import { ImageModelPicker } from '../../components/image-model-picker'
 import { RequirePermission } from '../../components/require-permission'
 import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-settings-panel'
 import { PlatformSettingsPanel } from '../../components/settings/platform-settings-panel'
+import { ScimSettingsPanel } from '../../components/settings/scim-settings-panel'
 import { RolesPermissionsPanel } from '../../components/settings/roles-permissions-panel'
 import { usePermissions } from '../../context/use-permissions'
 import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
@@ -24,7 +25,8 @@ function isSystemSettingsPath(pathname: string): boolean {
   return (
     pathname === '/settings/roles' ||
     pathname === '/settings/lti-tools' ||
-    pathname === '/settings/platform'
+    pathname === '/settings/platform' ||
+    pathname === '/settings/scim-provisioning'
   )
 }
 
@@ -614,7 +616,10 @@ export default function Settings() {
     <LmsPage title="Settings" description="Account and learning preferences.">
       <div
         className={`mt-8 ${
-          activeView === 'roles' || activeView === 'lti-tools' || activeView === 'platform'
+          activeView === 'roles' ||
+          activeView === 'lti-tools' ||
+          activeView === 'platform' ||
+          activeView === 'scim-provisioning'
             ? 'max-w-4xl'
             : activeView === 'ai-prompts'
               ? 'max-w-3xl'
@@ -1130,6 +1135,23 @@ export default function Settings() {
           >
             <LtiToolsSettingsPanel />
           </RequirePermission>
+        )}
+
+        {activeView === 'scim-provisioning' && (
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">SCIM provisioning</h2>
+            <RequirePermission
+              permission={PERM_RBAC_MANAGE}
+              fallback={
+                <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                  You need permission to manage SCIM provisioning (
+                  <code className="font-mono text-xs">{PERM_RBAC_MANAGE}</code>).
+                </p>
+              }
+            >
+              <ScimSettingsPanel />
+            </RequirePermission>
+          </div>
         )}
 
         {activeView === 'platform' && (

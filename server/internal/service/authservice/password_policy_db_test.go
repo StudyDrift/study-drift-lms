@@ -33,7 +33,7 @@ func TestSignup_RejectsBreachedPasswordWhenHIBPReportsHit_Pg(t *testing.T) {
 		t.Fatalf("pool: %v", err)
 	}
 	defer pool.Close()
-	jwt := auth.NewJWTSigner("01234567890123456789012345678901")
+	jwt := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
 	email := "pwpol-" + time.Now().Format("20060102150405.000000000") + "@example.com"
 	checker := hibp.StubChecker{Result: hibp.Result{BreachFound: true, HIBPAvailable: true}}
 	_, err = Signup(ctx, pool, jwt, checker, SignupRequest{Email: email, Password: "any-pass-here"})
@@ -67,7 +67,7 @@ func TestChangePassword_AuditTrail_Pg(t *testing.T) {
 		t.Fatalf("pool: %v", err)
 	}
 	defer pool.Close()
-	jwt := auth.NewJWTSigner("01234567890123456789012345678901")
+	jwt := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
 	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
 	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
 	email := "pwc-" + time.Now().Format("20060102150405.000000000") + "@example.com"

@@ -59,7 +59,7 @@ func (d Deps) handleCourseImportCanvasWS() http.HandlerFunc {
 		if err := json.Unmarshal(b, &m); err != nil || m.AuthToken == "" {
 			return
 		}
-		u, err := d.JWTSigner.Verify(m.AuthToken)
+		u, err := d.JWTSigner.Verify(r.Context(), m.AuthToken)
 		if err != nil {
 			return
 		}
