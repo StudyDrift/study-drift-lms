@@ -130,6 +130,14 @@ export function buildSearchItems(
       haystack: 'openrouter saml feature flags lti oneroster platform environment database admin page'.toLowerCase(),
     })
     items.push({
+      id: 'page:/settings/organizations',
+      group: 'page',
+      title: 'Organizations',
+      subtitle: 'System settings',
+      path: '/settings/organizations',
+      haystack: 'organizations tenants multi-tenant org slug suspend admin page'.toLowerCase(),
+    })
+    items.push({
       id: 'page:/settings/ai/models',
       group: 'page',
       title: 'AI models',

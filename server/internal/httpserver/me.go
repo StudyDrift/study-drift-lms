@@ -9,6 +9,7 @@ import (
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/auth"
 	"github.com/lextures/lextures/server/internal/repos/oidc"
+	"github.com/lextures/lextures/server/internal/repos/organization"
 	"github.com/lextures/lextures/server/internal/service/meperm"
 )
 
@@ -34,6 +35,29 @@ func (d Deps) meUserID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool)
 	}
 	if d.Pool == nil {
 		apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Server misconfiguration.")
+		return uuid.UUID{}, false
+	}
+	ctx := r.Context()
+	dbOrgID, err := organization.OrgIDForUser(ctx, d.Pool, userID)
+	if err != nil {
+		apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Server misconfiguration.")
+		return uuid.UUID{}, false
+	}
+	if u.OrgID != "" && u.OrgID != dbOrgID.String() {
+		apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission for this action.")
+		return uuid.UUID{}, false
+	}
+	st, err := organization.OrgStatusForUser(ctx, d.Pool, userID)
+	if err != nil {
+		apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Server misconfiguration.")
+		return uuid.UUID{}, false
+	}
+	if st == "suspended" {
+		apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeOrgSuspended, "This organization has been suspended.")
+		return uuid.UUID{}, false
+	}
+	if st == "deleted" || st == "" {
+		apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission for this action.")
 		return uuid.UUID{}, false
 	}
 	return userID, true

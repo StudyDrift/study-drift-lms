@@ -98,6 +98,9 @@ type ChangePasswordResponse struct{ Message string }
 // ErrInvalidCredentials is returned for bad login.
 var ErrInvalidCredentials = errors.New("invalid credentials")
 
+// ErrOrgSuspended is returned when the user's organization is suspended (plan 5.1 AC-5).
+var ErrOrgSuspended = errors.New("org suspended")
+
 // ErrEmailTaken is a unique email violation.
 var ErrEmailTaken = errors.New("email taken")
 
@@ -124,6 +127,9 @@ func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg co
 	}
 	if row.DeactivatedAt != nil {
 		return AuthResponse{}, ErrInvalidCredentials
+	}
+	if err := orgAuthGate(ctx, pool, row.ID); err != nil {
+		return AuthResponse{}, err
 	}
 	ok, err := pauth.VerifyPassword(req.Password, row.PasswordHash)
 	if err != nil || !ok {
@@ -352,6 +358,9 @@ func HTTPErrorFor(err error) (status int, code, msg string) {
 	}
 	if errors.Is(err, ErrRefreshInvalid) {
 		return http.StatusUnauthorized, apierr.CodeUnauthorized, "Session expired. Sign in again."
+	}
+	if errors.Is(err, ErrOrgSuspended) {
+		return http.StatusForbidden, apierr.CodeOrgSuspended, "This organization has been suspended."
 	}
 	return http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong."
 }

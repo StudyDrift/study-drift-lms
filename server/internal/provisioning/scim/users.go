@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/lextures/lextures/server/internal/repos/refreshtoken"
+	"github.com/lextures/lextures/server/internal/repos/organization"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
 	"github.com/lextures/lextures/server/internal/repos/user"
 	"github.com/lextures/lextures/server/internal/service/authservice"
@@ -133,6 +134,11 @@ func CreateUser(ctx context.Context, pool *pgxpool.Pool, institutionID uuid.UUID
 		return nil, err
 	}
 
+	orgID, err := organization.ResolveOrgIDForProvisioning(ctx, pool, institutionID)
+	if err != nil {
+		return nil, err
+	}
+
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -173,10 +179,10 @@ SELECT EXISTS (
 
 	var uid uuid.UUID
 	err = tx.QueryRow(ctx, `
-INSERT INTO "user".users (email, password_hash, display_name, scim_external_id)
-VALUES ($1, $2, $3, $4)
+INSERT INTO "user".users (email, password_hash, display_name, scim_external_id, org_id)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id
-`, email, ph, dn, extSQL).Scan(&uid)
+`, email, ph, dn, extSQL, orgID).Scan(&uid)
 	if err != nil {
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {

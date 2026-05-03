@@ -42,7 +42,7 @@ func TestHandleSearchIndex_Unauthorized(t *testing.T) {
 func TestHandleSearchIndex_MethodNotAllowed(t *testing.T) {
 	s := auth.NewJWTSigner("01234567890123456789012345678901")
 	d := Deps{Pool: nil, JWTSigner: s}
-	tok, err := s.Sign(context.Background(), uuid.NewString(), "x@y.com", nil)
+	tok, err := s.Sign(context.Background(), uuid.NewString(), "x@y.com", "", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

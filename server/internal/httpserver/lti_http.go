@@ -228,7 +228,7 @@ func (d Deps) handleLtiProviderLaunch() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Server misconfiguration.")
 			return
 		}
-		appTok, err := d.JWTSigner.Sign(r.Context(), uid.String(), email, nil)
+		appTok, err := d.JWTSigner.Sign(r.Context(), uid.String(), email, "", "", nil)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Could not issue session token.")
 			return

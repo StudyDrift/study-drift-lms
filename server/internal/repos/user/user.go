@@ -80,8 +80,8 @@ FROM "user".users WHERE id = $1`
 
 // InsertUser creates a new user; email must be normalized. Returns the full row.
 func InsertUser(ctx context.Context, pool *pgxpool.Pool, email, passwordHash string, displayName *string) (*Row, error) {
-	const q = `INSERT INTO "user".users (email, password_hash, display_name)
-VALUES ($1, $2, $3)
+	const q = `INSERT INTO "user".users (email, password_hash, display_name, org_id)
+VALUES ($1, $2, $3, (SELECT id FROM tenant.organizations WHERE slug = 'default' LIMIT 1))
 RETURNING id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
   login_blocked, deactivated_at`
 	var r Row
@@ -108,8 +108,8 @@ RETURNING id::text, email, password_hash, display_name, first_name, last_name, a
 
 // InsertUserTx is InsertUser within an existing transaction.
 func InsertUserTx(ctx context.Context, tx pgx.Tx, email, passwordHash string, displayName *string) (*Row, error) {
-	const q = `INSERT INTO "user".users (email, password_hash, display_name)
-VALUES ($1, $2, $3)
+	const q = `INSERT INTO "user".users (email, password_hash, display_name, org_id)
+VALUES ($1, $2, $3, (SELECT id FROM tenant.organizations WHERE slug = 'default' LIMIT 1))
 RETURNING id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
   login_blocked, deactivated_at`
 	var r Row

@@ -16,7 +16,7 @@ import (
 
 func upsertUser(
 	ctx context.Context, tx pgx.Tx,
-	inst uuid.UUID, sourcedID, email, givenName, familyName, displayName, orRole string,
+	inst, orgID uuid.UUID, sourcedID, email, givenName, familyName, displayName, orRole string,
 	log eventLogger,
 ) (op string, err error) {
 	appRole := mapAppRoleName(orRole)
@@ -65,9 +65,9 @@ FROM "user".users WHERE id = $1
 		if changed {
 			_, err = tx.Exec(ctx, `
 UPDATE "user".users SET email = $2, first_name = NULLIF($3,''), last_name = NULLIF($4,''),
-  display_name = NULLIF($5,'')
+  display_name = NULLIF($5,''), org_id = $6
 WHERE id = $1
-`, *mappedUID, email, gn, fn, dn)
+`, *mappedUID, email, gn, fn, dn, orgID)
 			if err != nil {
 				return "", err
 			}
@@ -101,9 +101,10 @@ WHERE id = $1
 UPDATE "user".users SET first_name = COALESCE(NULLIF($2,''), first_name),
   last_name = COALESCE(NULLIF($3,''), last_name),
   display_name = COALESCE(NULLIF($4,''), display_name),
-  deactivated_at = NULL, login_blocked = FALSE
+  deactivated_at = NULL, login_blocked = FALSE,
+  org_id = $5
 WHERE id = $1
-`, emailRowID, gn, fn, dn)
+`, emailRowID, gn, fn, dn, orgID)
 		if err != nil {
 			return "", err
 		}
@@ -128,10 +129,10 @@ WHERE id = $1
 	}
 	var newID uuid.UUID
 	err = tx.QueryRow(ctx, `
-INSERT INTO "user".users (email, password_hash, display_name, first_name, last_name)
-VALUES ($1, $2, $3, NULLIF($4,''), NULLIF($5,''))
+INSERT INTO "user".users (email, password_hash, display_name, first_name, last_name, org_id)
+VALUES ($1, $2, $3, NULLIF($4,''), NULLIF($5,''), $6)
 RETURNING id
-`, email, ph, dnPtr, gn, fn).Scan(&newID)
+`, email, ph, dnPtr, gn, fn, orgID).Scan(&newID)
 	if err != nil {
 		return "", err
 	}
@@ -154,7 +155,7 @@ ON CONFLICT (user_id, role_id) DO NOTHING
 	return err
 }
 
-func deactivateUser(ctx context.Context, tx pgx.Tx, inst uuid.UUID, sourcedID string, log eventLogger, deactivated *int) error {
+func deactivateUser(ctx context.Context, tx pgx.Tx, inst, orgID uuid.UUID, sourcedID string, log eventLogger, deactivated *int) error {
 	mappedUID, err := lookupMappedID(ctx, tx, inst, "user", sourcedID)
 	if err != nil {
 		return err
@@ -176,7 +177,7 @@ UPDATE "user".users SET deactivated_at = COALESCE(deactivated_at, NOW()), login_
 	return nil
 }
 
-func upsertClassCourse(ctx context.Context, tx pgx.Tx, p SyncParams, sourcedID, title string, log eventLogger) (string, error) {
+func upsertClassCourse(ctx context.Context, tx pgx.Tx, p SyncParams, orgID uuid.UUID, sourcedID, title string, log eventLogger) (string, error) {
 	mapped, err := lookupMappedID(ctx, tx, p.InstitutionID, "class", sourcedID)
 	if err != nil {
 		return "", err
@@ -184,8 +185,8 @@ func upsertClassCourse(ctx context.Context, tx pgx.Tx, p SyncParams, sourcedID, 
 	if mapped != nil {
 		tag, err := tx.Exec(ctx, `
 UPDATE course.courses SET title = $2, archived = FALSE, updated_at = NOW()
-WHERE id = $1 AND (title IS DISTINCT FROM $2 OR archived IS DISTINCT FROM FALSE)
-`, *mapped, title)
+WHERE id = $1 AND org_id = $3 AND (title IS DISTINCT FROM $2 OR archived IS DISTINCT FROM FALSE)
+`, *mapped, title, orgID)
 		if err != nil {
 			return "", err
 		}
@@ -204,10 +205,10 @@ WHERE id = $1 AND (title IS DISTINCT FROM $2 OR archived IS DISTINCT FROM FALSE)
 		}
 		var cid uuid.UUID
 		err = tx.QueryRow(ctx, `
-INSERT INTO course.courses (course_code, title, description, course_type, created_by_user_id)
-VALUES ($1, $2, '', 'traditional', $3)
+INSERT INTO course.courses (course_code, title, description, course_type, created_by_user_id, org_id)
+VALUES ($1, $2, '', 'traditional', $3, $4)
 RETURNING id
-`, code, title, p.ActorUserID).Scan(&cid)
+`, code, title, p.ActorUserID, orgID).Scan(&cid)
 		if err != nil {
 			var pe *pgconn.PgError
 			if errors.As(err, &pe) && pe.Code == "23505" {
@@ -229,7 +230,7 @@ ON CONFLICT (course_id, user_id, role) DO UPDATE SET active = TRUE
 	return "", errors.New("could not allocate unique course_code")
 }
 
-func deactivateClass(ctx context.Context, tx pgx.Tx, inst uuid.UUID, sourcedID string, log eventLogger, deactivated *int) error {
+func deactivateClass(ctx context.Context, tx pgx.Tx, inst, orgID uuid.UUID, sourcedID string, log eventLogger, deactivated *int) error {
 	mapped, err := lookupMappedID(ctx, tx, inst, "class", sourcedID)
 	if err != nil {
 		return err
@@ -237,7 +238,7 @@ func deactivateClass(ctx context.Context, tx pgx.Tx, inst uuid.UUID, sourcedID s
 	if mapped == nil {
 		return nil
 	}
-	tag, err := tx.Exec(ctx, `UPDATE course.courses SET archived = TRUE, updated_at = NOW() WHERE id = $1`, *mapped)
+	tag, err := tx.Exec(ctx, `UPDATE course.courses SET archived = TRUE, updated_at = NOW() WHERE id = $1 AND org_id = $2`, *mapped, orgID)
 	if err != nil {
 		return err
 	}
@@ -248,7 +249,7 @@ func deactivateClass(ctx context.Context, tx pgx.Tx, inst uuid.UUID, sourcedID s
 	return nil
 }
 
-func upsertEnrollment(ctx context.Context, tx pgx.Tx, inst uuid.UUID, enrollSID, classSID, userSID, enrollRole string, log eventLogger) (string, error) {
+func upsertEnrollment(ctx context.Context, tx pgx.Tx, inst, orgID uuid.UUID, enrollSID, classSID, userSID, enrollRole string, log eventLogger) (string, error) {
 	classID, err := lookupMappedID(ctx, tx, inst, "class", classSID)
 	if err != nil {
 		return "", err
@@ -262,6 +263,27 @@ func upsertEnrollment(ctx context.Context, tx pgx.Tx, inst uuid.UUID, enrollSID,
 	}
 	if userID == nil {
 		return "", errors.New("unknown userSourcedId")
+	}
+	var uOrg, cOrg uuid.UUID
+	var uSt, cSt string
+	if err := tx.QueryRow(ctx, `
+SELECT u.org_id, o.status
+FROM "user".users u
+INNER JOIN tenant.organizations o ON o.id = u.org_id
+WHERE u.id = $1
+`, *userID).Scan(&uOrg, &uSt); err != nil {
+		return "", err
+	}
+	if err := tx.QueryRow(ctx, `
+SELECT c.org_id, o.status
+FROM course.courses c
+INNER JOIN tenant.organizations o ON o.id = c.org_id
+WHERE c.id = $1
+`, *classID).Scan(&cOrg, &cSt); err != nil {
+		return "", err
+	}
+	if uOrg != cOrg || uSt != "active" || cSt != "active" {
+		return "", errors.New("enrollment blocked: user and course must belong to the same active organization")
 	}
 
 	mappedEnroll, err := lookupMappedID(ctx, tx, inst, "enrollment", enrollSID)
@@ -304,7 +326,7 @@ RETURNING id
 	return "create", nil
 }
 
-func deactivateEnrollment(ctx context.Context, tx pgx.Tx, inst uuid.UUID, enrollSID string, log eventLogger, deactivated *int) error {
+func deactivateEnrollment(ctx context.Context, tx pgx.Tx, inst, orgID uuid.UUID, enrollSID string, log eventLogger, deactivated *int) error {
 	mapped, err := lookupMappedID(ctx, tx, inst, "enrollment", enrollSID)
 	if err != nil {
 		return err
@@ -312,7 +334,12 @@ func deactivateEnrollment(ctx context.Context, tx pgx.Tx, inst uuid.UUID, enroll
 	if mapped == nil {
 		return nil
 	}
-	tag, err := tx.Exec(ctx, `UPDATE course.course_enrollments SET active = FALSE WHERE id = $1`, *mapped)
+	tag, err := tx.Exec(ctx, `
+UPDATE course.course_enrollments ce
+SET active = FALSE
+FROM course.courses c
+WHERE ce.id = $1 AND ce.course_id = c.id AND c.org_id = $2
+`, *mapped, orgID)
 	if err != nil {
 		return err
 	}

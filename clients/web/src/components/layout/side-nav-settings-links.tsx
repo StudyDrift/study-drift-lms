@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { ArrowLeft, Bell, Bot, ChevronDown, Link2, Plug, Settings2, Shield, User } from 'lucide-react'
+import { ArrowLeft, Bell, Bot, Building2, ChevronDown, Link2, Plug, Settings2, Shield, User } from 'lucide-react'
 import { usePermissions } from '../../context/use-permissions'
 import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
 import { settingsViewFromPathname } from './side-nav-path-utils'
@@ -72,6 +72,13 @@ export function SideNavSettingsLinks() {
           >
             <Settings2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
             Global platform
+          </NavLink>
+          <NavLink
+            to="/settings/organizations"
+            className={() => `${sideNavLinkClass} ${view === 'organizations' ? sideNavActiveClass : ''}`}
+          >
+            <Building2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+            Organizations
           </NavLink>
           <NavLink
             to="/settings/scim-provisioning"
