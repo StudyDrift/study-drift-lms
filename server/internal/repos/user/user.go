@@ -15,16 +15,16 @@ import (
 
 // Row is a users table row for authentication and profile in API responses.
 type Row struct {
-	ID           string
-	Email        string
-	PasswordHash string
-	DisplayName  *string
-	FirstName    *string
-	LastName     *string
-	AvatarURL    *string
-	UITheme      string
-	Sid          *string
-	LoginBlocked bool
+	ID            string
+	Email         string
+	PasswordHash  string
+	DisplayName   *string
+	FirstName     *string
+	LastName      *string
+	AvatarURL     *string
+	UITheme       string
+	Sid           *string
+	LoginBlocked  bool
 	DeactivatedAt *time.Time
 }
 
@@ -88,6 +88,34 @@ RETURNING id::text, email, password_hash, display_name, first_name, last_name, a
 	var dn, fn, ln, av, sid sql.NullString
 	var deactivatedAt sql.NullTime
 	err := pool.QueryRow(ctx, q, email, passwordHash, displayName).Scan(
+		&r.ID, &r.Email, &r.PasswordHash, &dn, &fn, &ln, &av, &r.UITheme, &sid,
+		&r.LoginBlocked, &deactivatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	r.DisplayName = strPtr(dn)
+	r.FirstName = strPtr(fn)
+	r.LastName = strPtr(ln)
+	r.AvatarURL = strPtr(av)
+	r.Sid = strPtr(sid)
+	if deactivatedAt.Valid {
+		t := deactivatedAt.Time
+		r.DeactivatedAt = &t
+	}
+	return &r, nil
+}
+
+// InsertUserTx is InsertUser within an existing transaction.
+func InsertUserTx(ctx context.Context, tx pgx.Tx, email, passwordHash string, displayName *string) (*Row, error) {
+	const q = `INSERT INTO "user".users (email, password_hash, display_name)
+VALUES ($1, $2, $3)
+RETURNING id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
+  login_blocked, deactivated_at`
+	var r Row
+	var dn, fn, ln, av, sid sql.NullString
+	var deactivatedAt sql.NullTime
+	err := tx.QueryRow(ctx, q, email, passwordHash, displayName).Scan(
 		&r.ID, &r.Email, &r.PasswordHash, &dn, &fn, &ln, &av, &r.UITheme, &sid,
 		&r.LoginBlocked, &deactivatedAt,
 	)
