@@ -137,7 +137,26 @@ func Signup(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, check
 	}
 	dn := trimStringPtr(req.DisplayName)
 
-	row, err := user.InsertUser(ctx, pool, email, ph, dn)
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return AuthResponse{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('signup_first_human'))`); err != nil {
+		return AuthResponse{}, err
+	}
+
+	var humanCount int64
+	err = tx.QueryRow(ctx, `
+SELECT COUNT(*)::bigint FROM "user".users
+WHERE id <> $1::uuid`, communication.PlatformInboxSenderID.String()).Scan(&humanCount)
+	if err != nil {
+		return AuthResponse{}, err
+	}
+	firstHuman := humanCount == 0
+
+	row, err := user.InsertUserTx(ctx, tx, email, ph, dn)
 	if err != nil {
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {
@@ -149,9 +168,18 @@ func Signup(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, check
 	if err != nil {
 		return AuthResponse{}, err
 	}
-	if err := rbac.AssignUserRoleByName(ctx, pool, uid, "Teacher"); err != nil {
+	if firstHuman {
+		if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, "Global Admin"); err != nil {
+			return AuthResponse{}, err
+		}
+	}
+	if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, "Teacher"); err != nil {
 		return AuthResponse{}, err
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return AuthResponse{}, err
+	}
+
 	_ = passwordcreditevents.Insert(ctx, pool, uid, passwordcreditevents.KindSignup, hibpRes.BreachFound, hibpRes.HIBPAvailable)
 	communication.SendWelcomeMessage(ctx, pool, email)
 	return responseFromRow(jwt, row)
