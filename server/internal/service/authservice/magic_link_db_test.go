@@ -103,14 +103,14 @@ VALUES ($1::uuid, $2, NOW() + INTERVAL '30 minutes', $3)
 		t.Fatalf("insert token: %v", err)
 	}
 	cfg := config.Config{PublicWebOrigin: "http://localhost:5173", MFAEnabled: false, MagicLinkEnabled: true}
-	res, err := ConsumeMagicLink(ctx, pool, jwt, cfg, plaintext)
+	res, err := ConsumeMagicLink(ctx, pool, jwt, cfg, plaintext, nil)
 	if err != nil {
 		t.Fatalf("consume: %v", err)
 	}
 	if res.AccessToken == "" {
 		t.Fatal("expected access token")
 	}
-	if _, err := ConsumeMagicLink(ctx, pool, jwt, cfg, plaintext); err == nil {
+	if _, err := ConsumeMagicLink(ctx, pool, jwt, cfg, plaintext, nil); err == nil {
 		t.Fatal("expected gone on replay")
 	} else if !errors.Is(err, ErrMagicLinkGone) {
 		t.Fatalf("want gone, got %v", err)

@@ -153,3 +153,93 @@ func TestAuthRoutes_Pg(t *testing.T) {
 		t.Fatalf("link response: %#v", linkRes)
 	}
 }
+
+func TestAuthRefreshRotationAndPasswordRevoke_Pg(t *testing.T) {
+	if os.Getenv("DATABASE_URL") == "" {
+		t.Skip("DATABASE_URL")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	dsn := os.Getenv("DATABASE_URL")
+	if err := migrate.RunWithFS(ctx, serverdata.Migrations, dsn); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	pool, err := db.NewPool(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	defer pool.Close()
+	cfg := config.Config{PublicWebOrigin: "http://localhost:5173"}
+	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
+	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
+	newPass := "K8r#yN3qM0wSlX5%iO9zU2dZ6cV7oN1bT"
+	d := Deps{Pool: pool, JWTSigner: auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool), Config: cfg, PasswordChecker: stub}
+	h := NewHandler(d)
+	email := "rf-" + time.Now().Format("20060102150405") + "@e.com"
+	body, _ := json.Marshal(map[string]any{"email": email, "password": pass, "display_name": "R"})
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/signup", bytes.NewReader(body))
+	r = r.WithContext(ctx)
+	h.ServeHTTP(rr, r)
+	if rr.Code != 200 {
+		t.Fatalf("signup: %d %s", rr.Code, rr.Body.String())
+	}
+	var login1 struct {
+		Access  string `json:"access_token"`
+		Refresh string `json:"refresh_token"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&login1); err != nil {
+		t.Fatal(err)
+	}
+	if login1.Refresh == "" || login1.Access == "" {
+		t.Fatalf("expected access+refresh from signup: %#v", login1)
+	}
+	rr = httptest.NewRecorder()
+	refBody, _ := json.Marshal(map[string]string{"refresh_token": login1.Refresh})
+	r = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(refBody))
+	r = r.WithContext(ctx)
+	h.ServeHTTP(rr, r)
+	if rr.Code != 200 {
+		t.Fatalf("refresh: %d %s", rr.Code, rr.Body.String())
+	}
+	var refOut struct {
+		Access  string `json:"access_token"`
+		Refresh string `json:"refresh_token"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&refOut); err != nil {
+		t.Fatal(err)
+	}
+	if refOut.Access == "" || refOut.Refresh == "" {
+		t.Fatal("expected rotated refresh")
+	}
+	rr = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(refBody))
+	r = r.WithContext(ctx)
+	h.ServeHTTP(rr, r)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("replay old refresh: want 401 got %d", rr.Code)
+	}
+	if _, err := d.JWTSigner.Verify(ctx, login1.Access); err != nil {
+		t.Fatalf("pre-password-change access should verify: %v", err)
+	}
+	rr = httptest.NewRecorder()
+	cp, _ := json.Marshal(map[string]string{"current_password": pass, "new_password": newPass})
+	r = httptest.NewRequest(http.MethodPost, "/api/v1/auth/change-password", bytes.NewReader(cp))
+	r = r.WithContext(ctx)
+	r.Header.Set("Authorization", "Bearer "+refOut.Access)
+	h.ServeHTTP(rr, r)
+	if rr.Code != 200 {
+		t.Fatalf("change password: %d %s", rr.Code, rr.Body.String())
+	}
+	if _, err := d.JWTSigner.Verify(ctx, login1.Access); err == nil {
+		t.Fatal("expected old access JWT rejected after password change (token_invalidated_at)")
+	}
+	rr = httptest.NewRecorder()
+	replayNew, _ := json.Marshal(map[string]string{"refresh_token": refOut.Refresh})
+	r = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(replayNew))
+	r = r.WithContext(ctx)
+	h.ServeHTTP(rr, r)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("refresh after password change: want 401 got %d", rr.Code)
+	}
+}

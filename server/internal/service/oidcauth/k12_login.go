@@ -35,6 +35,7 @@ func (s *Service) completeK12OIDCLogin(
 	ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner,
 	pv string, flow *oidcrepo.FlowStateRow,
 	prov *oidc.Provider, o2 oauth2.Config, tok *oauth2.Token,
+	meta *authservice.ClientMeta,
 ) (authservice.AuthResponse, *string, error) {
 	if tok == nil || strings.TrimSpace(tok.AccessToken) == "" {
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "The identity provider did not return an access token."}
@@ -140,7 +141,7 @@ func (s *Service) completeK12OIDCLogin(
 		if u2 == nil {
 			return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -151,14 +152,14 @@ func (s *Service) completeK12OIDCLogin(
 		if u, err := user.FindByCleverID(ctx, pool, *cleverID); err != nil {
 			return authservice.AuthResponse{}, nil, err
 		} else if u != nil {
-			return s.finishK12ExistingUser(ctx, pool, jwt, u, pv, subj, emailIn, cleverID, classlinkID, isMinor, givenName, familyName, connectedVia, flow.NextPath)
+			return s.finishK12ExistingUser(ctx, pool, jwt, u, pv, subj, emailIn, cleverID, classlinkID, isMinor, givenName, familyName, connectedVia, flow.NextPath, meta)
 		}
 	}
 	if pv == "classlink" && classlinkID != nil {
 		if u, err := user.FindByClassLinkID(ctx, pool, *classlinkID); err != nil {
 			return authservice.AuthResponse{}, nil, err
 		} else if u != nil {
-			return s.finishK12ExistingUser(ctx, pool, jwt, u, pv, subj, emailIn, cleverID, classlinkID, isMinor, givenName, familyName, connectedVia, flow.NextPath)
+			return s.finishK12ExistingUser(ctx, pool, jwt, u, pv, subj, emailIn, cleverID, classlinkID, isMinor, givenName, familyName, connectedVia, flow.NextPath, meta)
 		}
 	}
 
@@ -187,7 +188,7 @@ func (s *Service) completeK12OIDCLogin(
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -211,7 +212,7 @@ func (s *Service) completeK12OIDCLogin(
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -246,7 +247,7 @@ func (s *Service) completeK12OIDCLogin(
 	if u3 == nil {
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
 	}
-	res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u3)
+	res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u3, meta)
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
@@ -258,6 +259,7 @@ func (s *Service) finishK12ExistingUser(
 	u *user.Row, pv, subj, emailIn string,
 	cleverID, classlinkID *string, isMinor bool, givenName, familyName *string, connectedVia string,
 	nextPath *string,
+	meta *authservice.ClientMeta,
 ) (authservice.AuthResponse, *string, error) {
 	uid, err := uuid.Parse(u.ID)
 	if err != nil {
@@ -276,7 +278,7 @@ func (s *Service) finishK12ExistingUser(
 	if u2 == nil {
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
 	}
-	res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2)
+	res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2, meta)
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}

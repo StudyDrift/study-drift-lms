@@ -25,9 +25,11 @@ type UserPublic struct {
 }
 
 type AuthResponse struct {
-	AccessToken string     `json:"access_token"`
-	TokenType   string     `json:"token_type"`
-	User        UserPublic `json:"user"`
+	AccessToken  string     `json:"access_token"`
+	RefreshToken string     `json:"refresh_token,omitempty"`
+	ExpiresIn    int        `json:"expires_in,omitempty"`
+	TokenType    string     `json:"token_type"`
+	User         UserPublic `json:"user"`
 }
 
 type ForgotPasswordRequest struct {

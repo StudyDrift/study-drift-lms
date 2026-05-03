@@ -42,15 +42,15 @@ const spec = `{
     "/api/v1/auth/login": {
       "post": {
         "tags": ["auth"],
-        "summary": "Email and password sign-in",
-        "responses": { "200": { "description": "Access token and user" }, "401": { "description": "Invalid credentials" } }
+        "summary": "Email and password sign-in (short-lived access_token + refresh_token)",
+        "responses": { "200": { "description": "Access token, refresh token, expires_in, user" }, "401": { "description": "Invalid credentials" } }
       }
     },
     "/api/v1/auth/signup": {
       "post": {
         "tags": ["auth"],
-        "summary": "Create account (teacher role + welcome message)",
-        "responses": { "200": { "description": "Access token and user" }, "409": { "description": "Email taken" } }
+        "summary": "Create account (teacher role + welcome message; returns access + refresh tokens)",
+        "responses": { "200": { "description": "Access token, refresh token, user" }, "409": { "description": "Email taken" } }
       }
     },
     "/api/v1/auth/forgot-password": {
@@ -65,6 +65,28 @@ const spec = `{
         "tags": ["auth"],
         "summary": "Complete password reset with one-time token",
         "responses": { "200": { "description": "Password updated" }, "400": { "description": "Invalid or expired token" } }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Exchange refresh token for new access token (rotates refresh token)",
+        "responses": { "200": { "description": "access_token, refresh_token, expires_in" }, "401": { "description": "Invalid or expired refresh token" } }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Revoke refresh token (JSON body: refresh_token)",
+        "responses": { "200": { "description": "ok" }, "401": { "description": "Invalid refresh token" } }
+      }
+    },
+    "/api/v1/auth/logout-all": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Revoke all refresh tokens for the current user (Bearer access token)",
+        "security": [ { "bearerAuth": [] } ],
+        "responses": { "200": { "description": "ok" }, "401": { "description": "Not signed in" } }
       }
     },
     "/api/v1/auth/magic-link/request": {
@@ -388,6 +410,17 @@ const spec = `{
           { "name": "userId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
         ],
         "responses": { "200": { "description": "Export" }, "401": { "description": "Not signed in" }, "403": { "description": "Forbidden" } }
+      }
+    },
+    "/api/v1/admin/users/{userId}/sessions": {
+      "delete": {
+        "tags": ["admin"],
+        "summary": "Revoke all refresh tokens and bump session version for a user (plan 4.8)",
+        "security": [ { "bearerAuth": [] } ],
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": { "200": { "description": "ok" }, "401": { "description": "Not signed in" }, "403": { "description": "Forbidden" } }
       }
     },
     "/api/v1/admin/saml/config": {

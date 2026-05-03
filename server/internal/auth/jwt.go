@@ -15,10 +15,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/lextures/lextures/server/internal/auth/sessionversion"
+	"github.com/lextures/lextures/server/internal/auth/tokeninvalidation"
 )
 
 const (
-	defaultTokenTTL   = 72 * time.Hour
+	// AccessTokenTTL is the lifetime of login (Bearer) JWTs (plan 4.8).
+	AccessTokenTTL = 15 * time.Minute
+	defaultTokenTTL = AccessTokenTTL
 	mfaPendingTTL     = 60 * time.Second
 	ltiEmbedTicketTTL = 15 * time.Minute
 	// Rust jsonwebtoken's default validation allows 60 seconds of clock skew.
@@ -59,7 +62,7 @@ type JWTSigner struct {
 	pool   *pgxpool.Pool // optional; when set, login JWTs embed and validate jwt_session_version
 }
 
-// NewJWTSigner returns a signer with the same 72-hour login token TTL as the Rust server.
+// NewJWTSigner returns a signer with the configured access-token TTL (15 minutes; plan 4.8).
 func NewJWTSigner(secret string) *JWTSigner {
 	return &JWTSigner{
 		secret: []byte(secret),
@@ -91,11 +94,14 @@ func (s *JWTSigner) Sign(ctx context.Context, userID, email string) (string, err
 			return "", ErrInvalidToken
 		}
 	}
+	jti := uuid.NewString()
 	return s.sign(loginClaims{
 		Typ:            "login",
 		Subject:        userID,
 		Email:          email,
 		SessionVersion: sv,
+		Issued:         unixSeconds(s.now()),
+		JTI:            jti,
 		Expires:        unixSeconds(s.now().Add(s.ttl)),
 	})
 }
@@ -126,6 +132,16 @@ func (s *JWTSigner) Verify(ctx context.Context, token string) (AuthUser, error) 
 		}
 		if claims.SessionVersion != cur {
 			return AuthUser{}, ErrInvalidToken
+		}
+		invAt, err := tokeninvalidation.Read(ctx, s.pool, uid)
+		if err != nil {
+			return AuthUser{}, ErrInvalidToken
+		}
+		if invAt != nil && claims.Issued > 0 {
+			issued := time.Unix(claims.Issued, 0).UTC()
+			if issued.Before(invAt.UTC()) {
+				return AuthUser{}, ErrInvalidToken
+			}
 		}
 	}
 	return AuthUser{UserID: claims.Subject, Email: claims.Email}, nil
@@ -289,6 +305,8 @@ type loginClaims struct {
 	Subject        string `json:"sub"`
 	Email          string `json:"email"`
 	SessionVersion int64  `json:"sv,omitempty"`
+	Issued         int64  `json:"iat,omitempty"`
+	JTI            string `json:"jti,omitempty"`
 	Expires        int64  `json:"exp"`
 }
 

@@ -1,4 +1,9 @@
-import { clearAccessToken, getAccessToken } from './auth'
+import { getAccessToken } from './auth'
+import {
+  applyAuthTokenResponse,
+  clearSessionTokens,
+  getRefreshToken,
+} from './session-tokens'
 
 const defaultApi = 'http://localhost:8080'
 
@@ -41,13 +46,60 @@ export function wsUrl(path: string): string {
   return apiUrl(path).replace(/^http/, 'ws')
 }
 
+function dispatchAuthRequired(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('studydrift-auth-required'))
+  }
+}
+
 function applyUnauthorizedHandling(res: Response): void {
   if (res.status === 401) {
-    clearAccessToken()
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('studydrift-auth-required'))
-    }
+    clearSessionTokens()
+    dispatchAuthRequired()
   }
+}
+
+let refreshInFlight: Promise<boolean> | null = null
+
+/** POST /api/v1/auth/refresh; returns true when a new access token was stored. */
+export async function tryRefreshSession(): Promise<boolean> {
+  const rt = getRefreshToken()
+  if (!rt) {
+    return false
+  }
+  if (refreshInFlight) {
+    return refreshInFlight
+  }
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(apiUrl('/api/v1/auth/refresh'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt }),
+      })
+      if (!res.ok) {
+        clearSessionTokens()
+        dispatchAuthRequired()
+        return false
+      }
+      const raw: unknown = await res.json().catch(() => ({}))
+      const data = raw as { access_token?: string; refresh_token?: string }
+      if (!data.access_token) {
+        clearSessionTokens()
+        dispatchAuthRequired()
+        return false
+      }
+      applyAuthTokenResponse(data)
+      return true
+    } catch {
+      clearSessionTokens()
+      dispatchAuthRequired()
+      return false
+    } finally {
+      refreshInFlight = null
+    }
+  })()
+  return refreshInFlight
 }
 
 /**
@@ -69,7 +121,20 @@ export async function authorizedFetch(path: string, init?: RequestInit): Promise
     }
 
     try {
-      const res = await fetch(apiUrl(path), { ...init, headers })
+      let res = await fetch(apiUrl(path), { ...init, headers })
+
+      if (res.status === 401 && getRefreshToken() && path !== '/api/v1/auth/refresh') {
+        const ok = await tryRefreshSession()
+        if (ok) {
+          const h2 = new Headers(init?.headers)
+          const t2 = getAccessToken()
+          if (t2) {
+            h2.set('Authorization', `Bearer ${t2}`)
+          }
+          res = await fetch(apiUrl(path), { ...init, headers: h2 })
+        }
+      }
+
       applyUnauthorizedHandling(res)
 
       const transient =

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, LogOut, Menu, User } from 'lucide-react'
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { setCourseViewAs, useCourseViewAs } from '../../lib/course-view-as'
-import { authorizedFetch } from '../../lib/api'
+import { apiUrl, authorizedFetch } from '../../lib/api'
 import { useViewerEnrollmentRoles } from '../../lib/use-viewer-enrollment-roles'
 import { useKeyboardShortcutsSheet } from '../keyboard-shortcuts/keyboard-shortcuts-context'
 import {
@@ -11,7 +11,7 @@ import {
   isPostLoginShortcutTipPending,
   isSearchShortcutTipDismissedPermanently,
 } from '../../lib/post-login-shortcut-tip'
-import { clearAccessToken } from '../../lib/auth'
+import { clearSessionTokens, getRefreshToken } from '../../lib/session-tokens'
 import { applyUiTheme } from '../../lib/ui-theme'
 import {
   initialsFromName,
@@ -71,9 +71,21 @@ function UserMenu() {
     }
   }, [open])
 
-  function signOut() {
+  async function signOut() {
     setOpen(false)
-    clearAccessToken()
+    const rt = getRefreshToken()
+    if (rt) {
+      try {
+        await fetch(apiUrl('/api/v1/auth/logout'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: rt }),
+        })
+      } catch {
+        /* ignore network errors — still clear local session */
+      }
+    }
+    clearSessionTokens()
     applyUiTheme('light')
     navigate('/login', { replace: true })
   }

@@ -3,7 +3,7 @@ const ACCESS_TOKEN_KEY = 'studydrift_access_token'
 /** In-memory fallback when `localStorage` is unavailable (tests, private mode). */
 let memoryToken: string | null = null
 
-function notifyAuthTokenListeners(): void {
+export function notifyAuthTokenListeners(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('studydrift-auth-token'))
   }

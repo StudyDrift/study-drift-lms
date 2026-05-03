@@ -16,6 +16,7 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/originalityreports"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
 	"github.com/lextures/lextures/server/internal/repos/samlidp"
+	"github.com/lextures/lextures/server/internal/service/authservice"
 	"github.com/lextures/lextures/server/internal/service/irtcalibration"
 )
 
@@ -204,6 +205,35 @@ func (d Deps) handleAdminDSARExport() http.HandlerFunc {
 			"version":            1,
 			"exportKind":         "ferpa-slice",
 		})
+	}
+}
+
+func (d Deps) handleAdminRevokeUserSessions() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			w.Header().Set("Allow", http.MethodDelete)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		if _, ok := d.adminRbacUser(w, r); !ok {
+			return
+		}
+		uidS := chi.URLParam(r, "userId")
+		userID, err := uuid.Parse(uidS)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid user id.")
+			return
+		}
+		if d.Pool == nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Server misconfiguration.")
+			return
+		}
+		if err := authservice.RevokeAllSessionsForUser(r.Context(), d.Pool, userID); err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Server misconfiguration.")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	}
 }
 

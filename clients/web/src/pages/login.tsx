@@ -2,7 +2,8 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { BrandLogo } from '../components/brand-logo'
 import { OidcSignInButtons } from '../components/oidc-sign-in-buttons'
-import { getAccessToken, setAccessToken } from '../lib/auth'
+import { getAccessToken } from '../lib/auth'
+import { applyAuthTokenResponse } from '../lib/session-tokens'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
@@ -109,7 +110,7 @@ export default function Login() {
         setMessage('Unexpected sign-in response.')
         return
       }
-      setAccessToken(data.access_token)
+      applyAuthTokenResponse(data)
       applyUiTheme(parseUiTheme(data.user?.uiTheme))
       markPostLoginShortcutTip()
       navigate(from, { replace: true })

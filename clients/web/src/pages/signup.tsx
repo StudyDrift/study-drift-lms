@@ -2,7 +2,8 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { BrandLogo } from '../components/brand-logo'
 import { OidcSignInButtons } from '../components/oidc-sign-in-buttons'
-import { getAccessToken, setAccessToken } from '../lib/auth'
+import { getAccessToken } from '../lib/auth'
+import { applyAuthTokenResponse } from '../lib/session-tokens'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
 import { passwordStrengthEnglish, passwordStrengthKey, type PasswordStrengthKey } from '../lib/password-strength'
@@ -91,7 +92,7 @@ export default function Signup() {
         return
       }
       const data = raw as { access_token: string; user?: { uiTheme?: string | null } }
-      setAccessToken(data.access_token)
+      applyAuthTokenResponse(data)
       applyUiTheme(parseUiTheme(data.user?.uiTheme))
       markPostLoginShortcutTip()
       navigate('/', { replace: true })

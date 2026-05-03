@@ -82,6 +82,8 @@ export const handlers = [
     const body = (await request.json()) as { email: string; password: string }
     return HttpResponse.json({
       access_token: 'mock-access-token',
+      refresh_token: 'mock-refresh-token',
+      expires_in: 900,
       token_type: 'Bearer',
       user: {
         id: mockUserId,
@@ -119,6 +121,8 @@ export const handlers = [
     const displayName = body.display_name?.trim() || null
     return HttpResponse.json({
       access_token: 'mock-access-token',
+      refresh_token: 'mock-refresh-token',
+      expires_in: 900,
       token_type: 'Bearer',
       user: {
         id: mockUserId,
