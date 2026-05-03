@@ -54,7 +54,13 @@ export const handlers = [
       firstName: null,
       lastName: null,
       avatarUrl: null,
+      uiTheme: 'light',
+      sid: null,
+      sessionManagementUiEnabled: false,
     })
+  }),
+  http.get('http://localhost:8080/api/v1/me/sessions', () => {
+    return HttpResponse.json({ sessions: [] })
   }),
   http.get('http://localhost:8080/api/v1/communication/unread-count', () => {
     return HttpResponse.json({ unread_inbox: 0 })

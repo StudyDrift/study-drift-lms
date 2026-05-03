@@ -47,7 +47,7 @@ func TestRBACSettings_ListRoles_OK_Pg(t *testing.T) {
 		t.Fatalf("ga: %v", err)
 	}
 	signer := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
-	tok, err := signer.Sign(ctx, row.ID, em)
+	tok, err := signer.Sign(ctx, row.ID, em, nil)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}

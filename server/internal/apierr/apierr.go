@@ -23,7 +23,8 @@ const (
 	CodeMFARequired        = "MFA_REQUIRED"
 	CodeMFAEnrolRequired    = "MFA_ENROLMENT_REQUIRED"
 	CodeInternal           = "INTERNAL"
-	// AI feature errors (see server/src/error.rs).
+	// CodeUnprocessableEntity is used when the request is well-formed but cannot be applied (e.g. revoke current session).
+	CodeUnprocessableEntity = "UNPROCESSABLE_ENTITY"
 	CodeAiNotConfigured     = "AI_NOT_CONFIGURED"
 	CodeAiGenerationFailed  = "AI_GENERATION_FAILED"
 )

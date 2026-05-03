@@ -243,3 +243,110 @@ func TestAuthRefreshRotationAndPasswordRevoke_Pg(t *testing.T) {
 		t.Fatalf("refresh after password change: want 401 got %d", rr.Code)
 	}
 }
+
+func TestMySessionsListRevoke_Pg(t *testing.T) {
+	if os.Getenv("DATABASE_URL") == "" {
+		t.Skip("DATABASE_URL")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	dsn := os.Getenv("DATABASE_URL")
+	if err := migrate.RunWithFS(ctx, serverdata.Migrations, dsn); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	pool, err := db.NewPool(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	defer pool.Close()
+	cfg := config.Config{
+		PublicWebOrigin:            "http://localhost:5173",
+		SessionManagementUIEnabled: true,
+	}
+	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
+	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
+	d := Deps{Pool: pool, JWTSigner: auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool), Config: cfg, PasswordChecker: stub}
+	h := NewHandler(d)
+	email := "sess-" + time.Now().Format("20060102150405") + "@e.com"
+	signupBody, _ := json.Marshal(map[string]any{"email": email, "password": pass, "display_name": "S"})
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/signup", bytes.NewReader(signupBody))
+	r = r.WithContext(ctx)
+	h.ServeHTTP(rr, r)
+	if rr.Code != 200 {
+		t.Fatalf("signup: %d %s", rr.Code, rr.Body.String())
+	}
+	loginBody, _ := json.Marshal(map[string]string{"email": email, "password": pass})
+	rr = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginBody))
+	r = r.WithContext(ctx)
+	h.ServeHTTP(rr, r)
+	if rr.Code != 200 {
+		t.Fatalf("login: %d %s", rr.Code, rr.Body.String())
+	}
+	var login2 struct {
+		Access string `json:"access_token"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&login2); err != nil {
+		t.Fatal(err)
+	}
+	if login2.Access == "" {
+		t.Fatal("missing access token")
+	}
+	rr = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "/api/v1/me/sessions", nil)
+	r = r.WithContext(ctx)
+	r.Header.Set("Authorization", "Bearer "+login2.Access)
+	h.ServeHTTP(rr, r)
+	if rr.Code != 200 {
+		t.Fatalf("sessions list: %d %s", rr.Code, rr.Body.String())
+	}
+	var list struct {
+		Sessions []struct {
+			ID        string `json:"id"`
+			IsCurrent bool   `json:"isCurrent"`
+		} `json:"sessions"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Sessions) < 2 {
+		t.Fatalf("want >=2 active sessions, got %d", len(list.Sessions))
+	}
+	var otherID string
+	for _, s := range list.Sessions {
+		if !s.IsCurrent {
+			otherID = s.ID
+			break
+		}
+	}
+	if otherID == "" {
+		t.Fatal("no non-current session")
+	}
+	rr = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodDelete, "/api/v1/me/sessions/"+otherID, nil)
+	r = r.WithContext(ctx)
+	r.Header.Set("Authorization", "Bearer "+login2.Access)
+	h.ServeHTTP(rr, r)
+	if rr.Code != 200 {
+		t.Fatalf("revoke other: %d %s", rr.Code, rr.Body.String())
+	}
+	var curID string
+	for _, s := range list.Sessions {
+		if s.IsCurrent {
+			curID = s.ID
+			break
+		}
+	}
+	if curID == "" {
+		t.Fatal("no current session in list")
+	}
+	rr = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodDelete, "/api/v1/me/sessions/"+curID, nil)
+	r = r.WithContext(ctx)
+	r.Header.Set("Authorization", "Bearer "+login2.Access)
+	h.ServeHTTP(rr, r)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("revoke current: want 422 got %d %s", rr.Code, rr.Body.String())
+	}
+}

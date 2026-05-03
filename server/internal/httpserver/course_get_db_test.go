@@ -55,7 +55,7 @@ INSERT INTO course.courses (course_code, title, created_by_user_id) VALUES ($1, 
 		t.Fatalf("enroll: %v", err)
 	}
 	signer := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
-	tok, err := signer.Sign(ctx, row.ID, em)
+	tok, err := signer.Sign(ctx, row.ID, em, nil)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}

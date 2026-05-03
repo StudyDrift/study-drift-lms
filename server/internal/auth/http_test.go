@@ -43,7 +43,7 @@ func TestBearerTokenRejectsBlankBearerToken(t *testing.T) {
 
 func TestUserFromRequest(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
-	token, err := signer.Sign(context.Background(), userID, "a@b.com")
+	token, err := signer.Sign(context.Background(), userID, "a@b.com", nil)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}

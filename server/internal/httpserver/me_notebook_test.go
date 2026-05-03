@@ -16,7 +16,7 @@ import (
 func TestNotebookQuery_AINotConfigured(t *testing.T) {
 	signer := auth.NewJWTSigner("01234567890123456789012345678901")
 	h := NewHandler(Deps{JWTSigner: signer, Platform: platformstate.New(config.Config{}), Config: config.Config{}})
-	tok, err := signer.Sign(context.Background(), "a0000000-0000-4000-8000-000000000002", "x@y.com")
+	tok, err := signer.Sign(context.Background(), "a0000000-0000-4000-8000-000000000002", "x@y.com", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestNotebookQuery_Unauthorized(t *testing.T) {
 
 func TestNotebookQuery_Method(t *testing.T) {
 	signer := auth.NewJWTSigner("01234567890123456789012345678901")
-	tok, _ := signer.Sign(context.Background(), "a0000000-0000-4000-8000-000000000002", "x@y.com")
+	tok, _ := signer.Sign(context.Background(), "a0000000-0000-4000-8000-000000000002", "x@y.com", nil)
 	h := NewHandler(Deps{JWTSigner: signer, Platform: platformstate.New(config.Config{OpenRouterAPIKey: "k"}), Config: config.Config{OpenRouterAPIKey: "k"}})
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/me/notebooks/query", nil)
@@ -54,7 +54,7 @@ func TestNotebookQuery_Method(t *testing.T) {
 
 func TestNotebookQuery_PoolNotConfigured(t *testing.T) {
 	signer := auth.NewJWTSigner("01234567890123456789012345678901")
-	tok, _ := signer.Sign(context.Background(), "a0000000-0000-4000-8000-000000000002", "x@y.com")
+	tok, _ := signer.Sign(context.Background(), "a0000000-0000-4000-8000-000000000002", "x@y.com", nil)
 	h := NewHandler(Deps{Pool: nil, JWTSigner: signer, Platform: platformstate.New(config.Config{OpenRouterAPIKey: "k"}), Config: config.Config{OpenRouterAPIKey: "k"}})
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/me/notebooks/query", bytes.NewReader([]byte(`{"question":"q","notebooks":[{"courseCode":"C","markdown":"m"}]}`)))
@@ -67,7 +67,7 @@ func TestNotebookQuery_PoolNotConfigured(t *testing.T) {
 
 func TestNotebookQuery_InvalidJSON(t *testing.T) {
 	signer := auth.NewJWTSigner("01234567890123456789012345678901")
-	tok, _ := signer.Sign(context.Background(), "a0000000-0000-4000-8000-000000000002", "x@y.com")
+	tok, _ := signer.Sign(context.Background(), "a0000000-0000-4000-8000-000000000002", "x@y.com", nil)
 	h := NewHandler(Deps{JWTSigner: signer, Platform: platformstate.New(config.Config{OpenRouterAPIKey: "k"}), Config: config.Config{OpenRouterAPIKey: "k"}})
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/me/notebooks/query", bytes.NewReader([]byte("notjson")))
