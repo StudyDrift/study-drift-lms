@@ -40,7 +40,7 @@ func TestAuthRoutes_Pg(t *testing.T) {
 	cfg := config.Config{PublicWebOrigin: "http://localhost:5173"}
 	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
 	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
-	d := Deps{Pool: pool, JWTSigner: auth.NewJWTSigner("01234567890123456789012345678901"), Config: cfg, PasswordChecker: stub}
+	d := Deps{Pool: pool, JWTSigner: auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool), Config: cfg, PasswordChecker: stub}
 	h := NewHandler(d)
 	email := "ht-" + time.Now().Format("20060102150405") + "@e.com"
 	body, _ := json.Marshal(map[string]any{
@@ -131,7 +131,7 @@ func TestAuthRoutes_Pg(t *testing.T) {
 	oidcOn.OIDCPublicBaseURL = "https://oidc.example"
 	oidcOn.OIDCGoogleClientID = "g"
 	oidcOn.OIDCGoogleClientSecret = "s"
-	d2 := Deps{Pool: pool, JWTSigner: auth.NewJWTSigner("01234567890123456789012345678901"), Config: oidcOn, PasswordChecker: stub}
+	d2 := Deps{Pool: pool, JWTSigner: auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool), Config: oidcOn, PasswordChecker: stub}
 	h2 := NewHandler(d2)
 	rr = httptest.NewRecorder()
 	bodyLink, _ := json.Marshal(map[string]string{"provider": "google"})

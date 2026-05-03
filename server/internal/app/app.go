@@ -64,7 +64,7 @@ func Run(ctx context.Context, fsys fs.FS) error {
 	ltiRT := lti.NewFromConfig(merged)
 	deps := httpserver.Deps{
 		Pool:      pool,
-		JWTSigner: auth.NewJWTSigner(cfg.JWTSecret),
+		JWTSigner: auth.NewJWTSignerWithPool(cfg.JWTSecret, pool),
 		Config:    cfg,
 		Platform:  platformstate.New(merged),
 		OIDC:      oidcauth.NewService(merged),

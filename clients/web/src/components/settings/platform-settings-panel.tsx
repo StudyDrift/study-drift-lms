@@ -24,6 +24,7 @@ export type PlatformSettingsPayload = {
   resubmissionWorkflowEnabled: boolean
   ltiEnabled: boolean
   oneRosterEnabled: boolean
+  scimEnabled: boolean
   sources: {
     openRouterApiKey: FieldSource
     samlSsoEnabled: FieldSource
@@ -42,6 +43,7 @@ export type PlatformSettingsPayload = {
     resubmissionWorkflowEnabled: FieldSource
     ltiEnabled: FieldSource
     oneRosterEnabled: FieldSource
+    scimEnabled: FieldSource
   }
 }
 
@@ -64,6 +66,7 @@ function emptyForm(): PlatformSettingsPayload {
     resubmissionWorkflowEnabled: false,
     ltiEnabled: false,
     oneRosterEnabled: false,
+    scimEnabled: false,
     sources: {
       openRouterApiKey: 'environment',
       samlSsoEnabled: 'environment',
@@ -82,6 +85,7 @@ function emptyForm(): PlatformSettingsPayload {
       resubmissionWorkflowEnabled: 'environment',
       ltiEnabled: 'environment',
       oneRosterEnabled: 'environment',
+      scimEnabled: 'environment',
     },
   }
 }
@@ -240,6 +244,9 @@ export function PlatformSettingsPanel() {
       })
       maybe('oneRosterEnabled', baseline.oneRosterEnabled, form.oneRosterEnabled, () => {
         body.oneRosterEnabled = form.oneRosterEnabled
+      })
+      maybe('scimEnabled', baseline.scimEnabled, form.scimEnabled, () => {
+        body.scimEnabled = form.scimEnabled
       })
 
       if (mask.length === 0) {
@@ -444,6 +451,12 @@ export function PlatformSettingsPanel() {
               src={form.sources.oneRosterEnabled}
               checked={form.oneRosterEnabled}
               onChange={(v) => update('oneRosterEnabled', v)}
+            />
+            <FlagRow
+              label="SCIM 2.0 provisioning"
+              src={form.sources.scimEnabled}
+              checked={form.scimEnabled}
+              onChange={(v) => update('scimEnabled', v)}
             />
           </div>
         </section>

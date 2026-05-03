@@ -2,6 +2,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -9,6 +10,11 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/lextures/lextures/server/internal/auth/sessionversion"
 )
 
 const (
@@ -41,6 +47,7 @@ type JWTSigner struct {
 	secret []byte
 	ttl    time.Duration
 	now    func() time.Time
+	pool   *pgxpool.Pool // optional; when set, login JWTs embed and validate jwt_session_version
 }
 
 // NewJWTSigner returns a signer with the same 72-hour login token TTL as the Rust server.
@@ -52,20 +59,39 @@ func NewJWTSigner(secret string) *JWTSigner {
 	}
 }
 
-// Sign creates a login JWT containing sub, email, and exp claims.
-func (s *JWTSigner) Sign(userID, email string) (string, error) {
+// NewJWTSignerWithPool is like NewJWTSigner but ties login tokens to users.jwt_session_version when verifying.
+func NewJWTSignerWithPool(secret string, pool *pgxpool.Pool) *JWTSigner {
+	j := NewJWTSigner(secret)
+	j.pool = pool
+	return j
+}
+
+// Sign creates a login JWT containing sub, email, exp, and optional session version (revocation).
+func (s *JWTSigner) Sign(ctx context.Context, userID, email string) (string, error) {
 	if !isUUID(userID) || strings.TrimSpace(email) == "" {
 		return "", ErrInvalidToken
 	}
+	var sv int64
+	if s.pool != nil {
+		uid, err := uuid.Parse(userID)
+		if err != nil {
+			return "", ErrInvalidToken
+		}
+		sv, err = sessionversion.Read(ctx, s.pool, uid)
+		if err != nil {
+			return "", ErrInvalidToken
+		}
+	}
 	return s.sign(loginClaims{
-		Subject: userID,
-		Email:   email,
-		Expires: unixSeconds(s.now().Add(s.ttl)),
+		Subject:        userID,
+		Email:          email,
+		SessionVersion: sv,
+		Expires:        unixSeconds(s.now().Add(s.ttl)),
 	})
 }
 
 // Verify validates a login JWT and returns its authenticated user.
-func (s *JWTSigner) Verify(token string) (AuthUser, error) {
+func (s *JWTSigner) Verify(ctx context.Context, token string) (AuthUser, error) {
 	var claims loginClaims
 	if err := s.verify(token, &claims); err != nil {
 		return AuthUser{}, err
@@ -75,6 +101,19 @@ func (s *JWTSigner) Verify(token string) (AuthUser, error) {
 	}
 	if isExpired(claims.Expires, s.now()) {
 		return AuthUser{}, ErrExpiredToken
+	}
+	if s.pool != nil {
+		uid, err := uuid.Parse(claims.Subject)
+		if err != nil {
+			return AuthUser{}, ErrInvalidToken
+		}
+		cur, err := sessionversion.Read(ctx, s.pool, uid)
+		if err != nil {
+			return AuthUser{}, ErrInvalidToken
+		}
+		if claims.SessionVersion != cur {
+			return AuthUser{}, ErrInvalidToken
+		}
 	}
 	return AuthUser{UserID: claims.Subject, Email: claims.Email}, nil
 }
@@ -163,9 +202,10 @@ type jwtHeader struct {
 }
 
 type loginClaims struct {
-	Subject string `json:"sub"`
-	Email   string `json:"email"`
-	Expires int64  `json:"exp"`
+	Subject        string `json:"sub"`
+	Email          string `json:"email"`
+	SessionVersion int64  `json:"sv,omitempty"`
+	Expires        int64  `json:"exp"`
 }
 
 type ltiEmbedTicketClaims struct {

@@ -36,7 +36,7 @@ func TestAuthFlow_Pg(t *testing.T) {
 		t.Fatalf("pool: %v", err)
 	}
 	defer pool.Close()
-	jwt := auth.NewJWTSigner("01234567890123456789012345678901")
+	jwt := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
 	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
 	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
 	email := "e2e-" + time.Now().Format("20060102150405.000000000") + "@example.com"
@@ -100,7 +100,7 @@ WHERE u.id <> 'a0000000-0000-4000-8000-000000000001'::uuid`).Scan(&otherHumans)
 		t.Skip("database already has human users")
 	}
 
-	jwt := auth.NewJWTSigner("01234567890123456789012345678901")
+	jwt := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
 	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
 	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
 	email := "ga-first-" + time.Now().Format("20060102150405.000000000") + "@example.com"

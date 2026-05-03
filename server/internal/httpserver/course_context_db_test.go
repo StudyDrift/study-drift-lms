@@ -63,8 +63,8 @@ INSERT INTO course.courses (course_code, title, created_by_user_id) VALUES ($1, 
 	if err := pool.QueryRow(ctx, `INSERT INTO course.course_structure_items (course_id, sort_order, kind, title, parent_id) VALUES ($1, 0, 'content_page', 'P', $2) RETURNING id`, courseID, modID).Scan(&pageID); err != nil {
 		t.Fatalf("page: %v", err)
 	}
-	signer := auth.NewJWTSigner("01234567890123456789012345678901")
-	tok, err := signer.Sign(row.ID, em)
+	signer := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
+	tok, err := signer.Sign(ctx, row.ID, em)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}

@@ -140,7 +140,7 @@ func (s *Service) completeK12OIDCLogin(
 		if u2 == nil {
 			return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
 		}
-		res, err := authservice.AuthResponseForUser(jwt, u2)
+		res, err := authservice.AuthResponseForUser(ctx, jwt, u2)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -187,7 +187,7 @@ func (s *Service) completeK12OIDCLogin(
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(jwt, u2)
+		res, err := authservice.AuthResponseForUser(ctx, jwt, u2)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -211,7 +211,7 @@ func (s *Service) completeK12OIDCLogin(
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(jwt, u2)
+		res, err := authservice.AuthResponseForUser(ctx, jwt, u2)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -246,7 +246,7 @@ func (s *Service) completeK12OIDCLogin(
 	if u3 == nil {
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
 	}
-	res, err := authservice.AuthResponseForUser(jwt, u3)
+	res, err := authservice.AuthResponseForUser(ctx, jwt, u3)
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
@@ -276,7 +276,7 @@ func (s *Service) finishK12ExistingUser(
 	if u2 == nil {
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
 	}
-	res, err := authservice.AuthResponseForUser(jwt, u2)
+	res, err := authservice.AuthResponseForUser(ctx, jwt, u2)
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}

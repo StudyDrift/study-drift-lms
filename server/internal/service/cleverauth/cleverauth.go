@@ -169,7 +169,7 @@ func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pa
 		if u2 == nil {
 			return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
 		}
-		res, err := authservice.AuthResponseForUser(jwt, u2)
+		res, err := authservice.AuthResponseForUser(ctx, jwt, u2)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -196,7 +196,7 @@ func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pa
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(jwt, u2)
+		res, err := authservice.AuthResponseForUser(ctx, jwt, u2)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -223,7 +223,7 @@ func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pa
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(jwt, u2)
+		res, err := authservice.AuthResponseForUser(ctx, jwt, u2)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -254,7 +254,7 @@ func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pa
 	if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, "clever", subj, &email); err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
-	res, err := authservice.AuthResponseForUser(jwt, nu)
+	res, err := authservice.AuthResponseForUser(ctx, jwt, nu)
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}

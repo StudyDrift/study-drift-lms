@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"testing"
@@ -42,7 +43,7 @@ func TestBearerTokenRejectsBlankBearerToken(t *testing.T) {
 
 func TestUserFromRequest(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
-	token, err := signer.Sign(userID, "a@b.com")
+	token, err := signer.Sign(context.Background(), userID, "a@b.com")
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}

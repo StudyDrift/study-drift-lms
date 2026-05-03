@@ -242,7 +242,7 @@ func HandleACS(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, signe
 		_ = rbac.AssignUserRoleByName(ctx, pool, uid, role)
 	}
 
-	tok, err := signer.Sign(urow.ID, urow.Email)
+	tok, err := signer.Sign(ctx, urow.ID, urow.Email)
 	if err != nil {
 		return err
 	}

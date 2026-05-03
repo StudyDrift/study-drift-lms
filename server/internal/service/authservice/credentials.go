@@ -114,11 +114,14 @@ func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, req Lo
 	if row.LoginBlocked {
 		return AuthResponse{}, ErrInvalidCredentials
 	}
+	if row.DeactivatedAt != nil {
+		return AuthResponse{}, ErrInvalidCredentials
+	}
 	ok, err := pauth.VerifyPassword(req.Password, row.PasswordHash)
 	if err != nil || !ok {
 		return AuthResponse{}, ErrInvalidCredentials
 	}
-	return responseFromRow(jwt, row)
+	return responseFromRow(ctx, jwt, row)
 }
 
 // Signup .
@@ -182,7 +185,7 @@ WHERE id <> $1::uuid`, communication.PlatformInboxSenderID.String()).Scan(&human
 
 	_ = passwordcreditevents.Insert(ctx, pool, uid, passwordcreditevents.KindSignup, hibpRes.BreachFound, hibpRes.HIBPAvailable)
 	communication.SendWelcomeMessage(ctx, pool, email)
-	return responseFromRow(jwt, row)
+	return responseFromRow(ctx, jwt, row)
 }
 
 // RequestPasswordReset always returns the same public message; persists token when user exists.
@@ -338,12 +341,12 @@ func PlaceholderPasswordHash() (string, error) {
 }
 
 // AuthResponseForUser builds a bearer response from a user row (OIDC/SAML completion).
-func AuthResponseForUser(jwt *pauth.JWTSigner, row *user.Row) (AuthResponse, error) {
-	return responseFromRow(jwt, row)
+func AuthResponseForUser(ctx context.Context, jwt *pauth.JWTSigner, row *user.Row) (AuthResponse, error) {
+	return responseFromRow(ctx, jwt, row)
 }
 
-func responseFromRow(jwt *pauth.JWTSigner, row *user.Row) (AuthResponse, error) {
-	tok, err := jwt.Sign(row.ID, row.Email)
+func responseFromRow(ctx context.Context, jwt *pauth.JWTSigner, row *user.Row) (AuthResponse, error) {
+	tok, err := jwt.Sign(ctx, row.ID, row.Email)
 	if err != nil {
 		return AuthResponse{}, err
 	}

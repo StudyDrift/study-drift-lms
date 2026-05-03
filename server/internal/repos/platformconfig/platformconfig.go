@@ -33,6 +33,7 @@ type Row struct {
 	ResubmissionWorkflowEnabled *bool
 	LTIEnabled                  *bool
 	OneRosterEnabled            *bool
+	ScimEnabled                 *bool
 
 	UpdatedAt time.Time
 }
@@ -58,6 +59,7 @@ type Write struct {
 	ResubmissionWorkflowEnabled *bool
 	LTIEnabled                  *bool
 	OneRosterEnabled            *bool
+	ScimEnabled                 *bool
 }
 
 // Get returns the singleton row or (nil, nil) if missing.
@@ -82,6 +84,7 @@ SELECT
 	resubmission_workflow_enabled,
 	lti_enabled,
 	oneroster_enabled,
+	scim_enabled,
 	updated_at
 FROM settings.platform_app_settings
 WHERE id = 1
@@ -103,6 +106,7 @@ WHERE id = 1
 		&r.ResubmissionWorkflowEnabled,
 		&r.LTIEnabled,
 		&r.OneRosterEnabled,
+		&r.ScimEnabled,
 		&r.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
@@ -146,10 +150,11 @@ INSERT INTO settings.platform_app_settings (
 	resubmission_workflow_enabled,
 	lti_enabled,
 	oneroster_enabled,
+	scim_enabled,
 	updated_at
 ) VALUES (
 	1,
-	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW()
+	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
 	openrouter_api_key = COALESCE(EXCLUDED.openrouter_api_key, settings.platform_app_settings.openrouter_api_key),
@@ -169,6 +174,7 @@ ON CONFLICT (id) DO UPDATE SET
 	resubmission_workflow_enabled = COALESCE(EXCLUDED.resubmission_workflow_enabled, settings.platform_app_settings.resubmission_workflow_enabled),
 	lti_enabled = COALESCE(EXCLUDED.lti_enabled, settings.platform_app_settings.lti_enabled),
 	oneroster_enabled = COALESCE(EXCLUDED.oneroster_enabled, settings.platform_app_settings.oneroster_enabled),
+	scim_enabled = COALESCE(EXCLUDED.scim_enabled, settings.platform_app_settings.scim_enabled),
 	updated_at = NOW()
 `,
 		w.OpenRouterAPIKey,
@@ -188,6 +194,7 @@ ON CONFLICT (id) DO UPDATE SET
 		w.ResubmissionWorkflowEnabled,
 		w.LTIEnabled,
 		w.OneRosterEnabled,
+		w.ScimEnabled,
 	)
 	if err != nil {
 		return nil, err
@@ -254,6 +261,9 @@ func Merge(env config.Config, db *Row) config.Config {
 	if db.OneRosterEnabled != nil {
 		out.OneRosterEnabled = *db.OneRosterEnabled
 	}
+	if db.ScimEnabled != nil {
+		out.ScimEnabled = *db.ScimEnabled
+	}
 	return out
 }
 
@@ -286,6 +296,7 @@ type Sources struct {
 	ResubmissionWorkflowEnabled Source
 	LTIEnabled                  Source
 	OneRosterEnabled            Source
+	ScimEnabled                 Source
 }
 
 // ResolveSources compares env vs DB row to label each field.
@@ -311,6 +322,7 @@ func ResolveSources(env config.Config, db *Row) Sources {
 	s.ResubmissionWorkflowEnabled = sourceBool(env.ResubmissionWorkflowEnabled, db.ResubmissionWorkflowEnabled)
 	s.LTIEnabled = sourceBool(env.LTIEnabled, db.LTIEnabled)
 	s.OneRosterEnabled = sourceBool(env.OneRosterEnabled, db.OneRosterEnabled)
+	s.ScimEnabled = sourceBool(env.ScimEnabled, db.ScimEnabled)
 	return s
 }
 
@@ -334,6 +346,7 @@ func sourcesAllEnvironment(env config.Config) Sources {
 		ResubmissionWorkflowEnabled: SourceEnvironment,
 		LTIEnabled:                  SourceEnvironment,
 		OneRosterEnabled:            SourceEnvironment,
+		ScimEnabled:                 SourceEnvironment,
 	}
 }
 
