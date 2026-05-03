@@ -29,7 +29,6 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/user"
 
 	"github.com/lextures/lextures/server/internal/auth/hibp"
-	"github.com/lextures/lextures/server/internal/service/mfaservice"
 )
 
 // LoginRequest mirrors models/auth LoginRequest.
@@ -125,45 +124,7 @@ func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg co
 	if err != nil || !ok {
 		return AuthResponse{}, ErrInvalidCredentials
 	}
-	uid, err := uuid.Parse(row.ID)
-	if err != nil {
-		return AuthResponse{}, err
-	}
-	needEnrol, err := mfaservice.EnrolmentRequiredBeforeAccess(ctx, pool, cfg, uid)
-	if err != nil {
-		return AuthResponse{}, err
-	}
-	if needEnrol {
-		jti := uuid.NewString()
-		pend, err := jwt.SignMFAPending(ctx, row.ID, row.Email, jti, "setup")
-		if err != nil {
-			return AuthResponse{}, err
-		}
-		return AuthResponse{
-			MFAPendingToken:  pend,
-			TokenType:        "Bearer",
-			User:             userPublicFromRow(row),
-			MFASetupRequired: true,
-		}, nil
-	}
-	hasMFA, err := mfaservice.UserHasVerifiedMFA(ctx, pool, uid)
-	if err != nil {
-		return AuthResponse{}, err
-	}
-	if hasMFA {
-		jti := uuid.NewString()
-		pend, err := jwt.SignMFAPending(ctx, row.ID, row.Email, jti, "challenge")
-		if err != nil {
-			return AuthResponse{}, err
-		}
-		return AuthResponse{
-			MFAPendingToken: pend,
-			TokenType:       "Bearer",
-			User:            userPublicFromRow(row),
-			RequiresMFA:     true,
-		}, nil
-	}
-	return responseFromRow(ctx, jwt, row)
+	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row)
 }
 
 // Signup .
@@ -363,6 +324,15 @@ func HTTPErrorFor(err error) (status int, code, msg string) {
 	if errors.Is(err, ErrInvalidResetToken) {
 		return http.StatusBadRequest, apierr.CodeInvalidResetToken, "This reset link is invalid or has expired. Request a new one from the sign-in page."
 	}
+	if errors.Is(err, ErrMagicLinkDisabled) {
+		return http.StatusNotFound, apierr.CodeNotFound, "Magic link sign-in is not available."
+	}
+	if errors.Is(err, ErrMagicLinkRateLimited) {
+		return http.StatusTooManyRequests, apierr.CodeRateLimited, "Too many sign-in link requests. Try again in a few minutes."
+	}
+	if errors.Is(err, ErrMagicLinkGone) {
+		return http.StatusGone, apierr.CodeMagicLinkGone, "This link has already been used or has expired."
+	}
 	return http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong."
 }
 
@@ -382,9 +352,9 @@ func PlaceholderPasswordHash() (string, error) {
 	return pauth.HashPassword(secret)
 }
 
-// AuthResponseForUser builds a bearer response from a user row (OIDC/SAML completion).
-func AuthResponseForUser(ctx context.Context, jwt *pauth.JWTSigner, row *user.Row) (AuthResponse, error) {
-	return responseFromRow(ctx, jwt, row)
+// AuthResponseForUser builds a bearer (or MFA-pending) response from a user row after SSO / MFA completion.
+func AuthResponseForUser(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, row *user.Row) (AuthResponse, error) {
+	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row)
 }
 
 func responseFromRow(ctx context.Context, jwt *pauth.JWTSigner, row *user.Row) (AuthResponse, error) {

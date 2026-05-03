@@ -92,6 +92,11 @@ type Config struct {
 	MFAEnabled bool
 	// MFAEnforcement is none | all | staff (platform setting; staff = Teacher/TA/Global Admin).
 	MFAEnforcement string
+
+	// MagicLinkEnabled allows email one-time sign-in links (plan 4.7).
+	MagicLinkEnabled bool
+	// MagicLinkEnrolledOnly when true: only users with an active course enrollment receive a link.
+	MagicLinkEnrolledOnly bool
 }
 
 // Load reads configuration from the environment.
@@ -192,6 +197,9 @@ func Load() Config {
 
 		MFAEnabled:     boolEnv("MFA_ENABLED"),
 		MFAEnforcement: strings.ToLower(strings.TrimSpace(stringDefault(firstNonEmptyTrimmed("MFA_ENFORCEMENT"), "none"))),
+
+		MagicLinkEnabled:      boolEnv("MAGIC_LINK_ENABLED"),
+		MagicLinkEnrolledOnly: boolEnv("MAGIC_LINK_ENROLLED_ONLY"),
 	}
 }
 

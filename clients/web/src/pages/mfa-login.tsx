@@ -21,7 +21,8 @@ export default function MfaLogin() {
     from === '/signup' ||
     from === '/forgot-password' ||
     from === '/reset-password' ||
-    from.startsWith('/login/mfa')
+    from.startsWith('/login/mfa') ||
+    from.startsWith('/login/magic-link')
   ) {
     from = '/'
   }

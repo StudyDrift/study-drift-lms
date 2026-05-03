@@ -42,6 +42,7 @@ import MfaLogin from './pages/mfa-login'
 import SamlCallback from './pages/saml-callback'
 import SsoError from './pages/sso-error'
 import PrivacyPolicyPage from './pages/privacy-policy-page'
+import MagicLinkPage from './pages/magic-link'
 import ResetPassword from './pages/reset-password'
 import Signup from './pages/signup'
 import TermsOfUsePage from './pages/terms-of-use-page'
@@ -58,6 +59,7 @@ export default function App() {
         location.pathname === '/signup' ||
         location.pathname === '/forgot-password' ||
         location.pathname === '/reset-password' ||
+        location.pathname.startsWith('/login/magic-link') ||
         location.pathname.startsWith('/login/mfa') ||
         location.pathname === '/saml-callback' ||
         location.pathname === '/sso-error'
@@ -75,6 +77,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/login/magic-link" element={<MagicLinkPage />} />
       <Route path="/login/mfa" element={<MfaLogin />} />
       <Route path="/saml-callback" element={<SamlCallback />} />
       <Route path="/sso-error" element={<SsoError />} />

@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -99,6 +100,76 @@ func (d Deps) handleForgotPassword() http.HandlerFunc {
 			return
 		}
 		res, err := authservice.RequestPasswordReset(r.Context(), d.Pool, d.effectiveConfig(), b.Email)
+		if err != nil {
+			writeAuthErr(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(res)
+	}
+}
+
+type magicLinkRequestBody struct {
+	Email       string  `json:"email"`
+	RedirectTo  *string `json:"redirect_to"`
+}
+
+func (d Deps) handleMagicLinkRequest() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		if d.Pool == nil {
+			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
+			return
+		}
+		var b magicLinkRequestBody
+		if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
+			return
+		}
+		res, err := authservice.RequestMagicLink(r.Context(), d.Pool, d.effectiveConfig(), authservice.MagicLinkRequestRequest{
+			Email:      b.Email,
+			RedirectTo: b.RedirectTo,
+		})
+		if err != nil {
+			writeAuthErr(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(res)
+	}
+}
+
+type magicLinkConsumeBody struct {
+	Token string `json:"token"`
+}
+
+func (d Deps) handleMagicLinkConsume() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodPost {
+			w.Header().Set("Allow", fmt.Sprintf("%s, %s", http.MethodGet, http.MethodPost))
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		if d.Pool == nil || d.JWTSigner == nil {
+			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
+			return
+		}
+		var tok string
+		if r.Method == http.MethodGet {
+			tok = strings.TrimSpace(r.URL.Query().Get("token"))
+		} else {
+			var b magicLinkConsumeBody
+			if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
+				return
+			}
+			tok = strings.TrimSpace(b.Token)
+		}
+		res, err := authservice.ConsumeMagicLink(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), tok)
 		if err != nil {
 			writeAuthErr(w, err)
 			return
