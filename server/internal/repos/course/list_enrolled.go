@@ -198,6 +198,7 @@ func ListForEnrolledUser(ctx context.Context, pool *pgxpool.Pool, userID uuid.UU
 	rows, err := pool.Query(ctx, `
 SELECT`+coursePublicSelect+`
 FROM course.courses c
+INNER JOIN "user".users ucat ON ucat.id = $1 AND ucat.org_id = c.org_id
 LEFT JOIN course.user_course_catalog_order o
   ON o.user_id = $1 AND o.course_id = c.id
 WHERE c.id IN (SELECT e.course_id FROM course.course_enrollments e WHERE e.user_id = $1 AND e.active)

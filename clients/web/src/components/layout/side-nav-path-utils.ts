@@ -8,6 +8,7 @@ export type SettingsNavView =
   | 'roles'
   | 'lti-tools'
   | 'platform'
+  | 'organizations'
   | 'scim-provisioning'
 
 export function settingsViewFromPathname(pathname: string): SettingsNavView {
@@ -21,6 +22,7 @@ export function settingsViewFromPathname(pathname: string): SettingsNavView {
     raw === 'roles' ||
     raw === 'lti-tools' ||
     raw === 'platform' ||
+    raw === 'organizations' ||
     raw === 'scim-provisioning'
   )
     return raw

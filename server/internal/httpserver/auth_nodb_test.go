@@ -26,7 +26,7 @@ func TestOIDCLink_Method(t *testing.T) {
 
 func TestOIDCLink_BadBody(t *testing.T) {
 	d := Deps{JWTSigner: auth.NewJWTSigner("01234567890123456789012345678901"), Config: config.Config{OIDCSSOEnabled: true}}
-	tok, err := d.JWTSigner.Sign(context.Background(), "a0000000-0000-4000-8000-000000000002", "x@y.com", nil)
+	tok, err := d.JWTSigner.Sign(context.Background(), "a0000000-0000-4000-8000-000000000002", "x@y.com", "", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

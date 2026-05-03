@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/lextures/lextures/server/internal/repos/organization"
 	"github.com/lextures/lextures/server/internal/repos/user"
 )
 
@@ -54,6 +55,11 @@ func RunCSV(ctx context.Context, pool *pgxpool.Pool, p SyncParams) (uuid.UUID, e
 
 	if _, ok := tables["users.csv"]; !ok {
 		return uuid.UUID{}, ErrMissingColumn{File: "bundle", Column: "users.csv (file missing)"}
+	}
+
+	orgID, err := organization.ResolveOrgIDForProvisioning(ctx, pool, p.InstitutionID)
+	if err != nil {
+		return uuid.UUID{}, err
 	}
 
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
@@ -105,7 +111,7 @@ VALUES ($1, $2, $3, NULLIF($4,''), $5, NULLIF($6,''))
 		}
 		status := strings.ToLower(strings.TrimSpace(getCol(rec, uHdr, "status")))
 		if status == "tobedeleted" {
-			if err := deactivateUser(ctx, tx, p.InstitutionID, sid, logEvent, &deactivated); err != nil {
+			if err := deactivateUser(ctx, tx, p.InstitutionID, orgID, sid, logEvent, &deactivated); err != nil {
 				nErr++
 				logEvent("user", "error", sid, nil, err.Error())
 			}
@@ -120,7 +126,7 @@ VALUES ($1, $2, $3, NULLIF($4,''), $5, NULLIF($6,''))
 		}
 		orRole := strings.ToLower(strings.TrimSpace(firstRole(getCol(rec, uHdr, "role"), getCol(rec, uHdr, "roles"))))
 
-		op, err := upsertUser(ctx, tx, p.InstitutionID, sid, email, given, family, display, orRole, logEvent)
+		op, err := upsertUser(ctx, tx, p.InstitutionID, orgID, sid, email, given, family, display, orRole, logEvent)
 		if err != nil {
 			nErr++
 			logEvent("user", "error", sid, nil, err.Error())
@@ -146,7 +152,7 @@ VALUES ($1, $2, $3, NULLIF($4,''), $5, NULLIF($6,''))
 			}
 			status := strings.ToLower(strings.TrimSpace(getCol(rec, cHdr, "status")))
 			if status == "tobedeleted" {
-				if err := deactivateClass(ctx, tx, p.InstitutionID, sid, logEvent, &deactivated); err != nil {
+				if err := deactivateClass(ctx, tx, p.InstitutionID, orgID, sid, logEvent, &deactivated); err != nil {
 					nErr++
 					logEvent("class", "error", sid, nil, err.Error())
 				}
@@ -159,7 +165,7 @@ VALUES ($1, $2, $3, NULLIF($4,''), $5, NULLIF($6,''))
 			if title == "" {
 				title = "Class " + sid
 			}
-			op, err := upsertClassCourse(ctx, tx, p, sid, title, logEvent)
+			op, err := upsertClassCourse(ctx, tx, p, orgID, sid, title, logEvent)
 			if err != nil {
 				nErr++
 				logEvent("class", "error", sid, nil, err.Error())
@@ -192,7 +198,7 @@ VALUES ($1, $2, $3, NULLIF($4,''), $5, NULLIF($6,''))
 			}
 			status := strings.ToLower(strings.TrimSpace(getCol(rec, eHdr, "status")))
 			if status == "tobedeleted" {
-				if err := deactivateEnrollment(ctx, tx, p.InstitutionID, esid, logEvent, &deactivated); err != nil {
+				if err := deactivateEnrollment(ctx, tx, p.InstitutionID, orgID, esid, logEvent, &deactivated); err != nil {
 					nErr++
 					logEvent("enrollment", "error", esid, nil, err.Error())
 				}
@@ -200,7 +206,7 @@ VALUES ($1, $2, $3, NULLIF($4,''), $5, NULLIF($6,''))
 			}
 			roleStr := strings.ToLower(strings.TrimSpace(getCol(rec, eHdr, "role")))
 			enrollRole := mapEnrollmentRole(roleStr)
-			op, err := upsertEnrollment(ctx, tx, p.InstitutionID, esid, cls, us, enrollRole, logEvent)
+			op, err := upsertEnrollment(ctx, tx, p.InstitutionID, orgID, esid, cls, us, enrollRole, logEvent)
 			if err != nil {
 				nErr++
 				logEvent("enrollment", "error", esid, nil, err.Error())

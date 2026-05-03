@@ -21,7 +21,7 @@ const (
 func TestJWTSignerSignVerifyRoundTrip(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
 
-	token, err := signer.Sign(context.Background(), userID, "a@b.com", nil)
+	token, err := signer.Sign(context.Background(), userID, "a@b.com", "", "", nil)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestJWTSignerSignVerifyRoundTrip(t *testing.T) {
 func TestJWTSignerRTIRoundTrip(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
 	rti := uuid.MustParse("33333333-3333-4333-8333-333333333333")
-	tok, err := signer.Sign(context.Background(), userID, "a@b.com", &rti)
+	tok, err := signer.Sign(context.Background(), userID, "a@b.com", "", "", &rti)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestJWTSignerWrongSecretFailsVerify(t *testing.T) {
 	a := newTestSigner("secret-a")
 	b := newTestSigner("secret-b")
 
-	token, err := a.Sign(context.Background(), userID, "x@y.z", nil)
+	token, err := a.Sign(context.Background(), userID, "x@y.z", "", "", nil)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestJWTSignerWrongSecretFailsVerify(t *testing.T) {
 
 func TestJWTSignerRejectsExpiredToken(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
-	token, err := signer.Sign(context.Background(), userID, "a@b.com", nil)
+	token, err := signer.Sign(context.Background(), userID, "a@b.com", "", "", nil)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestJWTSignerRejectsMalformedLoginClaims(t *testing.T) {
 
 func TestJWTSignerRejectsUnsupportedAlgorithm(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
-	token, err := signer.Sign(context.Background(), userID, "a@b.com", nil)
+	token, err := signer.Sign(context.Background(), userID, "a@b.com", "", "", nil)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestJWTSignerLTIEmbedTicketRoundTrip(t *testing.T) {
 
 func TestJWTSignerLoginTokenIsNotLTIEmbedTicket(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
-	token, err := signer.Sign(context.Background(), userID, "a@b.com", nil)
+	token, err := signer.Sign(context.Background(), userID, "a@b.com", "", "", nil)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
@@ -164,10 +164,10 @@ func TestJWTSignerLoginTokenIsNotLTIEmbedTicket(t *testing.T) {
 func TestJWTSignerRejectsInvalidInput(t *testing.T) {
 	signer := newTestSigner("unit-test-secret")
 
-	if _, err := signer.Sign(context.Background(), "not-a-uuid", "a@b.com", nil); !errors.Is(err, ErrInvalidToken) {
+	if _, err := signer.Sign(context.Background(), "not-a-uuid", "a@b.com", "", "", nil); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("Sign invalid user id: %v", err)
 	}
-	if _, err := signer.Sign(context.Background(), userID, " ", nil); !errors.Is(err, ErrInvalidToken) {
+	if _, err := signer.Sign(context.Background(), userID, " ", "", "", nil); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("Sign invalid email: %v", err)
 	}
 	if _, err := signer.SignLTIEmbedTicket(userID, courseID, "not-a-uuid"); !errors.Is(err, ErrInvalidToken) {

@@ -49,7 +49,7 @@ VALUES ($1, 'google', 'sub-me', 'x@y.com') RETURNING id`, uid).Scan(&oidcID)
 		t.Fatalf("oidc: %v", err)
 	}
 	signer := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
-	tok, err := signer.Sign(ctx, row.ID, em, nil)
+	tok, err := signer.Sign(ctx, row.ID, em, "", "", nil)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}

@@ -21,7 +21,7 @@ func TestPutCourse_Not405NoRoute(t *testing.T) {
 		`"relativeEndAfter":null,"relativeHiddenAfter":null}`
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/courses/C-TEST", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	tok, _ := signer.Sign(context.Background(), "00000000-0000-0000-0000-000000000001", "u@test.com", nil)
+	tok, _ := signer.Sign(context.Background(), "00000000-0000-0000-0000-000000000001", "u@test.com", "", "", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
 	h.ServeHTTP(rr, req)
 	if rr.Code == http.StatusMethodNotAllowed {

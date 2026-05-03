@@ -27,6 +27,7 @@ const (
 	CodeUnprocessableEntity = "UNPROCESSABLE_ENTITY"
 	CodeAiNotConfigured     = "AI_NOT_CONFIGURED"
 	CodeAiGenerationFailed  = "AI_GENERATION_FAILED"
+	CodeOrgSuspended        = "ORG_SUSPENDED"
 )
 
 // Body matches server/src/error.rs JSON error envelope.

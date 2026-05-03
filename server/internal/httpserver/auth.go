@@ -208,6 +208,10 @@ func (d Deps) handleAuthRefresh() http.HandlerFunc {
 				apierr.WriteJSON(w, http.StatusUnauthorized, apierr.CodeUnauthorized, "Invalid or expired session.")
 				return
 			}
+			if errors.Is(err, authservice.ErrOrgSuspended) {
+				apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeOrgSuspended, "This organization has been suspended.")
+				return
+			}
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
 			return
 		}

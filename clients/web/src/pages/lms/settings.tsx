@@ -5,6 +5,7 @@ import { settingsViewFromPathname } from '../../components/layout/side-nav-path-
 import { ImageModelPicker } from '../../components/image-model-picker'
 import { RequirePermission } from '../../components/require-permission'
 import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-settings-panel'
+import { OrganizationsPanel } from '../../components/settings/organizations-panel'
 import { PlatformSettingsPanel } from '../../components/settings/platform-settings-panel'
 import { ScimSettingsPanel } from '../../components/settings/scim-settings-panel'
 import { RolesPermissionsPanel } from '../../components/settings/roles-permissions-panel'
@@ -27,6 +28,7 @@ function isSystemSettingsPath(pathname: string): boolean {
     pathname === '/settings/roles' ||
     pathname === '/settings/lti-tools' ||
     pathname === '/settings/platform' ||
+    pathname === '/settings/organizations' ||
     pathname === '/settings/scim-provisioning'
   )
 }
@@ -710,6 +712,7 @@ export default function Settings() {
           activeView === 'roles' ||
           activeView === 'lti-tools' ||
           activeView === 'platform' ||
+          activeView === 'organizations' ||
           activeView === 'scim-provisioning'
             ? 'max-w-4xl'
             : activeView === 'ai-prompts'
@@ -1375,6 +1378,23 @@ export default function Settings() {
               }
             >
               <PlatformSettingsPanel />
+            </RequirePermission>
+          </div>
+        )}
+
+        {activeView === 'organizations' && (
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">Organizations</h2>
+            <RequirePermission
+              permission={PERM_RBAC_MANAGE}
+              fallback={
+                <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                  You need permission to manage organizations (
+                  <code className="font-mono text-xs">{PERM_RBAC_MANAGE}</code>).
+                </p>
+              }
+            >
+              <OrganizationsPanel />
             </RequirePermission>
           </div>
         )}

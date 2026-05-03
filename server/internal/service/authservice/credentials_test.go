@@ -34,6 +34,7 @@ func TestHTTPErrorFor(t *testing.T) {
 		{ErrInvalidCredentials, http.StatusUnauthorized, apierr.CodeInvalidCredentials},
 		{ErrEmailTaken, http.StatusConflict, apierr.CodeEmailTaken},
 		{ErrInvalidResetToken, http.StatusBadRequest, apierr.CodeInvalidResetToken},
+		{ErrOrgSuspended, http.StatusForbidden, apierr.CodeOrgSuspended},
 		{errors.New("mystery"), http.StatusInternalServerError, apierr.CodeInternal},
 	}
 	for _, tc := range cases {

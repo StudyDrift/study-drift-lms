@@ -112,7 +112,7 @@ func MergeClientMeta(meta *ClientMeta, authMethod string) *ClientMeta {
 
 func issueAccessAndRefresh(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, row *user.Row, meta *ClientMeta) (access, refresh string, err error) {
 	if pool == nil {
-		tok, err := jwt.Sign(ctx, row.ID, row.Email, nil)
+		tok, err := jwt.Sign(ctx, row.ID, row.Email, "", "", nil)
 		return tok, "", err
 	}
 	tx, err := pool.Begin(ctx)
@@ -120,7 +120,7 @@ func issueAccessAndRefresh(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.J
 		return "", "", err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	a, ref, err := issueAccessAndRefreshTx(ctx, tx, jwt, row, meta, nil)
+	a, ref, err := issueAccessAndRefreshTx(ctx, pool, tx, jwt, row, meta, nil)
 	if err != nil {
 		return "", "", err
 	}
@@ -130,7 +130,7 @@ func issueAccessAndRefresh(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.J
 	return a, ref, nil
 }
 
-func issueAccessAndRefreshTx(ctx context.Context, tx pgx.Tx, jwt *pauth.JWTSigner, row *user.Row, meta *ClientMeta, rotatedFrom *refreshtoken.Row) (access, refresh string, err error) {
+func issueAccessAndRefreshTx(ctx context.Context, pool *pgxpool.Pool, tx pgx.Tx, jwt *pauth.JWTSigner, row *user.Row, meta *ClientMeta, rotatedFrom *refreshtoken.Row) (access, refresh string, err error) {
 	raw := make([]byte, refreshTokenRawBytes)
 	if _, err := rand.Read(raw); err != nil {
 		return "", "", err
@@ -157,8 +157,12 @@ func issueAccessAndRefreshTx(ctx context.Context, tx pgx.Tx, jwt *pauth.JWTSigne
 	if err != nil {
 		return "", "", err
 	}
+	orgID, orgSlug, _, err := orgJWTFieldsForUser(ctx, pool, row.ID)
+	if err != nil {
+		return "", "", err
+	}
 	rtid := refID
-	tok, err := jwt.Sign(ctx, row.ID, row.Email, &rtid)
+	tok, err := jwt.Sign(ctx, row.ID, row.Email, orgID, orgSlug, &rtid)
 	if err != nil {
 		return "", "", err
 	}
@@ -194,13 +198,20 @@ func Refresh(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, rawR
 	if urow == nil || urow.LoginBlocked || urow.DeactivatedAt != nil {
 		return RefreshTokenResponse{}, ErrRefreshInvalid
 	}
+	if st, err := orgStatusForUser(ctx, pool, urow.ID); err != nil {
+		return RefreshTokenResponse{}, err
+	} else if st == "suspended" {
+		return RefreshTokenResponse{}, ErrOrgSuspended
+	} else if st == "deleted" || st == "" {
+		return RefreshTokenResponse{}, ErrRefreshInvalid
+	}
 	if err := refreshtoken.TouchLastRefreshed(ctx, tx, row.ID, now, now); err != nil {
 		return RefreshTokenResponse{}, err
 	}
 	if err := refreshtoken.MarkRevoked(ctx, tx, row.ID, now); err != nil {
 		return RefreshTokenResponse{}, err
 	}
-	access, newRefresh, err := issueAccessAndRefreshTx(ctx, tx, jwt, urow, meta, row)
+	access, newRefresh, err := issueAccessAndRefreshTx(ctx, pool, tx, jwt, urow, meta, row)
 	if err != nil {
 		return RefreshTokenResponse{}, err
 	}

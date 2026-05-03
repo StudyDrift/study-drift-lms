@@ -70,8 +70,9 @@ INSERT INTO course.courses (
 	title,
 	description,
 	course_type,
-	created_by_user_id
-) VALUES ($1, $2, $3, $4, $5)
+	created_by_user_id,
+	org_id
+) VALUES ($1, $2, $3, $4, $5, (SELECT org_id FROM "user".users WHERE id = $5))
 RETURNING`+publicReturningColumns, courseCode, title, description, courseType, createdByUserID)
 
 	out, err := scanCoursePublicFromRow(row)

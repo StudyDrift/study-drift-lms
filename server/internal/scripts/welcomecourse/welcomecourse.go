@@ -89,11 +89,11 @@ LIMIT 1
 		var courseID uuid.UUID
 		if ierr := tx.QueryRow(ctx, `
 INSERT INTO course.courses (
-	course_code, title, description, course_type, created_by_user_id, published
+	course_code, title, description, course_type, created_by_user_id, published, org_id
 )
-VALUES ($1, $2, $3, 'traditional', $4, TRUE)
+VALUES ($1, $2, $3, 'traditional', $4, TRUE, (SELECT org_id FROM "user".users WHERE id = $5))
 RETURNING id
-`, code, defaultCourseTitle, defaultCourseDescription, primaryTeacher).Scan(&courseID); ierr != nil {
+`, code, defaultCourseTitle, defaultCourseDescription, primaryTeacher, studentUserID).Scan(&courseID); ierr != nil {
 			_ = tx.Rollback(ctx)
 			var pgErr *pgconn.PgError
 			if errors.As(ierr, &pgErr) && pgErr.Code == "23505" {

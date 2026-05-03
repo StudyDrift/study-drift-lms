@@ -192,6 +192,11 @@ func issueAuthAfterCredentialSuccess(ctx context.Context, pool *pgxpool.Pool, jw
 	if err != nil {
 		return AuthResponse{}, err
 	}
+	if pool != nil {
+		if err := orgAuthGate(ctx, pool, row.ID); err != nil {
+			return AuthResponse{}, err
+		}
+	}
 	needEnrol, err := mfaservice.EnrolmentRequiredBeforeAccess(ctx, pool, cfg, uid)
 	if err != nil {
 		return AuthResponse{}, err

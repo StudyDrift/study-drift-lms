@@ -37,6 +37,9 @@ var (
 type AuthUser struct {
 	UserID string
 	Email  string
+	// OrgID and OrgSlug scope the bearer to a tenant (plan 5.1); empty when absent from token (legacy JWTs).
+	OrgID   string
+	OrgSlug string
 	// RefreshTokenSessionID is the refresh_tokens row id that issued this access token (optional; plan 4.9).
 	RefreshTokenSessionID *uuid.UUID
 }
@@ -80,9 +83,12 @@ func NewJWTSignerWithPool(secret string, pool *pgxpool.Pool) *JWTSigner {
 	return j
 }
 
-// Sign creates a login JWT containing sub, email, exp, optional session version (revocation), and optional refresh-token session id (rti).
-func (s *JWTSigner) Sign(ctx context.Context, userID, email string, refreshTokenSessionID *uuid.UUID) (string, error) {
+// Sign creates a login JWT containing sub, email, org_id, org_slug, exp, optional session version (revocation), and optional refresh-token session id (rti).
+func (s *JWTSigner) Sign(ctx context.Context, userID, email string, orgID, orgSlug string, refreshTokenSessionID *uuid.UUID) (string, error) {
 	if !isUUID(userID) || strings.TrimSpace(email) == "" {
+		return "", ErrInvalidToken
+	}
+	if orgID != "" && !isUUID(orgID) {
 		return "", ErrInvalidToken
 	}
 	if refreshTokenSessionID != nil && *refreshTokenSessionID == uuid.Nil {
@@ -109,6 +115,8 @@ func (s *JWTSigner) Sign(ctx context.Context, userID, email string, refreshToken
 		Typ:            "login",
 		Subject:        userID,
 		Email:          email,
+		OrgID:          orgID,
+		OrgSlug:        orgSlug,
 		SessionVersion: sv,
 		Issued:         unixSeconds(s.now()),
 		JTI:            jti,
@@ -124,6 +132,9 @@ func (s *JWTSigner) Verify(ctx context.Context, token string) (AuthUser, error) 
 		return AuthUser{}, err
 	}
 	if !isUUID(claims.Subject) || strings.TrimSpace(claims.Email) == "" {
+		return AuthUser{}, ErrInvalidToken
+	}
+	if claims.OrgID != "" && !isUUID(claims.OrgID) {
 		return AuthUser{}, ErrInvalidToken
 	}
 	if claims.Typ != "" && claims.Typ != "login" {
@@ -163,7 +174,13 @@ func (s *JWTSigner) Verify(ctx context.Context, token string) (AuthUser, error) 
 		}
 		rti = &id
 	}
-	return AuthUser{UserID: claims.Subject, Email: claims.Email, RefreshTokenSessionID: rti}, nil
+	return AuthUser{
+		UserID:                claims.Subject,
+		Email:                 claims.Email,
+		OrgID:                 strings.TrimSpace(claims.OrgID),
+		OrgSlug:               strings.TrimSpace(claims.OrgSlug),
+		RefreshTokenSessionID: rti,
+	}, nil
 }
 
 // SignMFAPending issues a 60-second token used after password verification and before MFA completion.
@@ -323,6 +340,8 @@ type loginClaims struct {
 	Typ            string `json:"typ,omitempty"`
 	Subject        string `json:"sub"`
 	Email          string `json:"email"`
+	OrgID          string `json:"org_id,omitempty"`
+	OrgSlug        string `json:"org_slug,omitempty"`
 	SessionVersion int64  `json:"sv,omitempty"`
 	Issued         int64  `json:"iat,omitempty"`
 	JTI            string `json:"jti,omitempty"`
