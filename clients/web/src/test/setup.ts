@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { afterAll, afterEach, beforeAll } from 'vitest'
 import { clearAccessToken } from '../lib/auth'
+import { clearRefreshToken } from '../lib/session-tokens'
 import { server } from './mocks/server'
 
 /** jsdom does not implement ResizeObserver; `TopBar` uses it for layout. */
@@ -33,6 +34,7 @@ beforeAll(() => {
 afterEach(() => {
   server.resetHandlers()
   clearAccessToken()
+  clearRefreshToken()
 })
 
 afterAll(() => {

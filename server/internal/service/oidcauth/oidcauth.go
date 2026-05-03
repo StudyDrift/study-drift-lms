@@ -95,6 +95,7 @@ func (s *Service) providerForIssuer(ctx context.Context, issuer string) (*oidc.P
 func (s *Service) completeClassLinkLogin(
 	ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner,
 	subj, emailIn string, flow *oidcrepo.FlowStateRow,
+	meta *authservice.ClientMeta,
 ) (authservice.AuthResponse, *string, error) {
 	if u, err := user.FindByClassLinkID(ctx, pool, subj); err != nil {
 		return authservice.AuthResponse{}, nil, err
@@ -110,7 +111,7 @@ func (s *Service) completeClassLinkLogin(
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -136,7 +137,7 @@ func (s *Service) completeClassLinkLogin(
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -164,7 +165,7 @@ func (s *Service) completeClassLinkLogin(
 		if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, "classlink", subj, &emailIn); err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -188,7 +189,7 @@ func (s *Service) completeClassLinkLogin(
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -213,7 +214,7 @@ func (s *Service) completeClassLinkLogin(
 	if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, "classlink", subj, &emailIn); err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
-	res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, nu)
+	res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, nu, meta)
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
@@ -366,6 +367,7 @@ func (s *Service) resolveClient(pathProvider string, custom *oidcrepo.CustomProv
 func (s *Service) CompleteLogin(
 	ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner,
 	pathProvider, code, state string,
+	meta *authservice.ClientMeta,
 ) (authservice.AuthResponse, *string, error) {
 	pv := strings.ToLower(strings.TrimSpace(pathProvider))
 	if !s.oidcFlowAllowed(pathProvider) {
@@ -422,7 +424,7 @@ func (s *Service) CompleteLogin(
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "Could not complete sign-in with the identity provider."}
 	}
 	if pv == "clever" || pv == "classlink" {
-		return s.completeK12OIDCLogin(ctx, pool, jwt, pv, flow, prov, o2, tok)
+		return s.completeK12OIDCLogin(ctx, pool, jwt, pv, flow, prov, o2, tok, meta)
 	}
 	raw, ok := tok.Extra("id_token").(string)
 	if !ok || raw == "" {
@@ -462,7 +464,7 @@ func (s *Service) CompleteLogin(
 	}
 
 	if pv == "classlink" {
-		return s.completeClassLinkLogin(ctx, pool, jwt, subj, emailIn, flow)
+		return s.completeClassLinkLogin(ctx, pool, jwt, subj, emailIn, flow, meta)
 	}
 
 	ident, err := oidcrepo.FindIdentityByProviderAndSub(ctx, pool, pv, subj)
@@ -477,7 +479,7 @@ func (s *Service) CompleteLogin(
 		if u == nil {
 			return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -501,7 +503,7 @@ func (s *Service) CompleteLogin(
 		if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, pv, subj, &emailIn); err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -517,7 +519,7 @@ func (s *Service) CompleteLogin(
 		if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, pv, subj, &emailIn); err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -541,7 +543,7 @@ func (s *Service) CompleteLogin(
 	if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, pv, subj, &emailIn); err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
-	res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, nu)
+	res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, nu, meta)
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}

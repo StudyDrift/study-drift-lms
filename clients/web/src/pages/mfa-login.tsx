@@ -2,7 +2,7 @@ import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import { type FormEvent, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { BrandLogo } from '../components/brand-logo'
-import { setAccessToken } from '../lib/auth'
+import { applyAuthTokenResponse } from '../lib/session-tokens'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
@@ -45,11 +45,14 @@ export default function MfaLogin() {
 
   const authHeaders = { Authorization: `Bearer ${mfaFlow.token}` }
 
-  async function finishWithAccessToken(accessToken: string, uiTheme?: string | null) {
+  async function finishWithAccessToken(
+    tokens: { access_token?: string; refresh_token?: string; expires_in?: number },
+    uiTheme?: string | null,
+  ) {
     clearMfaFlow()
     setTotpCredId(null)
     setTotpQrUrl(null)
-    setAccessToken(accessToken)
+    applyAuthTokenResponse(tokens)
     applyUiTheme(parseUiTheme(uiTheme))
     markPostLoginShortcutTip()
     navigate(from, { replace: true })
@@ -69,8 +72,13 @@ export default function MfaLogin() {
         setMessage(readApiErrorMessage(raw))
         return
       }
-      const data = raw as { access_token?: string; user?: { uiTheme?: string | null } }
-      await finishWithAccessToken(data.access_token ?? '', data.user?.uiTheme)
+      const data = raw as {
+        access_token?: string
+        refresh_token?: string
+        expires_in?: number
+        user?: { uiTheme?: string | null }
+      }
+      await finishWithAccessToken(data, data.user?.uiTheme)
     } catch {
       setStatus('error')
       setMessage('Could not reach the server.')
@@ -111,8 +119,13 @@ export default function MfaLogin() {
         await completeSetup()
         return
       }
-      const data = raw as { access_token?: string; user?: { uiTheme?: string | null } }
-      await finishWithAccessToken(data.access_token ?? '', data.user?.uiTheme)
+      const data = raw as {
+        access_token?: string
+        refresh_token?: string
+        expires_in?: number
+        user?: { uiTheme?: string | null }
+      }
+      await finishWithAccessToken(data, data.user?.uiTheme)
     } catch {
       setStatus('error')
       setMessage('Could not reach the server.')
@@ -136,8 +149,13 @@ export default function MfaLogin() {
         setMessage(readApiErrorMessage(raw))
         return
       }
-      const data = raw as { access_token?: string; user?: { uiTheme?: string | null } }
-      await finishWithAccessToken(data.access_token ?? '', data.user?.uiTheme)
+      const data = raw as {
+        access_token?: string
+        refresh_token?: string
+        expires_in?: number
+        user?: { uiTheme?: string | null }
+      }
+      await finishWithAccessToken(data, data.user?.uiTheme)
     } catch {
       setStatus('error')
       setMessage('Could not reach the server.')
@@ -234,8 +252,13 @@ export default function MfaLogin() {
         }
         await completeSetup()
       } else {
-        const out = raw2 as { access_token?: string; user?: { uiTheme?: string | null } }
-        await finishWithAccessToken(out.access_token ?? '', out.user?.uiTheme)
+        const out = raw2 as {
+          access_token?: string
+          refresh_token?: string
+          expires_in?: number
+          user?: { uiTheme?: string | null }
+        }
+        await finishWithAccessToken(out, out.user?.uiTheme)
       }
     } catch {
       setMessage('Passkey was cancelled or failed.')

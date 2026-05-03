@@ -1,6 +1,11 @@
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearAccessToken, getAccessToken, setAccessToken } from '../auth'
+import {
+  clearRefreshToken,
+  getRefreshToken,
+  setRefreshToken,
+} from '../session-tokens'
 import { apiBaseUrl, apiUrl, authorizedFetch, backoffWithJitterMs, joinApiBase } from '../api'
 import { server } from '../../test/mocks/server'
 
@@ -50,6 +55,7 @@ describe('authorizedFetch', () => {
 
   afterEach(() => {
     clearAccessToken()
+    clearRefreshToken()
   })
 
   it('sends Authorization Bearer header to the API', async () => {
@@ -76,6 +82,38 @@ describe('authorizedFetch', () => {
     )
     await authorizedFetch('/api/v1/ping')
     expect(authHeader).toBeNull()
+  })
+
+  it('refreshes session on 401 when a refresh token is stored', async () => {
+    setAccessToken('expired-access')
+    setRefreshToken('rt-old')
+    let pingCount = 0
+    server.use(
+      http.get('http://localhost:8080/api/v1/ping', () => {
+        pingCount += 1
+        if (pingCount === 1) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return HttpResponse.json({ ok: true })
+      }),
+      http.post('http://localhost:8080/api/v1/auth/refresh', async ({ request }) => {
+        const body = (await request.json()) as { refresh_token?: string }
+        if (body.refresh_token !== 'rt-old') {
+          return HttpResponse.json({ error: 'bad' }, { status: 401 })
+        }
+        return HttpResponse.json({
+          access_token: 'new-access',
+          refresh_token: 'rt-new',
+          expires_in: 900,
+          token_type: 'Bearer',
+        })
+      }),
+    )
+    const res = await authorizedFetch('/api/v1/ping')
+    expect(res.ok).toBe(true)
+    expect(pingCount).toBe(2)
+    expect(getAccessToken()).toBe('new-access')
+    expect(getRefreshToken()).toBe('rt-new')
   })
 
   it('clears auth and redirects to login on 401 responses', async () => {

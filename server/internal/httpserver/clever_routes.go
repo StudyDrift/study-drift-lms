@@ -1,11 +1,13 @@
 package httpserver
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/lextures/lextures/server/internal/apierr"
+	"github.com/lextures/lextures/server/internal/service/authservice"
 	"github.com/lextures/lextures/server/internal/service/cleverauth"
 )
 
@@ -73,12 +75,24 @@ func (d Deps) handleCleverCallback() http.HandlerFunc {
 		}
 		code := q.Get("code")
 		state := q.Get("state")
-		res, nextPath, err := d.Clever.CompleteLogin(r.Context(), d.Pool, d.JWTSigner, code, state)
+		res, nextPath, err := d.Clever.CompleteLogin(r.Context(), d.Pool, d.JWTSigner, code, state, authservice.ClientMetaFromRequest(r))
 		if err != nil {
 			writeAuthErr(w, err)
 			return
 		}
-		enc := url.QueryEscape(res.AccessToken)
+		frag := "access_token=" + url.QueryEscape(res.AccessToken) + "&token_type=" + url.QueryEscape(res.TokenType)
+		if res.RefreshToken != "" {
+			frag += "&refresh_token=" + url.QueryEscape(res.RefreshToken) + fmt.Sprintf("&expires_in=%d", res.ExpiresIn)
+		}
+		if res.MFAPendingToken != "" {
+			frag += "&mfa_pending_token=" + url.QueryEscape(res.MFAPendingToken)
+			if res.RequiresMFA {
+				frag += "&requires_mfa=1"
+			}
+			if res.MFASetupRequired {
+				frag += "&mfa_setup_required=1"
+			}
+		}
 		next := "/"
 		if nextPath != nil {
 			np := strings.TrimSpace(*nextPath)
@@ -93,7 +107,7 @@ func (d Deps) handleCleverCallback() http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		html := `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Signing in</title></head>
-<body><script>location.replace("` + public + `/saml-callback#access_token=` + enc + `&token_type=Bearer` + nextQ + `");</script>
+<body><script>location.replace("` + public + `/saml-callback#` + frag + nextQ + `");</script>
 <p>Redirecting to the app…</p></body></html>`
 		_, _ = w.Write([]byte(html))
 	}

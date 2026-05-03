@@ -108,7 +108,7 @@ func pkceChallengeS256(verifier string) string {
 }
 
 // CompleteLogin exchanges the code, loads Clever profile, issues an app JWT.
-func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, code, state string) (authservice.AuthResponse, *string, error) {
+func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, code, state string, meta *authservice.ClientMeta) (authservice.AuthResponse, *string, error) {
 	if !s.Cfg.CleverSSOEnabled {
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "Clever sign-in is not enabled on this server."}
 	}
@@ -169,7 +169,7 @@ func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pa
 		if u2 == nil {
 			return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "User not found."}
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -196,7 +196,7 @@ func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pa
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -223,7 +223,7 @@ func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pa
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
-		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2)
+		res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, u2, meta)
 		if err != nil {
 			return authservice.AuthResponse{}, nil, err
 		}
@@ -254,7 +254,7 @@ func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pa
 	if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, "clever", subj, &email); err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
-	res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, nu)
+	res, err := authservice.AuthResponseForUser(ctx, pool, jwt, s.Cfg, nu, meta)
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}

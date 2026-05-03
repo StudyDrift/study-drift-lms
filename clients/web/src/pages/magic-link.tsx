@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { BrandLogo } from '../components/brand-logo'
-import { getAccessToken, setAccessToken } from '../lib/auth'
+import { getAccessToken } from '../lib/auth'
+import { applyAuthTokenResponse } from '../lib/session-tokens'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
@@ -72,7 +73,7 @@ export default function MagicLinkPage() {
           setMessage('Unexpected sign-in response.')
           return
         }
-        setAccessToken(data.access_token)
+        applyAuthTokenResponse(data)
         applyUiTheme(parseUiTheme(data.user?.uiTheme))
         markPostLoginShortcutTip()
         const dest =

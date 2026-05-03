@@ -133,7 +133,7 @@ func magicLinkPublicOK() MagicLinkRequestResponse {
 }
 
 // ConsumeMagicLink validates the token, marks it consumed, and returns the same auth shape as login.
-func ConsumeMagicLink(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, rawToken string) (AuthResponse, error) {
+func ConsumeMagicLink(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, rawToken string, meta *ClientMeta) (AuthResponse, error) {
 	if !cfg.MagicLinkEnabled {
 		return AuthResponse{}, ErrMagicLinkDisabled
 	}
@@ -183,11 +183,11 @@ func ConsumeMagicLink(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSig
 		return AuthResponse{}, ErrMagicLinkGone
 	}
 	magicLinkMetrics.consumed.Add(1)
-	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, urow)
+	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, urow, meta)
 }
 
 // issueAuthAfterCredentialSuccess issues MFA pending or access token after password/magic-link verification.
-func issueAuthAfterCredentialSuccess(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, row *user.Row) (AuthResponse, error) {
+func issueAuthAfterCredentialSuccess(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, row *user.Row, meta *ClientMeta) (AuthResponse, error) {
 	uid, err := uuid.Parse(row.ID)
 	if err != nil {
 		return AuthResponse{}, err
@@ -226,7 +226,7 @@ func issueAuthAfterCredentialSuccess(ctx context.Context, pool *pgxpool.Pool, jw
 			RequiresMFA:     true,
 		}, nil
 	}
-	return responseFromRow(ctx, jwt, row)
+	return responseFromRow(ctx, pool, jwt, row, meta)
 }
 
 func magicLinkSanitizeRedirect(publicOrigin, redirectTo string) (string, error) {

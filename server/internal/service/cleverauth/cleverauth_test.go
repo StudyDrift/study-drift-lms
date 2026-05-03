@@ -98,7 +98,7 @@ func TestCompleteLogin_MockCleverAPI(t *testing.T) {
 	s.CleverAPIBase = srv.URL + "/v3.0"
 
 	jwt := pauth.NewJWTSigner("01234567890123456789012345678901")
-	res, _, err := s.CompleteLogin(ctx, pool, jwt, "authcode", "st1")
+	res, _, err := s.CompleteLogin(ctx, pool, jwt, "authcode", "st1", nil)
 	if err != nil {
 		t.Fatalf("CompleteLogin: %v", err)
 	}

@@ -35,6 +35,8 @@ import (
 type LoginRequest struct {
 	Email    string
 	Password string
+	// Client is optional HTTP metadata stored on refresh tokens (login handler).
+	Client *ClientMeta
 }
 
 // SignupRequest mirrors models/auth SignupRequest.
@@ -42,6 +44,7 @@ type SignupRequest struct {
 	Email       string
 	Password    string
 	DisplayName *string
+	Client      *ClientMeta
 }
 
 // UserPublic is the API user (camelCase at the HTTP layer).
@@ -59,6 +62,8 @@ type UserPublic struct {
 // AuthResponse mirrors models/auth AuthResponse (field names are snake_case like the Rust `AuthResponse` struct).
 type AuthResponse struct {
 	AccessToken        string     `json:"access_token,omitempty"`
+	RefreshToken       string     `json:"refresh_token,omitempty"`
+	ExpiresIn          int        `json:"expires_in,omitempty"`
 	MFAPendingToken    string     `json:"mfa_pending_token,omitempty"`
 	TokenType          string     `json:"token_type"`
 	User               UserPublic `json:"user"`
@@ -124,7 +129,7 @@ func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg co
 	if err != nil || !ok {
 		return AuthResponse{}, ErrInvalidCredentials
 	}
-	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row)
+	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row, req.Client)
 }
 
 // Signup .
@@ -188,7 +193,7 @@ WHERE id <> $1::uuid`, communication.PlatformInboxSenderID.String()).Scan(&human
 
 	_ = passwordcreditevents.Insert(ctx, pool, uid, passwordcreditevents.KindSignup, hibpRes.BreachFound, hibpRes.HIBPAvailable)
 	communication.SendWelcomeMessage(ctx, pool, email)
-	return responseFromRow(ctx, jwt, row)
+	return responseFromRow(ctx, pool, jwt, row, req.Client)
 }
 
 // RequestPasswordReset always returns the same public message; persists token when user exists.
@@ -269,6 +274,12 @@ func ResetPassword(ctx context.Context, pool *pgxpool.Pool, checker hibp.Checker
 	if !ok {
 		return ResetPasswordResponse{}, ErrInvalidResetToken
 	}
+	if err := RevokeAllSessionsForUser(ctx, pool, uid); err != nil {
+		return ResetPasswordResponse{}, err
+	}
+	if err := InvalidatePasswordJWTs(ctx, pool, uid); err != nil {
+		return ResetPasswordResponse{}, err
+	}
 	_ = passwordcreditevents.Insert(ctx, pool, uid, passwordcreditevents.KindPasswordReset, hibpRes.BreachFound, hibpRes.HIBPAvailable)
 	return ResetPasswordResponse{Message: "Your password has been updated. You can sign in now."}, nil
 }
@@ -302,6 +313,12 @@ func ChangePassword(ctx context.Context, pool *pgxpool.Pool, checker hibp.Checke
 	if err := user.SetPasswordHash(ctx, pool, userID, ph); err != nil {
 		return ChangePasswordResponse{}, err
 	}
+	if err := RevokeAllSessionsForUser(ctx, pool, userID); err != nil {
+		return ChangePasswordResponse{}, err
+	}
+	if err := InvalidatePasswordJWTs(ctx, pool, userID); err != nil {
+		return ChangePasswordResponse{}, err
+	}
 	_ = passwordcreditevents.Insert(ctx, pool, userID, passwordcreditevents.KindPasswordChange, hibpRes.BreachFound, hibpRes.HIBPAvailable)
 	return ChangePasswordResponse{Message: "Your password has been updated."}, nil
 }
@@ -333,6 +350,9 @@ func HTTPErrorFor(err error) (status int, code, msg string) {
 	if errors.Is(err, ErrMagicLinkGone) {
 		return http.StatusGone, apierr.CodeMagicLinkGone, "This link has already been used or has expired."
 	}
+	if errors.Is(err, ErrRefreshInvalid) {
+		return http.StatusUnauthorized, apierr.CodeUnauthorized, "Session expired. Sign in again."
+	}
 	return http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong."
 }
 
@@ -353,20 +373,25 @@ func PlaceholderPasswordHash() (string, error) {
 }
 
 // AuthResponseForUser builds a bearer (or MFA-pending) response from a user row after SSO / MFA completion.
-func AuthResponseForUser(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, row *user.Row) (AuthResponse, error) {
-	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row)
+func AuthResponseForUser(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, row *user.Row, meta *ClientMeta) (AuthResponse, error) {
+	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row, meta)
 }
 
-func responseFromRow(ctx context.Context, jwt *pauth.JWTSigner, row *user.Row) (AuthResponse, error) {
-	tok, err := jwt.Sign(ctx, row.ID, row.Email)
+func responseFromRow(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, row *user.Row, meta *ClientMeta) (AuthResponse, error) {
+	access, refresh, err := issueAccessAndRefresh(ctx, pool, jwt, row, meta)
 	if err != nil {
 		return AuthResponse{}, err
 	}
-	return AuthResponse{
-		AccessToken: tok,
+	res := AuthResponse{
+		AccessToken: access,
 		TokenType:   "Bearer",
 		User:        userPublicFromRow(row),
-	}, nil
+	}
+	if refresh != "" {
+		res.RefreshToken = refresh
+		res.ExpiresIn = int(pauth.AccessTokenTTL / time.Second)
+	}
+	return res, nil
 }
 
 func userPublicFromRow(row *user.Row) UserPublic {

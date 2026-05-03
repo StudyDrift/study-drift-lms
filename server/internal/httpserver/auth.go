@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -51,6 +52,7 @@ func (d Deps) handleLogin() http.HandlerFunc {
 		res, err := authservice.Login(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), authservice.LoginRequest{
 			Email:    b.Email,
 			Password: b.Password,
+			Client:   authservice.ClientMetaFromRequest(r),
 		})
 		if err != nil {
 			writeAuthErr(w, err)
@@ -77,6 +79,7 @@ func (d Deps) handleSignup() http.HandlerFunc {
 			Email:       b.Email,
 			Password:    b.Password,
 			DisplayName: b.DisplayName,
+			Client:      authservice.ClientMetaFromRequest(r),
 		})
 		if err != nil {
 			writeAuthErr(w, err)
@@ -169,13 +172,110 @@ func (d Deps) handleMagicLinkConsume() http.HandlerFunc {
 			}
 			tok = strings.TrimSpace(b.Token)
 		}
-		res, err := authservice.ConsumeMagicLink(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), tok)
+		res, err := authservice.ConsumeMagicLink(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), tok, authservice.ClientMetaFromRequest(r))
 		if err != nil {
 			writeAuthErr(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(res)
+	}
+}
+
+type refreshTokenBody struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+func (d Deps) handleAuthRefresh() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		if d.Pool == nil || d.JWTSigner == nil {
+			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
+			return
+		}
+		var b refreshTokenBody
+		if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
+			return
+		}
+		res, err := authservice.Refresh(r.Context(), d.Pool, d.JWTSigner, b.RefreshToken, authservice.ClientMetaFromRequest(r))
+		if err != nil {
+			if errors.Is(err, authservice.ErrRefreshInvalid) {
+				apierr.WriteJSON(w, http.StatusUnauthorized, apierr.CodeUnauthorized, "Invalid or expired session.")
+				return
+			}
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(res)
+	}
+}
+
+func (d Deps) handleAuthLogout() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		if d.Pool == nil {
+			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
+			return
+		}
+		var b refreshTokenBody
+		if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
+			return
+		}
+		if err := authservice.Logout(r.Context(), d.Pool, b.RefreshToken); err != nil {
+			if errors.Is(err, authservice.ErrRefreshInvalid) {
+				apierr.WriteJSON(w, http.StatusUnauthorized, apierr.CodeUnauthorized, "Invalid or expired session.")
+				return
+			}
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}
+}
+
+func (d Deps) handleAuthLogoutAll() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		if d.JWTSigner == nil {
+			apierr.WriteJSON(w, http.StatusUnauthorized, apierr.CodeUnauthorized, "Sign in required.")
+			return
+		}
+		u, err := auth.UserFromRequest(r, d.JWTSigner)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusUnauthorized, apierr.CodeUnauthorized, "Sign in required.")
+			return
+		}
+		uid, err := uuid.Parse(u.UserID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusUnauthorized, apierr.CodeUnauthorized, "Sign in required.")
+			return
+		}
+		if d.Pool == nil {
+			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInvalidInput, "Database is not configured.")
+			return
+		}
+		if err := authservice.LogoutAll(r.Context(), d.Pool, uid); err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Something went wrong.")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	}
 }
 

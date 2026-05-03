@@ -242,23 +242,35 @@ func HandleACS(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, signe
 		_ = rbac.AssignUserRoleByName(ctx, pool, uid, role)
 	}
 
-	tok, err := signer.Sign(ctx, urow.ID, urow.Email)
+	res, err := authservice.AuthResponseForUser(ctx, pool, signer, cfg, urow, authservice.ClientMetaFromRequest(r))
 	if err != nil {
 		return err
 	}
 
 	pub := strings.TrimRight(publicWebOrigin, "/")
-	tokEnc := url.PathEscape(tok)
+	frag := "access_token=" + url.QueryEscape(res.AccessToken) + "&token_type=" + url.QueryEscape(res.TokenType)
+	if res.RefreshToken != "" {
+		frag += "&refresh_token=" + url.QueryEscape(res.RefreshToken) + fmt.Sprintf("&expires_in=%d", res.ExpiresIn)
+	}
+	if res.MFAPendingToken != "" {
+		frag += "&mfa_pending_token=" + url.QueryEscape(res.MFAPendingToken)
+		if res.RequiresMFA {
+			frag += "&requires_mfa=1"
+		}
+		if res.MFASetupRequired {
+			frag += "&mfa_setup_required=1"
+		}
+	}
 	next := ""
 	if rs := strings.TrimSpace(r.PostFormValue("RelayState")); rs != "" && strings.HasPrefix(rs, "/") {
 		next = "&next=" + url.QueryEscape(rs)
 	}
 	htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Signing in</title></head>
 <body>
-<script>location.replace("%s/saml-callback#access_token=%s&token_type=Bearer%s");</script>
+<script>location.replace("%s/saml-callback#%s%s");</script>
 <p>Redirecting to the app…</p>
 </body></html>`,
-		html.EscapeString(pub), tokEnc, next)
+		html.EscapeString(pub), frag, next)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(htmlBody))

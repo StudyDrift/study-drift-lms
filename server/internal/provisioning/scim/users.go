@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/lextures/lextures/server/internal/repos/refreshtoken"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
 	"github.com/lextures/lextures/server/internal/repos/user"
 	"github.com/lextures/lextures/server/internal/service/authservice"
@@ -204,6 +206,10 @@ ON CONFLICT DO NOTHING
 	}
 
 	if !active {
+		now := time.Now().UTC()
+		if err := refreshtoken.RevokeAllForUserTx(ctx, tx, uid, now); err != nil {
+			return nil, err
+		}
 		if _, err := tx.Exec(ctx, `
 UPDATE "user".users SET
   deactivated_at = COALESCE(deactivated_at, NOW()),
@@ -401,6 +407,10 @@ func setUserActiveTx(ctx context.Context, tx pgx.Tx, uid uuid.UUID, active bool)
 		_, err := tx.Exec(ctx, `
 UPDATE "user".users SET deactivated_at = NULL, login_blocked = FALSE WHERE id = $1
 `, uid)
+		return err
+	}
+	now := time.Now().UTC()
+	if err := refreshtoken.RevokeAllForUserTx(ctx, tx, uid, now); err != nil {
 		return err
 	}
 	_, err := tx.Exec(ctx, `
