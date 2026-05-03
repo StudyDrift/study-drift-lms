@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@custom-variant light (&:where(.light, .light *));
+
+@theme {
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-bg-deep: #020617;
+  --color-bg-elevated: #0b1220;
+  --color-accent: #22d3ee;
+  --color-accent-soft: #67e8f9;
+  --color-accent-dim: rgba(34, 211, 238, 0.12);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-bg-deep text-slate-100 antialiased font-sans;
+    font-feature-settings: "ss01" on, "cv02" on;
+  }
+
+  ::selection {
+    @apply bg-cyan-500/30 text-white;
+  }
+
+  .light body {
+    @apply bg-slate-50 text-slate-900;
+  }
+
+  .light ::selection {
+    @apply bg-cyan-600/25 text-slate-900;
+  }
+}
+
+@utility glass-panel {
+  @apply border border-white/10 bg-white/[0.03] shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] backdrop-blur-xl;
+}
+
+.light .glass-panel {
+  @apply border-slate-200/80 bg-white/70 shadow-[0_1px_0_rgba(15,23,42,0.06)_inset] backdrop-blur-xl;
+}
+
+@utility text-gradient {
+  @apply bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-500 bg-clip-text text-transparent;
+}
+
+.light .text-gradient {
+  @apply from-cyan-600 via-sky-600 to-blue-600;
+}

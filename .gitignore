@@ -19,6 +19,9 @@ lerna-debug.log*
 # Dependencies & frontend build (clients/web — Vite, React, Vitest)
 node_modules/
 dist/
+
+# Marketing site (www/) — built by CI or `npm run build` locally
+www/dist/
 .vite/
 .eslintcache
 *.tsbuildinfo
@@ -51,6 +54,9 @@ iac/demo/override.tf
 
 # Agents
 .agents/
+
+# Local agent artifacts (screenshots, etc.)
+.cursor/artifacts/
 
 # Go Air (dev container)
 server/tmp/
