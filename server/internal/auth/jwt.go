@@ -19,6 +19,7 @@ import (
 
 const (
 	defaultTokenTTL   = 72 * time.Hour
+	mfaPendingTTL     = 60 * time.Second
 	ltiEmbedTicketTTL = 15 * time.Minute
 	// Rust jsonwebtoken's default validation allows 60 seconds of clock skew.
 	jwtExpiryLeeway = time.Minute
@@ -33,6 +34,14 @@ var (
 type AuthUser struct {
 	UserID string
 	Email  string
+}
+
+// MFAPendingUser is the identity encoded in a short-lived MFA pending JWT.
+type MFAPendingUser struct {
+	UserID  string
+	Email   string
+	JTI     string
+	Purpose string // "challenge" (after password) or "setup" (MFA required before access)
 }
 
 // LTIEmbedTicket is the short-lived identity encoded for LTI iframe embeds.
@@ -83,6 +92,7 @@ func (s *JWTSigner) Sign(ctx context.Context, userID, email string) (string, err
 		}
 	}
 	return s.sign(loginClaims{
+		Typ:            "login",
 		Subject:        userID,
 		Email:          email,
 		SessionVersion: sv,
@@ -97,6 +107,9 @@ func (s *JWTSigner) Verify(ctx context.Context, token string) (AuthUser, error) 
 		return AuthUser{}, err
 	}
 	if !isUUID(claims.Subject) || strings.TrimSpace(claims.Email) == "" {
+		return AuthUser{}, ErrInvalidToken
+	}
+	if claims.Typ != "" && claims.Typ != "login" {
 		return AuthUser{}, ErrInvalidToken
 	}
 	if isExpired(claims.Expires, s.now()) {
@@ -116,6 +129,76 @@ func (s *JWTSigner) Verify(ctx context.Context, token string) (AuthUser, error) 
 		}
 	}
 	return AuthUser{UserID: claims.Subject, Email: claims.Email}, nil
+}
+
+// SignMFAPending issues a 60-second token used after password verification and before MFA completion.
+// purpose is "challenge" (second factor after password) or "setup" (password ok but MFA enrolment required).
+func (s *JWTSigner) SignMFAPending(ctx context.Context, userID, email, jti, purpose string) (string, error) {
+	if !isUUID(userID) || strings.TrimSpace(email) == "" || !isUUID(jti) {
+		return "", ErrInvalidToken
+	}
+	if purpose == "" {
+		purpose = "challenge"
+	}
+	if purpose != "challenge" && purpose != "setup" {
+		return "", ErrInvalidToken
+	}
+	var sv int64
+	if s.pool != nil {
+		uid, err := uuid.Parse(userID)
+		if err != nil {
+			return "", ErrInvalidToken
+		}
+		sv, err = sessionversion.Read(ctx, s.pool, uid)
+		if err != nil {
+			return "", ErrInvalidToken
+		}
+	}
+	return s.sign(mfaPendingClaims{
+		Typ:            "mfa_pending",
+		MFAPending:     true,
+		Subject:        userID,
+		Email:          email,
+		JTI:            jti,
+		Purpose:        purpose,
+		SessionVersion: sv,
+		Expires:        unixSeconds(s.now().Add(mfaPendingTTL)),
+	})
+}
+
+// VerifyMFAPending validates an MFA pending JWT.
+func (s *JWTSigner) VerifyMFAPending(ctx context.Context, token string) (MFAPendingUser, error) {
+	var claims mfaPendingClaims
+	if err := s.verify(token, &claims); err != nil {
+		return MFAPendingUser{}, err
+	}
+	if !claims.MFAPending || !isUUID(claims.Subject) || strings.TrimSpace(claims.Email) == "" || !isUUID(claims.JTI) {
+		return MFAPendingUser{}, ErrInvalidToken
+	}
+	purpose := claims.Purpose
+	if purpose == "" {
+		purpose = "challenge"
+	}
+	if purpose != "challenge" && purpose != "setup" {
+		return MFAPendingUser{}, ErrInvalidToken
+	}
+	if isExpired(claims.Expires, s.now()) {
+		return MFAPendingUser{}, ErrExpiredToken
+	}
+	if s.pool != nil {
+		uid, err := uuid.Parse(claims.Subject)
+		if err != nil {
+			return MFAPendingUser{}, ErrInvalidToken
+		}
+		cur, err := sessionversion.Read(ctx, s.pool, uid)
+		if err != nil {
+			return MFAPendingUser{}, ErrInvalidToken
+		}
+		if claims.SessionVersion != cur {
+			return MFAPendingUser{}, ErrInvalidToken
+		}
+	}
+	return MFAPendingUser{UserID: claims.Subject, Email: claims.Email, JTI: claims.JTI, Purpose: purpose}, nil
 }
 
 // SignLTIEmbedTicket creates a short-lived token for LTI iframe access without a Bearer header.
@@ -202,8 +285,20 @@ type jwtHeader struct {
 }
 
 type loginClaims struct {
+	Typ            string `json:"typ,omitempty"`
 	Subject        string `json:"sub"`
 	Email          string `json:"email"`
+	SessionVersion int64  `json:"sv,omitempty"`
+	Expires        int64  `json:"exp"`
+}
+
+type mfaPendingClaims struct {
+	Typ            string `json:"typ,omitempty"`
+	MFAPending     bool   `json:"mfaPending"`
+	Subject        string `json:"sub"`
+	Email          string `json:"email"`
+	JTI            string `json:"jti"`
+	Purpose        string `json:"purpose,omitempty"`
 	SessionVersion int64  `json:"sv,omitempty"`
 	Expires        int64  `json:"exp"`
 }

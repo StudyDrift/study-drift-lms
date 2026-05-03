@@ -87,6 +87,11 @@ type Config struct {
 	OneRosterBearerFallbackInst  string // UUID string; used with fallback token when DB has no match
 
 	ScimEnabled bool
+
+	// MFAEnabled gates TOTP/WebAuthn MFA (env MFA_ENABLED or DB override).
+	MFAEnabled bool
+	// MFAEnforcement is none | all | staff (platform setting; staff = Teacher/TA/Global Admin).
+	MFAEnforcement string
 }
 
 // Load reads configuration from the environment.
@@ -184,6 +189,9 @@ func Load() Config {
 		OneRosterBearerFallbackInst:  strings.TrimSpace(os.Getenv("ONEROSTER_BEARER_FALLBACK_INSTITUTION_ID")),
 
 		ScimEnabled: boolEnv("SCIM_ENABLED"),
+
+		MFAEnabled:     boolEnv("MFA_ENABLED"),
+		MFAEnforcement: strings.ToLower(strings.TrimSpace(stringDefault(firstNonEmptyTrimmed("MFA_ENFORCEMENT"), "none"))),
 	}
 }
 

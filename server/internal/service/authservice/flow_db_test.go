@@ -37,6 +37,7 @@ func TestAuthFlow_Pg(t *testing.T) {
 	}
 	defer pool.Close()
 	jwt := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
+	cfg := config.Config{PublicWebOrigin: "http://localhost:5173", MFAEnabled: false}
 	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
 	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
 	email := "e2e-" + time.Now().Format("20060102150405.000000000") + "@example.com"
@@ -48,17 +49,16 @@ func TestAuthFlow_Pg(t *testing.T) {
 	if !errors.Is(err, ErrEmailTaken) {
 		t.Fatalf("second signup: %v", err)
 	}
-	if _, err := Login(ctx, pool, jwt, LoginRequest{Email: email, Password: "wrong"}); !errors.Is(err, ErrInvalidCredentials) {
+	if _, err := Login(ctx, pool, jwt, cfg, LoginRequest{Email: email, Password: "wrong"}); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("login bad pass: %v", err)
 	}
-	res, err := Login(ctx, pool, jwt, LoginRequest{Email: email, Password: pass})
+	res, err := Login(ctx, pool, jwt, cfg, LoginRequest{Email: email, Password: pass})
 	if err != nil {
 		t.Fatalf("login: %v", err)
 	}
 	if res.AccessToken == "" {
 		t.Fatal("empty token")
 	}
-	cfg := config.Config{PublicWebOrigin: "http://localhost:5173"}
 	if _, err := RequestPasswordReset(ctx, pool, cfg, email); err != nil {
 		t.Fatalf("forgot: %v", err)
 	}

@@ -35,6 +35,9 @@ type Row struct {
 	OneRosterEnabled            *bool
 	ScimEnabled                 *bool
 
+	MFAEnabled     *bool
+	MFAEnforcement *string
+
 	UpdatedAt time.Time
 }
 
@@ -60,6 +63,9 @@ type Write struct {
 	LTIEnabled                  *bool
 	OneRosterEnabled            *bool
 	ScimEnabled                 *bool
+
+	MFAEnabled     *bool
+	MFAEnforcement *string
 }
 
 // Get returns the singleton row or (nil, nil) if missing.
@@ -85,6 +91,8 @@ SELECT
 	lti_enabled,
 	oneroster_enabled,
 	scim_enabled,
+	mfa_enabled,
+	mfa_enforcement,
 	updated_at
 FROM settings.platform_app_settings
 WHERE id = 1
@@ -107,6 +115,8 @@ WHERE id = 1
 		&r.LTIEnabled,
 		&r.OneRosterEnabled,
 		&r.ScimEnabled,
+		&r.MFAEnabled,
+		&r.MFAEnforcement,
 		&r.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
@@ -151,10 +161,12 @@ INSERT INTO settings.platform_app_settings (
 	lti_enabled,
 	oneroster_enabled,
 	scim_enabled,
+	mfa_enabled,
+	mfa_enforcement,
 	updated_at
 ) VALUES (
 	1,
-	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW()
+	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
 	openrouter_api_key = COALESCE(EXCLUDED.openrouter_api_key, settings.platform_app_settings.openrouter_api_key),
@@ -175,6 +187,8 @@ ON CONFLICT (id) DO UPDATE SET
 	lti_enabled = COALESCE(EXCLUDED.lti_enabled, settings.platform_app_settings.lti_enabled),
 	oneroster_enabled = COALESCE(EXCLUDED.oneroster_enabled, settings.platform_app_settings.oneroster_enabled),
 	scim_enabled = COALESCE(EXCLUDED.scim_enabled, settings.platform_app_settings.scim_enabled),
+	mfa_enabled = COALESCE(EXCLUDED.mfa_enabled, settings.platform_app_settings.mfa_enabled),
+	mfa_enforcement = COALESCE(EXCLUDED.mfa_enforcement, settings.platform_app_settings.mfa_enforcement),
 	updated_at = NOW()
 `,
 		w.OpenRouterAPIKey,
@@ -195,6 +209,8 @@ ON CONFLICT (id) DO UPDATE SET
 		w.LTIEnabled,
 		w.OneRosterEnabled,
 		w.ScimEnabled,
+		w.MFAEnabled,
+		w.MFAEnforcement,
 	)
 	if err != nil {
 		return nil, err
@@ -264,6 +280,12 @@ func Merge(env config.Config, db *Row) config.Config {
 	if db.ScimEnabled != nil {
 		out.ScimEnabled = *db.ScimEnabled
 	}
+	if db.MFAEnabled != nil {
+		out.MFAEnabled = *db.MFAEnabled
+	}
+	if db.MFAEnforcement != nil && strings.TrimSpace(*db.MFAEnforcement) != "" {
+		out.MFAEnforcement = strings.ToLower(strings.TrimSpace(*db.MFAEnforcement))
+	}
 	return out
 }
 
@@ -297,6 +319,8 @@ type Sources struct {
 	LTIEnabled                  Source
 	OneRosterEnabled            Source
 	ScimEnabled                 Source
+	MFAEnabled                  Source
+	MFAEnforcement              Source
 }
 
 // ResolveSources compares env vs DB row to label each field.
@@ -323,6 +347,8 @@ func ResolveSources(env config.Config, db *Row) Sources {
 	s.LTIEnabled = sourceBool(env.LTIEnabled, db.LTIEnabled)
 	s.OneRosterEnabled = sourceBool(env.OneRosterEnabled, db.OneRosterEnabled)
 	s.ScimEnabled = sourceBool(env.ScimEnabled, db.ScimEnabled)
+	s.MFAEnabled = sourceBool(env.MFAEnabled, db.MFAEnabled)
+	s.MFAEnforcement = sourceString(env.MFAEnforcement, db.MFAEnforcement)
 	return s
 }
 
@@ -347,6 +373,8 @@ func sourcesAllEnvironment(env config.Config) Sources {
 		LTIEnabled:                  SourceEnvironment,
 		OneRosterEnabled:            SourceEnvironment,
 		ScimEnabled:                 SourceEnvironment,
+		MFAEnabled:                  SourceEnvironment,
+		MFAEnforcement:              SourceEnvironment,
 	}
 }
 

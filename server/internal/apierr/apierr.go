@@ -18,6 +18,8 @@ const (
 	CodeNotImplementedInGo = "NOT_IMPLEMENTED_IN_GO"
 	CodeUnknownCourseCode  = "UNKNOWN_COURSE_CODE"
 	CodeForbidden          = "FORBIDDEN"
+	CodeMFARequired        = "MFA_REQUIRED"
+	CodeMFAEnrolRequired    = "MFA_ENROLMENT_REQUIRED"
 	CodeInternal           = "INTERNAL"
 	// AI feature errors (see server/src/error.rs).
 	CodeAiNotConfigured     = "AI_NOT_CONFIGURED"
