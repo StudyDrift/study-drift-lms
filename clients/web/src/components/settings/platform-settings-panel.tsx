@@ -25,6 +25,8 @@ export type PlatformSettingsPayload = {
   ltiEnabled: boolean
   oneRosterEnabled: boolean
   scimEnabled: boolean
+  mfaEnabled: boolean
+  mfaEnforcement: 'none' | 'all' | 'staff'
   sources: {
     openRouterApiKey: FieldSource
     samlSsoEnabled: FieldSource
@@ -44,6 +46,8 @@ export type PlatformSettingsPayload = {
     ltiEnabled: FieldSource
     oneRosterEnabled: FieldSource
     scimEnabled: FieldSource
+    mfaEnabled: FieldSource
+    mfaEnforcement: FieldSource
   }
 }
 
@@ -67,6 +71,8 @@ function emptyForm(): PlatformSettingsPayload {
     ltiEnabled: false,
     oneRosterEnabled: false,
     scimEnabled: false,
+    mfaEnabled: false,
+    mfaEnforcement: 'none',
     sources: {
       openRouterApiKey: 'environment',
       samlSsoEnabled: 'environment',
@@ -86,6 +92,8 @@ function emptyForm(): PlatformSettingsPayload {
       ltiEnabled: 'environment',
       oneRosterEnabled: 'environment',
       scimEnabled: 'environment',
+      mfaEnabled: 'environment',
+      mfaEnforcement: 'environment',
     },
   }
 }
@@ -247,6 +255,12 @@ export function PlatformSettingsPanel() {
       })
       maybe('scimEnabled', baseline.scimEnabled, form.scimEnabled, () => {
         body.scimEnabled = form.scimEnabled
+      })
+      maybe('mfaEnabled', baseline.mfaEnabled, form.mfaEnabled, () => {
+        body.mfaEnabled = form.mfaEnabled
+      })
+      maybe('mfaEnforcement', baseline.mfaEnforcement, form.mfaEnforcement, () => {
+        body.mfaEnforcement = form.mfaEnforcement
       })
 
       if (mask.length === 0) {
@@ -458,6 +472,33 @@ export function PlatformSettingsPanel() {
               checked={form.scimEnabled}
               onChange={(v) => update('scimEnabled', v)}
             />
+            <FlagRow
+              label="Two-factor authentication (TOTP and passkeys)"
+              src={form.sources.mfaEnabled}
+              checked={form.mfaEnabled}
+              onChange={(v) => update('mfaEnabled', v)}
+            />
+            <div className="flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-neutral-700 dark:bg-neutral-800/40">
+              <label className="text-sm font-medium text-slate-800 dark:text-neutral-100">
+                MFA requirement {sourceBadge(form.sources.mfaEnforcement)}
+              </label>
+              <select
+                value={form.mfaEnforcement}
+                onChange={(e) =>
+                  update('mfaEnforcement', e.target.value as PlatformSettingsPayload['mfaEnforcement'])
+                }
+                className="mt-1 w-full max-w-xs rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+              >
+                <option value="none">Optional (users choose)</option>
+                <option value="staff">Required for teachers, TAs, and global admins</option>
+                <option value="all">Required for everyone</option>
+              </select>
+              <p className="text-xs text-slate-500 dark:text-neutral-400">
+                When required, users without a factor complete setup after password sign-in. Set{' '}
+                <code className="rounded bg-slate-100 px-1 font-mono dark:bg-neutral-900">PUBLIC_WEB_ORIGIN</code> for
+                passkeys.
+              </p>
+            </div>
           </div>
         </section>
 

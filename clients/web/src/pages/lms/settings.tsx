@@ -11,6 +11,7 @@ import { RolesPermissionsPanel } from '../../components/settings/roles-permissio
 import { usePermissions } from '../../context/use-permissions'
 import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
 import { OidcConnectedAccountsPanel } from '../../components/oidc-connected-accounts-panel'
+import { MfaFactorsPanel } from '../../components/settings/mfa-factors-panel'
 import { LmsPage } from './lms-page'
 import { FALLBACK_IMAGE_MODEL_OPTIONS, FALLBACK_TEXT_MODEL_OPTIONS } from '../../lib/ai-models'
 import { apiUrl, authorizedFetch } from '../../lib/api'
@@ -1089,6 +1090,7 @@ export default function Settings() {
               </form>
             )}
             {!accountLoading && <OidcConnectedAccountsPanel />}
+            {!accountLoading && <MfaFactorsPanel />}
           </div>
         )}
 

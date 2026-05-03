@@ -38,6 +38,7 @@ import Reports from './pages/lms/reports'
 import Settings from './pages/lms/settings'
 import ForgotPassword from './pages/forgot-password'
 import Login from './pages/login'
+import MfaLogin from './pages/mfa-login'
 import SamlCallback from './pages/saml-callback'
 import SsoError from './pages/sso-error'
 import PrivacyPolicyPage from './pages/privacy-policy-page'
@@ -57,6 +58,7 @@ export default function App() {
         location.pathname === '/signup' ||
         location.pathname === '/forgot-password' ||
         location.pathname === '/reset-password' ||
+        location.pathname.startsWith('/login/mfa') ||
         location.pathname === '/saml-callback' ||
         location.pathname === '/sso-error'
       ) {
@@ -73,6 +75,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/login/mfa" element={<MfaLogin />} />
       <Route path="/saml-callback" element={<SamlCallback />} />
       <Route path="/sso-error" element={<SsoError />} />
       <Route path="/signup" element={<Signup />} />

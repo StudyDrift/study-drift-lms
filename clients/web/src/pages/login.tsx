@@ -7,6 +7,7 @@ import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
 import { markPostLoginShortcutTip } from '../lib/post-login-shortcut-tip'
+import { setMfaFlow } from '../lib/mfa-flow-storage'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -17,7 +18,8 @@ export default function Login() {
     from === '/login' ||
     from === '/signup' ||
     from === '/forgot-password' ||
-    from === '/reset-password'
+    from === '/reset-password' ||
+    from.startsWith('/login/mfa')
   ) {
     from = '/'
   }
@@ -84,8 +86,26 @@ export default function Login() {
         return
       }
       const data = raw as {
-        access_token: string
+        access_token?: string
+        mfa_pending_token?: string
+        requires_mfa?: boolean
+        mfa_setup_required?: boolean
         user?: { email?: string; uiTheme?: string | null }
+      }
+      if (data.requires_mfa && data.mfa_pending_token) {
+        setMfaFlow({ token: data.mfa_pending_token, mode: 'challenge' })
+        navigate('/login/mfa', { replace: true, state: { from } })
+        return
+      }
+      if (data.mfa_setup_required && data.mfa_pending_token) {
+        setMfaFlow({ token: data.mfa_pending_token, mode: 'setup' })
+        navigate('/login/mfa', { replace: true, state: { from } })
+        return
+      }
+      if (!data.access_token) {
+        setStatus('error')
+        setMessage('Unexpected sign-in response.')
+        return
       }
       setAccessToken(data.access_token)
       applyUiTheme(parseUiTheme(data.user?.uiTheme))

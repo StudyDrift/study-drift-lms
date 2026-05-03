@@ -48,6 +48,9 @@ type platformSettingsJSON struct {
 	OneRosterEnabled            bool `json:"oneRosterEnabled"`
 	ScimEnabled                 bool `json:"scimEnabled"`
 
+	MFAEnabled     bool   `json:"mfaEnabled"`
+	MFAEnforcement string `json:"mfaEnforcement"`
+
 	Sources platformSourcesJSON `json:"sources"`
 }
 
@@ -72,6 +75,8 @@ type platformSourcesJSON struct {
 	LTIEnabled                  string `json:"ltiEnabled"`
 	OneRosterEnabled            string `json:"oneRosterEnabled"`
 	ScimEnabled                 string `json:"scimEnabled"`
+	MFAEnabled                  string `json:"mfaEnabled"`
+	MFAEnforcement              string `json:"mfaEnforcement"`
 }
 
 func src(s platformconfig.Source) string {
@@ -120,6 +125,8 @@ func (d Deps) handleGetPlatformSettings() http.HandlerFunc {
 			LTIEnabled:                  merged.LTIEnabled,
 			OneRosterEnabled:            merged.OneRosterEnabled,
 			ScimEnabled:                 merged.ScimEnabled,
+			MFAEnabled:                  merged.MFAEnabled,
+			MFAEnforcement:              merged.MFAEnforcement,
 			Sources: platformSourcesJSON{
 				OpenRouterAPIKey:            src(sources.OpenRouterAPIKey),
 				SAMLSSOEnabled:              src(sources.SAMLSSOEnabled),
@@ -139,6 +146,8 @@ func (d Deps) handleGetPlatformSettings() http.HandlerFunc {
 				LTIEnabled:                  src(sources.LTIEnabled),
 				OneRosterEnabled:            src(sources.OneRosterEnabled),
 				ScimEnabled:                 src(sources.ScimEnabled),
+				MFAEnabled:                  src(sources.MFAEnabled),
+				MFAEnforcement:              src(sources.MFAEnforcement),
 			},
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -168,6 +177,9 @@ type putPlatformBody struct {
 	LTIEnabled                  *bool `json:"ltiEnabled"`
 	OneRosterEnabled            *bool `json:"oneRosterEnabled"`
 	ScimEnabled                 *bool `json:"scimEnabled"`
+
+	MFAEnabled     *bool   `json:"mfaEnabled"`
+	MFAEnforcement *string `json:"mfaEnforcement"`
 
 	UpdateMask []string `json:"updateMask"`
 }
@@ -313,6 +325,17 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 			v := *body.ScimEnabled
 			wr.ScimEnabled = &v
 		})
+		set("mfaenabled", body.MFAEnabled != nil, func() {
+			v := *body.MFAEnabled
+			wr.MFAEnabled = &v
+		})
+		set("mfaenforcement", body.MFAEnforcement != nil, func() {
+			s := strings.ToLower(strings.TrimSpace(*body.MFAEnforcement))
+			if s != "none" && s != "all" && s != "staff" {
+				return
+			}
+			wr.MFAEnforcement = &s
+		})
 
 		dbRow, err := platformconfig.Upsert(r.Context(), d.Pool, wr)
 		if err != nil {
@@ -348,6 +371,8 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 			LTIEnabled:                  merged.LTIEnabled,
 			OneRosterEnabled:            merged.OneRosterEnabled,
 			ScimEnabled:                 merged.ScimEnabled,
+			MFAEnabled:                  merged.MFAEnabled,
+			MFAEnforcement:              merged.MFAEnforcement,
 			Sources: platformSourcesJSON{
 				OpenRouterAPIKey:            src(sources.OpenRouterAPIKey),
 				SAMLSSOEnabled:              src(sources.SAMLSSOEnabled),
@@ -367,6 +392,8 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 				LTIEnabled:                  src(sources.LTIEnabled),
 				OneRosterEnabled:            src(sources.OneRosterEnabled),
 				ScimEnabled:                 src(sources.ScimEnabled),
+				MFAEnabled:                  src(sources.MFAEnabled),
+				MFAEnforcement:              src(sources.MFAEnforcement),
 			},
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")

@@ -32,6 +32,25 @@ func TestJWTSignerSignVerifyRoundTrip(t *testing.T) {
 	}
 }
 
+func TestJWTSignerMFAPendingRoundTrip(t *testing.T) {
+	signer := newTestSigner("unit-test-secret")
+	jti := "11111111-1111-4111-8111-111111111111"
+	tok, err := signer.SignMFAPending(context.Background(), userID, "a@b.com", jti, "challenge")
+	if err != nil {
+		t.Fatalf("SignMFAPending: %v", err)
+	}
+	p, err := signer.VerifyMFAPending(context.Background(), tok)
+	if err != nil {
+		t.Fatalf("VerifyMFAPending: %v", err)
+	}
+	if p.UserID != userID || p.Email != "a@b.com" || p.JTI != jti || p.Purpose != "challenge" {
+		t.Fatalf("pending: %#v", p)
+	}
+	if _, err := signer.Verify(context.Background(), tok); err == nil {
+		t.Fatal("login verify should reject mfa pending token")
+	}
+}
+
 func TestJWTSignerWrongSecretFailsVerify(t *testing.T) {
 	a := newTestSigner("secret-a")
 	b := newTestSigner("secret-b")

@@ -29,6 +29,7 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/user"
 
 	"github.com/lextures/lextures/server/internal/auth/hibp"
+	"github.com/lextures/lextures/server/internal/service/mfaservice"
 )
 
 // LoginRequest mirrors models/auth LoginRequest.
@@ -58,9 +59,12 @@ type UserPublic struct {
 
 // AuthResponse mirrors models/auth AuthResponse (field names are snake_case like the Rust `AuthResponse` struct).
 type AuthResponse struct {
-	AccessToken string     `json:"access_token"`
-	TokenType   string     `json:"token_type"`
-	User        UserPublic `json:"user"`
+	AccessToken        string     `json:"access_token,omitempty"`
+	MFAPendingToken    string     `json:"mfa_pending_token,omitempty"`
+	TokenType          string     `json:"token_type"`
+	User               UserPublic `json:"user"`
+	RequiresMFA        bool       `json:"requires_mfa,omitempty"`
+	MFASetupRequired   bool       `json:"mfa_setup_required,omitempty"`
 }
 
 // ForgotPasswordRequest .
@@ -99,7 +103,7 @@ type FieldError struct{ Message string }
 func (e FieldError) Error() string { return e.Message }
 
 // Login .
-func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, req LoginRequest) (AuthResponse, error) {
+func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, req LoginRequest) (AuthResponse, error) {
 	if err := validateLogin(&req); err != nil {
 		return AuthResponse{}, err
 	}
@@ -120,6 +124,44 @@ func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, req Lo
 	ok, err := pauth.VerifyPassword(req.Password, row.PasswordHash)
 	if err != nil || !ok {
 		return AuthResponse{}, ErrInvalidCredentials
+	}
+	uid, err := uuid.Parse(row.ID)
+	if err != nil {
+		return AuthResponse{}, err
+	}
+	needEnrol, err := mfaservice.EnrolmentRequiredBeforeAccess(ctx, pool, cfg, uid)
+	if err != nil {
+		return AuthResponse{}, err
+	}
+	if needEnrol {
+		jti := uuid.NewString()
+		pend, err := jwt.SignMFAPending(ctx, row.ID, row.Email, jti, "setup")
+		if err != nil {
+			return AuthResponse{}, err
+		}
+		return AuthResponse{
+			MFAPendingToken:  pend,
+			TokenType:        "Bearer",
+			User:             userPublicFromRow(row),
+			MFASetupRequired: true,
+		}, nil
+	}
+	hasMFA, err := mfaservice.UserHasVerifiedMFA(ctx, pool, uid)
+	if err != nil {
+		return AuthResponse{}, err
+	}
+	if hasMFA {
+		jti := uuid.NewString()
+		pend, err := jwt.SignMFAPending(ctx, row.ID, row.Email, jti, "challenge")
+		if err != nil {
+			return AuthResponse{}, err
+		}
+		return AuthResponse{
+			MFAPendingToken: pend,
+			TokenType:       "Bearer",
+			User:            userPublicFromRow(row),
+			RequiresMFA:     true,
+		}, nil
 	}
 	return responseFromRow(ctx, jwt, row)
 }
