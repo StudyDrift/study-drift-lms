@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lextures/lextures/server/internal/config"
+	"github.com/lextures/lextures/server/internal/repos/terms"
 	"github.com/lextures/lextures/server/internal/service/quizautosubmit"
 )
 
@@ -25,6 +26,16 @@ func Start(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) {
 			return
 		}
 		sweepScheduledReleases(context.Background(), pool, cfg, time.Now().UTC())
+	})
+	go runEvery(ctx, 30*time.Second, func() {
+		n, err := terms.SweepStatuses(context.Background(), pool, time.Now().UTC())
+		if err != nil {
+			slog.Warn("term status sweep failed", "err", err)
+			return
+		}
+		if n > 0 {
+			slog.Info("term status sweep updated rows", "count", n)
+		}
 	})
 }
 

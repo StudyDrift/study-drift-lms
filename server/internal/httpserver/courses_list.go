@@ -2,8 +2,11 @@ package httpserver
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/orgunit"
@@ -27,6 +30,22 @@ func (d Deps) handleListCourses() http.HandlerFunc {
 			return
 		}
 		ctx := r.Context()
+		termIDStr := strings.TrimSpace(r.URL.Query().Get("term_id"))
+		if termIDStr == "" {
+			termIDStr = strings.TrimSpace(r.URL.Query().Get("termId"))
+		}
+		var termFilter *uuid.UUID
+		if termIDStr != "" {
+			tid, err := uuid.Parse(termIDStr)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid term_id query parameter.")
+				return
+			}
+			termFilter = &tid
+		}
+		if termFilter != nil {
+			slog.Info("course list filtered by term", "term_id", termFilter.String())
+		}
 		courses, err := course.ListForEnrolledUser(ctx, d.Pool, userID)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to list courses.")
@@ -49,13 +68,36 @@ func (d Deps) handleListCourses() http.HandlerFunc {
 				return
 			}
 			if len(subtrees) > 0 {
-				unitScoped, err := course.ListForEnrolledUserInOrgUnits(ctx, d.Pool, userID, subtrees)
+				if termFilter != nil {
+					unitScoped, err := course.ListForEnrolledUserInOrgUnitsByTerm(ctx, d.Pool, userID, subtrees, *termFilter)
+					if err != nil {
+						apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to list courses.")
+						return
+					}
+					courses = unitScoped
+				} else {
+					unitScoped, err := course.ListForEnrolledUserInOrgUnits(ctx, d.Pool, userID, subtrees)
+					if err != nil {
+						apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to list courses.")
+						return
+					}
+					courses = unitScoped
+				}
+			} else if termFilter != nil {
+				filtered, err := course.ListForEnrolledUserByTerm(ctx, d.Pool, userID, *termFilter)
 				if err != nil {
 					apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to list courses.")
 					return
 				}
-				courses = unitScoped
+				courses = filtered
 			}
+		} else if termFilter != nil {
+			filtered, err := course.ListForEnrolledUserByTerm(ctx, d.Pool, userID, *termFilter)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to list courses.")
+				return
+			}
+			courses = filtered
 		}
 		if courses == nil {
 			courses = []course.CoursePublic{}

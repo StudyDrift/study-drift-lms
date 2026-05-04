@@ -11,6 +11,7 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/orgunit"
 	"github.com/lextures/lextures/server/internal/repos/organization"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/repos/terms"
 )
 
 type createCourseBody struct {
@@ -18,6 +19,7 @@ type createCourseBody struct {
 	Description string  `json:"description"`
 	CourseType  *string `json:"courseType"`
 	OrgUnitID   *string `json:"orgUnitId"`
+	TermID      *string `json:"termId"`
 }
 
 // handleCreateCourse is POST /api/v1/courses.
@@ -70,16 +72,16 @@ func (d Deps) handleCreateCourse() http.HandlerFunc {
 		}
 
 		ctx := r.Context()
+		uOrg, err := organization.OrgIDForUser(ctx, d.Pool, userID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify organization.")
+			return
+		}
 		var orgUnitID *uuid.UUID
 		if body.OrgUnitID != nil && strings.TrimSpace(*body.OrgUnitID) != "" {
 			uid, err := uuid.Parse(strings.TrimSpace(*body.OrgUnitID))
 			if err != nil {
 				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid orgUnitId.")
-				return
-			}
-			uOrg, err := organization.OrgIDForUser(ctx, d.Pool, userID)
-			if err != nil {
-				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify organization.")
 				return
 			}
 			row, err := orgunit.GetByID(ctx, d.Pool, uid)
@@ -113,7 +115,26 @@ func (d Deps) handleCreateCourse() http.HandlerFunc {
 			orgUnitID = &uid
 		}
 
-		out, err := course.CreateCourse(ctx, d.Pool, userID, title, description, courseType, orgUnitID)
+		var termIDPtr *uuid.UUID
+		if body.TermID != nil && strings.TrimSpace(*body.TermID) != "" {
+			tid, err := uuid.Parse(strings.TrimSpace(*body.TermID))
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid termId.")
+				return
+			}
+			trow, err := terms.GetByID(ctx, d.Pool, tid)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify term.")
+				return
+			}
+			if trow == nil || trow.OrgID != uOrg.String() {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid term for your organization.")
+				return
+			}
+			termIDPtr = &tid
+		}
+
+		out, err := course.CreateCourse(ctx, d.Pool, userID, title, description, courseType, orgUnitID, termIDPtr)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to create course.")
 			return

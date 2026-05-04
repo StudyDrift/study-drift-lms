@@ -7,11 +7,14 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/relativeschedule"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
+	"github.com/lextures/lextures/server/internal/repos/organization"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/repos/terms"
 )
 
 // Parity: server `UpdateCourseRequest` (camelCase JSON).
@@ -26,6 +29,7 @@ type putCourseBody struct {
 	ScheduleMode        *string    `json:"scheduleMode"`
 	RelativeEndAfter    *string    `json:"relativeEndAfter"`
 	RelativeHiddenAfter *string    `json:"relativeHiddenAfter"`
+	TermID              *string    `json:"termId"`
 }
 
 // handlePutCourse is PUT /api/v1/courses/{course_code} (parity: server `update_handler`).
@@ -147,6 +151,50 @@ func (d Deps) handlePutCourse() http.HandlerFunc {
 		if out == nil {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
 			return
+		}
+		if body.TermID != nil {
+			uOrg, err := organization.OrgIDForUser(r.Context(), d.Pool, userID)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify organization.")
+				return
+			}
+			tStr := strings.TrimSpace(*body.TermID)
+			if tStr == "" {
+				out2, err := course.SetTermID(r.Context(), d.Pool, courseCode, nil)
+				if err != nil {
+					apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to update term.")
+					return
+				}
+				out = out2
+			} else {
+				tid, err := uuid.Parse(tStr)
+				if err != nil {
+					apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid termId.")
+					return
+				}
+				trow, err := terms.GetByID(r.Context(), d.Pool, tid)
+				if err != nil {
+					apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify term.")
+					return
+				}
+				if trow == nil || trow.OrgID != uOrg.String() {
+					apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid term for this organization.")
+					return
+				}
+				cOrg, err := course.CourseOrgID(r.Context(), d.Pool, courseCode)
+				if err != nil || cOrg == nil || *cOrg != uOrg {
+					apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You cannot set a term for this course.")
+					return
+				}
+				out2, err := course.SetTermID(r.Context(), d.Pool, courseCode, &tid)
+				if err != nil {
+					apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to update term.")
+					return
+				}
+				if out2 != nil {
+					out = out2
+				}
+			}
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(out)

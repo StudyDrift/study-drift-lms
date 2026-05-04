@@ -64,6 +64,17 @@ export const courseSchema = z
     viewerStudentEnrollmentId: z.string().optional(),
     annotationsEnabled: z.boolean().optional(),
     feedbackMediaEnabled: z.boolean().optional(),
+    termId: z.string().nullable().optional(),
+    term: z
+      .object({
+        id: z.string(),
+        name: z.string(),
+        termType: z.string(),
+        startDate: z.string(),
+        endDate: z.string(),
+        status: z.string(),
+      })
+      .optional(),
   })
   .passthrough()
   .transform((c) => ({

@@ -15,6 +15,7 @@ import { RequirePermission } from '../../components/require-permission'
 import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-settings-panel'
 import { OrganizationsPanel } from '../../components/settings/organizations-panel'
 import { OrgUnitsPanel } from '../../components/settings/org-units-panel'
+import { TermsSettingsPanel } from '../../components/settings/terms-settings-panel'
 import { PlatformSettingsPanel } from '../../components/settings/platform-settings-panel'
 import { ScimSettingsPanel } from '../../components/settings/scim-settings-panel'
 import { RolesPermissionsPanel } from '../../components/settings/roles-permissions-panel'
@@ -39,6 +40,7 @@ function isSystemSettingsPath(pathname: string): boolean {
     pathname === '/settings/platform' ||
     pathname === '/settings/organizations' ||
     pathname === '/settings/org-units' ||
+    pathname === '/settings/terms' ||
     pathname === '/settings/scim-provisioning'
   )
 }
@@ -714,9 +716,10 @@ export default function Settings() {
   }
   if (!permLoading && isSystemSettingsPath(location.pathname)) {
     const onOrgUnits = location.pathname === '/settings/org-units'
+    const onTerms = location.pathname === '/settings/terms'
     const hasRbac = allows(PERM_RBAC_MANAGE)
     const hasUnitAdmin = allows(PERM_TENANT_ORG_UNITS_ADMIN)
-    if (!hasRbac && !(onOrgUnits && hasUnitAdmin)) {
+    if (!hasRbac && !((onOrgUnits || onTerms) && hasUnitAdmin)) {
       return <Navigate to="/settings/account" replace />
     }
   }
@@ -730,6 +733,7 @@ export default function Settings() {
           activeView === 'platform' ||
           activeView === 'organizations' ||
           activeView === 'org-units' ||
+          activeView === 'terms' ||
           activeView === 'scim-provisioning'
             ? 'max-w-4xl'
             : activeView === 'ai-prompts'
@@ -1420,6 +1424,12 @@ export default function Settings() {
               Schools, colleges, and departments within your organization.
             </p>
             <OrgUnitsPanel />
+          </div>
+        )}
+
+        {activeView === 'terms' && (
+          <div className="mt-2">
+            <TermsSettingsPanel />
           </div>
         )}
 

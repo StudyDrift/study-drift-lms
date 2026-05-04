@@ -2,10 +2,8 @@ package course
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -34,61 +32,18 @@ func UpdateCourse(
 			relative_schedule_anchor_at = $11,
 			updated_at = NOW()
 		WHERE course_code = $12
-		RETURNING` + publicReturningColumns
-
-	row := pool.QueryRow(ctx, q,
+	`
+	tag, err := pool.Exec(ctx, q,
 		title, description, published,
 		startsAt, endsAt, visibleFrom, hiddenAt,
 		scheduleMode, relativeEndAfter, relativeHiddenAfter, relativeScheduleAnchorAt,
 		courseCode,
 	)
-	p, err := scanCoursePublicFromRow(row)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
 		return nil, err
 	}
-	return &p, nil
+	if tag.RowsAffected() == 0 {
+		return nil, nil
+	}
+	return GetPublicByCourseCode(ctx, pool, courseCode)
 }
-
-// publicReturningColumns is the RETURNING column list for public course rows (no table alias; matches coursePublicSelect order without "c.").
-const publicReturningColumns = `
-    id,
-    course_code,
-    title,
-    description,
-    hero_image_url,
-    hero_image_object_position,
-    starts_at,
-    ends_at,
-    visible_from,
-    hidden_at,
-    schedule_mode,
-    relative_end_after,
-    relative_hidden_after,
-    relative_schedule_anchor_at,
-    published,
-    markdown_theme_preset,
-    markdown_theme_custom,
-    grading_scale,
-    archived,
-    notebook_enabled,
-    feed_enabled,
-    calendar_enabled,
-    question_bank_enabled,
-    lockdown_mode_enabled,
-    standards_alignment_enabled,
-    adaptive_paths_enabled,
-    srs_enabled,
-    diagnostic_assessments_enabled,
-    hint_scaffolding_enabled,
-    misconception_detection_enabled,
-    course_type,
-    created_at,
-    updated_at,
-    sbg_enabled,
-    sbg_proficiency_scale_json,
-    sbg_aggregation_rule,
-    org_unit_id
-`

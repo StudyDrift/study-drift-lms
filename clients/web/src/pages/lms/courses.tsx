@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type MutableRefObject,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from 'react'
 import { Link } from 'react-router-dom'
 import {
   closestCorners,
@@ -32,7 +24,9 @@ import { LmsPage } from './lms-page'
 import { RequirePermission } from '../../components/require-permission'
 import { usePermissions } from '../../context/use-permissions'
 import { authorizedFetch } from '../../lib/api'
-import { putCourseCatalogOrder, type CoursePublic } from '../../lib/courses-api'
+import { putCourseCatalogOrder, type CoursePublic, fetchOrgTerms, type OrgTerm } from '../../lib/courses-api'
+import { decodeJwtPayload } from '../../lib/jwt-payload'
+import { getAccessToken } from '../../lib/auth'
 import { readApiErrorMessage } from '../../lib/errors'
 import { heroImageObjectStyle } from '../../lib/hero-image-position'
 import { formatRelativeCompact } from '../../lib/format-datetime'
@@ -173,6 +167,24 @@ export default function Courses() {
   const { allows, loading: permLoading } = usePermissions()
   const [courses, setCourses] = useState<CoursePublic[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [termFilter, setTermFilter] = useState<string>('')
+  const [termList, setTermList] = useState<OrgTerm[]>([])
+  const orgId = decodeJwtPayload(getAccessToken())?.org_id ?? ''
+
+  useEffect(() => {
+    if (!orgId) return
+    let cancelled = false
+    void fetchOrgTerms(orgId)
+      .then((t) => {
+        if (!cancelled) setTermList(t)
+      })
+      .catch(() => {
+        if (!cancelled) setTermList([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [orgId])
   /** After a catalog drag, the browser may emit a click on the card link; block that navigation. */
   const suppressNavigateAfterDragRef = useRef(false)
 
@@ -181,7 +193,10 @@ export default function Courses() {
     ;(async () => {
       setError(null)
       try {
-        const res = await authorizedFetch('/api/v1/courses')
+        const qs = termFilter && termFilter !== ''
+          ? `?term_id=${encodeURIComponent(termFilter)}`
+          : ''
+        const res = await authorizedFetch(`/api/v1/courses${qs}`)
         const raw: unknown = await res.json().catch(() => ({}))
         if (!res.ok) {
           setCourses([])
@@ -200,7 +215,7 @@ export default function Courses() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [termFilter])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -208,6 +223,37 @@ export default function Courses() {
   )
 
   const courseIds = useMemo(() => (courses ?? []).map((c) => c.id), [courses])
+
+  const catalogSections = useMemo(() => {
+    if (!courses?.length || termFilter !== '') return null
+    if (!courses.some((c) => c.termId)) return null
+    const ongoing = courses.filter((c) => !c.termId)
+    const termOrder = [...termList].sort((a, b) => (a.startDate < b.startDate ? 1 : -1))
+    const sections: { key: string; title: string; items: CoursePublic[] }[] = []
+    if (ongoing.length > 0) {
+      sections.push({ key: 'ongoing', title: 'Ongoing / Self-paced', items: ongoing })
+    }
+    const seen = new Set<string>()
+    for (const t of termOrder) {
+      const items = courses.filter((c) => c.termId === t.id)
+      if (items.length === 0) continue
+      sections.push({ key: t.id, title: t.name, items })
+      seen.add(t.id)
+    }
+    const orphan = courses.filter((c) => c.termId && !seen.has(c.termId))
+    if (orphan.length > 0) {
+      const byId = new Map<string, CoursePublic[]>()
+      for (const c of orphan) {
+        const id = c.termId!
+        byId.set(id, [...(byId.get(id) ?? []), c])
+      }
+      for (const [id, items] of byId) {
+        const label = items[0]?.term?.name ?? 'Term'
+        sections.push({ key: id, title: label, items })
+      }
+    }
+    return sections
+  }, [courses, termFilter, termList])
 
   const clearSuppressNavigateAfterDragSoon = useCallback(() => {
     window.setTimeout(() => {
@@ -265,6 +311,28 @@ export default function Courses() {
         </p>
       )}
 
+      {orgId && termList.length > 0 && (
+        <div className="mt-6 max-w-md">
+          <label htmlFor="course-catalog-term-filter" className="text-sm font-medium text-slate-700 dark:text-neutral-200">
+            Term
+          </label>
+          <select
+            id="course-catalog-term-filter"
+            value={termFilter}
+            onChange={(e) => setTermFilter(e.target.value)}
+            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+            aria-label="Filter courses by academic term"
+          >
+            <option value="">All courses</option>
+            {termList.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {courses === null && !error && <CoursesCatalogSkeleton />}
 
       {courses && courses.length === 0 && !error && (
@@ -286,7 +354,42 @@ export default function Courses() {
         </div>
       )}
 
-      {courses && courses.length > 0 && (
+      {courses && courses.length > 0 && catalogSections && (
+        <DndContext
+          id={COURSE_GRID_SORT_ID}
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <SortableContext items={courseIds} strategy={rectSortingStrategy}>
+            <div className="mt-8 space-y-10">
+              {catalogSections.map((sec) => (
+                <section key={sec.key} aria-labelledby={`cat-${sec.key}`}>
+                  <h2
+                    id={`cat-${sec.key}`}
+                    className="text-base font-semibold text-slate-900 dark:text-neutral-100"
+                  >
+                    {sec.title}
+                  </h2>
+                  <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {sec.items.map((c) => (
+                      <SortableCourseCard
+                        key={c.id}
+                        course={c}
+                        suppressNavigateAfterDragRef={suppressNavigateAfterDragRef}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
+
+      {courses && courses.length > 0 && !catalogSections && (
         <DndContext
           id={COURSE_GRID_SORT_ID}
           sensors={sensors}
