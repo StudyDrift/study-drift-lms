@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { ArrowLeft, Bell, Bot, Building2, ChevronDown, Link2, Plug, Settings2, Shield, User } from 'lucide-react'
+import { ArrowLeft, Bell, Bot, Building2, ChevronDown, FolderTree, Link2, Plug, Settings2, Shield, User } from 'lucide-react'
 import { usePermissions } from '../../context/use-permissions'
 import { usePlatformScimEnabled } from '../../hooks/use-platform-scim-enabled'
-import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
+import { PERM_RBAC_MANAGE, PERM_TENANT_ORG_UNITS_ADMIN } from '../../lib/rbac-api'
 import { settingsViewFromPathname } from './side-nav-path-utils'
 import { sideNavActiveClass, sideNavLinkClass } from './side-nav-styles'
 
 export function SideNavSettingsLinks() {
   const { allows, loading: permLoading } = usePermissions()
   const canManageRbac = !permLoading && allows(PERM_RBAC_MANAGE)
+  const canOrgUnits = !permLoading && (canManageRbac || allows(PERM_TENANT_ORG_UNITS_ADMIN))
   const { scimEnabled: platformScimEnabled } = usePlatformScimEnabled(canManageRbac)
   const location = useLocation()
   const view = settingsViewFromPathname(location.pathname)
@@ -49,95 +50,108 @@ export function SideNavSettingsLinks() {
         <Bell className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Notifications
       </NavLink>
-      {canManageRbac && (
+      {(canOrgUnits || canManageRbac) && (
         <>
           <p className="px-3 pb-1 pt-4 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
             System Settings
           </p>
-          <NavLink
-            to="/settings/roles"
-            className={() => `${sideNavLinkClass} ${view === 'roles' ? sideNavActiveClass : ''}`}
-          >
-            <Shield className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-            Roles and Permissions
-          </NavLink>
-          <NavLink
-            to="/settings/lti-tools"
-            className={() => `${sideNavLinkClass} ${view === 'lti-tools' ? sideNavActiveClass : ''}`}
-          >
-            <Plug className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-            LTI tools
-          </NavLink>
-          <NavLink
-            to="/settings/platform"
-            className={() => `${sideNavLinkClass} ${view === 'platform' ? sideNavActiveClass : ''}`}
-          >
-            <Settings2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-            Global platform
-          </NavLink>
-          <NavLink
-            to="/settings/organizations"
-            className={() => `${sideNavLinkClass} ${view === 'organizations' ? sideNavActiveClass : ''}`}
-          >
-            <Building2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-            Organizations
-          </NavLink>
-          {platformScimEnabled && (
+          {canOrgUnits && (
             <NavLink
-              to="/settings/scim-provisioning"
-              className={() =>
-                `${sideNavLinkClass} ${view === 'scim-provisioning' ? sideNavActiveClass : ''}`
-              }
+              to="/settings/org-units"
+              className={() => `${sideNavLinkClass} ${view === 'org-units' ? sideNavActiveClass : ''}`}
             >
-              <Link2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-              SCIM provisioning
+              <FolderTree className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+              Org structure
             </NavLink>
           )}
-          <div className="flex flex-col gap-0.5">
-            <button
-              type="button"
-              onClick={() => setAiOpen((o) => !o)}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-white/80 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-800/90 dark:hover:text-neutral-50 ${
-                aiSectionActive ? sideNavActiveClass : 'text-slate-500'
-              }`}
-              aria-expanded={aiOpen}
-            >
-              <Bot className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-              <span className="min-w-0 flex-1">Intelligence</span>
-              <ChevronDown
-                className={`h-4 w-4 shrink-0 text-current opacity-70 transition-transform duration-200 ease-out ${
-                  aiOpen ? 'rotate-180' : 'rotate-0'
-                }`}
-                aria-hidden
-              />
-            </button>
-            <div
-              className={`grid transition-[grid-template-rows] duration-200 ease-out ${
-                aiOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-              }`}
-            >
-              <div className="min-h-0 overflow-hidden">
-                <div className="flex flex-col gap-0.5 border-l border-slate-200/80 pl-2 dark:border-neutral-600/80">
-                  <NavLink
-                    to="/settings/ai/models"
-                    className={() =>
-                      `${sideNavLinkClass} ${view === 'ai-models' ? sideNavActiveClass : ''}`
-                    }
-                  >
-                    Models
-                  </NavLink>
-                  <NavLink
-                    to="/settings/ai/system-prompts"
-                    className={() =>
-                      `${sideNavLinkClass} ${view === 'ai-prompts' ? sideNavActiveClass : ''}`
-                    }
-                  >
-                    System Prompts
-                  </NavLink>
+          {canManageRbac && (
+            <>
+              <NavLink
+                to="/settings/roles"
+                className={() => `${sideNavLinkClass} ${view === 'roles' ? sideNavActiveClass : ''}`}
+              >
+                <Shield className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                Roles and Permissions
+              </NavLink>
+              <NavLink
+                to="/settings/lti-tools"
+                className={() => `${sideNavLinkClass} ${view === 'lti-tools' ? sideNavActiveClass : ''}`}
+              >
+                <Plug className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                LTI tools
+              </NavLink>
+              <NavLink
+                to="/settings/platform"
+                className={() => `${sideNavLinkClass} ${view === 'platform' ? sideNavActiveClass : ''}`}
+              >
+                <Settings2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                Global platform
+              </NavLink>
+              <NavLink
+                to="/settings/organizations"
+                className={() => `${sideNavLinkClass} ${view === 'organizations' ? sideNavActiveClass : ''}`}
+              >
+                <Building2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                Organizations
+              </NavLink>
+              {platformScimEnabled && (
+                <NavLink
+                  to="/settings/scim-provisioning"
+                  className={() =>
+                    `${sideNavLinkClass} ${view === 'scim-provisioning' ? sideNavActiveClass : ''}`
+                  }
+                >
+                  <Link2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                  SCIM provisioning
+                </NavLink>
+              )}
+              <div className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setAiOpen((o) => !o)}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-white/80 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-800/90 dark:hover:text-neutral-50 ${
+                    aiSectionActive ? sideNavActiveClass : 'text-slate-500'
+                  }`}
+                  aria-expanded={aiOpen}
+                >
+                  <Bot className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                  <span className="min-w-0 flex-1">Intelligence</span>
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-current opacity-70 transition-transform duration-200 ease-out ${
+                      aiOpen ? 'rotate-180' : 'rotate-0'
+                    }`}
+                    aria-hidden
+                  />
+                </button>
+                <div
+                  className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                    aiOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                  }`}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                    <div className="flex flex-col gap-0.5 border-l border-slate-200/80 pl-2 dark:border-neutral-600/80">
+                      <NavLink
+                        to="/settings/ai/models"
+                        className={() =>
+                          `${sideNavLinkClass} ${view === 'ai-models' ? sideNavActiveClass : ''}`
+                        }
+                      >
+                        Models
+                      </NavLink>
+                      <NavLink
+                        to="/settings/ai/system-prompts"
+                        className={() =>
+                          `${sideNavLinkClass} ${view === 'ai-prompts' ? sideNavActiveClass : ''}`
+                        }
+                      >
+                        System Prompts
+                      </NavLink>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </>
       )}
     </>

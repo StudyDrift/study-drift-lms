@@ -14,11 +14,12 @@ import { ImageModelPicker } from '../../components/image-model-picker'
 import { RequirePermission } from '../../components/require-permission'
 import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-settings-panel'
 import { OrganizationsPanel } from '../../components/settings/organizations-panel'
+import { OrgUnitsPanel } from '../../components/settings/org-units-panel'
 import { PlatformSettingsPanel } from '../../components/settings/platform-settings-panel'
 import { ScimSettingsPanel } from '../../components/settings/scim-settings-panel'
 import { RolesPermissionsPanel } from '../../components/settings/roles-permissions-panel'
 import { usePermissions } from '../../context/use-permissions'
-import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
+import { PERM_RBAC_MANAGE, PERM_TENANT_ORG_UNITS_ADMIN } from '../../lib/rbac-api'
 import { OidcConnectedAccountsPanel } from '../../components/oidc-connected-accounts-panel'
 import { MfaFactorsPanel } from '../../components/settings/mfa-factors-panel'
 import { LmsPage } from './lms-page'
@@ -37,6 +38,7 @@ function isSystemSettingsPath(pathname: string): boolean {
     pathname === '/settings/lti-tools' ||
     pathname === '/settings/platform' ||
     pathname === '/settings/organizations' ||
+    pathname === '/settings/org-units' ||
     pathname === '/settings/scim-provisioning'
   )
 }
@@ -710,8 +712,13 @@ export default function Settings() {
       </LmsPage>
     )
   }
-  if (!permLoading && isSystemSettingsPath(location.pathname) && !allows(PERM_RBAC_MANAGE)) {
-    return <Navigate to="/settings/account" replace />
+  if (!permLoading && isSystemSettingsPath(location.pathname)) {
+    const onOrgUnits = location.pathname === '/settings/org-units'
+    const hasRbac = allows(PERM_RBAC_MANAGE)
+    const hasUnitAdmin = allows(PERM_TENANT_ORG_UNITS_ADMIN)
+    if (!hasRbac && !(onOrgUnits && hasUnitAdmin)) {
+      return <Navigate to="/settings/account" replace />
+    }
   }
 
   return (
@@ -722,6 +729,7 @@ export default function Settings() {
           activeView === 'lti-tools' ||
           activeView === 'platform' ||
           activeView === 'organizations' ||
+          activeView === 'org-units' ||
           activeView === 'scim-provisioning'
             ? 'max-w-4xl'
             : activeView === 'ai-prompts'
@@ -1402,6 +1410,16 @@ export default function Settings() {
             >
               <PlatformSettingsPanel />
             </RequirePermission>
+          </div>
+        )}
+
+        {activeView === 'org-units' && (
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">Org structure</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+              Schools, colleges, and departments within your organization.
+            </p>
+            <OrgUnitsPanel />
           </div>
         )}
 

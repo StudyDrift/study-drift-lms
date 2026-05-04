@@ -50,6 +50,7 @@ type CoursePublic struct {
 	SbgEnabled                    bool              `json:"sbgEnabled"`
 	SbgProficiencyScaleJSON       *json.RawMessage  `json:"sbgProficiencyScaleJson"`
 	SbgAggregationRule            string            `json:"sbgAggregationRule"`
+	OrgUnitID                     *string           `json:"orgUnitId,omitempty"`
 }
 
 // coursePublicSelect is the column list for `course.courses` (alias `c`) in public course APIs.
@@ -89,7 +90,8 @@ const coursePublicSelect = `
     c.updated_at,
     c.sbg_enabled,
     c.sbg_proficiency_scale_json,
-    c.sbg_aggregation_rule
+    c.sbg_aggregation_rule,
+    c.org_unit_id
 `
 
 func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
@@ -99,6 +101,7 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 	var starts, ends, vis, hid, relAnchor sql.NullTime
 	var mtheme, sbgProf []byte
 	var sbgRule string
+	var orgUnit sql.NullString
 
 	if err := row.Scan(
 		&id,
@@ -137,11 +140,16 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 		&p.SbgEnabled,
 		&sbgProf,
 		&sbgRule,
+		&orgUnit,
 	); err != nil {
 		return CoursePublic{}, err
 	}
 
 	p.ID = id.String()
+	if orgUnit.Valid {
+		s := orgUnit.String
+		p.OrgUnitID = &s
+	}
 	if hero.Valid {
 		s := hero.String
 		p.HeroImageURL = &s
@@ -205,6 +213,39 @@ WHERE c.id IN (SELECT e.course_id FROM course.course_enrollments e WHERE e.user_
   AND c.archived = false
 ORDER BY o.sort_order NULLS LAST, c.title ASC
 `, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []CoursePublic
+	for rows.Next() {
+		p, err := scanCoursePublicFromRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// ListForEnrolledUserInOrgUnits returns enrolled courses whose org_unit_id is in allowed (non-null only).
+func ListForEnrolledUserInOrgUnits(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, allowed []uuid.UUID) ([]CoursePublic, error) {
+	if len(allowed) == 0 {
+		return []CoursePublic{}, nil
+	}
+	rows, err := pool.Query(ctx, `
+SELECT`+coursePublicSelect+`
+FROM course.courses c
+INNER JOIN "user".users ucat ON ucat.id = $1 AND ucat.org_id = c.org_id
+LEFT JOIN course.user_course_catalog_order o
+  ON o.user_id = $1 AND o.course_id = c.id
+WHERE c.id IN (SELECT e.course_id FROM course.course_enrollments e WHERE e.user_id = $1 AND e.active)
+  AND c.archived = false
+  AND c.org_unit_id IS NOT NULL
+  AND c.org_unit_id = ANY($2::uuid[])
+ORDER BY o.sort_order NULLS LAST, c.title ASC
+`, userID, allowed)
 	if err != nil {
 		return nil, err
 	}

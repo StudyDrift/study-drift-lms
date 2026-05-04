@@ -27,6 +27,7 @@ func CreateCourse(
 	title string,
 	description string,
 	courseType string,
+	orgUnitID *uuid.UUID,
 ) (*CoursePublic, error) {
 	if courseType == "" {
 		courseType = defaultCourseType
@@ -37,7 +38,7 @@ func CreateCourse(
 		if err != nil {
 			return nil, err
 		}
-		out, retry, err := createCourseOnce(ctx, pool, createdByUserID, title, description, courseType, courseCode)
+		out, retry, err := createCourseOnce(ctx, pool, createdByUserID, title, description, courseType, courseCode, orgUnitID)
 		if err != nil {
 			return nil, err
 		}
@@ -57,6 +58,7 @@ func createCourseOnce(
 	description string,
 	courseType string,
 	courseCode string,
+	orgUnitID *uuid.UUID,
 ) (*CoursePublic, bool, error) {
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -71,9 +73,10 @@ INSERT INTO course.courses (
 	description,
 	course_type,
 	created_by_user_id,
-	org_id
-) VALUES ($1, $2, $3, $4, $5, (SELECT org_id FROM "user".users WHERE id = $5))
-RETURNING`+publicReturningColumns, courseCode, title, description, courseType, createdByUserID)
+	org_id,
+	org_unit_id
+) VALUES ($1, $2, $3, $4, $5, (SELECT org_id FROM "user".users WHERE id = $5), $6)
+RETURNING`+publicReturningColumns, courseCode, title, description, courseType, createdByUserID, orgUnitID)
 
 	out, err := scanCoursePublicFromRow(row)
 	if err != nil {

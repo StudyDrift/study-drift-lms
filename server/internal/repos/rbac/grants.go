@@ -43,6 +43,12 @@ SELECT s.permission_string FROM (
 	INNER JOIN "user".permissions p ON p.id = rp.permission_id
 	WHERE uar.user_id = $1
 	UNION
+	SELECT DISTINCT p.permission_string
+	FROM "user".user_org_unit_roles uor
+	INNER JOIN "user".rbac_role_permissions rp ON rp.role_id = uor.role_id
+	INNER JOIN "user".permissions p ON p.id = rp.permission_id
+	WHERE uor.user_id = $1
+	UNION
 	SELECT DISTINCT g.permission_string
 	FROM course.user_course_grants g
 	WHERE g.user_id = $1

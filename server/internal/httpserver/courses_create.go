@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/repos/course"
+	"github.com/lextures/lextures/server/internal/repos/orgunit"
+	"github.com/lextures/lextures/server/internal/repos/organization"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
 )
 
@@ -14,6 +17,7 @@ type createCourseBody struct {
 	Title       string  `json:"title"`
 	Description string  `json:"description"`
 	CourseType  *string `json:"courseType"`
+	OrgUnitID   *string `json:"orgUnitId"`
 }
 
 // handleCreateCourse is POST /api/v1/courses.
@@ -65,7 +69,51 @@ func (d Deps) handleCreateCourse() http.HandlerFunc {
 			return
 		}
 
-		out, err := course.CreateCourse(r.Context(), d.Pool, userID, title, description, courseType)
+		ctx := r.Context()
+		var orgUnitID *uuid.UUID
+		if body.OrgUnitID != nil && strings.TrimSpace(*body.OrgUnitID) != "" {
+			uid, err := uuid.Parse(strings.TrimSpace(*body.OrgUnitID))
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid orgUnitId.")
+				return
+			}
+			uOrg, err := organization.OrgIDForUser(ctx, d.Pool, userID)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify organization.")
+				return
+			}
+			row, err := orgunit.GetByID(ctx, d.Pool, uid)
+			if err != nil || row == nil || row.OrgID != uOrg {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid org unit.")
+				return
+			}
+			ga, err := rbac.UserHasPermission(ctx, d.Pool, userID, permGlobalRBACManage)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
+				return
+			}
+			if !ga {
+				subtrees, err := orgunit.ListSubtreeIDsForUserOrgUnitAdmin(ctx, d.Pool, userID, uOrg)
+				if err != nil {
+					apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify unit scope.")
+					return
+				}
+				ok := false
+				for _, id := range subtrees {
+					if id == uid {
+						ok = true
+						break
+					}
+				}
+				if !ok {
+					apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission to assign this org unit.")
+					return
+				}
+			}
+			orgUnitID = &uid
+		}
+
+		out, err := course.CreateCourse(ctx, d.Pool, userID, title, description, courseType, orgUnitID)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to create course.")
 			return
