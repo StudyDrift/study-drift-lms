@@ -127,6 +127,8 @@ export type CoursePublic = {
   hintScaffoldingEnabled?: boolean
   /** Misconception tagging + remediation in quiz results (plan 1.10). */
   misconceptionDetectionEnabled?: boolean
+  /** Plan 5.4 — multiple teaching sections with scoped rosters and gradebook. */
+  sectionsEnabled?: boolean
   /** `traditional` or `competency_based` (server default when omitted: traditional). */
   courseType?: string
   createdAt: string
@@ -135,6 +137,9 @@ export type CoursePublic = {
   viewerEnrollmentRoles?: string[]
   /** Student enrollment row id for adaptive “next” navigation when the viewer is enrolled as a student. */
   viewerStudentEnrollmentId?: string
+  /** When sections are enabled, section code for the viewer's student enrollment (GET /courses/:code). */
+  viewerSectionCode?: string
+  viewerSectionName?: string
   /** Server `ANNOTATION_ENABLED` — inline submission annotation / SpeedGrader surfaces. */
   annotationsEnabled?: boolean
   /** Server `FEEDBACK_MEDIA_ENABLED` — instructor A/V feedback on submissions (plan 3.2). */
@@ -627,6 +632,7 @@ export async function patchCourseFeatures(
     diagnosticAssessmentsEnabled?: boolean
     hintScaffoldingEnabled?: boolean
     misconceptionDetectionEnabled?: boolean
+    sectionsEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -646,6 +652,7 @@ export async function patchCourseFeatures(
         diagnosticAssessmentsEnabled: body.diagnosticAssessmentsEnabled,
         hintScaffoldingEnabled: body.hintScaffoldingEnabled,
         misconceptionDetectionEnabled: body.misconceptionDetectionEnabled,
+        ...(body.sectionsEnabled !== undefined ? { sectionsEnabled: body.sectionsEnabled } : {}),
       }),
     },
   )
@@ -1371,9 +1378,15 @@ export type CourseGradebookGridResponse = {
   excusedGrades?: Record<string, Record<string, boolean>>
 }
 
-export async function fetchCourseGradebookGrid(courseCode: string): Promise<CourseGradebookGridResponse> {
+export async function fetchCourseGradebookGrid(
+  courseCode: string,
+  opts?: { sectionId?: string | null },
+): Promise<CourseGradebookGridResponse> {
+  const qs = new URLSearchParams()
+  if (opts?.sectionId) qs.set('section_id', opts.sectionId)
+  const q = qs.toString()
   const res = await authorizedFetch(
-    `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook/grid`,
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook/grid${q ? `?${q}` : ''}`,
   )
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
@@ -3543,6 +3556,9 @@ export type CourseEnrollmentRosterRow = {
   userId: string
   displayName: string | null
   role: string
+  sectionId?: string | null
+  sectionCode?: string | null
+  sectionName?: string | null
 }
 
 export async function fetchCourseEnrollmentsList(
@@ -3564,9 +3580,188 @@ export async function fetchCourseEnrollmentsList(
     const role = typeof o.role === 'string' ? o.role : ''
     if (!id || !userId) continue
     const displayName = typeof o.displayName === 'string' ? o.displayName : null
-    out.push({ id, userId, displayName, role })
+    const sectionId =
+      typeof o.sectionId === 'string' ? o.sectionId : typeof o.section_id === 'string' ? o.section_id : null
+    const sectionCode =
+      typeof o.sectionCode === 'string'
+        ? o.sectionCode
+        : typeof o.section_code === 'string'
+          ? o.section_code
+          : null
+    const sectionName =
+      typeof o.sectionName === 'string'
+        ? o.sectionName
+        : typeof o.section_name === 'string'
+          ? o.section_name
+          : null
+    out.push({ id, userId, displayName, role, sectionId, sectionCode, sectionName })
   }
   return out
+}
+
+export type CourseSection = {
+  id: string
+  courseId: string
+  sectionCode: string
+  name?: string | null
+  termId?: string | null
+  instructorUserId?: string | null
+  capacity?: number | null
+  meetingInfo?: unknown
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchCourseSections(courseCode: string): Promise<CourseSection[]> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/sections`)
+  const raw = await parseJson(res)
+  if (res.status === 404) return []
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const list = (raw as { sections?: unknown }).sections
+  if (!Array.isArray(list)) return []
+  const out: CourseSection[] = []
+  for (const row of list) {
+    if (!row || typeof row !== 'object') continue
+    const o = row as Record<string, unknown>
+    const id = typeof o.id === 'string' ? o.id : null
+    const courseId = typeof o.courseId === 'string' ? o.courseId : typeof o.course_id === 'string' ? o.course_id : ''
+    const sectionCode =
+      typeof o.sectionCode === 'string' ? o.sectionCode : typeof o.section_code === 'string' ? o.section_code : null
+    const status = typeof o.status === 'string' ? o.status : 'active'
+    const createdAt = typeof o.createdAt === 'string' ? o.createdAt : typeof o.created_at === 'string' ? o.created_at : ''
+    const updatedAt = typeof o.updatedAt === 'string' ? o.updatedAt : typeof o.updated_at === 'string' ? o.updated_at : ''
+    if (!id || !sectionCode || !createdAt || !updatedAt) continue
+    out.push({
+      id,
+      courseId,
+      sectionCode,
+      name: typeof o.name === 'string' ? o.name : null,
+      termId: typeof o.termId === 'string' ? o.termId : typeof o.term_id === 'string' ? o.term_id : null,
+      instructorUserId:
+        typeof o.instructorUserId === 'string'
+          ? o.instructorUserId
+          : typeof o.instructor_user_id === 'string'
+            ? o.instructor_user_id
+            : null,
+      capacity: typeof o.capacity === 'number' && Number.isFinite(o.capacity) ? o.capacity : null,
+      meetingInfo: o.meetingInfo ?? o.meeting_info,
+      status,
+      createdAt,
+      updatedAt,
+    })
+  }
+  return out
+}
+
+export async function postCourseSection(
+  courseCode: string,
+  body: { sectionCode: string; name?: string | null },
+): Promise<CourseSection> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/sections`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sectionCode: body.sectionCode,
+      ...(body.name != null && body.name !== '' ? { name: body.name } : {}),
+    }),
+  })
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as Record<string, unknown>
+  const id = typeof o.id === 'string' ? o.id : ''
+  const cc =
+    typeof o.sectionCode === 'string' ? o.sectionCode : typeof o.section_code === 'string' ? o.section_code : ''
+  const createdAt =
+    typeof o.createdAt === 'string' ? o.createdAt : typeof o.created_at === 'string' ? o.created_at : ''
+  const updatedAt =
+    typeof o.updatedAt === 'string' ? o.updatedAt : typeof o.updated_at === 'string' ? o.updated_at : ''
+  if (!id || !cc || !createdAt || !updatedAt) throw new Error('Invalid API response (postCourseSection)')
+  return {
+    id,
+    courseId: typeof o.courseId === 'string' ? o.courseId : typeof o.course_id === 'string' ? o.course_id : '',
+    sectionCode: cc,
+    name: typeof o.name === 'string' ? o.name : null,
+    termId: typeof o.termId === 'string' ? o.termId : typeof o.term_id === 'string' ? o.term_id : null,
+    instructorUserId:
+      typeof o.instructorUserId === 'string'
+        ? o.instructorUserId
+        : typeof o.instructor_user_id === 'string'
+          ? o.instructor_user_id
+          : null,
+    capacity: typeof o.capacity === 'number' && Number.isFinite(o.capacity) ? o.capacity : null,
+    meetingInfo: o.meetingInfo ?? o.meeting_info,
+    status: typeof o.status === 'string' ? o.status : 'active',
+    createdAt,
+    updatedAt,
+  }
+}
+
+export async function patchEnrollmentSection(enrollmentId: string, sectionId: string): Promise<void> {
+  const res = await authorizedFetch(`/api/v1/enrollments/${encodeURIComponent(enrollmentId)}/section`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sectionId }),
+  })
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+}
+
+export async function patchCourseSection(
+  courseCode: string,
+  sectionId: string,
+  body: { status?: 'active' | 'cancelled' | 'archived' },
+): Promise<CourseSection> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/sections/${encodeURIComponent(sectionId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as Record<string, unknown>
+  const id = typeof o.id === 'string' ? o.id : sectionId
+  const cc =
+    typeof o.sectionCode === 'string' ? o.sectionCode : typeof o.section_code === 'string' ? o.section_code : ''
+  return {
+    id,
+    courseId: typeof o.courseId === 'string' ? o.courseId : '',
+    sectionCode: cc,
+    name: typeof o.name === 'string' ? o.name : null,
+    status: typeof o.status === 'string' ? o.status : 'active',
+    createdAt: typeof o.createdAt === 'string' ? o.createdAt : '',
+    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : '',
+  }
+}
+
+export async function deleteCourseSection(courseCode: string, sectionId: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/sections/${encodeURIComponent(sectionId)}`,
+    { method: 'DELETE' },
+  )
+  if (res.ok || res.status === 204) return
+  const raw = await parseJson(res)
+  throw new Error(readApiErrorMessage(raw))
+}
+
+export async function putSectionAssignmentOverride(
+  sectionId: string,
+  itemId: string,
+  body: { dueAt?: string | null; availableFrom?: string | null; availableUntil?: string | null },
+): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/sections/${encodeURIComponent(sectionId)}/overrides/${encodeURIComponent(itemId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
 }
 
 export type ModerationProvisionalGrade = {

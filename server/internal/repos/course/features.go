@@ -56,3 +56,18 @@ func PatchFeatures(
 	return GetPublicByCourseCode(ctx, pool, courseCode)
 }
 
+// SetSectionsEnabled toggles per-course sections (plan 5.4).
+func SetSectionsEnabled(ctx context.Context, pool *pgxpool.Pool, courseCode string, enabled bool) (*CoursePublic, error) {
+	tag, err := pool.Exec(ctx, `
+		UPDATE course.courses
+		SET sections_enabled = $1, updated_at = NOW()
+		WHERE course_code = $2
+	`, enabled, courseCode)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, nil
+	}
+	return GetPublicByCourseCode(ctx, pool, courseCode)
+}

@@ -111,6 +111,14 @@ function countEmptyGradeCells(grid: CourseGradebookGridResponse): number {
   return n
 }
 
+function courseSectionSubtitle(course: CoursePublic): string | null {
+  if (course.sectionsEnabled !== true) return null
+  const code = course.viewerSectionCode?.trim()
+  if (!code) return null
+  const name = course.viewerSectionName?.trim()
+  return name ? `Section ${code} — ${name}` : `Section ${code}`
+}
+
 function dueThisWeekItems(
   structure: CourseStructureItem[],
   weekStart: Date,
@@ -734,6 +742,9 @@ export default function Dashboard() {
                             <div className="min-w-0">
                               <p className="text-xs font-medium text-slate-500 dark:text-neutral-400">
                                 {row.course.title}
+                                {courseSectionSubtitle(row.course)
+                                  ? ` · ${courseSectionSubtitle(row.course)}`
+                                  : ''}
                               </p>
                               <p className="truncate text-sm font-semibold text-slate-900 dark:text-neutral-100">
                                 {it.title}
@@ -810,6 +821,11 @@ export default function Dashboard() {
                       >
                         {row.course.title}
                       </Link>
+                      {courseSectionSubtitle(row.course) ? (
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
+                          {courseSectionSubtitle(row.course)}
+                        </p>
+                      ) : null}
                       <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                         Course grade (so far)
                       </p>
@@ -904,6 +920,11 @@ export default function Dashboard() {
                       >
                         {row.course.title}
                       </Link>
+                      {courseSectionSubtitle(row.course) ? (
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
+                          {courseSectionSubtitle(row.course)}
+                        </p>
+                      ) : null}
                       <dl className="mt-4 space-y-3 text-sm">
                         <div className="flex justify-between gap-3">
                           <dt className="text-slate-500 dark:text-neutral-400">Gradebook gaps</dt>

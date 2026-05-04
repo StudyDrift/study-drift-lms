@@ -21,6 +21,7 @@ type patchCourseFeaturesBody struct {
 	DiagnosticAssessmentsEnabled  *bool `json:"diagnosticAssessmentsEnabled"`
 	HintScaffoldingEnabled        *bool `json:"hintScaffoldingEnabled"`
 	MisconceptionDetectionEnabled *bool `json:"misconceptionDetectionEnabled"`
+	SectionsEnabled               *bool `json:"sectionsEnabled"`
 }
 
 // handlePatchCourseFeatures is PATCH /api/v1/courses/{course_code}/features.
@@ -100,8 +101,17 @@ func (d Deps) handlePatchCourseFeatures() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
 			return
 		}
+		if req.SectionsEnabled != nil {
+			out2, err := course.SetSectionsEnabled(r.Context(), d.Pool, courseCode, *req.SectionsEnabled)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to update sections setting.")
+				return
+			}
+			if out2 != nil {
+				out = out2
+			}
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(out)
 	}
 }
-

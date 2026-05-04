@@ -24,6 +24,7 @@ import { CourseExportImportSection } from './course-export-import-section'
 import { CourseGradingSettingsSection } from './course-grading-settings'
 import { CourseFeaturesSection } from './course-features-section'
 import { CourseOutcomesSection } from './course-outcomes-section'
+import { CourseSectionsSettingsSection } from './course-sections-settings'
 
 function isoToDatetimeLocal(iso: string | null): string {
   if (!iso) return ''
@@ -85,6 +86,7 @@ type SettingsSection =
   | 'grading'
   | 'outcomes'
   | 'features'
+  | 'sections'
   | 'import-export'
   | 'archive'
 
@@ -120,6 +122,7 @@ function parseSettingsSection(courseCode: string, pathname: string): SettingsSec
   if (seg === 'grading') return 'grading'
   if (seg === 'outcomes') return 'outcomes'
   if (seg === 'features') return 'features'
+  if (seg === 'sections') return 'sections'
   if (seg === 'import-export') return 'import-export'
   if (seg === 'archive') return 'archive'
   return 'invalid'
@@ -539,6 +542,10 @@ export default function CourseSettings() {
             ? course?.title
               ? `${course.title} — features`
               : 'Features'
+            : section === 'sections'
+              ? course?.title
+                ? `${course.title} — sections`
+                : 'Sections'
             : section === 'import-export'
               ? course?.title
                 ? `${course.title} — import / export`
@@ -560,7 +567,9 @@ export default function CourseSettings() {
           ? 'Define learning outcomes, map assignments and quizzes (including individual questions) with measurement and intensity levels, and review class progress from grades and attempts.'
           : section === 'features'
             ? 'Choose which course tools appear in the menu and are available to instructors and learners.'
-            : section === 'import-export'
+            : section === 'sections'
+              ? 'Create teaching sections, manage rosters, and set per-section assignment due dates.'
+              : section === 'import-export'
               ? 'Download the full course as JSON or restore from a backup file.'
               : section === 'archive'
                 ? 'Module items you archived from the outline. Restore them when you want them visible again.'
@@ -1004,6 +1013,15 @@ export default function CourseSettings() {
               onCourseUpdated={setCourse}
             />
           )}
+          {section === 'sections' &&
+            (course.sectionsEnabled ? (
+              <CourseSectionsSettingsSection courseCode={courseCode} />
+            ) : (
+              <p className="text-sm text-slate-600 dark:text-neutral-300">
+                Turn on <span className="font-medium">Course sections</span> under the Features tab
+                first, then return here to add sections and overrides.
+              </p>
+            ))}
           {section === 'import-export' && <CourseExportImportSection courseCode={courseCode} />}
           {section === 'archive' && <CourseArchivedContentSection courseCode={courseCode} />}
         </div>

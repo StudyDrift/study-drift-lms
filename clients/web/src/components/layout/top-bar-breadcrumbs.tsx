@@ -23,6 +23,7 @@ const COURSE_SETTINGS_LABEL: Record<CourseSettingsSection, string> = {
   grading: 'Grading',
   outcomes: 'Outcomes',
   features: 'Features',
+  sections: 'Sections',
   'import-export': 'Import / export',
   archive: 'Archive',
 }

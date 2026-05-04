@@ -12,6 +12,7 @@ import (
 	"github.com/lextures/lextures/server/internal/relativeschedule"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/coursemoduleassignments"
+	"github.com/lextures/lextures/server/internal/repos/coursesections"
 	"github.com/lextures/lextures/server/internal/repos/coursestructure"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
@@ -41,10 +42,10 @@ type moduleAssignmentGetResponse struct {
 	ViewerCanRevealIdentities    bool             `json:"viewerCanRevealIdentities"`
 	ModeratedGrading             bool             `json:"moderatedGrading"`
 	ModerationThresholdPct       *int             `json:"moderationThresholdPct,omitempty"`
-	ModeratorUserID              *uuid.UUID     `json:"moderatorUserId,omitempty"`
+	ModeratorUserID              *uuid.UUID       `json:"moderatorUserId,omitempty"`
 	ProvisionalGraderUserIds     *[]string        `json:"provisionalGraderUserIds,omitempty"`
 	OriginalityDetection         *string          `json:"originalityDetection,omitempty"`
-	OriginalityStudentVisibility *string         `json:"originalityStudentVisibility,omitempty"`
+	OriginalityStudentVisibility *string          `json:"originalityStudentVisibility,omitempty"`
 	GradingType                  *string          `json:"gradingType,omitempty"`
 	PostingPolicy                *string          `json:"postingPolicy,omitempty"`
 	ReleaseAt                    *time.Time       `json:"releaseAt,omitempty"`
@@ -83,30 +84,30 @@ func buildModuleAssignmentResponse(
 		posting = "automatic"
 	}
 	resp := moduleAssignmentGetResponse{
-		ItemID:                        itemID,
-		Title:                          row.Title,
-		Markdown:                       row.Markdown,
-		DueAt:                          due,
-		PointsWorth:                    row.PointsWorth,
-		AssignmentGroupID:              row.AssignmentGroupID,
-		UpdatedAt:                      row.UpdatedAt,
-		AvailableFrom:                  avF,
-		AvailableUntil:                 avU,
-		RequiresAssignmentAccessCode:  &bReq,
-		AssignmentAccessCode:           acc,
-		SubmissionAllowText:            &sText,
-		SubmissionAllowFileUpload:        &sFile,
-		SubmissionAllowURL:             &sURL,
-		LateSubmissionPolicy:            &lpol,
-		LatePenaltyPercent:              row.LatePenaltyPercent,
-		Rubric:                          row.OptionalRubricJSON(),
-		BlindGrading:                    row.BlindGrading,
-		IdentitiesRevealedAt:            row.IdentitiesRevealedAt,
-		ViewerCanRevealIdentities:        viewerCanReveal && row.BlindGrading && row.IdentitiesRevealedAt == nil,
-		ModeratedGrading:                 showModerationDetail && row.ModeratedGrading,
-		ReleaseAt:                        row.ReleaseAt,
-		NeverDrop:                        row.NeverDrop,
-		ReplaceWithFinal:                 row.ReplaceWithFinal,
+		ItemID:                       itemID,
+		Title:                        row.Title,
+		Markdown:                     row.Markdown,
+		DueAt:                        due,
+		PointsWorth:                  row.PointsWorth,
+		AssignmentGroupID:            row.AssignmentGroupID,
+		UpdatedAt:                    row.UpdatedAt,
+		AvailableFrom:                avF,
+		AvailableUntil:               avU,
+		RequiresAssignmentAccessCode: &bReq,
+		AssignmentAccessCode:         acc,
+		SubmissionAllowText:          &sText,
+		SubmissionAllowFileUpload:    &sFile,
+		SubmissionAllowURL:           &sURL,
+		LateSubmissionPolicy:         &lpol,
+		LatePenaltyPercent:           row.LatePenaltyPercent,
+		Rubric:                       row.OptionalRubricJSON(),
+		BlindGrading:                 row.BlindGrading,
+		IdentitiesRevealedAt:         row.IdentitiesRevealedAt,
+		ViewerCanRevealIdentities:    viewerCanReveal && row.BlindGrading && row.IdentitiesRevealedAt == nil,
+		ModeratedGrading:             showModerationDetail && row.ModeratedGrading,
+		ReleaseAt:                    row.ReleaseAt,
+		NeverDrop:                    row.NeverDrop,
+		ReplaceWithFinal:             row.ReplaceWithFinal,
 	}
 	if od != "" {
 		o := od
@@ -200,6 +201,27 @@ func (d Deps) handleGetModuleAssignment() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Not found.")
 			return
 		}
+		disp := *row
+		if !canEdit {
+			crow, err := course.GetPublicByCourseCode(r.Context(), d.Pool, courseCode)
+			if err == nil && crow != nil && crow.SectionsEnabled {
+				secID, err := enrollment.GetStudentSectionID(r.Context(), d.Pool, *cid, viewer)
+				if err == nil && secID != nil {
+					ov, err := coursesections.GetOverride(r.Context(), d.Pool, *secID, itemID)
+					if err == nil && ov != nil {
+						if ov.DueAt != nil {
+							disp.DueAt = ov.DueAt
+						}
+						if ov.AvailableFrom != nil {
+							disp.AvailableFrom = ov.AvailableFrom
+						}
+						if ov.AvailableUntil != nil {
+							disp.AvailableUntil = ov.AvailableUntil
+						}
+					}
+				}
+			}
+		}
 		var shift *relativeschedule.Context
 		if !canEdit {
 			shift, err = relativeschedule.LoadForUser(r.Context(), d.Pool, *cid, viewer)
@@ -222,7 +244,7 @@ func (d Deps) handleGetModuleAssignment() http.HandlerFunc {
 			}
 		}
 		out := buildModuleAssignmentResponse(
-			itemID, row, canEdit, shift, viewerCanReveal, showMod,
+			itemID, &disp, canEdit, shift, viewerCanReveal, showMod,
 		)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(out)

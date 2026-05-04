@@ -3,6 +3,7 @@ package enrollment
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 
 	"github.com/google/uuid"
@@ -63,6 +64,32 @@ WHERE ce.course_id = $1 AND ce.user_id = $2 AND ce.role = 'student' AND ce.activ
 		return nil, err
 	}
 	return &id, nil
+}
+
+// GetStudentSectionID returns ce.section_id for the viewer's active student enrollment in the course, if any.
+func GetStudentSectionID(ctx context.Context, pool *pgxpool.Pool, courseID, userID uuid.UUID) (*uuid.UUID, error) {
+	var sid sql.NullString
+	err := pool.QueryRow(ctx, `
+SELECT ce.section_id::text
+FROM course.course_enrollments ce
+INNER JOIN course.courses c ON c.id = ce.course_id
+INNER JOIN "user".users u ON u.id = ce.user_id
+WHERE ce.course_id = $1 AND ce.user_id = $2 AND ce.role = 'student' AND ce.active AND c.org_id = u.org_id
+`, courseID, userID).Scan(&sid)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !sid.Valid || sid.String == "" {
+		return nil, nil
+	}
+	u, err := uuid.Parse(sid.String)
+	if err != nil {
+		return nil, nil
+	}
+	return &u, nil
 }
 
 // UserIsCourseStaff is true for teacher or instructor in the course.

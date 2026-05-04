@@ -38,6 +38,7 @@ export type CourseSettingsSection =
   | 'grading'
   | 'outcomes'
   | 'features'
+  | 'sections'
   | 'import-export'
   | 'archive'
 
@@ -59,6 +60,7 @@ export function courseSettingsSectionFromPathname(pathname: string): CourseSetti
   if (seg === 'grading') return 'grading'
   if (seg === 'outcomes') return 'outcomes'
   if (seg === 'features' || seg === 'features-tools') return 'features'
+  if (seg === 'sections') return 'sections'
   if (seg === 'import-export' || seg === 'export-import') return 'import-export'
   if (seg === 'archive' || seg === 'archived') return 'archive'
   return 'general'

@@ -222,7 +222,7 @@ func AddOutcomeLink(
 		return nil, err
 	}
 
-	students, err := enrollment.ListStudentUsersForCourseCode(ctx, pool, courseCode)
+	students, err := enrollment.ListStudentUsersForCourseCode(ctx, pool, courseCode, nil)
 	if err != nil {
 		return nil, err
 	}

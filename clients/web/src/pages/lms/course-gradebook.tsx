@@ -5,8 +5,10 @@ import {
   courseGradebookViewPermission,
   courseItemCreatePermission,
   downloadCourseGradebookCsv,
+  fetchCourse,
   fetchCourseGradebookGrid,
   fetchCourseGradingSettings,
+  fetchCourseSections,
   fetchGradeCellHistory,
   patchCourseGradebookCellExcused,
   type GradeHistoryEvent,
@@ -15,6 +17,7 @@ import {
   type AssignmentGroup,
   type CourseGradebookGridColumn,
   type CourseGradebookGridStudent,
+  type CourseSection,
   type RubricDefinition,
 } from '../../lib/courses-api'
 import {
@@ -337,6 +340,46 @@ export default function CourseGradebook() {
   const [gradeHistoryEvents, setGradeHistoryEvents] = useState<GradeHistoryEvent[] | null>(null)
   const [gradebookCsvEnabled, setGradebookCsvEnabled] = useState(false)
   const [importModalOpen, setImportModalOpen] = useState(false)
+  const [sectionsEnabled, setSectionsEnabled] = useState(false)
+  const [sections, setSections] = useState<CourseSection[]>([])
+  const [gradebookSectionId, setGradebookSectionId] = useState<string>('')
+
+  useEffect(() => {
+    if (!courseCode) return
+    let cancelled = false
+    void fetchCourse(courseCode)
+      .then((c) => {
+        if (!cancelled) setSectionsEnabled(c.sectionsEnabled === true)
+      })
+      .catch(() => {
+        if (!cancelled) setSectionsEnabled(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [courseCode])
+
+  useEffect(() => {
+    if (!courseCode || !sectionsEnabled) {
+      setSections([])
+      setGradebookSectionId('')
+      return
+    }
+    let cancelled = false
+    void fetchCourseSections(courseCode)
+      .then((list) => {
+        if (!cancelled) {
+          const active = list.filter((s) => s.status === 'active')
+          setSections(active)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSections([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [courseCode, sectionsEnabled])
 
   const gridStudents: GradebookStudent[] = useMemo(
     () => students.map((s) => ({ id: s.userId, name: s.displayName })),
@@ -390,7 +433,9 @@ export default function CourseGradebook() {
     setLoadState('loading')
     setLoadError(null)
     try {
-      const data = await fetchCourseGradebookGrid(courseCode)
+      const sectionOpt =
+        sectionsEnabled && canEditGrades && gradebookSectionId ? gradebookSectionId : null
+      const data = await fetchCourseGradebookGrid(courseCode, { sectionId: sectionOpt })
       setStudents(data.students)
       setColumns(data.columns)
       setGradeHeld(data.gradeHeld)
@@ -451,7 +496,7 @@ export default function CourseGradebook() {
       setLoadState('error')
       setLoadError(e instanceof Error ? e.message : 'Could not load gradebook.')
     }
-  }, [courseCode])
+  }, [courseCode, sectionsEnabled, canEditGrades, gradebookSectionId])
 
   const handlePostAssignmentGrades = useCallback(
     async (itemId: string) => {
@@ -689,6 +734,28 @@ export default function CourseGradebook() {
       )}
       {loadState === 'ok' && savedGrades != null && (
         <>
+          {sectionsEnabled && canEditGrades && sections.length > 0 ? (
+            <div className="lms-print-hide mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+              <label htmlFor="gb-section-filter" className="text-sm font-medium text-slate-700 dark:text-neutral-200">
+                Section
+              </label>
+              <select
+                id="gb-section-filter"
+                aria-label="Filter by section"
+                value={gradebookSectionId}
+                onChange={(e) => setGradebookSectionId(e.target.value)}
+                className="min-w-[12rem] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+              >
+                <option value="">All sections</option>
+                {sections.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.sectionCode}
+                    {s.name ? ` — ${s.name}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           {canEditGrades && gridStudents.length > 0 && gridColumns.length > 0 && (
             <div
               className="lms-print-hide mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
-import { Pencil, Trash2, UsersRound, X } from 'lucide-react'
+import { Pencil, Shuffle, Trash2, UsersRound, X } from 'lucide-react'
 import { EnrollmentGroupsPanel } from './enrollment-groups-panel'
 import { EnrollmentsActionsMenu } from './enrollments-actions-menu'
 import { LmsPage } from './lms-page'
@@ -19,11 +19,14 @@ import {
   courseEnrollmentsUpdatePermission,
   fetchCourse,
   fetchCourseScopedRoles,
+  fetchCourseSections,
   fetchEnrollmentGroupsTree,
+  patchEnrollmentSection,
   postEnrollmentGroupsEnable,
   putEnrollmentGroupMembership,
   viewerShouldHideCourseEnrollmentsNav,
   type CourseScopedAppRole,
+  type CourseSection,
   type EnrollmentGroupMembership,
   type EnrollmentGroupsTreeResponse,
 } from '../../lib/courses-api'
@@ -38,6 +41,9 @@ export type CourseEnrollment = {
   role: string
   lastCourseAccessAt?: string | null
   groupMemberships?: EnrollmentGroupMembership[]
+  sectionId?: string | null
+  sectionCode?: string | null
+  sectionName?: string | null
 }
 
 /** Blurred dim backdrop for roster modals (Escape closes in the keydown effect below). */
@@ -106,6 +112,13 @@ export default function CourseEnrollments() {
   const [groupAssignStatus, setGroupAssignStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [groupAssignMessage, setGroupAssignMessage] = useState<string | null>(null)
 
+  const [sectionsEnabled, setSectionsEnabled] = useState(false)
+  const [sections, setSections] = useState<CourseSection[]>([])
+  const [sectionTransferTarget, setSectionTransferTarget] = useState<CourseEnrollment | null>(null)
+  const [sectionTransferPick, setSectionTransferPick] = useState('')
+  const [sectionTransferStatus, setSectionTransferStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [sectionTransferMessage, setSectionTransferMessage] = useState<string | null>(null)
+
   useEffect(() => {
     if (!courseCode) {
       setCourseViewerEnrollmentRoles(null)
@@ -114,7 +127,10 @@ export default function CourseEnrollments() {
     let cancelled = false
     void fetchCourse(courseCode)
       .then((c) => {
-        if (!cancelled) setCourseViewerEnrollmentRoles(c.viewerEnrollmentRoles ?? [])
+        if (!cancelled) {
+          setCourseViewerEnrollmentRoles(c.viewerEnrollmentRoles ?? [])
+          setSectionsEnabled(c.sectionsEnabled === true)
+        }
       })
       .catch(() => {
         if (!cancelled) setCourseViewerEnrollmentRoles([])
@@ -123,6 +139,23 @@ export default function CourseEnrollments() {
       cancelled = true
     }
   }, [courseCode])
+
+  const loadSections = useCallback(async () => {
+    if (!courseCode || !sectionsEnabled) {
+      setSections([])
+      return
+    }
+    try {
+      const list = await fetchCourseSections(courseCode)
+      setSections(list.filter((s) => s.status === 'active'))
+    } catch {
+      setSections([])
+    }
+  }, [courseCode, sectionsEnabled])
+
+  useEffect(() => {
+    void loadSections()
+  }, [loadSections])
 
   const enrollmentMeta = useMemo(() => {
     if (!enrollments?.length) {
@@ -199,6 +232,24 @@ export default function CourseEnrollments() {
             : typeof o.last_course_access_at === 'string'
               ? o.last_course_access_at
               : null
+        const sectionId =
+          typeof o.sectionId === 'string'
+            ? o.sectionId
+            : typeof o.section_id === 'string'
+              ? o.section_id
+              : null
+        const sectionCode =
+          typeof o.sectionCode === 'string'
+            ? o.sectionCode
+            : typeof o.section_code === 'string'
+              ? o.section_code
+              : null
+        const sectionName =
+          typeof o.sectionName === 'string'
+            ? o.sectionName
+            : typeof o.section_name === 'string'
+              ? o.section_name
+              : null
         const rawGm = o.groupMemberships ?? o.group_memberships
         let groupMemberships: EnrollmentGroupMembership[] | undefined
         if (Array.isArray(rawGm)) {
@@ -227,6 +278,9 @@ export default function CourseEnrollments() {
           displayName,
           role,
           lastCourseAccessAt,
+          sectionId,
+          sectionCode,
+          sectionName,
           ...(groupMemberships?.length ? { groupMemberships } : {}),
         }
       })
@@ -304,6 +358,46 @@ export default function CourseEnrollments() {
     setGroupAssignMessage(null)
   }, [])
 
+  const closeSectionTransferModal = useCallback(() => {
+    setSectionTransferTarget(null)
+    setSectionTransferPick('')
+    setSectionTransferStatus('idle')
+    setSectionTransferMessage(null)
+  }, [])
+
+  const openSectionTransferModal = useCallback(
+    (e: CourseEnrollment) => {
+      setSectionTransferTarget(e)
+      const alt = sections.find((s) => s.id !== e.sectionId)
+      setSectionTransferPick(alt?.id ?? sections[0]?.id ?? '')
+      setSectionTransferStatus('idle')
+      setSectionTransferMessage(null)
+    },
+    [sections],
+  )
+
+  async function onSubmitSectionTransfer(ev: FormEvent) {
+    ev.preventDefault()
+    if (!sectionTransferTarget || !sectionTransferPick) return
+    if (sectionTransferPick === sectionTransferTarget.sectionId) {
+      setSectionTransferMessage('Choose a different section.')
+      setSectionTransferStatus('error')
+      return
+    }
+    setSectionTransferStatus('loading')
+    setSectionTransferMessage(null)
+    try {
+      await patchEnrollmentSection(sectionTransferTarget.id, sectionTransferPick)
+      setSectionTransferStatus('idle')
+      closeSectionTransferModal()
+      await loadEnrollments()
+      await loadSections()
+    } catch (err) {
+      setSectionTransferStatus('error')
+      setSectionTransferMessage(err instanceof Error ? err.message : 'Transfer failed.')
+    }
+  }
+
   useEffect(() => {
     if ((!modalOpen && !editTarget) || !courseCode || !viewerRoles.includes('teacher')) {
       return
@@ -340,17 +434,27 @@ export default function CourseEnrollments() {
   }, [modalOpen, editTarget, courseCode, viewerRoles])
 
   useEffect(() => {
-    if (!modalOpen && !editTarget && !groupAssignTarget) return
+    if (!modalOpen && !editTarget && !groupAssignTarget && !sectionTransferTarget) return
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
       e.preventDefault()
       if (modalOpen) closeModal()
       else if (editTarget) closeEditModal()
       else if (groupAssignTarget) closeGroupAssignModal()
+      else if (sectionTransferTarget) closeSectionTransferModal()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [modalOpen, editTarget, groupAssignTarget, closeModal, closeEditModal, closeGroupAssignModal])
+  }, [
+    modalOpen,
+    editTarget,
+    groupAssignTarget,
+    sectionTransferTarget,
+    closeModal,
+    closeEditModal,
+    closeGroupAssignModal,
+    closeSectionTransferModal,
+  ])
 
   async function onSubmitAddEnrollments(e: FormEvent) {
     e.preventDefault()
@@ -667,6 +771,7 @@ export default function CourseEnrollments() {
               <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Role</th>
+                {sectionsEnabled ? <th className="px-4 py-3">Section</th> : null}
                 <th className="px-4 py-3">Last access</th>
                 {canUpdateEnrollments && (
                   <th className="min-w-[4.5rem] px-2 py-3 text-right font-normal" aria-label="Actions" />
@@ -683,6 +788,8 @@ export default function CourseEnrollments() {
                   (isCourseCreator || e.role === 'Instructor')
                 const showGroupAssign =
                   enrollmentGroupsEnabled && canUpdateEnrollments && e.role === 'Student'
+                const showSectionTransfer =
+                  sectionsEnabled && canUpdateEnrollments && e.role === 'Student' && sections.length > 1
                 return (
                   <tr
                     key={e.id}
@@ -692,13 +799,32 @@ export default function CourseEnrollments() {
                       {e.displayName?.trim() || '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-700">{e.role}</td>
+                    {sectionsEnabled ? (
+                      <td className="px-4 py-3 text-slate-600">
+                        {e.sectionCode?.trim()
+                          ? e.sectionName?.trim()
+                            ? `${e.sectionCode} (${e.sectionName})`
+                            : e.sectionCode
+                          : '—'}
+                      </td>
+                    ) : null}
                     <td className="px-4 py-3 text-slate-600">
                       {formatTimeAgoFromIso(e.lastCourseAccessAt, relativeNowMs)}
                     </td>
                     {canUpdateEnrollments && (
                       <td className="px-2 py-3 text-right align-middle">
-                        {showEdit || showRemove || showGroupAssign ? (
+                        {showEdit || showRemove || showGroupAssign || showSectionTransfer ? (
                           <div className="inline-flex items-center justify-end gap-0.5">
+                            {showSectionTransfer ? (
+                              <button
+                                type="button"
+                                onClick={() => openSectionTransferModal(e)}
+                                className="inline-flex rounded-lg p-1.5 text-slate-400 opacity-0 transition hover:bg-indigo-50 hover:text-indigo-800 group-hover:opacity-100 focus-visible:opacity-100 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-200"
+                                aria-label={`Change section for ${e.displayName?.trim() || 'this student'}`}
+                              >
+                                <Shuffle className="h-4 w-4" aria-hidden />
+                              </button>
+                            ) : null}
                             {showGroupAssign ? (
                               <button
                                 type="button"
@@ -861,6 +987,82 @@ export default function CourseEnrollments() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {sectionTransferTarget && (
+        <div
+          className={LMS_MODAL_OVERLAY_CLASS}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="section-transfer-title"
+          onClick={(ev) => {
+            if (ev.target === ev.currentTarget) closeSectionTransferModal()
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-neutral-700">
+              <h3
+                id="section-transfer-title"
+                className="text-sm font-semibold text-slate-900 dark:text-neutral-100"
+              >
+                Move to section
+              </h3>
+              <button
+                type="button"
+                onClick={() => closeSectionTransferModal()}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={onSubmitSectionTransfer} className="space-y-4 p-4 text-sm text-slate-700 dark:text-neutral-300">
+              <p className="font-medium text-slate-900 dark:text-neutral-100">
+                {sectionTransferTarget.displayName?.trim() || 'Student'}
+              </p>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">New section</span>
+                <select
+                  value={sectionTransferPick}
+                  onChange={(ev) => setSectionTransferPick(ev.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                  aria-label="Select section to transfer this student into"
+                  disabled={sectionTransferStatus === 'loading'}
+                >
+                  {sections
+                    .filter((s) => s.id !== sectionTransferTarget.sectionId)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.sectionCode}
+                        {s.name ? ` — ${s.name}` : ''}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              {sectionTransferMessage ? (
+                <p className="text-sm text-rose-700 dark:text-rose-300" role="alert">
+                  {sectionTransferMessage}
+                </p>
+              ) : null}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => closeSectionTransferModal()}
+                  className="rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={sectionTransferStatus === 'loading' || !sectionTransferPick}
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  {sectionTransferStatus === 'loading' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

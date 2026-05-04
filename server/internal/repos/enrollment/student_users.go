@@ -5,15 +5,20 @@ import (
 	"sort"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ListStudentUsersForCourseCode returns (user_id, display_label) for `student` enrollments (Rust `list_student_users_for_course_code`).
-func ListStudentUsersForCourseCode(ctx context.Context, pool *pgxpool.Pool, courseCode string) ([]struct {
+// When sectionIDs is non-empty, only students whose enrollment.section_id is in that set are returned.
+func ListStudentUsersForCourseCode(ctx context.Context, pool *pgxpool.Pool, courseCode string, sectionIDs []uuid.UUID) ([]struct {
 	UserID      uuid.UUID
 	DisplayName string
 }, error) {
-	rows, err := pool.Query(ctx, `
+	var rows pgx.Rows
+	var err error
+	if len(sectionIDs) == 0 {
+		rows, err = pool.Query(ctx, `
 		SELECT ce.user_id,
 		       COALESCE(NULLIF(TRIM(u.display_name), ''), u.email) AS display_label
 		FROM course.course_enrollments ce
@@ -22,6 +27,18 @@ func ListStudentUsersForCourseCode(ctx context.Context, pool *pgxpool.Pool, cour
 		WHERE c.course_code = $1 AND ce.role = 'student' AND ce.active
 		ORDER BY display_label ASC, ce.user_id ASC
 	`, courseCode)
+	} else {
+		rows, err = pool.Query(ctx, `
+		SELECT ce.user_id,
+		       COALESCE(NULLIF(TRIM(u.display_name), ''), u.email) AS display_label
+		FROM course.course_enrollments ce
+		INNER JOIN course.courses c ON c.id = ce.course_id
+		INNER JOIN "user".users u ON u.id = ce.user_id
+		WHERE c.course_code = $1 AND ce.role = 'student' AND ce.active
+		  AND ce.section_id = ANY($2::uuid[])
+		ORDER BY display_label ASC, ce.user_id ASC
+	`, courseCode, sectionIDs)
+	}
 	if err != nil {
 		return nil, err
 	}
