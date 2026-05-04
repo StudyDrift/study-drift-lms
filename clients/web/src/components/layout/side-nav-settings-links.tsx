@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ArrowLeft, Bell, Bot, Building2, ChevronDown, Link2, Plug, Settings2, Shield, User } from 'lucide-react'
 import { usePermissions } from '../../context/use-permissions'
+import { usePlatformScimEnabled } from '../../hooks/use-platform-scim-enabled'
 import { PERM_RBAC_MANAGE } from '../../lib/rbac-api'
 import { settingsViewFromPathname } from './side-nav-path-utils'
 import { sideNavActiveClass, sideNavLinkClass } from './side-nav-styles'
@@ -9,6 +10,7 @@ import { sideNavActiveClass, sideNavLinkClass } from './side-nav-styles'
 export function SideNavSettingsLinks() {
   const { allows, loading: permLoading } = usePermissions()
   const canManageRbac = !permLoading && allows(PERM_RBAC_MANAGE)
+  const { scimEnabled: platformScimEnabled } = usePlatformScimEnabled(canManageRbac)
   const location = useLocation()
   const view = settingsViewFromPathname(location.pathname)
   const aiSectionActive = view === 'ai-models' || view === 'ai-prompts'
@@ -80,15 +82,17 @@ export function SideNavSettingsLinks() {
             <Building2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
             Organizations
           </NavLink>
-          <NavLink
-            to="/settings/scim-provisioning"
-            className={() =>
-              `${sideNavLinkClass} ${view === 'scim-provisioning' ? sideNavActiveClass : ''}`
-            }
-          >
-            <Link2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-            SCIM provisioning
-          </NavLink>
+          {platformScimEnabled && (
+            <NavLink
+              to="/settings/scim-provisioning"
+              className={() =>
+                `${sideNavLinkClass} ${view === 'scim-provisioning' ? sideNavActiveClass : ''}`
+              }
+            >
+              <Link2 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+              SCIM provisioning
+            </NavLink>
+          )}
           <div className="flex flex-col gap-0.5">
             <button
               type="button"

@@ -23,7 +23,7 @@ func SendPasswordResetEmail(c config.Config, toEmail, resetURL string) error {
 
 	host := strings.TrimSpace(c.SMTPHost)
 	if host == "" {
-		log.Printf("mail: password reset for %q (SMTP not configured; set SMTP_HOST to send email) url=%q", toEmail, resetURL)
+		log.Printf("mail: password reset for %q (SMTP not configured; set Global platform email or SMTP_HOST) url=%q", toEmail, resetURL)
 		return nil
 	}
 	from := strings.TrimSpace(c.SMTPFrom)

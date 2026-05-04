@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
 
-  --color-bg-deep: #0a0a0a;
-  --color-bg-elevated: #111111;
-  --color-accent: #22d3ee;
-  --color-accent-bright: #00f0ff;
-  --color-accent-soft: #67e8f9;
-  --color-accent-dim: rgba(34, 211, 238, 0.12);
+  --color-bg-deep: #0b1120;
+  --color-bg-elevated: #111827;
+  --color-accent: #38bdf8;
+  --color-accent-soft: #7dd3fc;
+  --color-accent-dim: rgba(56, 189, 248, 0.12);
+  --color-accent-2: #a5b4fc;
 }
 
 @layer base {
@@ -18,22 +18,21 @@
   }
 
   body {
-    @apply bg-bg-deep text-neutral-200 antialiased font-sans;
-    font-feature-settings: "cv02" on, "ss01" on;
+    @apply bg-bg-deep text-slate-300 antialiased font-sans;
+    font-optical-sizing: auto;
   }
 
   ::selection {
-    @apply bg-cyan-500/35 text-white;
+    @apply bg-sky-500/35 text-white;
   }
 
   a:not([class*="rounded"]):not([class*="no-underline"]) {
-    @apply text-cyan-300 underline-offset-4 transition-colors hover:text-cyan-200 hover:underline;
+    @apply text-sky-300 underline-offset-4 transition-colors hover:text-sky-200 hover:underline;
   }
 }
 
-/* Subtle film grain for hero / tech feel */
 @utility bg-noise {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
 }
 
 @utility glass-panel {
@@ -41,9 +40,5 @@
 }
 
 @utility text-gradient {
-  @apply bg-gradient-to-r from-cyan-300 via-cyan-400 to-violet-400 bg-clip-text text-transparent;
-}
-
-@utility code-inline {
-  @apply rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[0.9em] text-neutral-200 ring-1 ring-white/10;
+  @apply bg-gradient-to-r from-sky-300 via-sky-200 to-indigo-300 bg-clip-text text-transparent;
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/lextures/lextures/server/internal/config"
+	"github.com/lextures/lextures/server/internal/crypto/appsecrets"
 )
 
 // Row is the optional DB override layer; nil pointers mean "use environment value".
@@ -37,6 +38,12 @@ type Row struct {
 
 	MFAEnabled     *bool
 	MFAEnforcement *string
+
+	SMTPHost               *string
+	SMTPPort               *int32
+	SMTPFrom               *string
+	SMTPUser               *string
+	SMTPPasswordCiphertext []byte
 
 	UpdatedAt time.Time
 }
@@ -66,6 +73,12 @@ type Write struct {
 
 	MFAEnabled     *bool
 	MFAEnforcement *string
+
+	SMTPHost               *string
+	SMTPPort               *int32
+	SMTPFrom               *string
+	SMTPUser               *string
+	SMTPPasswordCiphertext *[]byte // nil = leave unchanged in Upsert
 }
 
 // Get returns the singleton row or (nil, nil) if missing.
@@ -93,6 +106,11 @@ SELECT
 	scim_enabled,
 	mfa_enabled,
 	mfa_enforcement,
+	smtp_host,
+	smtp_port,
+	smtp_from,
+	smtp_user,
+	smtp_password_ciphertext,
 	updated_at
 FROM settings.platform_app_settings
 WHERE id = 1
@@ -117,6 +135,11 @@ WHERE id = 1
 		&r.ScimEnabled,
 		&r.MFAEnabled,
 		&r.MFAEnforcement,
+		&r.SMTPHost,
+		&r.SMTPPort,
+		&r.SMTPFrom,
+		&r.SMTPUser,
+		&r.SMTPPasswordCiphertext,
 		&r.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
@@ -138,8 +161,26 @@ WHERE id = 1
 	return err
 }
 
+// ClearSMTPPassword removes the stored encrypted SMTP password override.
+func ClearSMTPPassword(ctx context.Context, pool *pgxpool.Pool) error {
+	_, err := pool.Exec(ctx, `
+UPDATE settings.platform_app_settings
+SET smtp_password_ciphertext = NULL, updated_at = NOW()
+WHERE id = 1
+`)
+	return err
+}
+
 // Upsert applies non-nil fields in w to the singleton row (COALESCE keeps existing values).
 func Upsert(ctx context.Context, pool *pgxpool.Pool, w *Write) (*Row, error) {
+	var smtpPort any
+	if w.SMTPPort != nil {
+		smtpPort = *w.SMTPPort
+	}
+	var smtpCipher any
+	if w.SMTPPasswordCiphertext != nil {
+		smtpCipher = *w.SMTPPasswordCiphertext
+	}
 	_, err := pool.Exec(ctx, `
 INSERT INTO settings.platform_app_settings (
 	id,
@@ -163,10 +204,17 @@ INSERT INTO settings.platform_app_settings (
 	scim_enabled,
 	mfa_enabled,
 	mfa_enforcement,
+	smtp_host,
+	smtp_port,
+	smtp_from,
+	smtp_user,
+	smtp_password_ciphertext,
 	updated_at
 ) VALUES (
 	1,
-	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
+	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+	$21, $22, $23, $24, $25,
+	NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
 	openrouter_api_key = COALESCE(EXCLUDED.openrouter_api_key, settings.platform_app_settings.openrouter_api_key),
@@ -189,6 +237,11 @@ ON CONFLICT (id) DO UPDATE SET
 	scim_enabled = COALESCE(EXCLUDED.scim_enabled, settings.platform_app_settings.scim_enabled),
 	mfa_enabled = COALESCE(EXCLUDED.mfa_enabled, settings.platform_app_settings.mfa_enabled),
 	mfa_enforcement = COALESCE(EXCLUDED.mfa_enforcement, settings.platform_app_settings.mfa_enforcement),
+	smtp_host = COALESCE(EXCLUDED.smtp_host, settings.platform_app_settings.smtp_host),
+	smtp_port = COALESCE(EXCLUDED.smtp_port, settings.platform_app_settings.smtp_port),
+	smtp_from = COALESCE(EXCLUDED.smtp_from, settings.platform_app_settings.smtp_from),
+	smtp_user = COALESCE(EXCLUDED.smtp_user, settings.platform_app_settings.smtp_user),
+	smtp_password_ciphertext = COALESCE(EXCLUDED.smtp_password_ciphertext, settings.platform_app_settings.smtp_password_ciphertext),
 	updated_at = NOW()
 `,
 		w.OpenRouterAPIKey,
@@ -211,6 +264,11 @@ ON CONFLICT (id) DO UPDATE SET
 		w.ScimEnabled,
 		w.MFAEnabled,
 		w.MFAEnforcement,
+		w.SMTPHost,
+		smtpPort,
+		w.SMTPFrom,
+		w.SMTPUser,
+		smtpCipher,
 	)
 	if err != nil {
 		return nil, err
@@ -286,6 +344,30 @@ func Merge(env config.Config, db *Row) config.Config {
 	if db.MFAEnforcement != nil && strings.TrimSpace(*db.MFAEnforcement) != "" {
 		out.MFAEnforcement = strings.ToLower(strings.TrimSpace(*db.MFAEnforcement))
 	}
+	if db.SMTPHost != nil && strings.TrimSpace(*db.SMTPHost) != "" {
+		out.SMTPHost = strings.TrimSpace(*db.SMTPHost)
+	}
+	if db.SMTPPort != nil && *db.SMTPPort > 0 && *db.SMTPPort <= 65535 {
+		out.SMTPPort = uint16(*db.SMTPPort)
+	}
+	if db.SMTPFrom != nil && strings.TrimSpace(*db.SMTPFrom) != "" {
+		out.SMTPFrom = strings.TrimSpace(*db.SMTPFrom)
+	}
+	if db.SMTPUser != nil {
+		out.SMTPUser = strings.TrimSpace(*db.SMTPUser)
+	}
+	if len(db.SMTPPasswordCiphertext) > 0 {
+		if len(env.PlatformSecretsKey) != 32 {
+			out.SMTPPassword = ""
+		} else {
+			plain, err := appsecrets.Decrypt(db.SMTPPasswordCiphertext, env.PlatformSecretsKey)
+			if err != nil {
+				out.SMTPPassword = ""
+			} else {
+				out.SMTPPassword = strings.TrimSpace(string(plain))
+			}
+		}
+	}
 	return out
 }
 
@@ -321,6 +403,12 @@ type Sources struct {
 	ScimEnabled                 Source
 	MFAEnabled                  Source
 	MFAEnforcement              Source
+
+	SMTPHost               Source
+	SMTPPort               Source
+	SMTPFrom               Source
+	SMTPUser               Source
+	SMTPPasswordCiphertext Source
 }
 
 // ResolveSources compares env vs DB row to label each field.
@@ -349,6 +437,11 @@ func ResolveSources(env config.Config, db *Row) Sources {
 	s.ScimEnabled = sourceBool(env.ScimEnabled, db.ScimEnabled)
 	s.MFAEnabled = sourceBool(env.MFAEnabled, db.MFAEnabled)
 	s.MFAEnforcement = sourceString(env.MFAEnforcement, db.MFAEnforcement)
+	s.SMTPHost = sourceString(env.SMTPHost, db.SMTPHost)
+	s.SMTPPort = sourceSMTPPort(env.SMTPPort, db.SMTPPort)
+	s.SMTPFrom = sourceString(env.SMTPFrom, db.SMTPFrom)
+	s.SMTPUser = sourceOptionalStringPtr(db.SMTPUser)
+	s.SMTPPasswordCiphertext = sourceSMTPPasswordCiphertext(db.SMTPPasswordCiphertext)
 	return s
 }
 
@@ -375,7 +468,33 @@ func sourcesAllEnvironment(env config.Config) Sources {
 		ScimEnabled:                 SourceEnvironment,
 		MFAEnabled:                  SourceEnvironment,
 		MFAEnforcement:              SourceEnvironment,
+		SMTPHost:                    SourceEnvironment,
+		SMTPPort:                    SourceEnvironment,
+		SMTPFrom:                    SourceEnvironment,
+		SMTPUser:                    SourceEnvironment,
+		SMTPPasswordCiphertext:      SourceEnvironment,
 	}
+}
+
+func sourceSMTPPort(envPort uint16, dbPtr *int32) Source {
+	if dbPtr != nil {
+		return SourceDatabase
+	}
+	return SourceEnvironment
+}
+
+func sourceOptionalStringPtr(dbPtr *string) Source {
+	if dbPtr != nil {
+		return SourceDatabase
+	}
+	return SourceEnvironment
+}
+
+func sourceSMTPPasswordCiphertext(ciphertext []byte) Source {
+	if len(ciphertext) > 0 {
+		return SourceDatabase
+	}
+	return SourceEnvironment
 }
 
 func sourceString(envVal string, dbPtr *string) Source {
