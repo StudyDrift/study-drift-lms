@@ -1,4 +1,12 @@
-import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  type ChangeEvent,
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { ImageIcon, Monitor, Save, Upload, X } from 'lucide-react'
 import { settingsViewFromPathname } from '../../components/layout/side-nav-path-utils'
@@ -132,6 +140,7 @@ export default function Settings() {
   const { allows, loading: permLoading } = usePermissions()
   const { density, setDensity } = useUiDensityControls()
   const activeView = settingsViewFromPathname(location.pathname)
+  const accountFormId = useId()
 
   const [systemPrompts, setSystemPrompts] = useState<SystemPromptItem[]>([])
   const [systemPromptKey, setSystemPromptKey] = useState('')
@@ -976,37 +985,39 @@ export default function Settings() {
               </p>
             )}
             {!accountLoading && (
-              <form className="mt-6 space-y-5" onSubmit={onSaveAccount}>
-                <div>
-                  <label htmlFor="account-email" className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Email
-                  </label>
-                  <input
-                    id="account-email"
-                    type="text"
-                    value={email}
-                    disabled
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500"
-                  />
-                </div>
+              <div className="mt-6 space-y-5">
+                <form id={accountFormId} className="space-y-5" onSubmit={onSaveAccount}>
+                  <div>
+                    <label htmlFor="account-email" className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Email
+                    </label>
+                    <input
+                      id="account-email"
+                      type="text"
+                      value={email}
+                      disabled
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500"
+                    />
+                  </div>
 
-                <div>
-                  <label htmlFor="account-sid" className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Student ID
-                  </label>
-                  <input
-                    id="account-sid"
-                    type="text"
-                    value={studentId ?? ''}
-                    disabled
-                    placeholder="Not assigned"
-                    title="Your student ID is assigned by an administrator and cannot be changed here."
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500 placeholder:text-slate-400"
-                  />
-                  <p className="mt-1 text-xs text-slate-500">
-                    Assigned by your institution. Contact an administrator if this should be updated.
-                  </p>
-                </div>
+                  <div>
+                    <label htmlFor="account-sid" className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Student ID
+                    </label>
+                    <input
+                      id="account-sid"
+                      type="text"
+                      value={studentId ?? ''}
+                      disabled
+                      placeholder="Not assigned"
+                      title="Your student ID is assigned by an administrator and cannot be changed here."
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500 placeholder:text-slate-400"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Assigned by your institution. Contact an administrator if this should be updated.
+                    </p>
+                  </div>
+                </form>
 
                 <div className="border-t border-slate-200 pt-6 dark:border-neutral-700">
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Change password</h3>
@@ -1102,87 +1113,98 @@ export default function Settings() {
                   </form>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-slate-700">First name</span>
-                    <input
-                      type="text"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      maxLength={80}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-sm font-medium text-slate-700">Last name</span>
-                    <input
-                      type="text"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      maxLength={80}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
-                    />
-                  </label>
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Profile image</label>
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100">
-                      {avatarPreviewUrl ? (
-                        <img src={avatarPreviewUrl} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        <ImageIcon className="h-6 w-6 text-slate-400" aria-hidden />
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={openGenerateAvatarModal}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900"
-                      >
-                        <ImageIcon className="h-4 w-4" aria-hidden />
-                        Generate avatar
-                      </button>
-                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900">
-                        <Upload className="h-4 w-4" aria-hidden />
-                        Upload image
-                        <input type="file" accept="image/*" className="hidden" onChange={onAvatarUpload} />
-                      </label>
-                    </div>
+                <div className="space-y-5">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-medium text-slate-700">First name</span>
+                      <input
+                        form={accountFormId}
+                        type="text"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        maxLength={80}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-medium text-slate-700">Last name</span>
+                      <input
+                        form={accountFormId}
+                        type="text"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        maxLength={80}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
+                      />
+                    </label>
                   </div>
-                  <label className="mt-3 block">
-                    <span className="mb-1.5 block text-sm font-medium text-slate-700">Image URL</span>
-                    <input
-                      type="url"
-                      value={avatarUrl}
-                      onChange={(e) => {
-                        setAvatarUrl(e.target.value)
-                        setAvatarPreviewUrl(e.target.value.trim() || null)
-                      }}
-                      placeholder="https://example.com/avatar.png"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
-                    />
-                  </label>
-                </div>
 
-                {accountMessage && (
-                  <p className="text-sm text-emerald-700" role="status">
-                    {accountMessage}
-                  </p>
-                )}
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700">Profile image</label>
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+                        {avatarPreviewUrl ? (
+                          <img src={avatarPreviewUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <ImageIcon className="h-6 w-6 text-slate-400" aria-hidden />
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={openGenerateAvatarModal}
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900"
+                        >
+                          <ImageIcon className="h-4 w-4" aria-hidden />
+                          Generate avatar
+                        </button>
+                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900">
+                          <Upload className="h-4 w-4" aria-hidden />
+                          Upload image
+                          <input
+                            form={accountFormId}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={onAvatarUpload}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <label className="mt-3 block">
+                      <span className="mb-1.5 block text-sm font-medium text-slate-700">Image URL</span>
+                      <input
+                        form={accountFormId}
+                        type="url"
+                        value={avatarUrl}
+                        onChange={(e) => {
+                          setAvatarUrl(e.target.value)
+                          setAvatarPreviewUrl(e.target.value.trim() || null)
+                        }}
+                        placeholder="https://example.com/avatar.png"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
+                      />
+                    </label>
+                  </div>
 
-                <button
-                  type="submit"
-                  disabled={accountSaving}
-                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white dark:shadow-none"
-                >
-                  <Save className="h-4 w-4" aria-hidden />
-                  {accountSaving ? 'Saving…' : 'Save'}
-                </button>
+                  {accountMessage && (
+                    <p className="text-sm text-emerald-700" role="status">
+                      {accountMessage}
+                    </p>
+                  )}
 
-                {sessionManagementUiEnabled && (
-                  <div className="border-t border-slate-200 pt-8 dark:border-neutral-700">
+                  <button
+                    form={accountFormId}
+                    type="submit"
+                    disabled={accountSaving}
+                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white dark:shadow-none"
+                  >
+                    <Save className="h-4 w-4" aria-hidden />
+                    {accountSaving ? 'Saving…' : 'Save'}
+                  </button>
+
+                  {sessionManagementUiEnabled && (
+                    <div className="border-t border-slate-200 pt-8 dark:border-neutral-700">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-neutral-100">
@@ -1296,7 +1318,8 @@ export default function Settings() {
                     )}
                   </div>
                 )}
-              </form>
+                </div>
+              </div>
             )}
             {!accountLoading && <OidcConnectedAccountsPanel />}
             {!accountLoading && <MfaFactorsPanel />}

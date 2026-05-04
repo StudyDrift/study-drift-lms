@@ -17,7 +17,7 @@ func SendMagicLinkEmail(c config.Config, toEmail, magicURL string) error {
 	}
 	host := strings.TrimSpace(c.SMTPHost)
 	if host == "" {
-		log.Printf("mail: magic link for %q (SMTP not configured; set SMTP_HOST to send email) url=%q", toEmail, magicURL)
+		log.Printf("mail: magic link for %q (SMTP not configured; set Global platform email or SMTP_HOST) url=%q", toEmail, magicURL)
 		return nil
 	}
 	from := strings.TrimSpace(c.SMTPFrom)

@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { authorizedFetch, apiUrl } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
+import { usePlatformScimEnabled } from '../../hooks/use-platform-scim-enabled'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 
 type ScimToken = {
@@ -27,29 +28,7 @@ export function ScimSettingsPanel() {
   const [loading, setLoading] = useState(false)
   const [newToken, setNewToken] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [scimEnabled, setScimEnabled] = useState(false)
-  const [flagLoading, setFlagLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await authorizedFetch('/api/v1/settings/platform')
-        const raw: unknown = await res.json().catch(() => ({}))
-        if (!cancelled && res.ok) {
-          const data = raw as { scimEnabled?: boolean }
-          setScimEnabled(data.scimEnabled === true)
-        }
-      } catch {
-        /* ignore */
-      } finally {
-        if (!cancelled) setFlagLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const { scimEnabled, loading: flagLoading } = usePlatformScimEnabled(true)
 
   const instOk = useMemo(() => {
     const s = institutionId.trim()

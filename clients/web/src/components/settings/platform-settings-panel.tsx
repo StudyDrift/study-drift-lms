@@ -27,6 +27,11 @@ export type PlatformSettingsPayload = {
   scimEnabled: boolean
   mfaEnabled: boolean
   mfaEnforcement: 'none' | 'all' | 'staff'
+  smtpHost: string
+  smtpPort: number
+  smtpFrom: string
+  smtpUser: string
+  smtpPassword: string
   sources: {
     openRouterApiKey: FieldSource
     samlSsoEnabled: FieldSource
@@ -48,7 +53,23 @@ export type PlatformSettingsPayload = {
     scimEnabled: FieldSource
     mfaEnabled: FieldSource
     mfaEnforcement: FieldSource
+    smtpHost: FieldSource
+    smtpPort: FieldSource
+    smtpFrom: FieldSource
+    smtpUser: FieldSource
+    smtpPassword: FieldSource
   }
+}
+
+function normalizePlatformPayload(data: PlatformSettingsPayload) {
+  if (typeof data.smtpPort !== 'number' || Number.isNaN(data.smtpPort)) {
+    data.smtpPort = 587
+  }
+  data.smtpHost ??= ''
+  data.smtpFrom ??= ''
+  data.smtpUser ??= ''
+  data.smtpPassword ??= ''
+  data.sources = { ...emptyForm().sources, ...data.sources }
 }
 
 function emptyForm(): PlatformSettingsPayload {
@@ -73,6 +94,11 @@ function emptyForm(): PlatformSettingsPayload {
     scimEnabled: false,
     mfaEnabled: false,
     mfaEnforcement: 'none',
+    smtpHost: '',
+    smtpPort: 587,
+    smtpFrom: '',
+    smtpUser: '',
+    smtpPassword: '',
     sources: {
       openRouterApiKey: 'environment',
       samlSsoEnabled: 'environment',
@@ -94,6 +120,11 @@ function emptyForm(): PlatformSettingsPayload {
       scimEnabled: 'environment',
       mfaEnabled: 'environment',
       mfaEnforcement: 'environment',
+      smtpHost: 'environment',
+      smtpPort: 'environment',
+      smtpFrom: 'environment',
+      smtpUser: 'environment',
+      smtpPassword: 'environment',
     },
   }
 }
@@ -130,6 +161,7 @@ export function PlatformSettingsPanel() {
         throw new Error(readApiErrorMessage(raw))
       }
       const data = raw as PlatformSettingsPayload
+      normalizePlatformPayload(data)
       setForm(data)
       setBaseline(data)
     } catch (e) {
@@ -263,6 +295,33 @@ export function PlatformSettingsPanel() {
         body.mfaEnforcement = form.mfaEnforcement
       })
 
+      maybe('smtpHost', baseline.smtpHost, form.smtpHost, () => {
+        body.smtpHost = form.smtpHost.trim()
+      })
+      maybe('smtpPort', baseline.smtpPort, form.smtpPort, () => {
+        body.smtpPort = form.smtpPort
+      })
+      maybe('smtpFrom', baseline.smtpFrom, form.smtpFrom, () => {
+        body.smtpFrom = form.smtpFrom.trim()
+      })
+      maybe('smtpUser', baseline.smtpUser, form.smtpUser, () => {
+        body.smtpUser = form.smtpUser.trim()
+      })
+      maybe('smtpPassword', baseline.smtpPassword, form.smtpPassword, () => {
+        const v = form.smtpPassword.trim()
+        if (v && v !== PLATFORM_SECRET_PLACEHOLDER) {
+          body.smtpPassword = v
+        }
+      })
+      if (
+        baseline.sources.smtpPassword === 'database' &&
+        form.smtpPassword.trim() === '' &&
+        baseline.smtpPassword !== form.smtpPassword
+      ) {
+        mask.push('clearSmtpPassword')
+        body.clearSmtpPassword = true
+      }
+
       if (mask.length === 0) {
         toastSaveOk('No changes to save.')
         setSaving(false)
@@ -282,6 +341,7 @@ export function PlatformSettingsPanel() {
         return
       }
       const data = raw as PlatformSettingsPayload
+      normalizePlatformPayload(data)
       setForm(data)
       setBaseline(data)
       toastSaveOk('Platform settings saved.')
@@ -314,6 +374,85 @@ export function PlatformSettingsPanel() {
       )}
 
       <form className="mt-8 space-y-10" onSubmit={onSubmit}>
+        <section>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Outgoing email (SMTP)</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+            Passwords are encrypted in the database using{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono dark:bg-neutral-900">PLATFORM_SECRETS_KEY</code> on the
+            API (32 random bytes, base64). Process{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono dark:bg-neutral-900">SMTP_*</code> environment variables
+            still apply when a field is not set here.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-neutral-200">
+                SMTP host {sourceBadge(form.sources.smtpHost)}
+              </label>
+              <input
+                type="text"
+                autoComplete="off"
+                value={form.smtpHost}
+                onChange={(e) => update('smtpHost', e.target.value)}
+                placeholder="e.g. smtp.sendgrid.net"
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-neutral-200">
+                Port {sourceBadge(form.sources.smtpPort)}
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                value={form.smtpPort}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10)
+                  update('smtpPort', Number.isFinite(n) ? n : 587)
+                }}
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-neutral-200">
+                From address {sourceBadge(form.sources.smtpFrom)}
+              </label>
+              <input
+                type="email"
+                value={form.smtpFrom}
+                onChange={(e) => update('smtpFrom', e.target.value)}
+                placeholder="no-reply@school.edu"
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-neutral-200">
+                Username (optional) {sourceBadge(form.sources.smtpUser)}
+              </label>
+              <input
+                type="text"
+                autoComplete="off"
+                value={form.smtpUser}
+                onChange={(e) => update('smtpUser', e.target.value)}
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-neutral-200">
+                Password (optional) {sourceBadge(form.sources.smtpPassword)}
+              </label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder={PLATFORM_SECRET_PLACEHOLDER}
+                value={form.smtpPassword}
+                onChange={(e) => update('smtpPassword', e.target.value)}
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+              />
+            </div>
+          </div>
+        </section>
+
         <section>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">AI — OpenRouter</h3>
           <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">

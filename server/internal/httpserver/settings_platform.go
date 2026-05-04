@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lextures/lextures/server/internal/apierr"
+	"github.com/lextures/lextures/server/internal/crypto/appsecrets"
 	"github.com/lextures/lextures/server/internal/repos/platformconfig"
 )
 
@@ -24,6 +25,16 @@ func maskPEMIfSet(pem string) string {
 		return ""
 	}
 	return placeholderSecretResponse
+}
+
+func smtpPasswordMasked(dbRow *platformconfig.Row, mergedPassword string) string {
+	if strings.TrimSpace(mergedPassword) != "" {
+		return maskSecret("x")
+	}
+	if dbRow != nil && len(dbRow.SMTPPasswordCiphertext) > 0 {
+		return maskSecret("x")
+	}
+	return ""
 }
 
 type platformSettingsJSON struct {
@@ -51,6 +62,12 @@ type platformSettingsJSON struct {
 	MFAEnabled     bool   `json:"mfaEnabled"`
 	MFAEnforcement string `json:"mfaEnforcement"`
 
+	SMTPHost     string `json:"smtpHost"`
+	SMTPPort     int    `json:"smtpPort"`
+	SMTPFrom     string `json:"smtpFrom"`
+	SMTPUser     string `json:"smtpUser"`
+	SMTPPassword string `json:"smtpPassword"`
+
 	Sources platformSourcesJSON `json:"sources"`
 }
 
@@ -77,6 +94,12 @@ type platformSourcesJSON struct {
 	ScimEnabled                 string `json:"scimEnabled"`
 	MFAEnabled                  string `json:"mfaEnabled"`
 	MFAEnforcement              string `json:"mfaEnforcement"`
+
+	SMTPHost     string `json:"smtpHost"`
+	SMTPPort     string `json:"smtpPort"`
+	SMTPFrom     string `json:"smtpFrom"`
+	SMTPUser     string `json:"smtpUser"`
+	SMTPPassword string `json:"smtpPassword"`
 }
 
 func src(s platformconfig.Source) string {
@@ -127,6 +150,11 @@ func (d Deps) handleGetPlatformSettings() http.HandlerFunc {
 			ScimEnabled:                 merged.ScimEnabled,
 			MFAEnabled:                  merged.MFAEnabled,
 			MFAEnforcement:              merged.MFAEnforcement,
+			SMTPHost:                    merged.SMTPHost,
+			SMTPPort:                    int(merged.SMTPPort),
+			SMTPFrom:                    merged.SMTPFrom,
+			SMTPUser:                    merged.SMTPUser,
+			SMTPPassword:                smtpPasswordMasked(dbRow, merged.SMTPPassword),
 			Sources: platformSourcesJSON{
 				OpenRouterAPIKey:            src(sources.OpenRouterAPIKey),
 				SAMLSSOEnabled:              src(sources.SAMLSSOEnabled),
@@ -148,6 +176,11 @@ func (d Deps) handleGetPlatformSettings() http.HandlerFunc {
 				ScimEnabled:                 src(sources.ScimEnabled),
 				MFAEnabled:                  src(sources.MFAEnabled),
 				MFAEnforcement:              src(sources.MFAEnforcement),
+				SMTPHost:                    src(sources.SMTPHost),
+				SMTPPort:                    src(sources.SMTPPort),
+				SMTPFrom:                    src(sources.SMTPFrom),
+				SMTPUser:                    src(sources.SMTPUser),
+				SMTPPassword:                src(sources.SMTPPasswordCiphertext),
 			},
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -180,6 +213,13 @@ type putPlatformBody struct {
 
 	MFAEnabled     *bool   `json:"mfaEnabled"`
 	MFAEnforcement *string `json:"mfaEnforcement"`
+
+	SMTPHost           *string `json:"smtpHost"`
+	SMTPPort           *int    `json:"smtpPort"`
+	SMTPFrom           *string `json:"smtpFrom"`
+	SMTPUser           *string `json:"smtpUser"`
+	SMTPPassword       *string `json:"smtpPassword"`
+	ClearSMTPPassword  bool    `json:"clearSmtpPassword"`
 
 	UpdateMask []string `json:"updateMask"`
 }
@@ -216,10 +256,15 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 
 		wr := &platformconfig.Write{}
 		clearRouter := body.ClearOpenRouterAPIKey
+		clearSMTP := body.ClearSMTPPassword
 		if len(mask) > 0 {
 			clearRouter = false
 			if _, ok := mask["clearopenrouterapikey"]; ok {
 				clearRouter = true
+			}
+			clearSMTP = false
+			if _, ok := mask["clearsmtpassword"]; ok {
+				clearSMTP = true
 			}
 		}
 
@@ -253,6 +298,67 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 				return
 			}
 		}
+
+		smtpPortActive := len(mask) == 0
+		if _, ok := mask["smtpport"]; ok {
+			smtpPortActive = true
+		}
+		if body.SMTPPort != nil && smtpPortActive {
+			if *body.SMTPPort < 1 || *body.SMTPPort > 65535 {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "smtpPort must be between 1 and 65535.")
+				return
+			}
+		}
+
+		var smtpPasswordErr string
+		set("smtppassword", body.SMTPPassword != nil, func() {
+			s := strings.TrimSpace(*body.SMTPPassword)
+			if s == "" || s == placeholderSecretResponse {
+				return
+			}
+			if len(d.Config.PlatformSecretsKey) != 32 {
+				smtpPasswordErr = "Set PLATFORM_SECRETS_KEY to a base64-encoded 32-byte key (e.g. openssl rand -base64 32) before storing an SMTP password."
+				return
+			}
+			blob, err := appsecrets.Encrypt([]byte(s), d.Config.PlatformSecretsKey)
+			if err != nil {
+				smtpPasswordErr = err.Error()
+				return
+			}
+			wr.SMTPPasswordCiphertext = &blob
+		})
+		if smtpPasswordErr != "" {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, smtpPasswordErr)
+			return
+		}
+		if clearSMTP && wr.SMTPPasswordCiphertext != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Cannot set smtpPassword and clearSmtpPassword together.")
+			return
+		}
+		if clearSMTP {
+			if err := platformconfig.ClearSMTPPassword(r.Context(), d.Pool); err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to clear stored SMTP password.")
+				return
+			}
+		}
+
+		set("smtphost", body.SMTPHost != nil, func() {
+			s := strings.TrimSpace(*body.SMTPHost)
+			wr.SMTPHost = &s
+		})
+		set("smtpport", body.SMTPPort != nil, func() {
+			v := int32(*body.SMTPPort)
+			wr.SMTPPort = &v
+		})
+		set("smtpfrom", body.SMTPFrom != nil, func() {
+			s := strings.TrimSpace(*body.SMTPFrom)
+			wr.SMTPFrom = &s
+		})
+		set("smtpuser", body.SMTPUser != nil, func() {
+			s := strings.TrimSpace(*body.SMTPUser)
+			wr.SMTPUser = &s
+		})
+
 		set("samlssoenabled", body.SAMLSSOEnabled != nil, func() {
 			v := *body.SAMLSSOEnabled
 			wr.SAMLSSOEnabled = &v
@@ -373,6 +479,11 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 			ScimEnabled:                 merged.ScimEnabled,
 			MFAEnabled:                  merged.MFAEnabled,
 			MFAEnforcement:              merged.MFAEnforcement,
+			SMTPHost:                    merged.SMTPHost,
+			SMTPPort:                    int(merged.SMTPPort),
+			SMTPFrom:                    merged.SMTPFrom,
+			SMTPUser:                    merged.SMTPUser,
+			SMTPPassword:                smtpPasswordMasked(dbRow, merged.SMTPPassword),
 			Sources: platformSourcesJSON{
 				OpenRouterAPIKey:            src(sources.OpenRouterAPIKey),
 				SAMLSSOEnabled:              src(sources.SAMLSSOEnabled),
@@ -394,6 +505,11 @@ func (d Deps) handlePutPlatformSettings() http.HandlerFunc {
 				ScimEnabled:                 src(sources.ScimEnabled),
 				MFAEnabled:                  src(sources.MFAEnabled),
 				MFAEnforcement:              src(sources.MFAEnforcement),
+				SMTPHost:                    src(sources.SMTPHost),
+				SMTPPort:                    src(sources.SMTPPort),
+				SMTPFrom:                    src(sources.SMTPFrom),
+				SMTPUser:                    src(sources.SMTPUser),
+				SMTPPassword:                src(sources.SMTPPasswordCiphertext),
 			},
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")

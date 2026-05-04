@@ -30,7 +30,7 @@ const (
 	magicLinkTokenBytes   = 32 // 256-bit raw → URL-safe base64
 )
 
-// ErrMagicLinkDisabled is returned when MAGIC_LINK_ENABLED is false.
+// ErrMagicLinkDisabled is returned when MAGIC_LINK_ENABLED=0 (feature is on by default).
 var ErrMagicLinkDisabled = errors.New("magic link disabled")
 
 // ErrMagicLinkRateLimited is returned when too many requests were made for one user.

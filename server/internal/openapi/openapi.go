@@ -92,7 +92,7 @@ const spec = `{
     "/api/v1/auth/magic-link/request": {
       "post": {
         "tags": ["auth"],
-        "summary": "Request a one-time email sign-in link (MAGIC_LINK_ENABLED)",
+        "summary": "Request a one-time email sign-in link (disabled when MAGIC_LINK_ENABLED=0)",
         "responses": { "200": { "description": "Generic message (enumeration-safe)" }, "404": { "description": "Feature disabled" }, "429": { "description": "Rate limited" } }
       }
     },

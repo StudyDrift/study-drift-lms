@@ -2,6 +2,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strconv"
@@ -31,6 +32,10 @@ type Config struct {
 
 	CanvasAllowedHostSuffixes []string
 	PublicWebOrigin           string
+
+	// PlatformSecretsKey is a 32-byte AES-256 key (base64 in PLATFORM_SECRETS_KEY) used to encrypt
+	// SMTP passwords and similar values stored in settings.platform_app_settings.
+	PlatformSecretsKey []byte
 
 	SMTPHost     string
 	SMTPPort     uint16
@@ -142,6 +147,8 @@ func Load() Config {
 		CanvasAllowedHostSuffixes: canvasAllowedHostSuffixes(),
 		PublicWebOrigin:           trimTrailingSlash(stringDefault(firstNonEmptyTrimmed("PUBLIC_WEB_ORIGIN"), "http://localhost:5173")),
 
+		PlatformSecretsKey: platformSecretsKeyFromEnv(),
+
 		SMTPHost:     firstNonEmptyTrimmed("SMTP_HOST"),
 		SMTPPort:     smtpPort(),
 		SMTPUser:     firstNonEmptyTrimmed("SMTP_USER"),
@@ -201,7 +208,7 @@ func Load() Config {
 		MFAEnabled:     boolEnv("MFA_ENABLED"),
 		MFAEnforcement: strings.ToLower(strings.TrimSpace(stringDefault(firstNonEmptyTrimmed("MFA_ENFORCEMENT"), "none"))),
 
-		MagicLinkEnabled:      boolEnv("MAGIC_LINK_ENABLED"),
+		MagicLinkEnabled:      boolEnvDefaultTrue("MAGIC_LINK_ENABLED"),
 		MagicLinkEnrolledOnly: boolEnv("MAGIC_LINK_ENROLLED_ONLY"),
 
 		SessionManagementUIEnabled: boolEnv("SESSION_MANAGEMENT_UI_ENABLED"),
@@ -353,6 +360,18 @@ func canvasAllowedHostSuffixes() []string {
 		return append([]string(nil), defaultCanvasAllowedHostSuffixes...)
 	}
 	return suffixes
+}
+
+func platformSecretsKeyFromEnv() []byte {
+	raw := strings.TrimSpace(os.Getenv("PLATFORM_SECRETS_KEY"))
+	if raw == "" {
+		return nil
+	}
+	b, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil || len(b) != 32 {
+		return nil
+	}
+	return b
 }
 
 func smtpPort() uint16 {
