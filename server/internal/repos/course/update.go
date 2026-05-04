@@ -89,5 +89,6 @@ const publicReturningColumns = `
     updated_at,
     sbg_enabled,
     sbg_proficiency_scale_json,
-    sbg_aggregation_rule
+    sbg_aggregation_rule,
+    org_unit_id
 `

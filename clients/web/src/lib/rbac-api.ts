@@ -7,6 +7,9 @@ export const PERM_RBAC_MANAGE = 'global:app:rbac:manage' as const
 /** Create new courses (Courses page + POST /api/v1/courses). */
 export const PERM_COURSE_CREATE = 'global:app:course:create' as const
 
+/** Manage org hierarchy (schools / departments) within the user's org, or all orgs as platform admin. */
+export const PERM_TENANT_ORG_UNITS_ADMIN = 'tenant:org:units:admin' as const
+
 /** Learning activity reports (`user.user_audit` aggregates). */
 export const PERM_REPORTS_VIEW = 'global:app:reports:view' as const
 
