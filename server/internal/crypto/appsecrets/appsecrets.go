@@ -12,7 +12,7 @@ import (
 
 const (
 	formatVersion byte = 1
-	nonceSize            = 12 // GCM standard nonce
+	nonceSize     int  = 12 // GCM standard nonce
 )
 
 // ErrInvalidKey means the key is not usable for AES-256-GCM.
