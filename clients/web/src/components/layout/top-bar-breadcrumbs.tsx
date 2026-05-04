@@ -58,6 +58,18 @@ function settingsSubLabel(view: ReturnType<typeof settingsViewFromPathname>): st
       return 'Models'
     case 'ai-prompts':
       return 'System Prompts'
+    case 'lti-tools':
+      return 'LTI tools'
+    case 'platform':
+      return 'Global platform'
+    case 'organizations':
+      return 'Organizations'
+    case 'org-units':
+      return 'Org structure'
+    case 'terms':
+      return 'Academic terms'
+    case 'scim-provisioning':
+      return 'SCIM provisioning'
     default:
       return 'Account'
   }

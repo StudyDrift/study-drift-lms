@@ -1,4 +1,4 @@
-import { type FormEvent, useId, useState } from 'react'
+import { type FormEvent, useEffect, useId, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check, ChevronRight, FileText, LayoutList, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { RequirePermission } from '../../components/require-permission'
@@ -12,12 +12,16 @@ import {
   createCourseOutcomeSubOutcome,
   createModuleAssignment,
   createModuleQuiz,
+  fetchOrgTerms,
   patchCourseOutcome,
   patchCourseSyllabus,
   putCourse,
   type CoursePublic,
+  type OrgTerm,
   type SyllabusSection,
 } from '../../lib/courses-api'
+import { decodeJwtPayload } from '../../lib/jwt-payload'
+import { getAccessToken } from '../../lib/auth'
 import { PERM_COURSE_CREATE } from '../../lib/rbac-api'
 import {
   COURSE_CREATE_STARTER_TEMPLATES,
@@ -86,6 +90,24 @@ export default function CourseCreate() {
   const [competencies, setCompetencies] = useState<CompetencyDraft[]>(() => [emptyCompetency()])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const orgId = decodeJwtPayload(getAccessToken())?.org_id ?? ''
+  const [termOptions, setTermOptions] = useState<OrgTerm[]>([])
+  const [selectedTermId, setSelectedTermId] = useState<string>('')
+
+  useEffect(() => {
+    if (!orgId) return
+    let cancelled = false
+    void fetchOrgTerms(orgId)
+      .then((rows) => {
+        if (!cancelled) setTermOptions(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setTermOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [orgId])
 
   const isCompetency = courseMode === 'competency_based'
   const stepTitle =
@@ -112,6 +134,7 @@ export default function CourseCreate() {
           title: t,
           description: description.trim(),
           courseType: courseMode,
+          ...(selectedTermId ? { termId: selectedTermId } : {}),
         })
         setCreatedCourse(course)
       }
@@ -438,6 +461,35 @@ export default function CourseCreate() {
                   </label>
                 </div>
               </fieldset>
+
+              {orgId && termOptions.length > 0 && (
+                <div>
+                  <label
+                    htmlFor="course-term"
+                    className="text-sm font-medium text-slate-700 dark:text-neutral-200"
+                  >
+                    Academic term <span className="font-normal text-slate-500">(optional)</span>
+                  </label>
+                  <select
+                    id="course-term"
+                    value={selectedTermId}
+                    onChange={(e) => setSelectedTermId(e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none ring-indigo-500/0 transition focus:border-indigo-300 focus:ring-2 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500/60"
+                    aria-label="Academic term for default schedule dates"
+                  >
+                    <option value="">No term — self-paced or ongoing</option>
+                    {termOptions.map((tm) => (
+                      <option key={tm.id} value={tm.id}>
+                        {tm.name} ({tm.startDate} — {tm.endDate})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-neutral-400">
+                    When selected, the course schedule dates default to the term window. You can still adjust them in
+                    course settings.
+                  </p>
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-3">
                 <button

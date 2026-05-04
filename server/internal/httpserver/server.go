@@ -103,6 +103,12 @@ func NewHandler(d Deps) http.Handler {
 	r.Delete("/api/v1/me/sessions/{id}", d.handleDeleteMySession())
 	r.Get("/api/v1/courses", d.handleListCourses())
 	r.Post("/api/v1/courses", d.handleCreateCourse())
+	r.Get("/api/v1/orgs/{orgId}/terms", d.handleOrgTermsRead())
+	r.Post("/api/v1/orgs/{orgId}/terms", d.handleOrgTermsPost())
+	r.Patch("/api/v1/orgs/{orgId}/terms/{tid}", d.handleOrgTermPatch())
+	r.Delete("/api/v1/orgs/{orgId}/terms/{tid}", d.handleOrgTermDelete())
+	// Course calendar feed (iCalendar) — must register before /api/v1/courses/{course_code} static routes that might shadow.
+	r.Get("/api/v1/courses/{course_code}/calendar.ics", d.handleCourseICS())
 	// One Route for /api/v1/courses/{course_code} so GET and PATCH /markdown-theme share the same chi subtree
 	// (registering a separate r.Get + r.Route on the same path prefix drops the leaf GET).
 	r.Route("/api/v1/courses/{course_code}", func(cr chi.Router) {
@@ -203,6 +209,7 @@ func NewHandler(d Deps) http.Handler {
 	r.Post("/api/v1/admin/orgs/{orgId}/units/{unitId}/children", d.handleAdminOrgUnitChildren())
 	r.Post("/api/v1/admin/orgs/{orgId}/units/{unitId}/org-unit-admins", d.handleAdminOrgUnitAssignAdmin())
 	r.Patch("/api/v1/admin/orgs/{orgId}/courses/{courseCode}/org-unit", d.handleAdminOrgCourseOrgUnit())
+	r.Get("/api/v1/admin/orgs/{orgId}/terms", d.handleAdminOrgTermsList())
 	r.Put("/api/v1/admin/originality-config", d.handleAdminPutOriginality())
 	r.Get("/api/v1/admin/users/{userId}/dsar-export", d.handleAdminDSARExport())
 	r.Delete("/api/v1/admin/users/{userId}/sessions", d.handleAdminRevokeUserSessions())

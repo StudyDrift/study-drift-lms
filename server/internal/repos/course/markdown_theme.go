@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -20,22 +19,20 @@ func UpdateMarkdownTheme(ctx context.Context, pool *pgxpool.Pool, courseCode, pr
 	} else {
 		custom = customJSON
 	}
-	row := pool.QueryRow(ctx, `
+	tag, err := pool.Exec(ctx, `
 UPDATE course.courses c SET
 	markdown_theme_preset = $1,
 	markdown_theme_custom = $2,
 	updated_at = NOW()
 WHERE c.course_code = $3
-RETURNING`+coursePublicSelect+`
 `, preset, custom, courseCode)
-	p, err := scanCoursePublicFromRow(row)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
 		return nil, err
 	}
-	return &p, nil
+	if tag.RowsAffected() == 0 {
+		return nil, nil
+	}
+	return GetPublicByCourseCode(ctx, pool, courseCode)
 }
 
 // DefaultMarkdownThemeCustomJSON is `{}` for Rust `MarkdownThemeCustom::default()` when preset is custom and body omits custom.

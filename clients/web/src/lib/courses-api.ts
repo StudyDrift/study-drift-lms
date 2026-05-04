@@ -68,6 +68,15 @@ export type { StandardCoverageItem }
 
 export type LateSubmissionPolicy = 'allow' | 'penalty' | 'block'
 
+export type TermSummary = {
+  id: string
+  name: string
+  termType: string
+  startDate: string
+  endDate: string
+  status: string
+}
+
 /** Mirrors server `models::course::CoursePublic` (API JSON for a course). */
 export type CoursePublic = {
   id: string
@@ -132,6 +141,30 @@ export type CoursePublic = {
   feedbackMediaEnabled?: boolean
   /** Server `RESUBMISSION_WORKFLOW_ENABLED` — revision requests and versioned resubmissions (plan 3.13). */
   resubmissionWorkflowEnabled?: boolean
+  /** Academic term id when assigned (plan 5.3). */
+  termId?: string | null
+  /** Embedded term metadata when `termId` is set. */
+  term?: TermSummary | null
+}
+
+export type OrgTerm = {
+  id: string
+  orgId: string
+  name: string
+  termType: string
+  startDate: string
+  endDate: string
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchOrgTerms(orgId: string): Promise<OrgTerm[]> {
+  const res = await authorizedFetch(`/api/v1/orgs/${encodeURIComponent(orgId)}/terms`)
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const data = raw as { terms?: OrgTerm[] }
+  return data.terms ?? []
 }
 
 export type StructurePathRule = {
@@ -930,6 +963,7 @@ export async function createCourse(body: {
   title: string
   description: string
   courseType?: 'traditional' | 'competency_based'
+  termId?: string | null
 }): Promise<CoursePublic> {
   const res = await authorizedFetch('/api/v1/courses', {
     method: 'POST',
@@ -955,6 +989,7 @@ export async function putCourse(
     scheduleMode: 'fixed' | 'relative'
     relativeEndAfter: string | null
     relativeHiddenAfter: string | null
+    termId?: string | null
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}`, {
@@ -971,6 +1006,7 @@ export async function putCourse(
       scheduleMode: body.scheduleMode,
       relativeEndAfter: body.relativeEndAfter,
       relativeHiddenAfter: body.relativeHiddenAfter,
+      ...(body.termId !== undefined ? { termId: body.termId } : {}),
     }),
   })
   const raw = await parseJson(res)

@@ -5,11 +5,13 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lextures/lextures/server/internal/repos/terms"
 )
 
 const (
@@ -28,6 +30,7 @@ func CreateCourse(
 	description string,
 	courseType string,
 	orgUnitID *uuid.UUID,
+	termID *uuid.UUID,
 ) (*CoursePublic, error) {
 	if courseType == "" {
 		courseType = defaultCourseType
@@ -38,7 +41,7 @@ func CreateCourse(
 		if err != nil {
 			return nil, err
 		}
-		out, retry, err := createCourseOnce(ctx, pool, createdByUserID, title, description, courseType, courseCode, orgUnitID)
+		out, retry, err := createCourseOnce(ctx, pool, createdByUserID, title, description, courseType, courseCode, orgUnitID, termID)
 		if err != nil {
 			return nil, err
 		}
@@ -59,6 +62,7 @@ func createCourseOnce(
 	courseType string,
 	courseCode string,
 	orgUnitID *uuid.UUID,
+	termID *uuid.UUID,
 ) (*CoursePublic, bool, error) {
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -66,7 +70,9 @@ func createCourseOnce(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	row := tx.QueryRow(ctx, `
+	var courseID uuid.UUID
+	var courseCodeOut string
+	err = tx.QueryRow(ctx, `
 INSERT INTO course.courses (
 	course_code,
 	title,
@@ -74,11 +80,11 @@ INSERT INTO course.courses (
 	course_type,
 	created_by_user_id,
 	org_id,
-	org_unit_id
-) VALUES ($1, $2, $3, $4, $5, (SELECT org_id FROM "user".users WHERE id = $5), $6)
-RETURNING`+publicReturningColumns, courseCode, title, description, courseType, createdByUserID, orgUnitID)
-
-	out, err := scanCoursePublicFromRow(row)
+	org_unit_id,
+	term_id
+) VALUES ($1, $2, $3, $4, $5, (SELECT org_id FROM "user".users WHERE id = $5), $6, $7)
+RETURNING id, course_code
+`, courseCode, title, description, courseType, createdByUserID, orgUnitID, termID).Scan(&courseID, &courseCodeOut)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -86,10 +92,8 @@ RETURNING`+publicReturningColumns, courseCode, title, description, courseType, c
 		}
 		return nil, false, err
 	}
-
-	courseID, err := uuid.Parse(out.ID)
-	if err != nil {
-		return nil, false, err
+	if courseCodeOut != courseCode {
+		return nil, false, fmt.Errorf("course code mismatch")
 	}
 
 	if _, err := tx.Exec(ctx, `
@@ -100,10 +104,31 @@ ON CONFLICT (course_id, user_id, role) DO NOTHING
 		return nil, false, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return nil, false, err
 	}
-	return &out, false, nil
+	out, err := GetPublicByCourseCode(ctx, pool, courseCode)
+	if err != nil {
+		return nil, false, err
+	}
+	if out == nil {
+		return nil, false, fmt.Errorf("course missing after create")
+	}
+	if termID != nil {
+		trow, err := terms.GetByID(ctx, pool, *termID)
+		if err == nil && trow != nil && out.StartsAt == nil && out.EndsAt == nil {
+			start, e1 := time.ParseInLocation("2006-01-02", trow.StartDate, time.UTC)
+			endDate, e2 := time.ParseInLocation("2006-01-02", trow.EndDate, time.UTC)
+			if e1 == nil && e2 == nil {
+				startT := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+				endT := time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 999999999, time.UTC)
+				if u, err := UpdateCourse(ctx, pool, courseCode, out.Title, out.Description, out.Published, &startT, &endT, out.VisibleFrom, out.HiddenAt, out.ScheduleMode, out.RelativeEndAfter, out.RelativeHiddenAfter, out.RelativeScheduleAnchorAt); err == nil && u != nil {
+					out = u
+				}
+			}
+		}
+	}
+	return out, false, nil
 }
 
 // RandomCourseCode returns a new candidate `C-XXXXXX` segment (caller retries on unique violation).

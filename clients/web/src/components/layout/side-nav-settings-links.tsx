@@ -1,6 +1,19 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { ArrowLeft, Bell, Bot, Building2, ChevronDown, FolderTree, Link2, Plug, Settings2, Shield, User } from 'lucide-react'
+import {
+  ArrowLeft,
+  Bell,
+  Bot,
+  Building2,
+  CalendarRange,
+  ChevronDown,
+  FolderTree,
+  Link2,
+  Plug,
+  Settings2,
+  Shield,
+  User,
+} from 'lucide-react'
 import { usePermissions } from '../../context/use-permissions'
 import { usePlatformScimEnabled } from '../../hooks/use-platform-scim-enabled'
 import { PERM_RBAC_MANAGE, PERM_TENANT_ORG_UNITS_ADMIN } from '../../lib/rbac-api'
@@ -56,13 +69,22 @@ export function SideNavSettingsLinks() {
             System Settings
           </p>
           {canOrgUnits && (
-            <NavLink
-              to="/settings/org-units"
-              className={() => `${sideNavLinkClass} ${view === 'org-units' ? sideNavActiveClass : ''}`}
-            >
-              <FolderTree className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-              Org structure
-            </NavLink>
+            <>
+              <NavLink
+                to="/settings/org-units"
+                className={() => `${sideNavLinkClass} ${view === 'org-units' ? sideNavActiveClass : ''}`}
+              >
+                <FolderTree className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                Org structure
+              </NavLink>
+              <NavLink
+                to="/settings/terms"
+                className={() => `${sideNavLinkClass} ${view === 'terms' ? sideNavActiveClass : ''}`}
+              >
+                <CalendarRange className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                Academic terms
+              </NavLink>
+            </>
           )}
           {canManageRbac && (
             <>

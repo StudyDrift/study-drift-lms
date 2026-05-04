@@ -2,9 +2,7 @@ package course
 
 import (
 	"context"
-	"errors"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -14,16 +12,14 @@ func SetArchived(ctx context.Context, pool *pgxpool.Pool, courseCode string, arc
 		UPDATE course.courses
 		SET archived = $1, updated_at = NOW()
 		WHERE course_code = $2
-		RETURNING` + publicReturningColumns
-
-	row := pool.QueryRow(ctx, q, archived, courseCode)
-	out, err := scanCoursePublicFromRow(row)
+	`
+	tag, err := pool.Exec(ctx, q, archived, courseCode)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
 		return nil, err
 	}
-	return &out, nil
+	if tag.RowsAffected() == 0 {
+		return nil, nil
+	}
+	return GetPublicByCourseCode(ctx, pool, courseCode)
 }
 

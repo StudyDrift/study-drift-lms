@@ -2,9 +2,7 @@ package course
 
 import (
 	"context"
-	"errors"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -41,21 +39,20 @@ func PatchFeatures(
 			misconception_detection_enabled = $11,
 			updated_at = NOW()
 		WHERE course_code = $12
-		RETURNING` + publicReturningColumns
+	`
 
-	row := pool.QueryRow(ctx, q,
+	tag, err := pool.Exec(ctx, q,
 		notebookEnabled, feedEnabled, calendarEnabled, questionBankEnabled,
 		lockdownModeEnabled, standardsAlignmentEnabled, adaptivePathsEnabled, srsEnabled,
 		diagnosticAssessmentsEnabled, hintScaffoldingEnabled, misconceptionDetectionEnabled,
 		courseCode,
 	)
-	out, err := scanCoursePublicFromRow(row)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
 		return nil, err
 	}
-	return &out, nil
+	if tag.RowsAffected() == 0 {
+		return nil, nil
+	}
+	return GetPublicByCourseCode(ctx, pool, courseCode)
 }
 

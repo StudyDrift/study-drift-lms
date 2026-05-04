@@ -89,7 +89,7 @@ func FactoryResetCourse(ctx context.Context, pool *pgxpool.Pool, courseCode stri
 		return nil, err
 	}
 
-	row := tx.QueryRow(ctx, `
+	_, err = tx.Exec(ctx, `
 		UPDATE course.courses c
 		SET
 			published = false,
@@ -115,8 +115,7 @@ func FactoryResetCourse(ctx context.Context, pool *pgxpool.Pool, courseCode stri
 			sbg_aggregation_rule = 'most_recent',
 			updated_at = NOW()
 		WHERE c.course_code = $1
-		RETURNING`+coursePublicSelect, courseCode)
-	resetCourse, err := scanCoursePublicFromRow(row)
+	`, courseCode)
 	if err != nil {
 		log.Printf("factory-reset: update/reset course row failed course=%q err=%v", courseCode, err)
 		return nil, err
@@ -126,9 +125,18 @@ func FactoryResetCourse(ctx context.Context, pool *pgxpool.Pool, courseCode stri
 		log.Printf("factory-reset: commit failed course=%q err=%v", courseCode, err)
 		return nil, err
 	}
+	resetCourse, err := GetPublicByCourseCode(ctx, pool, courseCode)
+	if err != nil {
+		log.Printf("factory-reset: reload course row failed course=%q err=%v", courseCode, err)
+		return nil, err
+	}
+	if resetCourse == nil {
+		log.Printf("factory-reset: course missing after reset course=%q", courseCode)
+		return nil, nil
+	}
 	log.Printf("factory-reset: committed course=%q file_keys=%d", courseCode, len(fileKeys))
 	return &FactoryResetCourseOutcome{
-		Course:                       &resetCourse,
+		Course:                       resetCourse,
 		RemovedCourseFileStorageKeys: fileKeys,
 	}, nil
 }

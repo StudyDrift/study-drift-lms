@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,9 +52,11 @@ type CoursePublic struct {
 	SbgProficiencyScaleJSON       *json.RawMessage  `json:"sbgProficiencyScaleJson"`
 	SbgAggregationRule            string            `json:"sbgAggregationRule"`
 	OrgUnitID                     *string           `json:"orgUnitId,omitempty"`
+	TermID                        *string           `json:"termId,omitempty"`
+	Term                          *TermSummary      `json:"term,omitempty"`
 }
 
-// coursePublicSelect is the column list for `course.courses` (alias `c`) in public course APIs.
+// coursePublicSelect is columns for `course.courses` joined to `tenant.terms` (alias `tr`) for public APIs.
 const coursePublicSelect = `
     c.id,
     c.course_code,
@@ -91,7 +94,19 @@ const coursePublicSelect = `
     c.sbg_enabled,
     c.sbg_proficiency_scale_json,
     c.sbg_aggregation_rule,
-    c.org_unit_id
+    c.org_unit_id,
+    c.term_id,
+    tr.id,
+    tr.name,
+    tr.term_type,
+    tr.start_date::text,
+    tr.end_date::text,
+    tr.status
+`
+
+const coursePublicFrom = `
+FROM course.courses c
+LEFT JOIN tenant.terms tr ON tr.id = c.term_id
 `
 
 func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
@@ -102,6 +117,8 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 	var mtheme, sbgProf []byte
 	var sbgRule string
 	var orgUnit sql.NullString
+	var termIDCol, trID sql.NullString
+	var trName, trType, trStart, trEnd, trStatus sql.NullString
 
 	if err := row.Scan(
 		&id,
@@ -141,6 +158,13 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 		&sbgProf,
 		&sbgRule,
 		&orgUnit,
+		&termIDCol,
+		&trID,
+		&trName,
+		&trType,
+		&trStart,
+		&trEnd,
+		&trStatus,
 	); err != nil {
 		return CoursePublic{}, err
 	}
@@ -180,14 +204,27 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 		p.SbgProficiencyScaleJSON = &raw
 	}
 	p.SbgAggregationRule = sbgRule
+	if termIDCol.Valid && strings.TrimSpace(termIDCol.String) != "" {
+		s := termIDCol.String
+		p.TermID = &s
+	}
+	if trID.Valid && trName.Valid && trType.Valid && trStart.Valid && trEnd.Valid && trStatus.Valid {
+		p.Term = &TermSummary{
+			ID:        trID.String,
+			Name:      trName.String,
+			TermType:  trType.String,
+			StartDate: trStart.String,
+			EndDate:   trEnd.String,
+			Status:    trStatus.String,
+		}
+	}
 	return p, nil
 }
 
 // GetPublicByCourseCode returns a course by `course.courses.course_code`, or nil if not found.
 func GetPublicByCourseCode(ctx context.Context, pool *pgxpool.Pool, courseCode string) (*CoursePublic, error) {
 	row := pool.QueryRow(ctx, `
-SELECT`+coursePublicSelect+`
-FROM course.courses c
+SELECT`+coursePublicSelect+coursePublicFrom+`
 WHERE c.course_code = $1
 `, courseCode)
 	p, err := scanCoursePublicFromRow(row)
@@ -204,8 +241,7 @@ WHERE c.course_code = $1
 // Relative-schedule “materialization” for students is not applied here yet.
 func ListForEnrolledUser(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]CoursePublic, error) {
 	rows, err := pool.Query(ctx, `
-SELECT`+coursePublicSelect+`
-FROM course.courses c
+SELECT`+coursePublicSelect+coursePublicFrom+`
 INNER JOIN "user".users ucat ON ucat.id = $1 AND ucat.org_id = c.org_id
 LEFT JOIN course.user_course_catalog_order o
   ON o.user_id = $1 AND o.course_id = c.id
@@ -235,8 +271,7 @@ func ListForEnrolledUserInOrgUnits(ctx context.Context, pool *pgxpool.Pool, user
 		return []CoursePublic{}, nil
 	}
 	rows, err := pool.Query(ctx, `
-SELECT`+coursePublicSelect+`
-FROM course.courses c
+SELECT`+coursePublicSelect+coursePublicFrom+`
 INNER JOIN "user".users ucat ON ucat.id = $1 AND ucat.org_id = c.org_id
 LEFT JOIN course.user_course_catalog_order o
   ON o.user_id = $1 AND o.course_id = c.id
@@ -251,6 +286,65 @@ ORDER BY o.sort_order NULLS LAST, c.title ASC
 	}
 	defer rows.Close()
 
+	var out []CoursePublic
+	for rows.Next() {
+		p, err := scanCoursePublicFromRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// ListForEnrolledUserByTerm filters enrolled courses by term_id (must belong to user's org).
+func ListForEnrolledUserByTerm(ctx context.Context, pool *pgxpool.Pool, userID, termID uuid.UUID) ([]CoursePublic, error) {
+	rows, err := pool.Query(ctx, `
+SELECT`+coursePublicSelect+coursePublicFrom+`
+INNER JOIN "user".users ucat ON ucat.id = $1 AND ucat.org_id = c.org_id
+LEFT JOIN course.user_course_catalog_order o
+  ON o.user_id = $1 AND o.course_id = c.id
+WHERE c.id IN (SELECT e.course_id FROM course.course_enrollments e WHERE e.user_id = $1 AND e.active)
+  AND c.archived = false
+  AND c.term_id = $2
+ORDER BY o.sort_order NULLS LAST, c.title ASC
+`, userID, termID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CoursePublic
+	for rows.Next() {
+		p, err := scanCoursePublicFromRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// ListForEnrolledUserInOrgUnitsByTerm is ListForEnrolledUserInOrgUnits with term filter.
+func ListForEnrolledUserInOrgUnitsByTerm(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, allowed []uuid.UUID, termID uuid.UUID) ([]CoursePublic, error) {
+	if len(allowed) == 0 {
+		return []CoursePublic{}, nil
+	}
+	rows, err := pool.Query(ctx, `
+SELECT`+coursePublicSelect+coursePublicFrom+`
+INNER JOIN "user".users ucat ON ucat.id = $1 AND ucat.org_id = c.org_id
+LEFT JOIN course.user_course_catalog_order o
+  ON o.user_id = $1 AND o.course_id = c.id
+WHERE c.id IN (SELECT e.course_id FROM course.course_enrollments e WHERE e.user_id = $1 AND e.active)
+  AND c.archived = false
+  AND c.org_unit_id IS NOT NULL
+  AND c.org_unit_id = ANY($2::uuid[])
+  AND c.term_id = $3
+ORDER BY o.sort_order NULLS LAST, c.title ASC
+`, userID, allowed, termID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 	var out []CoursePublic
 	for rows.Next() {
 		p, err := scanCoursePublicFromRow(rows)
