@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { patchCourseFeatures } from '../../lib/courses-api'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
-import type { CoursePublic } from './courses'
+import type { CoursePublic } from '../../lib/courses-api'
 
 type Props = {
   courseCode: string

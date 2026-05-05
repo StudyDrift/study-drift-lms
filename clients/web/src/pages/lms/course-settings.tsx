@@ -7,7 +7,7 @@ import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 import { courseItemCreatePermission, patchCourseMarkdownTheme } from '../../lib/courses-api'
-import type { CoursePublic } from './courses'
+import type { CoursePublic } from '../../lib/courses-api'
 import {
   MARKDOWN_THEME_PRESET_META,
   markdownThemeCustomSeed,
