@@ -15,6 +15,9 @@ type RosterRow struct {
 	UserID      uuid.UUID
 	DisplayName *string
 	Role        string
+	SectionID   *uuid.UUID
+	SectionCode *string
+	SectionName *string
 }
 
 // ListRosterForCourse returns enrollments for a course code, ordered for UI.
@@ -24,10 +27,14 @@ SELECT
 	ce.id,
 	ce.user_id,
 	u.display_name,
-	ce.role
+	ce.role,
+	ce.section_id,
+	cs.section_code,
+	cs.name
 FROM course.course_enrollments ce
 INNER JOIN course.courses c ON c.id = ce.course_id
 INNER JOIN "user".users u ON u.id = ce.user_id
+LEFT JOIN course.course_sections cs ON cs.id = ce.section_id
 WHERE c.course_code = $1 AND ce.active
 ORDER BY
 	CASE ce.role
@@ -45,7 +52,9 @@ ORDER BY
 	for rows.Next() {
 		var r RosterRow
 		var display sql.NullString
-		if err := rows.Scan(&r.ID, &r.UserID, &display, &r.Role); err != nil {
+		var secID sql.NullString
+		var secCode, secName sql.NullString
+		if err := rows.Scan(&r.ID, &r.UserID, &display, &r.Role, &secID, &secCode, &secName); err != nil {
 			return nil, err
 		}
 		if display.Valid {
@@ -53,6 +62,20 @@ ORDER BY
 			if s != "" {
 				r.DisplayName = &s
 			}
+		}
+		if secID.Valid {
+			u, err := uuid.Parse(secID.String)
+			if err == nil {
+				r.SectionID = &u
+			}
+		}
+		if secCode.Valid && secCode.String != "" {
+			s := secCode.String
+			r.SectionCode = &s
+		}
+		if secName.Valid && secName.String != "" {
+			s := secName.String
+			r.SectionName = &s
 		}
 		out = append(out, r)
 	}

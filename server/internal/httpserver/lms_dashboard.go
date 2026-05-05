@@ -12,10 +12,11 @@ import (
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/coursefeed"
+	"github.com/lextures/lextures/server/internal/repos/coursesections"
 	"github.com/lextures/lextures/server/internal/repos/coursestructure"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
-	"github.com/lextures/lextures/server/internal/repos/recommendations"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/repos/recommendations"
 	"github.com/lextures/lextures/server/internal/repos/srs"
 )
 
@@ -340,6 +341,16 @@ func (d Deps) handleCourseStructure() http.HandlerFunc {
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load course structure.")
 			return
+		}
+		crow, err := course.GetPublicByCourseCode(r.Context(), d.Pool, courseCode)
+		if err == nil && crow != nil && crow.SectionsEnabled && !staffView {
+			secID, err := enrollment.GetStudentSectionID(r.Context(), d.Pool, *cid, viewer)
+			if err == nil && secID != nil {
+				ovm, err := coursesections.ListOverridesForSection(r.Context(), d.Pool, *secID)
+				if err == nil && len(ovm) > 0 {
+					applySectionAssignmentOverrides(items, ovm)
+				}
+			}
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(resp{Items: items})
@@ -690,6 +701,9 @@ func (d Deps) handleCourseEnrollmentsList() http.HandlerFunc {
 		UserID      string  `json:"userId"`
 		DisplayName *string `json:"displayName"`
 		Role        string  `json:"role"`
+		SectionID   *string `json:"sectionId,omitempty"`
+		SectionCode *string `json:"sectionCode,omitempty"`
+		SectionName *string `json:"sectionName,omitempty"`
 	}
 	type resp struct {
 		Enrollments []row `json:"enrollments"`
@@ -715,12 +729,23 @@ func (d Deps) handleCourseEnrollmentsList() http.HandlerFunc {
 		}
 		out := make([]row, 0, len(roster))
 		for _, e := range roster {
-			out = append(out, row{
+			r := row{
 				ID:          e.ID.String(),
 				UserID:      e.UserID.String(),
 				DisplayName: e.DisplayName,
 				Role:        e.Role,
-			})
+			}
+			if e.SectionID != nil {
+				s := e.SectionID.String()
+				r.SectionID = &s
+			}
+			if e.SectionCode != nil {
+				r.SectionCode = e.SectionCode
+			}
+			if e.SectionName != nil {
+				r.SectionName = e.SectionName
+			}
+			out = append(out, r)
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(resp{Enrollments: out})

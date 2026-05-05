@@ -66,6 +66,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const diagnosticAssessmentsEnabled = course.diagnosticAssessmentsEnabled === true
   const hintScaffoldingEnabled = course.hintScaffoldingEnabled === true
   const misconceptionDetectionEnabled = course.misconceptionDetectionEnabled === true
+  const sectionsEnabled = course.sectionsEnabled === true
 
   const persist = useCallback(
     async (patch: {
@@ -80,6 +81,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       diagnosticAssessmentsEnabled?: boolean
       hintScaffoldingEnabled?: boolean
       misconceptionDetectionEnabled?: boolean
+      sectionsEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -99,6 +101,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           hintScaffoldingEnabled: patch.hintScaffoldingEnabled ?? hintScaffoldingEnabled,
           misconceptionDetectionEnabled:
             patch.misconceptionDetectionEnabled ?? misconceptionDetectionEnabled,
+          sectionsEnabled: patch.sectionsEnabled ?? sectionsEnabled,
         }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
@@ -119,6 +122,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       diagnosticAssessmentsEnabled,
       hintScaffoldingEnabled,
       misconceptionDetectionEnabled,
+      sectionsEnabled,
       calendarEnabled,
       courseCode,
       feedEnabled,
@@ -220,6 +224,13 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           onToggle={() =>
             void persist({ misconceptionDetectionEnabled: !misconceptionDetectionEnabled })
           }
+        />
+        <FeatureToggleRow
+          label="Course sections"
+          description="Split one course into multiple sections with separate rosters, section instructors, and optional per-section due dates. Disable to hide section APIs and UI."
+          enabled={sectionsEnabled}
+          disabled={saving}
+          onToggle={() => void persist({ sectionsEnabled: !sectionsEnabled })}
         />
       </div>
 

@@ -15,6 +15,7 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/coursegrades"
 	"github.com/lextures/lextures/server/internal/repos/coursegrading"
 	"github.com/lextures/lextures/server/internal/repos/coursemoduleassignments"
+	"github.com/lextures/lextures/server/internal/repos/coursesections"
 	"github.com/lextures/lextures/server/internal/repos/coursestructure"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
 	"github.com/lextures/lextures/server/internal/repos/gradingschemes"
@@ -48,9 +49,9 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 		ScaleJSON json.RawMessage `json:"scaleJson"`
 	}
 	type gridResp struct {
-		Students            []studentOut                             `json:"students"`
-		Columns             []gradebookGridColumn                      `json:"columns"`
-		Grades              map[string]map[string]string             `json:"grades,omitempty"`
+		Students            []studentOut                            `json:"students"`
+		Columns             []gradebookGridColumn                   `json:"columns"`
+		Grades              map[string]map[string]string            `json:"grades,omitempty"`
 		DisplayGrades       map[string]map[string]string            `json:"displayGrades,omitempty"`
 		RubricScores        map[string]map[string]map[string]string `json:"rubricScores,omitempty"`
 		GradeHeld           map[string]map[string]bool              `json:"gradeHeld,omitempty"`
@@ -95,7 +96,39 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 		}
 		courseID := *cid
 
-		stuRows, err := enrollment.ListStudentUsersForCourseCode(r.Context(), d.Pool, courseCode)
+		qSection := strings.TrimSpace(r.URL.Query().Get("section_id"))
+		var sectionFilter []uuid.UUID
+		if qSection != "" {
+			pub, err := course.GetPublicByCourseCode(r.Context(), d.Pool, courseCode)
+			if err == nil && pub != nil && pub.SectionsEnabled {
+				sid, err := uuid.Parse(qSection)
+				if err == nil {
+					sec, err := coursesections.GetByID(r.Context(), d.Pool, courseID, sid)
+					if err == nil && sec != nil {
+						canManage, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+						if err == nil && canManage {
+							sectionFilter = []uuid.UUID{sid}
+						}
+					}
+				}
+			}
+		}
+		if len(sectionFilter) == 0 {
+			sectionFilter, err = enrollment.GradebookStudentSectionFilter(r.Context(), d.Pool, courseID, courseCode, viewer)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to resolve section scope.")
+				return
+			}
+		}
+		var stuRows []struct {
+			UserID      uuid.UUID
+			DisplayName string
+		}
+		if len(sectionFilter) > 0 {
+			stuRows, err = enrollment.ListStudentUsersForCourseCode(r.Context(), d.Pool, courseCode, sectionFilter)
+		} else {
+			stuRows, err = enrollment.ListStudentUsersForCourseCode(r.Context(), d.Pool, courseCode, nil)
+		}
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load students.")
 			return
@@ -329,10 +362,10 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 			Grades:              grades,
 			DisplayGrades:       display,
 			RubricScores:        rubricScores,
-			GradeHeld:            gradeHeld,
-			DroppedGrades:        droppedByStudent,
-			ExcusedGrades:        excused,
-			GradingScheme:        schemePtr,
+			GradeHeld:           gradeHeld,
+			DroppedGrades:       droppedByStudent,
+			ExcusedGrades:       excused,
+			GradingScheme:       schemePtr,
 			GradebookCsvEnabled: d.effectiveConfig().GradebookCSVEnabled,
 		})
 	}

@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   FolderInput,
   Info,
+  LayoutGrid,
   Scale,
   SlidersHorizontal,
   Target,
@@ -61,6 +62,15 @@ export function SideNavCourseSettingsLinks({ courseCode }: SideNavCourseSettings
       >
         <SlidersHorizontal className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Features
+      </NavLink>
+      <NavLink
+        to={`${base}/sections`}
+        className={() =>
+          `${sideNavLinkClass} ${section === 'sections' ? sideNavActiveClass : ''}`
+        }
+      >
+        <LayoutGrid className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        Sections
       </NavLink>
       <NavLink
         to={`${base}/import-export`}

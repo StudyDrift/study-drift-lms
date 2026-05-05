@@ -15,45 +15,46 @@ import (
 
 // CoursePublic is the JSON body for a course in list/detail APIs (camelCase, matches Rust `CoursePublic`).
 type CoursePublic struct {
-	ID                            string            `json:"id"`
-	CourseCode                    string            `json:"courseCode"`
-	Title                         string            `json:"title"`
-	Description                   string            `json:"description"`
-	HeroImageURL                  *string           `json:"heroImageUrl"`
-	HeroImageObjectPosition       *string           `json:"heroImageObjectPosition"`
-	StartsAt                      *time.Time        `json:"startsAt"`
-	EndsAt                        *time.Time        `json:"endsAt"`
-	VisibleFrom                   *time.Time        `json:"visibleFrom"`
-	HiddenAt                      *time.Time        `json:"hiddenAt"`
-	ScheduleMode                  string            `json:"scheduleMode"`
-	RelativeEndAfter              *string           `json:"relativeEndAfter"`
-	RelativeHiddenAfter           *string           `json:"relativeHiddenAfter"`
-	RelativeScheduleAnchorAt      *time.Time        `json:"relativeScheduleAnchorAt"`
-	Published                     bool              `json:"published"`
-	MarkdownThemePreset           string            `json:"markdownThemePreset"`
-	MarkdownThemeCustom           *json.RawMessage  `json:"markdownThemeCustom"`
-	GradingScale                  string            `json:"gradingScale"`
-	Archived                      bool              `json:"archived"`
-	NotebookEnabled               bool              `json:"notebookEnabled"`
-	FeedEnabled                   bool              `json:"feedEnabled"`
-	CalendarEnabled               bool              `json:"calendarEnabled"`
-	QuestionBankEnabled           bool              `json:"questionBankEnabled"`
-	LockdownModeEnabled           bool              `json:"lockdownModeEnabled"`
-	StandardsAlignmentEnabled     bool              `json:"standardsAlignmentEnabled"`
-	AdaptivePathsEnabled          bool              `json:"adaptivePathsEnabled"`
-	SRSEnabled                    bool              `json:"srsEnabled"`
-	DiagnosticAssessmentsEnabled  bool              `json:"diagnosticAssessmentsEnabled"`
-	HintScaffoldingEnabled        bool              `json:"hintScaffoldingEnabled"`
-	MisconceptionDetectionEnabled bool              `json:"misconceptionDetectionEnabled"`
-	CourseType                    string            `json:"courseType"`
-	CreatedAt                     time.Time         `json:"createdAt"`
-	UpdatedAt                     time.Time         `json:"updatedAt"`
-	SbgEnabled                    bool              `json:"sbgEnabled"`
-	SbgProficiencyScaleJSON       *json.RawMessage  `json:"sbgProficiencyScaleJson"`
-	SbgAggregationRule            string            `json:"sbgAggregationRule"`
-	OrgUnitID                     *string           `json:"orgUnitId,omitempty"`
-	TermID                        *string           `json:"termId,omitempty"`
-	Term                          *TermSummary      `json:"term,omitempty"`
+	ID                            string           `json:"id"`
+	CourseCode                    string           `json:"courseCode"`
+	Title                         string           `json:"title"`
+	Description                   string           `json:"description"`
+	HeroImageURL                  *string          `json:"heroImageUrl"`
+	HeroImageObjectPosition       *string          `json:"heroImageObjectPosition"`
+	StartsAt                      *time.Time       `json:"startsAt"`
+	EndsAt                        *time.Time       `json:"endsAt"`
+	VisibleFrom                   *time.Time       `json:"visibleFrom"`
+	HiddenAt                      *time.Time       `json:"hiddenAt"`
+	ScheduleMode                  string           `json:"scheduleMode"`
+	RelativeEndAfter              *string          `json:"relativeEndAfter"`
+	RelativeHiddenAfter           *string          `json:"relativeHiddenAfter"`
+	RelativeScheduleAnchorAt      *time.Time       `json:"relativeScheduleAnchorAt"`
+	Published                     bool             `json:"published"`
+	MarkdownThemePreset           string           `json:"markdownThemePreset"`
+	MarkdownThemeCustom           *json.RawMessage `json:"markdownThemeCustom"`
+	GradingScale                  string           `json:"gradingScale"`
+	Archived                      bool             `json:"archived"`
+	NotebookEnabled               bool             `json:"notebookEnabled"`
+	FeedEnabled                   bool             `json:"feedEnabled"`
+	CalendarEnabled               bool             `json:"calendarEnabled"`
+	QuestionBankEnabled           bool             `json:"questionBankEnabled"`
+	LockdownModeEnabled           bool             `json:"lockdownModeEnabled"`
+	StandardsAlignmentEnabled     bool             `json:"standardsAlignmentEnabled"`
+	AdaptivePathsEnabled          bool             `json:"adaptivePathsEnabled"`
+	SRSEnabled                    bool             `json:"srsEnabled"`
+	DiagnosticAssessmentsEnabled  bool             `json:"diagnosticAssessmentsEnabled"`
+	HintScaffoldingEnabled        bool             `json:"hintScaffoldingEnabled"`
+	MisconceptionDetectionEnabled bool             `json:"misconceptionDetectionEnabled"`
+	SectionsEnabled               bool             `json:"sectionsEnabled"`
+	CourseType                    string           `json:"courseType"`
+	CreatedAt                     time.Time        `json:"createdAt"`
+	UpdatedAt                     time.Time        `json:"updatedAt"`
+	SbgEnabled                    bool             `json:"sbgEnabled"`
+	SbgProficiencyScaleJSON       *json.RawMessage `json:"sbgProficiencyScaleJson"`
+	SbgAggregationRule            string           `json:"sbgAggregationRule"`
+	OrgUnitID                     *string          `json:"orgUnitId,omitempty"`
+	TermID                        *string          `json:"termId,omitempty"`
+	Term                          *TermSummary     `json:"term,omitempty"`
 }
 
 // coursePublicSelect is columns for `course.courses` joined to `tenant.terms` (alias `tr`) for public APIs.
@@ -88,6 +89,7 @@ const coursePublicSelect = `
     c.diagnostic_assessments_enabled,
     c.hint_scaffolding_enabled,
     c.misconception_detection_enabled,
+    c.sections_enabled,
     c.course_type,
     c.created_at,
     c.updated_at,
@@ -151,6 +153,7 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 		&p.DiagnosticAssessmentsEnabled,
 		&p.HintScaffoldingEnabled,
 		&p.MisconceptionDetectionEnabled,
+		&p.SectionsEnabled,
 		&p.CourseType,
 		&p.CreatedAt,
 		&p.UpdatedAt,
