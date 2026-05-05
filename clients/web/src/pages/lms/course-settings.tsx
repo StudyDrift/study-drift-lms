@@ -24,6 +24,7 @@ import { CourseExportImportSection } from './course-export-import-section'
 import { CourseGradingSettingsSection } from './course-grading-settings'
 import { CourseFeaturesSection } from './course-features-section'
 import { CourseOutcomesSection } from './course-outcomes-section'
+import { CourseCrossListingSection } from './course-cross-listing-settings'
 import { CourseSectionsSettingsSection } from './course-sections-settings'
 
 function isoToDatetimeLocal(iso: string | null): string {
@@ -1015,7 +1016,14 @@ export default function CourseSettings() {
           )}
           {section === 'sections' &&
             (course.sectionsEnabled ? (
-              <CourseSectionsSettingsSection courseCode={courseCode} />
+              <>
+                <CourseSectionsSettingsSection courseCode={courseCode} />
+                <CourseCrossListingSection
+                  courseCode={courseCode}
+                  courseId={course.id}
+                  orgId={course.orgId}
+                />
+              </>
             ) : (
               <p className="text-sm text-slate-600 dark:text-neutral-300">
                 Turn on <span className="font-medium">Course sections</span> under the Features tab

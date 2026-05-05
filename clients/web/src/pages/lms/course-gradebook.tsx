@@ -343,6 +343,7 @@ export default function CourseGradebook() {
   const [sectionsEnabled, setSectionsEnabled] = useState(false)
   const [sections, setSections] = useState<CourseSection[]>([])
   const [gradebookSectionId, setGradebookSectionId] = useState<string>('')
+  const [crossListMerge, setCrossListMerge] = useState(true)
 
   useEffect(() => {
     if (!courseCode) return
@@ -435,7 +436,10 @@ export default function CourseGradebook() {
     try {
       const sectionOpt =
         sectionsEnabled && canEditGrades && gradebookSectionId ? gradebookSectionId : null
-      const data = await fetchCourseGradebookGrid(courseCode, { sectionId: sectionOpt })
+      const data = await fetchCourseGradebookGrid(courseCode, {
+        sectionId: sectionOpt,
+        crossList: sectionsEnabled && canEditGrades ? crossListMerge : undefined,
+      })
       setStudents(data.students)
       setColumns(data.columns)
       setGradeHeld(data.gradeHeld)
@@ -496,7 +500,7 @@ export default function CourseGradebook() {
       setLoadState('error')
       setLoadError(e instanceof Error ? e.message : 'Could not load gradebook.')
     }
-  }, [courseCode, sectionsEnabled, canEditGrades, gradebookSectionId])
+  }, [courseCode, sectionsEnabled, canEditGrades, gradebookSectionId, crossListMerge])
 
   const handlePostAssignmentGrades = useCallback(
     async (itemId: string) => {
@@ -736,6 +740,27 @@ export default function CourseGradebook() {
         <>
           {sectionsEnabled && canEditGrades && sections.length > 0 ? (
             <div className="lms-print-hide mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+              <span id="gb-crosslist-label" className="text-sm font-medium text-slate-700 dark:text-neutral-200">
+                Combined cross-listed sections
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={crossListMerge}
+                aria-labelledby="gb-crosslist-label"
+                onClick={() => setCrossListMerge((v) => !v)}
+                className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900 ${
+                  crossListMerge ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-neutral-600'
+                }`}
+              >
+                <span className="sr-only">Toggle combined cross-list gradebook</span>
+                <span
+                  aria-hidden
+                  className={`pointer-events-none inline-block h-6 w-6 translate-y-0.5 rounded-full bg-white shadow transition ${
+                    crossListMerge ? 'translate-x-5' : 'translate-x-1'
+                  }`}
+                />
+              </button>
               <label htmlFor="gb-section-filter" className="text-sm font-medium text-slate-700 dark:text-neutral-200">
                 Section
               </label>

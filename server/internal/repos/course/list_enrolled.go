@@ -49,6 +49,7 @@ type CoursePublic struct {
 	CourseType                    string           `json:"courseType"`
 	CreatedAt                     time.Time        `json:"createdAt"`
 	UpdatedAt                     time.Time        `json:"updatedAt"`
+	OrgID                         *string          `json:"orgId,omitempty"`
 	SbgEnabled                    bool             `json:"sbgEnabled"`
 	SbgProficiencyScaleJSON       *json.RawMessage `json:"sbgProficiencyScaleJson"`
 	SbgAggregationRule            string           `json:"sbgAggregationRule"`
@@ -60,6 +61,7 @@ type CoursePublic struct {
 // coursePublicSelect is columns for `course.courses` joined to `tenant.terms` (alias `tr`) for public APIs.
 const coursePublicSelect = `
     c.id,
+    c.org_id,
     c.course_code,
     c.title,
     c.description,
@@ -119,11 +121,13 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 	var mtheme, sbgProf []byte
 	var sbgRule string
 	var orgUnit sql.NullString
+	var orgIDCol sql.NullString
 	var termIDCol, trID sql.NullString
 	var trName, trType, trStart, trEnd, trStatus sql.NullString
 
 	if err := row.Scan(
 		&id,
+		&orgIDCol,
 		&p.CourseCode,
 		&p.Title,
 		&p.Description,
@@ -173,6 +177,10 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 	}
 
 	p.ID = id.String()
+	if orgIDCol.Valid && strings.TrimSpace(orgIDCol.String) != "" {
+		s := orgIDCol.String
+		p.OrgID = &s
+	}
 	if orgUnit.Valid {
 		s := orgUnit.String
 		p.OrgUnitID = &s

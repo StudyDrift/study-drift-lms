@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
+	"log/slog"
 	"math"
 	"net/http"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/coursemoduleassignments"
 	"github.com/lextures/lextures/server/internal/repos/coursesections"
 	"github.com/lextures/lextures/server/internal/repos/coursestructure"
+	"github.com/lextures/lextures/server/internal/repos/crosslisting"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
 	"github.com/lextures/lextures/server/internal/repos/gradingschemes"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
@@ -59,6 +61,8 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 		ExcusedGrades       map[string]map[string]bool              `json:"excusedGrades,omitempty"`
 		GradingScheme       *schemeSum                              `json:"gradingScheme,omitempty"`
 		GradebookCsvEnabled bool                                    `json:"gradebookCsvEnabled"`
+		CrossListGroupID    *string                                 `json:"crossListGroupId,omitempty"`
+		CrossListMerged     bool                                    `json:"crossListMerged"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +101,8 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 		courseID := *cid
 
 		qSection := strings.TrimSpace(r.URL.Query().Get("section_id"))
+		crossListQP := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("cross_list")))
+		mergedCrossList := crossListQP == "1" || crossListQP == "true" || crossListQP == "yes"
 		var sectionFilter []uuid.UUID
 		if qSection != "" {
 			pub, err := course.GetPublicByCourseCode(r.Context(), d.Pool, courseCode)
@@ -114,11 +120,29 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 			}
 		}
 		if len(sectionFilter) == 0 {
-			sectionFilter, err = enrollment.GradebookStudentSectionFilter(r.Context(), d.Pool, courseID, courseCode, viewer)
+			sectionFilter, err = enrollment.GradebookStudentSectionFilter(r.Context(), d.Pool, courseID, courseCode, viewer, mergedCrossList)
 			if err != nil {
 				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to resolve section scope.")
 				return
 			}
+		} else if mergedCrossList {
+			sectionFilter, err = crosslisting.ExpandInstructorSectionFilter(r.Context(), d.Pool, courseID, sectionFilter, true)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to resolve cross-list scope.")
+				return
+			}
+		}
+		clGroup, err := crosslisting.GetGroupForCourse(r.Context(), d.Pool, courseID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load cross-list group.")
+			return
+		}
+		var crossListGroupID *string
+		crossListMerged := mergedCrossList && clGroup != nil && len(clGroup.Members) >= 2
+		if crossListMerged && clGroup != nil {
+			s := clGroup.ID.String()
+			crossListGroupID = &s
+			slog.Info("gradebook.cross_list", "cross_list_group_id", clGroup.ID.String(), "course_code", courseCode)
 		}
 		var stuRows []struct {
 			UserID      uuid.UUID
@@ -367,6 +391,8 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 			ExcusedGrades:       excused,
 			GradingScheme:       schemePtr,
 			GradebookCsvEnabled: d.effectiveConfig().GradebookCSVEnabled,
+			CrossListGroupID:    crossListGroupID,
+			CrossListMerged:     crossListMerged,
 		})
 	}
 }
