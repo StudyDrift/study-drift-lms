@@ -20,6 +20,7 @@ const (
 	CodeNotImplementedInGo = "NOT_IMPLEMENTED_IN_GO"
 	CodeUnknownCourseCode  = "UNKNOWN_COURSE_CODE"
 	CodeForbidden          = "FORBIDDEN"
+	CodeConflict           = "CONFLICT"
 	CodeMFARequired        = "MFA_REQUIRED"
 	CodeMFAEnrolRequired    = "MFA_ENROLMENT_REQUIRED"
 	CodeInternal           = "INTERNAL"

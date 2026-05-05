@@ -148,6 +148,8 @@ export type CoursePublic = {
   resubmissionWorkflowEnabled?: boolean
   /** Academic term id when assigned (plan 5.3). */
   termId?: string | null
+  /** Organization id (course tenant); used for org-scoped admin APIs (plan 5.5). */
+  orgId?: string
   /** Embedded term metadata when `termId` is set. */
   term?: TermSummary | null
 }
@@ -170,6 +172,80 @@ export async function fetchOrgTerms(orgId: string): Promise<OrgTerm[]> {
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   const data = raw as { terms?: OrgTerm[] }
   return data.terms ?? []
+}
+
+/** Plan 5.5 — cross-listed sections for merged roster / gradebook (same course). */
+export type CrossListMember = {
+  sectionId: string
+  isPrimary: boolean
+  sectionCode: string
+  sectionName?: string | null
+}
+
+export type CrossListGroup = {
+  id: string
+  courseId: string
+  name?: string | null
+  createdAt: string
+  primarySectionId?: string | null
+  members: CrossListMember[]
+}
+
+export async function fetchOrgCrossListGroups(orgId: string): Promise<CrossListGroup[]> {
+  const res = await authorizedFetch(`/api/v1/orgs/${encodeURIComponent(orgId)}/cross-list-groups`)
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const data = raw as { groups?: CrossListGroup[] }
+  return data.groups ?? []
+}
+
+export async function postOrgCrossListGroup(
+  orgId: string,
+  body: { courseCode: string; primarySectionId: string; name?: string | null },
+): Promise<CrossListGroup> {
+  const res = await authorizedFetch(`/api/v1/orgs/${encodeURIComponent(orgId)}/cross-list-groups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as CrossListGroup
+}
+
+export async function postOrgCrossListMember(
+  orgId: string,
+  groupId: string,
+  sectionId: string,
+): Promise<CrossListGroup> {
+  const res = await authorizedFetch(
+    `/api/v1/orgs/${encodeURIComponent(orgId)}/cross-list-groups/${encodeURIComponent(groupId)}/members`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sectionId }),
+    },
+  )
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as CrossListGroup
+}
+
+export async function deleteOrgCrossListMember(
+  orgId: string,
+  groupId: string,
+  sectionId: string,
+): Promise<CrossListGroup | null> {
+  const res = await authorizedFetch(
+    `/api/v1/orgs/${encodeURIComponent(orgId)}/cross-list-groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(sectionId)}`,
+    { method: 'DELETE' },
+  )
+  const raw: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  if (raw && typeof raw === 'object' && 'removed' in raw && (raw as { removed?: boolean }).removed === true) {
+    return null
+  }
+  return raw as CrossListGroup
 }
 
 export type StructurePathRule = {
@@ -1374,16 +1450,20 @@ export type CourseGradebookGridResponse = {
   gradingScheme?: GradingSchemeSummary | null
   /** Plan 3.11 — server flag for CSV tools. */
   gradebookCsvEnabled?: boolean
+  /** Plan 5.5 — present when cross-list combined view is active. */
+  crossListGroupId?: string
+  crossListMerged?: boolean
   /** Plan 3.12 */
   excusedGrades?: Record<string, Record<string, boolean>>
 }
 
 export async function fetchCourseGradebookGrid(
   courseCode: string,
-  opts?: { sectionId?: string | null },
+  opts?: { sectionId?: string | null; crossList?: boolean },
 ): Promise<CourseGradebookGridResponse> {
   const qs = new URLSearchParams()
   if (opts?.sectionId) qs.set('section_id', opts.sectionId)
+  if (opts?.crossList) qs.set('cross_list', 'true')
   const q = qs.toString()
   const res = await authorizedFetch(
     `/api/v1/courses/${encodeURIComponent(courseCode)}/gradebook/grid${q ? `?${q}` : ''}`,

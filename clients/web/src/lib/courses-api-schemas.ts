@@ -78,6 +78,7 @@ export const courseSchema = z
         status: z.string(),
       })
       .optional(),
+    orgId: z.string().optional(),
   })
   .passthrough()
   .transform((c) => ({
@@ -351,6 +352,8 @@ export const courseGradebookGridResponseSchema = z.object({
     })
     .optional(),
   gradebookCsvEnabled: z.boolean().optional().default(false),
+  crossListGroupId: z.string().optional(),
+  crossListMerged: z.boolean().optional().default(false),
 })
 
 export const gradebookImportCellPreviewSchema = z.object({
