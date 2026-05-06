@@ -300,7 +300,7 @@ func canvasImportAssignmentGrades(
 	canvasUserToLocal map[int64]uuid.UUID,
 ) error {
 	// #region agent log
-	var assignCanvasIDs int64 = int64(len(canvasAssignToItem))
+	assignCanvasIDs := int64(len(canvasAssignToItem))
 	var totalSubs int64
 	var skipBadCanvasUID int64
 	var skipNoLocalUser int64
@@ -462,7 +462,7 @@ func canvasImportQuizGrades(
 	canvasUserToLocal map[int64]uuid.UUID,
 ) error {
 	// #region agent log
-	var quizCanvasIDs int64 = int64(len(canvasQuizToItem))
+	quizCanvasIDs := int64(len(canvasQuizToItem))
 	var totalQuizSubs int64
 	var quizSkipNotInLocalMap int64
 	var quizMergedLearners int64
