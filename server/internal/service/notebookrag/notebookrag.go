@@ -17,15 +17,15 @@ import (
 )
 
 const (
-	maxQuestionChars         = 2000
-	maxNotebooks             = 48
-	maxMarkdownPerNotebook   = 100_000
-	maxTotalMarkdown         = 320_000
-	chunkCharTarget          = 1100
-	chunkCharStride          = 720
-	maxChunksInPrompt        = 14
-	sourceExcerptChars         = 220
-	emptyNotebooksMsg          = "Your notebooks look empty from the server’s perspective—there were no text chunks to search. Try again after saving notes in a course notebook."
+	maxQuestionChars       = 2000
+	maxNotebooks           = 48
+	maxMarkdownPerNotebook = 100_000
+	maxTotalMarkdown       = 320_000
+	chunkCharTarget        = 1100
+	chunkCharStride        = 720
+	maxChunksInPrompt      = 14
+	sourceExcerptChars     = 220
+	emptyNotebooksMsg      = "Your notebooks look empty from the server’s perspective—there were no text chunks to search. Try again after saving notes in a course notebook."
 )
 
 const systemPrompt = `You answer questions using only the student's private course notebook excerpts provided below.

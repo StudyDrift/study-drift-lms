@@ -5,9 +5,9 @@ import "strings"
 
 // Standard lockdown mode tokens (see course + quiz settings).
 const (
-	LockdownStandard    = "standard"
-	LockdownOneAtATime  = "one_at_a_time"
-	LockdownKiosk       = "kiosk"
+	LockdownStandard   = "standard"
+	LockdownOneAtATime = "one_at_a_time"
+	LockdownKiosk      = "kiosk"
 )
 
 // QuizRowLockdown models the per-quiz field used by [EffectiveLockdownMode].

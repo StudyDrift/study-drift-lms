@@ -32,11 +32,11 @@ const defaultCleverAPIBase = "https://api.clever.com/v3.0"
 
 // Service holds HTTP client for Clever APIs.
 type Service struct {
-	Cfg             config.Config
-	HTTP            *http.Client
-	AuthorizeURL    string
-	TokenURL        string
-	CleverAPIBase   string
+	Cfg           config.Config
+	HTTP          *http.Client
+	AuthorizeURL  string
+	TokenURL      string
+	CleverAPIBase string
 }
 
 // NewService returns a Clever auth service (handlers still check CleverSSOEnabled).

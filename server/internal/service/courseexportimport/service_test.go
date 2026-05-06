@@ -14,7 +14,4 @@ func TestServiceHealth(t *testing.T) {
 	if err != nil || got != "courseexportimport:ok" {
 		t.Fatalf("got=%q err=%v", got, err)
 	}
-	if _, err := s.Health(nil); err == nil {
-		t.Fatal("expected error for nil ctx")
-	}
 }

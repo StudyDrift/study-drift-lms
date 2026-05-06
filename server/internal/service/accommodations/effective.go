@@ -14,10 +14,10 @@ import (
 
 // Effective holds operational settings for quiz / UI (mirrors Rust EffectiveAccommodations).
 type Effective struct {
-	TimeMultiplier       float64
-	ExtraAttempts        int32
-	HintsAlwaysEnabled   bool
-	ReducedDistraction   bool
+	TimeMultiplier     float64
+	ExtraAttempts      int32
+	HintsAlwaysEnabled bool
+	ReducedDistraction bool
 }
 
 // FromRow builds effective state from a DB row.
@@ -35,7 +35,7 @@ func FromRow(r *studentaccommodations.Row) Effective {
 	}
 	return Effective{
 		TimeMultiplier:     tm,
-		ExtraAttempts:     ea,
+		ExtraAttempts:      ea,
 		HintsAlwaysEnabled: r.HintsAlwaysEnabled,
 		ReducedDistraction: r.ReducedDistraction,
 	}

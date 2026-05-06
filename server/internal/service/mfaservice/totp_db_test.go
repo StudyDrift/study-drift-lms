@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	serverdata "github.com/lextures/lextures/server"
 	"github.com/jackc/pgx/v5/pgxpool"
+	serverdata "github.com/lextures/lextures/server"
 	"github.com/pquerna/otp/totp"
 
 	"github.com/lextures/lextures/server/internal/auth"

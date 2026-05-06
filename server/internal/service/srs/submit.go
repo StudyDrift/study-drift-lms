@@ -23,14 +23,14 @@ func srsActiveForCourse(globalOn, courseFlag bool) bool {
 
 // SubmitReviewBody matches POST /learners/{id}/review JSON.
 type SubmitReviewBody struct {
-	QuestionID  uuid.UUID `json:"questionId"`
-	Grade       string    `json:"grade"`
-	ResponseMs  *int32    `json:"responseMs,omitempty"`
+	QuestionID uuid.UUID `json:"questionId"`
+	Grade      string    `json:"grade"`
+	ResponseMs *int32    `json:"responseMs,omitempty"`
 }
 
 type SubmitReviewResponse struct {
-	NextReviewAt  time.Time `json:"nextReviewAt"`
-	IntervalDays  float64   `json:"intervalDays"`
+	NextReviewAt time.Time `json:"nextReviewAt"`
+	IntervalDays float64   `json:"intervalDays"`
 }
 
 // ErrSubmitReview is a lightweight error for HTTP mapping.

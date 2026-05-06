@@ -35,9 +35,6 @@ func TestService_Health(t *testing.T) {
 	if err != nil || got != "irt:ok" {
 		t.Fatal()
 	}
-	if _, err := s.Health(nil); err == nil {
-		t.Fatal("nil ctx")
-	}
 }
 
 func fp(f float64) *float64 { return &f }

@@ -34,7 +34,7 @@ func TestParseClassLinkUserInfoClaims(t *testing.T) {
 		"given_name":          "Pat",
 		"family_name":         "Lee",
 		"classLink_sourcedId": "src-1",
-		"classLink_role":    "Teacher",
+		"classLink_role":      "Teacher",
 	})
 	if p.Email != "t@school.edu" || p.GivenName != "Pat" || p.FamilyName != "Lee" || p.SourcedID != "src-1" || p.RoleName != "Teacher" {
 		t.Fatalf("unexpected profile: %+v", p)
