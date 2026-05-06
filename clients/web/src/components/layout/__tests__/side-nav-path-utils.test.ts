@@ -43,6 +43,7 @@ describe('courseSettingsSectionFromPathname', () => {
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/import-export')).toBe(
       'import-export',
     )
+    expect(courseSettingsSectionFromPathname('/courses/C-1/settings/blueprint')).toBe('blueprint')
     expect(courseSettingsSectionFromPathname('/courses/C-1/settings/export-import')).toBe(
       'import-export',
     )

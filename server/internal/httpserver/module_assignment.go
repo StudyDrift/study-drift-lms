@@ -323,6 +323,22 @@ func (d Deps) handlePatchModuleAssignment() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
 			return
 		}
+		locked, found, err := coursestructure.ItemBlueprintLockState(r.Context(), d.Pool, *cid, itemID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify structure item.")
+			return
+		}
+		if found && locked {
+			cOrg, err := course.CourseOrgID(r.Context(), d.Pool, courseCode)
+			if err != nil || cOrg == nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify course.")
+				return
+			}
+			if !d.userCanManageBlueprintLocks(r.Context(), viewer, *cOrg) {
+				apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "This item is managed by the district blueprint.")
+				return
+			}
+		}
 		policy := strings.TrimSpace(req.LateSubmissionPolicy)
 		if policy == "" {
 			policy = "allow"

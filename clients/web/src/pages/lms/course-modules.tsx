@@ -32,6 +32,7 @@ import {
   EyeOff,
   FileText,
   GripVertical,
+  Lock,
   MoreVertical,
   Settings,
   Sparkles,
@@ -288,6 +289,16 @@ function ModuleChildStudentStatusRow({
   )
 }
 
+function BlueprintLockIcon({ locked }: { locked?: boolean }) {
+  if (!locked) return null
+  return (
+    <Lock
+      className="h-4 w-4 shrink-0 text-slate-500 dark:text-neutral-400"
+      aria-label="Blueprint-locked item – contact your district admin to modify"
+    />
+  )
+}
+
 function ChildRowContent({
   child,
   courseCode,
@@ -317,12 +328,15 @@ function ChildRowContent({
             <FileText className="h-4 w-4" strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
-            <Link
-              to={`/courses/${encodeURIComponent(courseCode)}/modules/content/${encodeURIComponent(child.id)}`}
-              className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-            >
-              {child.title}
-            </Link>
+            <div className="flex min-w-0 items-center gap-2">
+              <Link
+                to={`/courses/${encodeURIComponent(courseCode)}/modules/content/${encodeURIComponent(child.id)}`}
+                className="min-w-0 flex-1 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                {child.title}
+              </Link>
+              <BlueprintLockIcon locked={child.blueprintLocked} />
+            </div>
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
             {studentFooter}
           </div>
@@ -336,12 +350,15 @@ function ChildRowContent({
             <ClipboardList className="h-4 w-4" strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
-            <Link
-              to={`/courses/${encodeURIComponent(courseCode)}/modules/assignment/${encodeURIComponent(child.id)}`}
-              className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-            >
-              {child.title}
-            </Link>
+            <div className="flex min-w-0 items-center gap-2">
+              <Link
+                to={`/courses/${encodeURIComponent(courseCode)}/modules/assignment/${encodeURIComponent(child.id)}`}
+                className="min-w-0 flex-1 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                {child.title}
+              </Link>
+              <BlueprintLockIcon locked={child.blueprintLocked} />
+            </div>
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
             {studentFooter}
           </div>
@@ -378,6 +395,7 @@ function ChildRowContent({
                   Adaptive
                 </span>
               ) : null}
+              <BlueprintLockIcon locked={child.blueprintLocked} />
             </div>
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
             {studentFooter}
@@ -392,23 +410,26 @@ function ChildRowContent({
             <ExternalLink className="h-4 w-4" strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
-            {child.externalUrl ? (
-              <a
-                href={child.externalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-              >
-                {child.title}
-              </a>
-            ) : (
-              <Link
-                to={`/courses/${encodeURIComponent(courseCode)}/modules/external-link/${encodeURIComponent(child.id)}`}
-                className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-              >
-                {child.title}
-              </Link>
-            )}
+            <div className="flex min-w-0 items-center gap-2">
+              {child.externalUrl ? (
+                <a
+                  href={child.externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 flex-1 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+                >
+                  {child.title}
+                </a>
+              ) : (
+                <Link
+                  to={`/courses/${encodeURIComponent(courseCode)}/modules/external-link/${encodeURIComponent(child.id)}`}
+                  className="min-w-0 flex-1 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+                >
+                  {child.title}
+                </Link>
+              )}
+              <BlueprintLockIcon locked={child.blueprintLocked} />
+            </div>
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
             {studentFooter}
           </div>
@@ -422,21 +443,27 @@ function ChildRowContent({
             <Plug className="h-4 w-4" strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
-            <Link
-              to={`/courses/${encodeURIComponent(courseCode)}/modules/lti/${encodeURIComponent(child.id)}`}
-              className="min-w-0 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-            >
-              {child.title}
-            </Link>
+            <div className="flex min-w-0 items-center gap-2">
+              <Link
+                to={`/courses/${encodeURIComponent(courseCode)}/modules/lti/${encodeURIComponent(child.id)}`}
+                className="min-w-0 flex-1 text-base font-semibold leading-snug tracking-tight text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                {child.title}
+              </Link>
+              <BlueprintLockIcon locked={child.blueprintLocked} />
+            </div>
             {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
             {studentFooter}
           </div>
         </div>
       ) : (
         <div className="min-w-0 flex-1">
-          <p className="min-w-0 text-lg font-bold leading-snug tracking-tight text-slate-950 sm:text-xl dark:text-neutral-100">
-            {child.title}
-          </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="min-w-0 flex-1 text-lg font-bold leading-snug tracking-tight text-slate-950 sm:text-xl dark:text-neutral-100">
+              {child.title}
+            </p>
+            <BlueprintLockIcon locked={child.blueprintLocked} />
+          </div>
           {meta ? <p className={moduleChildMetaLineClasses}>{meta}</p> : null}
           {studentFooter}
         </div>
@@ -726,8 +753,9 @@ function ModuleCardBody({
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-slate-950 dark:text-neutral-100">
-                      {item.title}
+                    <span className="flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-neutral-100">
+                      <span className="min-w-0">{item.title}</span>
+                      <BlueprintLockIcon locked={item.blueprintLocked} />
                     </span>
                     {!collapsed ? (
                       <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-neutral-400">
@@ -743,7 +771,10 @@ function ModuleCardBody({
               </button>
             ) : (
               <>
-                <p className="text-sm font-semibold text-slate-950 dark:text-neutral-100">{item.title}</p>
+                <p className="flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-neutral-100">
+                  <span className="min-w-0">{item.title}</span>
+                  <BlueprintLockIcon locked={item.blueprintLocked} />
+                </p>
                 {!minified && (
                   <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
                     Course activities and items can be grouped under this module.

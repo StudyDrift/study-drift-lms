@@ -40,6 +40,7 @@ export type CourseSettingsSection =
   | 'features'
   | 'sections'
   | 'import-export'
+  | 'blueprint'
   | 'archive'
 
 export function courseSettingsSectionFromPathname(pathname: string): CourseSettingsSection {
@@ -62,6 +63,7 @@ export function courseSettingsSectionFromPathname(pathname: string): CourseSetti
   if (seg === 'features' || seg === 'features-tools') return 'features'
   if (seg === 'sections') return 'sections'
   if (seg === 'import-export' || seg === 'export-import') return 'import-export'
+  if (seg === 'blueprint') return 'blueprint'
   if (seg === 'archive' || seg === 'archived') return 'archive'
   return 'general'
 }

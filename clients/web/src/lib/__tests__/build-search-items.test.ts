@@ -222,20 +222,22 @@ describe('buildSearchItems', () => {
     expect(noGrade.some((i) => i.path === '/courses/G/settings/grading')).toBe(false)
   })
 
-  it('includes import-export, outcomes, features, and archive settings when item:create is granted', () => {
+  it('includes import-export, outcomes, features, blueprint, and archive settings when item:create is granted', () => {
     const allowsItems = (p: string) => p === courseItemCreatePermission('Z')
     const items = buildSearchItems([{ courseCode: 'Z', title: 'W' }], [], allowsItems)
     expect(items.some((i) => i.path === '/courses/Z/settings/outcomes')).toBe(true)
     expect(items.some((i) => i.path === '/courses/Z/settings/features')).toBe(true)
     expect(items.some((i) => i.path === '/courses/Z/settings/import-export')).toBe(true)
+    expect(items.some((i) => i.path === '/courses/Z/settings/blueprint')).toBe(true)
     expect(items.some((i) => i.path === '/courses/Z/settings/archive')).toBe(true)
   })
 
-  it('omits import-export, outcomes, features, and archive settings without item:create', () => {
+  it('omits import-export, outcomes, features, blueprint, and archive settings without item:create', () => {
     const items = buildSearchItems([{ courseCode: 'Z', title: 'W' }], [], allowsNone)
     expect(items.some((i) => i.path === '/courses/Z/settings/outcomes')).toBe(false)
     expect(items.some((i) => i.path === '/courses/Z/settings/features')).toBe(false)
     expect(items.some((i) => i.path === '/courses/Z/settings/import-export')).toBe(false)
+    expect(items.some((i) => i.path === '/courses/Z/settings/blueprint')).toBe(false)
     expect(items.some((i) => i.path === '/courses/Z/settings/archive')).toBe(false)
   })
 

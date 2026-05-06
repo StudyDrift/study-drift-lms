@@ -24,6 +24,8 @@ type ItemRow struct {
 	Archived          bool
 	DueAt             *time.Time
 	AssignmentGroupID *uuid.UUID
+	BlueprintLocked   bool
+	BlueprintOriginID *uuid.UUID
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
@@ -40,6 +42,8 @@ type ItemResponse struct {
 	Archived          bool       `json:"archived"`
 	DueAt             *time.Time `json:"dueAt"`
 	AssignmentGroupID *string    `json:"assignmentGroupId"`
+	BlueprintLocked   bool       `json:"blueprintLocked"`
+	BlueprintOriginID *string    `json:"blueprintOriginId,omitempty"`
 	CreatedAt         time.Time  `json:"createdAt"`
 	UpdatedAt         time.Time  `json:"updatedAt"`
 	IsAdaptive        *bool      `json:"isAdaptive,omitempty"`
@@ -49,7 +53,7 @@ type ItemResponse struct {
 }
 
 var selectItemRow = `SELECT
-    c.id, c.course_id, c.sort_order, c.kind, c.title, c.parent_id, c.published, c.visible_from, c.archived, c.due_at, c.assignment_group_id, c.created_at, c.updated_at
+    c.id, c.course_id, c.sort_order, c.kind, c.title, c.parent_id, c.published, c.visible_from, c.archived, c.due_at, c.assignment_group_id, c.blueprint_locked, c.blueprint_origin_id, c.created_at, c.updated_at
     FROM course.course_structure_items c`
 
 // ListForCourse loads and orders structure rows (top-level, then each module’s children) for one course.
@@ -63,7 +67,7 @@ func ListForCourse(ctx context.Context, pool *pgxpool.Pool, courseID uuid.UUID) 
 	for rows.Next() {
 		var r ItemRow
 		if err := rows.Scan(
-			&r.ID, &r.CourseID, &r.SortOrder, &r.Kind, &r.Title, &r.ParentID, &r.Published, &r.VisibleFrom, &r.Archived, &r.DueAt, &r.AssignmentGroupID, &r.CreatedAt, &r.UpdatedAt,
+			&r.ID, &r.CourseID, &r.SortOrder, &r.Kind, &r.Title, &r.ParentID, &r.Published, &r.VisibleFrom, &r.Archived, &r.DueAt, &r.AssignmentGroupID, &r.BlueprintLocked, &r.BlueprintOriginID, &r.CreatedAt, &r.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -182,6 +186,8 @@ func BaseItemResponse(r ItemRow) ItemResponse {
 		Archived:          r.Archived,
 		DueAt:             r.DueAt,
 		AssignmentGroupID: uuidStringPtr(r.AssignmentGroupID),
+		BlueprintLocked:   r.BlueprintLocked,
+		BlueprintOriginID: uuidStringPtr(r.BlueprintOriginID),
 		CreatedAt:         r.CreatedAt,
 		UpdatedAt:         r.UpdatedAt,
 	}
@@ -395,7 +401,7 @@ func ListForCourseWithEnrichment(ctx context.Context, pool *pgxpool.Pool, course
 func GetItemRow(ctx context.Context, pool *pgxpool.Pool, courseID, itemID uuid.UUID) (*ItemRow, error) {
 	var r ItemRow
 	err := pool.QueryRow(ctx, selectItemRow+` WHERE c.course_id = $1 AND c.id = $2`, courseID, itemID).Scan(
-		&r.ID, &r.CourseID, &r.SortOrder, &r.Kind, &r.Title, &r.ParentID, &r.Published, &r.VisibleFrom, &r.Archived, &r.DueAt, &r.AssignmentGroupID, &r.CreatedAt, &r.UpdatedAt,
+		&r.ID, &r.CourseID, &r.SortOrder, &r.Kind, &r.Title, &r.ParentID, &r.Published, &r.VisibleFrom, &r.Archived, &r.DueAt, &r.AssignmentGroupID, &r.BlueprintLocked, &r.BlueprintOriginID, &r.CreatedAt, &r.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil

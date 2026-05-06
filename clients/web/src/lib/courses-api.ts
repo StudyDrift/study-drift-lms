@@ -148,6 +148,11 @@ export type CoursePublic = {
   resubmissionWorkflowEnabled?: boolean
   /** Academic term id when assigned (plan 5.3). */
   termId?: string | null
+  /** Plan 5.6 — district blueprint master course. */
+  isBlueprint?: boolean
+  blueprintParentId?: string | null
+  blueprintParentCourseCode?: string | null
+  blueprintLastSyncAt?: string | null
   /** Organization id (course tenant); used for org-scoped admin APIs (plan 5.5). */
   orgId?: string
   /** Embedded term metadata when `termId` is set. */
@@ -735,6 +740,84 @@ export async function patchCourseFeatures(
   const raw = await parseJson(res)
   if (!res.ok) throw new Error(readApiErrorMessage(raw))
   return parseApiResponse('patchCourseFeatures', courseSchema, raw)
+}
+
+export async function patchCourseBlueprint(courseCode: string, isBlueprint: boolean): Promise<CoursePublic> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/blueprint`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ isBlueprint }),
+  })
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return parseApiResponse('patchCourseBlueprint', courseSchema, raw)
+}
+
+export type BlueprintChildRow = {
+  courseCode: string
+  title: string
+  lastSyncAt?: string | null
+}
+
+export async function fetchBlueprintChildren(courseCode: string): Promise<BlueprintChildRow[]> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/blueprint/children`)
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { children?: BlueprintChildRow[] }
+  return Array.isArray(o.children) ? o.children : []
+}
+
+export async function postBlueprintChildLink(courseCode: string, childCourseCode: string): Promise<void> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/blueprint/children`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ childCourseCode }),
+  })
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+}
+
+export async function deleteBlueprintChildLink(courseCode: string, childCourseCode: string): Promise<void> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/blueprint/children/${encodeURIComponent(childCourseCode)}`,
+    { method: 'DELETE' },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+}
+
+export type BlueprintPushResult = {
+  childrenTotal: number
+  childrenSuccess: number
+  childrenError: number
+  detail: Array<{ courseCode?: string; ok?: boolean; error?: string }>
+}
+
+export async function postBlueprintPush(courseCode: string): Promise<BlueprintPushResult> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/blueprint/push`, {
+    method: 'POST',
+  })
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return raw as BlueprintPushResult
+}
+
+export type BlueprintSyncLogRow = {
+  id: string
+  triggeredBy: string
+  triggeredAt: string
+  childrenTotal: number
+  childrenSuccess: number
+  childrenError: number
+  logDetail: unknown
+}
+
+export async function fetchBlueprintSyncLogs(courseCode: string): Promise<BlueprintSyncLogRow[]> {
+  const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}/blueprint/sync-logs`)
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const o = raw as { logs?: BlueprintSyncLogRow[] }
+  return Array.isArray(o.logs) ? o.logs : []
 }
 
 export type EnrollmentDiagnosticGate = {
@@ -1365,6 +1448,9 @@ export type CourseStructureItem = {
   dueAt: string | null
   /** Which assignment group this gradable item counts toward (course grading settings). */
   assignmentGroupId: string | null
+  /** Plan 5.6 — item copied from a district blueprint; edits blocked for instructors. */
+  blueprintLocked?: boolean
+  blueprintOriginId?: string | null
   /** Quiz items only: true when the quiz is in adaptive mode. */
   isAdaptive?: boolean
   /** Non-adaptive quizzes only: sum of per-question points from the course structure API. */

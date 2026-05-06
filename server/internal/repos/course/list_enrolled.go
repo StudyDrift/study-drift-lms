@@ -56,6 +56,10 @@ type CoursePublic struct {
 	OrgUnitID                     *string          `json:"orgUnitId,omitempty"`
 	TermID                        *string          `json:"termId,omitempty"`
 	Term                          *TermSummary     `json:"term,omitempty"`
+	IsBlueprint                   bool             `json:"isBlueprint"`
+	BlueprintParentID             *string          `json:"blueprintParentId,omitempty"`
+	BlueprintParentCourseCode     *string          `json:"blueprintParentCourseCode,omitempty"`
+	BlueprintLastSyncAt           *time.Time       `json:"blueprintLastSyncAt,omitempty"`
 }
 
 // coursePublicSelect is columns for `course.courses` joined to `tenant.terms` (alias `tr`) for public APIs.
@@ -99,6 +103,10 @@ const coursePublicSelect = `
     c.sbg_proficiency_scale_json,
     c.sbg_aggregation_rule,
     c.org_unit_id,
+    c.is_blueprint,
+    c.blueprint_parent_id,
+    bp.course_code AS blueprint_parent_course_code,
+    c.blueprint_last_sync_at,
     c.term_id,
     tr.id,
     tr.name,
@@ -110,6 +118,7 @@ const coursePublicSelect = `
 
 const coursePublicFrom = `
 FROM course.courses c
+LEFT JOIN course.courses bp ON bp.id = c.blueprint_parent_id
 LEFT JOIN tenant.terms tr ON tr.id = c.term_id
 `
 
@@ -122,6 +131,8 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 	var sbgRule string
 	var orgUnit sql.NullString
 	var orgIDCol sql.NullString
+	var bpParentID, bpParentCode sql.NullString
+	var bpLastSync sql.NullTime
 	var termIDCol, trID sql.NullString
 	var trName, trType, trStart, trEnd, trStatus sql.NullString
 
@@ -165,6 +176,10 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 		&sbgProf,
 		&sbgRule,
 		&orgUnit,
+		&p.IsBlueprint,
+		&bpParentID,
+		&bpParentCode,
+		&bpLastSync,
 		&termIDCol,
 		&trID,
 		&trName,
@@ -185,6 +200,15 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 		s := orgUnit.String
 		p.OrgUnitID = &s
 	}
+	if bpParentID.Valid && strings.TrimSpace(bpParentID.String) != "" {
+		s := bpParentID.String
+		p.BlueprintParentID = &s
+	}
+	if bpParentCode.Valid && strings.TrimSpace(bpParentCode.String) != "" {
+		s := bpParentCode.String
+		p.BlueprintParentCourseCode = &s
+	}
+	p.BlueprintLastSyncAt = nullTimePtr(bpLastSync)
 	if hero.Valid {
 		s := hero.String
 		p.HeroImageURL = &s
