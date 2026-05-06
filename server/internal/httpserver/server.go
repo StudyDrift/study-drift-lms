@@ -15,6 +15,7 @@ import (
 	"github.com/lextures/lextures/server/internal/lti"
 	"github.com/lextures/lextures/server/internal/openapi"
 	"github.com/lextures/lextures/server/internal/platformstate"
+	"github.com/lextures/lextures/server/internal/repos/orgbranding"
 	"github.com/lextures/lextures/server/internal/service/cleverauth"
 	"github.com/lextures/lextures/server/internal/service/oidcauth"
 	"github.com/lextures/lextures/server/internal/service/openrouter"
@@ -32,6 +33,8 @@ type Deps struct {
 	Clever   *cleverauth.Service
 	Comm     *commevents.Hub
 	Lti      *lti.Runtime
+	// BrandingResolver caches hostname→org branding (plan 5.7). Optional; nil builds an ephemeral resolver per request group via brandingResolver().
+	BrandingResolver *orgbranding.Resolver
 	// PasswordChecker overrides HIBP / password breach checks (tests). When nil, a production checker is built from Pool.
 	PasswordChecker hibp.Checker
 }
@@ -65,6 +68,8 @@ func NewHandler(d Deps) http.Handler {
 	r.Get("/api/docs", openapi.ServeDocs)
 	r.Get("/health", handleHealth())
 	r.Get("/health/ready", handleReady(ready))
+	r.Get("/api/v1/public/branding/resolve", d.handlePublicBrandingResolve())
+	r.Get("/api/v1/public/org-branding/{orgId}/{asset}", d.handlePublicOrgBrandAsset())
 	d.registerSAMLBrowserRoutes(r)
 	d.registerLTIHTTPRoutes(r)
 	r.Get("/auth/oidc/{provider}/login", d.handleOIDCLogin())
@@ -111,6 +116,10 @@ func NewHandler(d Deps) http.Handler {
 	r.Post("/api/v1/orgs/{orgId}/cross-list-groups", d.handleOrgCrossListGroupsPost())
 	r.Post("/api/v1/orgs/{orgId}/cross-list-groups/{gid}/members", d.handleOrgCrossListMembersPost())
 	r.Delete("/api/v1/orgs/{orgId}/cross-list-groups/{gid}/members/{sid}", d.handleOrgCrossListMemberDelete())
+	r.Get("/api/v1/orgs/{orgId}/branding", d.handleOrgBrandingItem())
+	r.Put("/api/v1/orgs/{orgId}/branding", d.handleOrgBrandingItem())
+	r.Post("/api/v1/orgs/{orgId}/branding/logo", d.handleOrgBrandingUpload("logo"))
+	r.Post("/api/v1/orgs/{orgId}/branding/favicon", d.handleOrgBrandingUpload("favicon"))
 	// Course calendar feed (iCalendar) — must register before /api/v1/courses/{course_code} static routes that might shadow.
 	r.Get("/api/v1/courses/{course_code}/calendar.ics", d.handleCourseICS())
 	// One Route for /api/v1/courses/{course_code} so GET and PATCH /markdown-theme share the same chi subtree

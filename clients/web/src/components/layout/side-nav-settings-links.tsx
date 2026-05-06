@@ -9,6 +9,7 @@ import {
   ChevronDown,
   FolderTree,
   Link2,
+  Palette,
   Plug,
   Settings2,
   Shield,
@@ -83,6 +84,15 @@ export function SideNavSettingsLinks() {
               >
                 <CalendarRange className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
                 Academic terms
+              </NavLink>
+              <NavLink
+                to="/settings/org-branding"
+                className={() =>
+                  `${sideNavLinkClass} ${view === 'org-branding' ? sideNavActiveClass : ''}`
+                }
+              >
+                <Palette className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                Branding
               </NavLink>
             </>
           )}

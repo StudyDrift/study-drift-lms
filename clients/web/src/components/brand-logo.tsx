@@ -1,12 +1,19 @@
+import { useOrgBranding } from '../context/org-branding-context'
+import { resolveOrgBrandAssetUrl } from '../lib/branding-url'
+
 type BrandLogoProps = {
   className?: string
 }
 
-/** Logo mark from `public/logo-trimmed.svg`. */
+/** Logo mark from org branding or `public/logo-trimmed.svg`. */
 export function BrandLogo({ className }: BrandLogoProps) {
+  const { logoUrl } = useOrgBranding()
+  const resolved = resolveOrgBrandAssetUrl(logoUrl)
+  const src = resolved ?? '/logo-trimmed.svg'
+
   return (
     <img
-      src="/logo-trimmed.svg"
+      src={src}
       alt="Lextures"
       className={
         className ??

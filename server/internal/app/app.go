@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/lextures/lextures/server/internal/lti"
 	"github.com/lextures/lextures/server/internal/migrate"
 	"github.com/lextures/lextures/server/internal/platformstate"
+	"github.com/lextures/lextures/server/internal/repos/orgbranding"
 	"github.com/lextures/lextures/server/internal/repos/platformconfig"
 	"github.com/lextures/lextures/server/internal/service/oidcauth"
 )
@@ -62,14 +64,16 @@ func Run(ctx context.Context, fsys fs.FS) error {
 	background.Start(ctx, pool, merged)
 
 	ltiRT := lti.NewFromConfig(merged)
+	brandingResolver := orgbranding.NewResolver(pool, merged.BrandingMultitenantHostSuffix, webHostFromOrigin(merged.PublicWebOrigin))
 	deps := httpserver.Deps{
-		Pool:      pool,
-		JWTSigner: auth.NewJWTSignerWithPool(cfg.JWTSecret, pool),
-		Config:    cfg,
-		Platform:  platformstate.New(merged),
-		OIDC:      oidcauth.NewService(merged),
-		Comm:      commevents.New(),
-		Lti:       ltiRT,
+		Pool:               pool,
+		JWTSigner:          auth.NewJWTSignerWithPool(cfg.JWTSecret, pool),
+		Config:             cfg,
+		Platform:           platformstate.New(merged),
+		OIDC:               oidcauth.NewService(merged),
+		Comm:               commevents.New(),
+		Lti:                ltiRT,
+		BrandingResolver:   brandingResolver,
 	}
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,
@@ -96,4 +100,12 @@ func Run(ctx context.Context, fsys fs.FS) error {
 func isUndefinedTable(err error) bool {
 	var pg *pgconn.PgError
 	return errors.As(err, &pg) && pg.Code == "42P01"
+}
+
+func webHostFromOrigin(origin string) string {
+	u, err := url.Parse(strings.TrimSpace(origin))
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return orgbranding.NormalizeHost(u.Host)
 }
