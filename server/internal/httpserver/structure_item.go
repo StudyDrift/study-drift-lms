@@ -55,6 +55,22 @@ func (d Deps) handlePatchCourseStructureItem() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
 			return
 		}
+		locked, found, err := coursestructure.ItemBlueprintLockState(r.Context(), d.Pool, *cid, itemID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify structure item.")
+			return
+		}
+		if found && locked {
+			cOrg, err := course.CourseOrgID(r.Context(), d.Pool, courseCode)
+			if err != nil || cOrg == nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify course.")
+				return
+			}
+			if !d.userCanManageBlueprintLocks(r.Context(), viewer, *cOrg) {
+				apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "This item is managed by the district blueprint.")
+				return
+			}
+		}
 		var body struct {
 			Title     *string `json:"title"`
 			Published *bool   `json:"published"`
@@ -136,6 +152,22 @@ func (d Deps) handleDeleteCourseStructureItem() http.HandlerFunc {
 		if cid == nil {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
 			return
+		}
+		locked, found, err := coursestructure.ItemBlueprintLockState(r.Context(), d.Pool, *cid, itemID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify structure item.")
+			return
+		}
+		if found && locked {
+			cOrg, err := course.CourseOrgID(r.Context(), d.Pool, courseCode)
+			if err != nil || cOrg == nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify course.")
+				return
+			}
+			if !d.userCanManageBlueprintLocks(r.Context(), viewer, *cOrg) {
+				apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "This item is managed by the district blueprint.")
+				return
+			}
 		}
 		err = coursestructure.ArchiveChildStructureItem(r.Context(), d.Pool, *cid, itemID)
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -24,6 +24,7 @@ import { CourseExportImportSection } from './course-export-import-section'
 import { CourseGradingSettingsSection } from './course-grading-settings'
 import { CourseFeaturesSection } from './course-features-section'
 import { CourseOutcomesSection } from './course-outcomes-section'
+import { CourseBlueprintSection } from './course-blueprint-settings'
 import { CourseCrossListingSection } from './course-cross-listing-settings'
 import { CourseSectionsSettingsSection } from './course-sections-settings'
 
@@ -89,6 +90,7 @@ type SettingsSection =
   | 'features'
   | 'sections'
   | 'import-export'
+  | 'blueprint'
   | 'archive'
 
 /** Canonical URLs: `/settings/general`, …; legacy slugs redirect here. */
@@ -125,6 +127,7 @@ function parseSettingsSection(courseCode: string, pathname: string): SettingsSec
   if (seg === 'features') return 'features'
   if (seg === 'sections') return 'sections'
   if (seg === 'import-export') return 'import-export'
+  if (seg === 'blueprint') return 'blueprint'
   if (seg === 'archive') return 'archive'
   return 'invalid'
 }
@@ -551,6 +554,10 @@ export default function CourseSettings() {
               ? course?.title
                 ? `${course.title} — import / export`
                 : 'Import / export'
+              : section === 'blueprint'
+                ? course?.title
+                  ? `${course.title} — blueprint`
+                  : 'Blueprint'
               : section === 'archive'
                 ? course?.title
                   ? `${course.title} — archive`
@@ -572,6 +579,8 @@ export default function CourseSettings() {
               ? 'Create teaching sections, manage rosters, and set per-section assignment due dates.'
               : section === 'import-export'
               ? 'Download the full course as JSON or restore from a backup file.'
+              : section === 'blueprint'
+                ? 'District curriculum blueprint: link child courses, push structural updates, and review sync history.'
               : section === 'archive'
                 ? 'Module items you archived from the outline. Restore them when you want them visible again.'
                 : ''
@@ -1031,6 +1040,9 @@ export default function CourseSettings() {
               </p>
             ))}
           {section === 'import-export' && <CourseExportImportSection courseCode={courseCode} />}
+          {section === 'blueprint' && course && (
+            <CourseBlueprintSection courseCode={courseCode} course={course} onCourseUpdated={setCourse} />
+          )}
           {section === 'archive' && <CourseArchivedContentSection courseCode={courseCode} />}
         </div>
       )}

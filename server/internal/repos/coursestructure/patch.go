@@ -28,10 +28,10 @@ func PatchChildStructureItem(
 		  AND parent_id IS NOT NULL
 		  AND kind `+patchableChildKindsSQL+`
 		RETURNING
-		    id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, created_at, updated_at
+		    id, course_id, sort_order, kind, title, parent_id, published, visible_from, archived, due_at, assignment_group_id, blueprint_locked, blueprint_origin_id, created_at, updated_at
 	`, title, published, archived, itemID, courseID,
 	).Scan(
-		&r.ID, &r.CourseID, &r.SortOrder, &r.Kind, &r.Title, &r.ParentID, &r.Published, &r.VisibleFrom, &r.Archived, &r.DueAt, &r.AssignmentGroupID, &r.CreatedAt, &r.UpdatedAt,
+		&r.ID, &r.CourseID, &r.SortOrder, &r.Kind, &r.Title, &r.ParentID, &r.Published, &r.VisibleFrom, &r.Archived, &r.DueAt, &r.AssignmentGroupID, &r.BlueprintLocked, &r.BlueprintOriginID, &r.CreatedAt, &r.UpdatedAt,
 	)
 	if err != nil {
 		return ItemRow{}, err

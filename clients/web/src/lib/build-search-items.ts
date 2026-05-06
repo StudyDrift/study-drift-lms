@@ -285,6 +285,12 @@ export function buildSearchItems(
         requiredPermission: courseItemCreatePermission,
       },
       {
+        suffix: '/settings/blueprint',
+        title: 'Course blueprint',
+        hint: 'district curriculum master child courses sync push template',
+        requiredPermission: courseItemCreatePermission,
+      },
+      {
         suffix: '/settings/archive',
         title: 'Archived modules',
         hint: 'archived deleted restore trash unarchive structure',

@@ -2,6 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   Archive,
   ArrowLeft,
+  BookCopy,
   FolderInput,
   Info,
   LayoutGrid,
@@ -80,6 +81,15 @@ export function SideNavCourseSettingsLinks({ courseCode }: SideNavCourseSettings
       >
         <FolderInput className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Import / export
+      </NavLink>
+      <NavLink
+        to={`${base}/blueprint`}
+        className={() =>
+          `${sideNavLinkClass} ${section === 'blueprint' ? sideNavActiveClass : ''}`
+        }
+      >
+        <BookCopy className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        Blueprint
       </NavLink>
       <NavLink
         to={`${base}/archive`}

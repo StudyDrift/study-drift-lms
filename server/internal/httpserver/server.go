@@ -182,6 +182,12 @@ func NewHandler(d Deps) http.Handler {
 	r.Patch("/api/v1/courses/{course_code}/archived", d.handlePatchCourseArchived())
 	r.Get("/api/v1/courses/{course_code}/outcomes", d.handleCourseOutcomesList())
 	r.Post("/api/v1/courses/{course_code}/factory-reset", d.handlePostFactoryResetCourse())
+	r.Patch("/api/v1/courses/{course_code}/blueprint", d.handlePatchCourseBlueprint())
+	r.Get("/api/v1/courses/{course_code}/blueprint/children", d.handleGetCourseBlueprintChildren())
+	r.Post("/api/v1/courses/{course_code}/blueprint/children", d.handlePostCourseBlueprintChild())
+	r.Delete("/api/v1/courses/{course_code}/blueprint/children/{child_course_code}", d.handleDeleteCourseBlueprintChild())
+	r.Post("/api/v1/courses/{course_code}/blueprint/push", d.handlePostCourseBlueprintPush())
+	r.Get("/api/v1/courses/{course_code}/blueprint/sync-logs", d.handleGetCourseBlueprintSyncLogs())
 	// Nesting keeps /syllabus/markups, /syllabus/accept, etc. on the same chi subtree so longer paths
 	// are not lost to a mis-ordered /syllabus leaf.
 	r.Route("/api/v1/courses/{course_code}/syllabus", func(s chi.Router) {

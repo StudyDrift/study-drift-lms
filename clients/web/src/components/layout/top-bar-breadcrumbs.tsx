@@ -25,6 +25,7 @@ const COURSE_SETTINGS_LABEL: Record<CourseSettingsSection, string> = {
   features: 'Features',
   sections: 'Sections',
   'import-export': 'Import / export',
+  blueprint: 'Blueprint',
   archive: 'Archive',
 }
 

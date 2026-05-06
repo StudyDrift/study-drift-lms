@@ -244,6 +244,8 @@ export const courseStructureItemSchema = z
     archived: z.boolean().optional(),
     dueAt: z.string().nullable(),
     assignmentGroupId: z.string().nullable(),
+    blueprintLocked: z.boolean().optional(),
+    blueprintOriginId: z.string().nullable().optional(),
     isAdaptive: z.boolean().optional(),
     pointsPossible: z.number().optional(),
     pointsWorth: z.number().nullable().optional(),

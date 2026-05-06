@@ -144,6 +144,22 @@ export default function CourseDetail() {
             Course settings
           </Link>
         )}
+        {course?.isBlueprint ? (
+          <span
+            className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-900 dark:bg-indigo-950 dark:text-indigo-100"
+            title="This course is a district blueprint master"
+          >
+            Blueprint master
+          </span>
+        ) : null}
+        {course?.blueprintParentCourseCode ? (
+          <span
+            className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800 dark:bg-neutral-800 dark:text-neutral-100"
+            title="Linked to a district blueprint course"
+          >
+            Blueprint child ({course.blueprintParentCourseCode})
+          </span>
+        ) : null}
       </div>
 
       {loading && <p className="mt-6 text-sm text-slate-500">Loading…</p>}
