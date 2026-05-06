@@ -61,14 +61,14 @@ type UserPublic struct {
 
 // AuthResponse mirrors models/auth AuthResponse (field names are snake_case like the Rust `AuthResponse` struct).
 type AuthResponse struct {
-	AccessToken        string     `json:"access_token,omitempty"`
-	RefreshToken       string     `json:"refresh_token,omitempty"`
-	ExpiresIn          int        `json:"expires_in,omitempty"`
-	MFAPendingToken    string     `json:"mfa_pending_token,omitempty"`
-	TokenType          string     `json:"token_type"`
-	User               UserPublic `json:"user"`
-	RequiresMFA        bool       `json:"requires_mfa,omitempty"`
-	MFASetupRequired   bool       `json:"mfa_setup_required,omitempty"`
+	AccessToken      string     `json:"access_token,omitempty"`
+	RefreshToken     string     `json:"refresh_token,omitempty"`
+	ExpiresIn        int        `json:"expires_in,omitempty"`
+	MFAPendingToken  string     `json:"mfa_pending_token,omitempty"`
+	TokenType        string     `json:"token_type"`
+	User             UserPublic `json:"user"`
+	RequiresMFA      bool       `json:"requires_mfa,omitempty"`
+	MFASetupRequired bool       `json:"mfa_setup_required,omitempty"`
 }
 
 // ForgotPasswordRequest .

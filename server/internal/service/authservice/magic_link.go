@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	magicLinkTokenTTL     = 15 * time.Minute
-	magicLinkRateWindow   = 5 * time.Minute
-	magicLinkRateMax      = 3
-	magicLinkTokenBytes   = 32 // 256-bit raw → URL-safe base64
+	magicLinkTokenTTL   = 15 * time.Minute
+	magicLinkRateWindow = 5 * time.Minute
+	magicLinkRateMax    = 3
+	magicLinkTokenBytes = 32 // 256-bit raw → URL-safe base64
 )
 
 // ErrMagicLinkDisabled is returned when MAGIC_LINK_ENABLED=0 (feature is on by default).
@@ -41,8 +41,8 @@ var ErrMagicLinkGone = errors.New("magic link gone")
 
 // MagicLinkRequestRequest is POST /auth/magic-link/request body.
 type MagicLinkRequestRequest struct {
-	Email       string
-	RedirectTo  *string
+	Email      string
+	RedirectTo *string
 }
 
 // MagicLinkRequestResponse is always 200 with this body when input is valid.

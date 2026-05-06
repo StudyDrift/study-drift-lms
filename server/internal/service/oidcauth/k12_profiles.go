@@ -29,8 +29,8 @@ type cleverMeEnvelope struct {
 }
 
 type cleverUserData struct {
-	Email      string `json:"email"`
-	Name       *struct {
+	Email string `json:"email"`
+	Name  *struct {
 		First string `json:"first"`
 		Last  string `json:"last"`
 	} `json:"name"`

@@ -10,9 +10,9 @@ func TestInstructorFlagLabels(t *testing.T) {
 	t.Parallel()
 	labels := InstructorFlagLabels(Effective{
 		TimeMultiplier:     1.5,
-		ExtraAttempts:     1,
+		ExtraAttempts:      1,
 		HintsAlwaysEnabled: true,
-		ReducedDistraction:  true,
+		ReducedDistraction: true,
 	})
 	want := []string{"extended_time", "extra_attempts", "reduced_distraction", "always_allow_hints"}
 	if len(labels) != len(want) {

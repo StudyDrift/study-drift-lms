@@ -16,12 +16,12 @@ import (
 
 // ListedModel is a row from the OpenRouter models list (for JSON output to the web app).
 type ListedModel struct {
-	ID                        string   `json:"id"`
-	Name                      string   `json:"name"`
-	ContextLength             *uint64  `json:"contextLength,omitempty"`
-	InputPricePerMillionUSD   *float64 `json:"inputPricePerMillionUsd,omitempty"`
-	OutputPricePerMillionUSD  *float64 `json:"outputPricePerMillionUsd,omitempty"`
-	ModalitiesSummary         *string  `json:"modalitiesSummary,omitempty"`
+	ID                       string   `json:"id"`
+	Name                     string   `json:"name"`
+	ContextLength            *uint64  `json:"contextLength,omitempty"`
+	InputPricePerMillionUSD  *float64 `json:"inputPricePerMillionUsd,omitempty"`
+	OutputPricePerMillionUSD *float64 `json:"outputPricePerMillionUsd,omitempty"`
+	ModalitiesSummary        *string  `json:"modalitiesSummary,omitempty"`
 }
 
 // ListModelsByOutputModality calls OpenRouter with output_modalities=text|image
@@ -110,7 +110,7 @@ func parseModelsEnvelope(raw []byte) ([]ListedModel, error) {
 			ContextLength:            cl,
 			InputPricePerMillionUSD:  inPrice,
 			OutputPricePerMillionUSD: outPrice,
-			ModalitiesSummary:      mods,
+			ModalitiesSummary:        mods,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
