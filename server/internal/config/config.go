@@ -33,6 +33,10 @@ type Config struct {
 	CanvasAllowedHostSuffixes []string
 	PublicWebOrigin           string
 
+	// BrandingMultitenantHostSuffix matches "{slug}.<suffix>" to tenant.organizations.slug (plan 5.7).
+	// Example: "lextures.io" maps greenvalley.lextures.io → slug greenvalley. Empty disables subdomain mapping.
+	BrandingMultitenantHostSuffix string
+
 	// PlatformSecretsKey is a 32-byte AES-256 key (base64 in PLATFORM_SECRETS_KEY) used to encrypt
 	// SMTP passwords and similar values stored in settings.platform_app_settings.
 	PlatformSecretsKey []byte
@@ -146,6 +150,7 @@ func Load() Config {
 
 		CanvasAllowedHostSuffixes: canvasAllowedHostSuffixes(),
 		PublicWebOrigin:           trimTrailingSlash(stringDefault(firstNonEmptyTrimmed("PUBLIC_WEB_ORIGIN"), "http://localhost:5173")),
+		BrandingMultitenantHostSuffix: strings.TrimSpace(strings.ToLower(firstNonEmptyTrimmed("BRANDING_MULTITENANT_HOST_SUFFIX"))),
 
 		PlatformSecretsKey: platformSecretsKeyFromEnv(),
 

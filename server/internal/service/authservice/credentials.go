@@ -23,6 +23,8 @@ import (
 	"github.com/lextures/lextures/server/internal/config"
 	"github.com/lextures/lextures/server/internal/mail"
 	"github.com/lextures/lextures/server/internal/repos/communication"
+	"github.com/lextures/lextures/server/internal/repos/orgbranding"
+	"github.com/lextures/lextures/server/internal/repos/organization"
 	"github.com/lextures/lextures/server/internal/repos/passwordcreditevents"
 	"github.com/lextures/lextures/server/internal/repos/passwordreset"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
@@ -231,7 +233,18 @@ func RequestPasswordReset(ctx context.Context, pool *pgxpool.Pool, cfg config.Co
 	}
 	origin := strings.TrimRight(strings.TrimSpace(cfg.PublicWebOrigin), "/")
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", origin, token)
-	if err := mail.SendPasswordResetEmail(cfg, row.Email, resetURL); err != nil {
+
+	var mailOpts *mail.PasswordResetOpts
+	if orgID, oerr := organization.OrgIDForUser(ctx, pool, uid); oerr == nil {
+		if br, berr := orgbranding.Get(ctx, pool, orgID); berr == nil && br != nil {
+			mailOpts = &mail.PasswordResetOpts{
+				PrimaryColor: br.PrimaryColor,
+			}
+			mailOpts.FromDisplayName = br.CustomEmailDisplayName
+			mailOpts.LogoURL = br.LogoURL
+		}
+	}
+	if err := mail.SendPasswordResetEmail(cfg, row.Email, resetURL, mailOpts); err != nil {
 		log.Printf("mail: password reset send failed: %v", err)
 	}
 	return forgotMsg(), nil

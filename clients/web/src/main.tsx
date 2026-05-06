@@ -4,15 +4,18 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './app'
 import { LmsToaster } from './components/lms-toaster'
+import { OrgBrandingProvider } from './context/org-branding-context'
 import { PermissionsProvider } from './context/permissions-provider'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <PermissionsProvider>
-        <App />
-        <LmsToaster />
-      </PermissionsProvider>
+      <OrgBrandingProvider>
+        <PermissionsProvider>
+          <App />
+          <LmsToaster />
+        </PermissionsProvider>
+      </OrgBrandingProvider>
     </BrowserRouter>
   </StrictMode>,
 )

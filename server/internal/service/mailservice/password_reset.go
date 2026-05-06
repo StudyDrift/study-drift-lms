@@ -7,6 +7,6 @@ import (
 )
 
 // SendPasswordResetEmail sends via SMTP when configured; no-ops with a log line when SMTP_HOST is unset.
-func SendPasswordResetEmail(c config.Config, toEmail, resetURL string) error {
-	return mail.SendPasswordResetEmail(c, toEmail, resetURL)
+func SendPasswordResetEmail(c config.Config, toEmail, resetURL string, opts *mail.PasswordResetOpts) error {
+	return mail.SendPasswordResetEmail(c, toEmail, resetURL, opts)
 }

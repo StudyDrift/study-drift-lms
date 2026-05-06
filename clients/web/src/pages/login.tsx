@@ -207,7 +207,8 @@ export default function Login() {
             <button
               type="submit"
               disabled={status === 'loading'}
-              className="flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ backgroundColor: 'var(--lex-brand-primary, #4f46e5)' }}
+              className="flex w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {status === 'loading' ? 'Signing in…' : 'Sign in'}
             </button>

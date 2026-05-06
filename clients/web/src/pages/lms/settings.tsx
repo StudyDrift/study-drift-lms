@@ -25,6 +25,7 @@ import { PERM_RBAC_MANAGE, PERM_TENANT_ORG_UNITS_ADMIN } from '../../lib/rbac-ap
 import { OidcConnectedAccountsPanel } from '../../components/oidc-connected-accounts-panel'
 import { MfaFactorsPanel } from '../../components/settings/mfa-factors-panel'
 import { LmsPage } from './lms-page'
+import OrgBranding from './admin/OrgBranding'
 import { FALLBACK_IMAGE_MODEL_OPTIONS, FALLBACK_TEXT_MODEL_OPTIONS } from '../../lib/ai-models'
 import { apiUrl, authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
@@ -42,6 +43,7 @@ function isSystemSettingsPath(pathname: string): boolean {
     pathname === '/settings/organizations' ||
     pathname === '/settings/org-units' ||
     pathname === '/settings/terms' ||
+    pathname === '/settings/org-branding' ||
     pathname === '/settings/scim-provisioning'
   )
 }
@@ -720,9 +722,10 @@ export default function Settings() {
   if (!permLoading && isSystemSettingsPath(location.pathname)) {
     const onOrgUnits = location.pathname === '/settings/org-units'
     const onTerms = location.pathname === '/settings/terms'
+    const onOrgBranding = location.pathname === '/settings/org-branding'
     const hasRbac = allows(PERM_RBAC_MANAGE)
     const hasUnitAdmin = allows(PERM_TENANT_ORG_UNITS_ADMIN)
-    if (!hasRbac && !((onOrgUnits || onTerms) && hasUnitAdmin)) {
+    if (!hasRbac && !((onOrgUnits || onTerms || onOrgBranding) && hasUnitAdmin)) {
       return <Navigate to="/settings/account" replace />
     }
   }
@@ -748,6 +751,7 @@ export default function Settings() {
           activeView === 'organizations' ||
           activeView === 'org-units' ||
           activeView === 'terms' ||
+          activeView === 'org-branding' ||
           activeView === 'scim-provisioning'
             ? 'max-w-4xl'
             : activeView === 'ai-prompts'
@@ -1444,6 +1448,18 @@ export default function Settings() {
         {activeView === 'terms' && (
           <div className="mt-2">
             <TermsSettingsPanel />
+          </div>
+        )}
+
+        {activeView === 'org-branding' && (
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">
+              Organization branding
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+              Logo, colors, optional custom domain, and email sender display name.
+            </p>
+            <OrgBranding />
           </div>
         )}
 
