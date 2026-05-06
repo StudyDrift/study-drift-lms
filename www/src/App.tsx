@@ -106,7 +106,7 @@ function LogoMark({ className = '' }: { className?: string }) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect width="32" height="32" rx="8" fill="#4f46e5" />
+      <rect width="32" height="32" rx="8" fill="var(--color-accent)" />
       <path
         d="M9 23V9h5.2c2.9 0 5.1 1.6 5.1 4.2 0 2.5-2.2 4.1-5.1 4.1H12.5V23H9Zm3.5-8.2h1.4c1.4 0 2.3-.7 2.3-1.8 0-1.2-.9-1.9-2.3-1.9h-1.4v3.7Z"
         fill="white"
@@ -126,20 +126,20 @@ export default function App() {
   const closeMenu = () => setMenuOpen(false)
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-white text-slate-700">
+    <div className="relative min-h-screen overflow-x-hidden bg-stone-50 text-slate-700">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-sm focus:text-white"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-accent focus:px-4 focus:py-2 focus:text-sm focus:text-white"
       >
         Skip to content
       </a>
 
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-stone-50/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <a href="#" className="flex items-center gap-2.5 no-underline">
             <LogoMark className="h-8 w-8 shrink-0" />
-            <span className="text-base font-semibold text-slate-900 tracking-tight">Lextures</span>
+            <span className="text-base font-semibold tracking-tight text-stone-900">Lextures</span>
           </a>
 
           <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
@@ -147,7 +147,7 @@ export default function App() {
               <a
                 key={item.href}
                 href={item.href}
-                className="rounded-md px-3 py-2 text-sm font-medium text-slate-600 no-underline transition-colors hover:bg-slate-100 hover:text-slate-900"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 no-underline transition-colors hover:bg-stone-200/60 hover:text-stone-900"
               >
                 {item.label}
               </a>
@@ -166,7 +166,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-100 md:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-stone-200 text-stone-600 transition hover:bg-stone-200/50 md:hidden"
             aria-expanded={menuOpen}
             aria-controls="mobile-nav"
             aria-label="Open menu"
@@ -179,21 +179,21 @@ export default function App() {
       {/* Mobile nav */}
       {menuOpen && (
         <div
-          className="fixed inset-0 z-[60] flex flex-col bg-white md:hidden"
+          className="fixed inset-0 z-[60] flex flex-col bg-stone-50 md:hidden"
           id="mobile-nav"
           role="dialog"
           aria-modal="true"
           aria-label="Navigation"
         >
-          <div className="flex h-16 items-center justify-between border-b border-slate-200 px-4">
+          <div className="flex h-16 items-center justify-between border-b border-stone-200 px-4">
             <div className="flex items-center gap-2.5">
               <LogoMark className="h-8 w-8" />
-              <span className="text-base font-semibold text-slate-900">Lextures</span>
+              <span className="text-base font-semibold text-stone-900">Lextures</span>
             </div>
             <button
               type="button"
               onClick={closeMenu}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-200/50"
               aria-label="Close menu"
             >
               <X className="h-4 w-4" />
@@ -205,13 +205,13 @@ export default function App() {
                 key={item.href}
                 href={item.href}
                 onClick={closeMenu}
-                className="rounded-lg px-4 py-3.5 text-base font-medium text-slate-700 no-underline transition hover:bg-slate-100"
+                className="rounded-lg px-4 py-3.5 text-base font-medium text-stone-800 no-underline transition hover:bg-stone-200/50"
               >
                 {item.label}
               </a>
             ))}
           </nav>
-          <div className="border-t border-slate-200 p-4 pb-8 flex flex-col gap-3">
+          <div className="flex flex-col gap-3 border-t border-stone-200 p-4 pb-8">
             <a href={LINKS.demo} onClick={closeMenu} className="btn-primary w-full justify-center">
               Try the demo
             </a>
@@ -224,24 +224,24 @@ export default function App() {
 
       <main id="main">
         {/* Hero */}
-        <section className="relative overflow-hidden border-b border-slate-200 py-20 sm:py-28 lg:py-32">
+        <section className="relative overflow-hidden border-b border-stone-200/90 bg-white py-20 sm:py-28 lg:py-32">
           <HeroCanvas />
-          {/* Gradient keeps text readable against the canvas */}
+          {/* Fade keeps the canvas visible but never competes with copy */}
           <div
-            className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white via-white/90 to-white/20"
+            className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white via-white/95 to-transparent"
             aria-hidden
           />
           <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-            <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">
+            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-stone-500">
               Open-source learning management
             </p>
-            <h1 className="mt-5 max-w-2xl font-display text-4xl font-normal italic leading-[1.1] tracking-tight text-slate-900 sm:text-5xl lg:text-[3.25rem]">
+            <h1 className="font-display mt-6 max-w-2xl text-[2.15rem] font-normal leading-[1.12] tracking-[-0.02em] text-stone-900 sm:text-5xl lg:text-[3.05rem]">
               The LMS that{' '}
-              <span className="not-italic text-indigo-600">adapts to every learner</span>
+              <span className="text-accent">adapts as learners move</span>
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-600 sm:text-xl">
-              Lextures brings adaptive quizzes, AI-generated content, and standards-based grading
-              to institutions ready to move past static course delivery.
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-stone-600 sm:text-xl">
+              Adaptive quizzes, instructor workflows, and integrations that fit schools and programs
+              running at real scale—not a slide deck with a gradebook attached.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
               <a href={LINKS.demo} className="btn-primary gap-2">
@@ -252,8 +252,8 @@ export default function App() {
                 Browse the repository
               </a>
             </div>
-            <p className="mt-8 text-sm text-slate-400">
-              MIT-licensed · Self-host on your own Postgres · LTI 1.3 ready
+            <p className="mt-8 text-sm text-stone-400">
+              MIT license · Self-hosted Postgres · LTI 1.3
             </p>
           </div>
         </section>
@@ -262,22 +262,22 @@ export default function App() {
         <section id="features" className="bg-surface py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
-              <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-                Everything instructors need. Nothing they don't.
+              <h2 className="text-3xl font-semibold tracking-tight text-stone-900 sm:text-4xl">
+                Built for courses, grading, and the messy middle
               </h2>
-              <p className="mt-4 text-lg leading-relaxed text-slate-600">
-                Lextures is a full LMS—course management, assessments, gradebook, and integrations—
-                built from the ground up with adaptive intelligence at the core.
+              <p className="mt-4 text-lg leading-relaxed text-stone-600">
+                Course management, assessments, gradebook, and integrations—without treating
+                adaptation like a marketing bolt-on.
               </p>
             </div>
             <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {FEATURES.map(({ title, body, icon: Icon }) => (
                 <article key={title} className="feature-card">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-muted/70 text-accent">
                     <Icon className="h-5 w-5" aria-hidden />
                   </div>
-                  <h3 className="mt-5 text-base font-semibold text-slate-900">{title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{body}</p>
+                  <h3 className="mt-5 text-base font-semibold text-stone-900">{title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-stone-600">{body}</p>
                 </article>
               ))}
             </div>
@@ -285,28 +285,28 @@ export default function App() {
         </section>
 
         {/* Adaptive AI */}
-        <section id="ai" className="border-y border-slate-200 py-20 sm:py-28">
+        <section id="ai" className="border-y border-stone-200/90 bg-white py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
-              <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">
-                Intelligence built in
+              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-stone-500">
+                Delivery & outcomes
               </p>
-              <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-                Not an AI add-on. An adaptive core.
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-stone-900 sm:text-4xl">
+                Adaptive mechanics, not buzzwords
               </h2>
-              <p className="mt-4 text-lg leading-relaxed text-slate-600">
-                Adaptive delivery, misconception detection, and spaced repetition are core infrastructure—
-                not a chatbot widget bolted onto a legacy gradebook.
+              <p className="mt-4 text-lg leading-relaxed text-stone-600">
+                Routing, misconceptions, and review scheduling sit next to grading and content—because
+                that is where they actually affect outcomes.
               </p>
             </div>
             <div className="mt-12 grid gap-8 lg:grid-cols-3">
               {AI_CAPABILITIES.map(({ title, body, icon: Icon }) => (
-                <div key={title} className="flex flex-col gap-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+                <div key={title} className="flex flex-col gap-4 rounded-xl border border-stone-200/90 bg-stone-50/50 p-6">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-stone-900 text-white shadow-sm">
                     <Icon className="h-5 w-5" aria-hidden />
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-                  <p className="text-sm leading-relaxed text-slate-600">{body}</p>
+                  <h3 className="text-lg font-semibold text-stone-900">{title}</h3>
+                  <p className="text-sm leading-relaxed text-stone-600">{body}</p>
                 </div>
               ))}
             </div>
@@ -317,10 +317,10 @@ export default function App() {
         <section id="institutions" className="bg-surface py-20 sm:py-28">
           <div className="mx-auto grid max-w-6xl gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:items-center lg:gap-20 lg:px-8">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              <h2 className="text-3xl font-semibold tracking-tight text-stone-900 sm:text-4xl">
                 Built around how institutions actually operate
               </h2>
-              <p className="mt-5 text-lg leading-relaxed text-slate-600">
+              <p className="mt-5 text-lg leading-relaxed text-stone-600">
                 From K-12 districts to university programs, Lextures is modeled on the workflows
                 that break first at scale: enrollment drift, inconsistent accommodations, grading
                 that can't be audited, and content no one can keep synchronized.
@@ -331,22 +331,22 @@ export default function App() {
                   'Accommodations are managed at the platform level—extra time and reduced distraction mode apply automatically, without per-assignment workarounds.',
                   'Every grading action is logged: who changed what, when, and why—so appeals and accreditation reviews have a real paper trail.',
                 ].map((line) => (
-                  <li key={line} className="flex gap-3 text-slate-700">
-                    <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />
+                  <li key={line} className="flex gap-3 text-stone-700">
+                    <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                     <span>{line}</span>
                   </li>
                 ))}
               </ul>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-surface-2 p-8">
-              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">
+            <div className="rounded-xl border border-stone-200/90 bg-surface-2 p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-stone-500">
                 Design principle
               </p>
-              <p className="mt-4 text-xl font-medium leading-snug text-slate-900">
+              <p className="mt-4 text-xl font-medium leading-snug text-stone-900">
                 If a registrar would wince at the data model, it doesn't ship—operational honesty
                 beats feature checklists.
               </p>
-              <p className="mt-5 text-sm leading-relaxed text-slate-500">
+              <p className="mt-5 text-sm leading-relaxed text-stone-500">
                 Lextures is under active development. The public demo is the fastest way to see
                 current capabilities and the direction the product is heading.
               </p>
@@ -359,13 +359,13 @@ export default function App() {
         </section>
 
         {/* Integrations */}
-        <section id="integrations" className="border-t border-slate-200 py-20 sm:py-28">
+        <section id="integrations" className="border-t border-stone-200/90 bg-white py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
-              <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              <h2 className="text-3xl font-semibold tracking-tight text-stone-900 sm:text-4xl">
                 Works inside the stack you already have
               </h2>
-              <p className="mt-4 text-lg text-slate-600">
+              <p className="mt-4 text-lg text-stone-600">
                 No rip-and-replace. Lextures is designed to integrate with Canvas, Blackboard,
                 Moodle, and your district SIS—or stand alone as your primary LMS.
               </p>
@@ -373,31 +373,31 @@ export default function App() {
             <dl className="mt-12 grid gap-5 sm:grid-cols-2">
               {INTEGRATIONS.map((row) => (
                 <div key={row.term} className="feature-card">
-                  <dt className="text-sm font-semibold text-slate-900">{row.term}</dt>
-                  <dd className="mt-2 text-sm leading-relaxed text-slate-600">{row.desc}</dd>
+                  <dt className="text-sm font-semibold text-stone-900">{row.term}</dt>
+                  <dd className="mt-2 text-sm leading-relaxed text-stone-600">{row.desc}</dd>
                 </div>
               ))}
             </dl>
-            <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-slate-400">
+            <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-stone-400">
               {['LTI 1.3', 'SAML 2.0', 'OIDC', 'OneRoster 1.2', 'SCIM 2.0', 'Clever', 'ClassLink', 'QTI 2.1/3.0', 'Canvas import', 'iCalendar'].map((tag) => (
-                <span key={tag} className="font-medium text-slate-500">{tag}</span>
+                <span key={tag} className="font-medium text-stone-500">{tag}</span>
               ))}
             </div>
           </div>
         </section>
 
         {/* Code section */}
-        <section className="bg-surface border-y border-slate-200 py-16 sm:py-20">
+        <section className="border-y border-stone-200/90 bg-surface py-16 sm:py-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:gap-16">
               <div className="lg:max-w-md">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-muted/70 text-accent">
                   <Code2 className="h-5 w-5" aria-hidden />
                 </div>
-                <h2 className="mt-5 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                <h2 className="mt-5 text-2xl font-semibold tracking-tight text-stone-900 sm:text-3xl">
                   Open source, MIT-licensed
                 </h2>
-                <p className="mt-4 leading-relaxed text-slate-600">
+                <p className="mt-4 leading-relaxed text-stone-600">
                   The full application stack—Go backend, React frontend, database migrations—is
                   public on GitHub. Deploy on your own infrastructure, fork it, or contribute.
                   No vendor lock-in, no usage fees.
@@ -409,25 +409,25 @@ export default function App() {
                   </a>
                 </div>
               </div>
-              <div className="flex-1 rounded-xl border border-slate-200 bg-slate-900 p-6 font-mono text-sm leading-relaxed shadow-sm">
-                <p className="text-slate-500"># Get started in minutes</p>
+              <div className="flex-1 rounded-xl border border-stone-800 bg-stone-950 p-6 font-mono text-sm leading-relaxed shadow-sm">
+                <p className="text-stone-500"># Get started in minutes</p>
                 <p className="mt-3">
-                  <span className="text-indigo-400">git clone</span>{' '}
-                  <span className="text-slate-300">https://github.com/StudyDrift/lextures</span>
+                  <span className="text-teal-400">git clone</span>{' '}
+                  <span className="text-stone-300">https://github.com/StudyDrift/lextures</span>
                 </p>
                 <p className="mt-1">
-                  <span className="text-indigo-400">cd</span>{' '}
-                  <span className="text-slate-300">lextures</span>
+                  <span className="text-teal-400">cd</span>{' '}
+                  <span className="text-stone-300">lextures</span>
                 </p>
-                <p className="mt-3 text-slate-500"># Start with Docker Compose</p>
+                <p className="mt-3 text-stone-500"># Start with Docker Compose</p>
                 <p className="mt-1">
-                  <span className="text-indigo-400">docker compose up</span>{' '}
-                  <span className="text-slate-400">-d</span>
+                  <span className="text-teal-400">docker compose up</span>{' '}
+                  <span className="text-stone-500">-d</span>
                 </p>
-                <p className="mt-3 text-slate-500"># Or run locally with your own Postgres</p>
+                <p className="mt-3 text-stone-500"># Or run locally with your own Postgres</p>
                 <p className="mt-1">
-                  <span className="text-indigo-400">make</span>{' '}
-                  <span className="text-slate-300">dev</span>
+                  <span className="text-teal-400">make</span>{' '}
+                  <span className="text-stone-300">dev</span>
                 </p>
               </div>
             </div>
@@ -437,26 +437,20 @@ export default function App() {
         {/* CTA */}
         <section className="py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-            <div className="rounded-2xl bg-indigo-600 px-8 py-14 text-center sm:px-14">
-              <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                See what modern course delivery looks like
+            <div className="rounded-2xl border border-stone-200/90 bg-white px-8 py-14 text-center shadow-[0_12px_40px_-24px_rgba(28,25,23,0.35)] sm:px-14">
+              <h2 className="text-3xl font-semibold tracking-tight text-stone-900 sm:text-4xl">
+                Try the product on the hosted demo
               </h2>
-              <p className="mx-auto mt-4 max-w-xl text-lg text-indigo-100">
-                Walk the learner and instructor paths on the hosted demo—adaptive quizzes, gradebook,
-                Canvas import, and all. Then evaluate whether the stack fits your institution.
+              <p className="mx-auto mt-4 max-w-xl text-lg leading-relaxed text-stone-600">
+                Walk learner and instructor flows—quizzes, gradebook, imports—then decide if the stack
+                matches your institution.
               </p>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <a
-                  href={LINKS.demo}
-                  className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-6 py-3 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
+                <a href={LINKS.demo} className="btn-primary gap-2 px-6 py-3">
                   Open demo.lextures.com
                   <ArrowRight className="h-4 w-4" aria-hidden />
                 </a>
-                <a
-                  href={LINKS.github}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border border-indigo-400 px-6 py-3 text-sm font-semibold text-white transition-colors hover:border-indigo-200 hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
+                <a href={LINKS.github} className="btn-secondary px-6 py-3">
                   Study the source
                 </a>
               </div>
@@ -466,36 +460,36 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-10">
-        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
+      <footer className="border-t border-stone-200/90 bg-white py-12">
+        <div className="mx-auto flex max-w-6xl flex-col gap-10 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
           <div>
             <div className="flex items-center gap-2.5">
               <LogoMark className="h-8 w-8" />
-              <span className="text-base font-semibold text-slate-900">Lextures</span>
+              <span className="text-base font-semibold text-stone-900">Lextures</span>
             </div>
-            <p className="mt-3 max-w-xs text-sm leading-relaxed text-slate-500">
-              Open-source learning management system for adaptive education. Built in public
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-stone-500">
+              Open-source LMS for courses, assessments, and institutional workflows. Developed in public
               on GitHub.
             </p>
-            <p className="mt-4 text-sm text-slate-400">© {new Date().getFullYear()} Lextures contributors</p>
+            <p className="mt-4 text-sm text-stone-400">© {new Date().getFullYear()} Lextures contributors</p>
           </div>
-          <div className="flex flex-wrap gap-x-10 gap-y-3 text-sm font-medium text-slate-500">
-            <a href={LINKS.demo} className="no-underline hover:text-slate-900 transition-colors">
+          <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm font-medium text-stone-500">
+            <a href={LINKS.demo} className="no-underline transition-colors hover:text-stone-900">
               Live demo
             </a>
-            <a href={LINKS.github} className="no-underline hover:text-slate-900 transition-colors">
+            <a href={LINKS.github} className="no-underline transition-colors hover:text-stone-900">
               GitHub
             </a>
-            <a href="#features" className="no-underline hover:text-slate-900 transition-colors">
+            <a href="#features" className="no-underline transition-colors hover:text-stone-900">
               Features
             </a>
-            <a href="#ai" className="no-underline hover:text-slate-900 transition-colors">
+            <a href="#ai" className="no-underline transition-colors hover:text-stone-900">
               Adaptive AI
             </a>
-            <a href="#institutions" className="no-underline hover:text-slate-900 transition-colors">
+            <a href="#institutions" className="no-underline transition-colors hover:text-stone-900">
               Institutions
             </a>
-            <a href="#integrations" className="no-underline hover:text-slate-900 transition-colors">
+            <a href="#integrations" className="no-underline transition-colors hover:text-stone-900">
               Integrations
             </a>
           </div>

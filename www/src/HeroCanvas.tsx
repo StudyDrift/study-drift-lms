@@ -8,44 +8,54 @@ interface Dot {
   r: number
 }
 
+const ACCENT_RGB = '13, 148, 136' /* teal-600 */
+const NODE_RGB = '120, 113, 108' /* stone-500 */
+
 export function HeroCanvas() {
   const ref = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    const canvas = ref.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    const surface = ref.current
+    if (!surface) return
+    const graphics = surface.getContext('2d')
+    if (!graphics) return
 
-    const COUNT = 90
-    const LINK_DIST = 145
+    const canvas: HTMLCanvasElement = surface
+    const ctx: CanvasRenderingContext2D = graphics
+
+    const reduceMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    const COUNT = reduceMotion ? 42 : 64
+    const LINK_DIST = 132
     let raf = 0
     const dots: Dot[] = []
 
     function resize() {
-      canvas!.width = canvas!.offsetWidth
-      canvas!.height = canvas!.offsetHeight
+      canvas.width = canvas.offsetWidth
+      canvas.height = canvas.offsetHeight
     }
 
     function init() {
-      const w = canvas!.width
-      const h = canvas!.height
+      const w = canvas.width
+      const h = canvas.height
       dots.length = 0
       for (let i = 0; i < COUNT; i++) {
         dots.push({
           x: Math.random() * w,
           y: Math.random() * h,
-          vx: (Math.random() - 0.5) * 0.45,
-          vy: (Math.random() - 0.5) * 0.45,
-          r: Math.random() * 1.4 + 0.6,
+          vx: reduceMotion ? 0 : (Math.random() - 0.5) * 0.35,
+          vy: reduceMotion ? 0 : (Math.random() - 0.5) * 0.35,
+          r: Math.random() * 1.2 + 0.45,
         })
       }
     }
 
-    function tick() {
-      const w = canvas!.width
-      const h = canvas!.height
-      ctx!.clearRect(0, 0, w, h)
+    function drawFrame() {
+      const w = canvas.width
+      const h = canvas.height
+      ctx.clearRect(0, 0, w, h)
 
       for (const d of dots) {
         d.x += d.vx
@@ -60,25 +70,30 @@ export function HeroCanvas() {
           const dy = dots[i].y - dots[j].y
           const dist = Math.sqrt(dx * dx + dy * dy)
           if (dist < LINK_DIST) {
-            const alpha = (1 - dist / LINK_DIST) * 0.16
-            ctx!.beginPath()
-            ctx!.strokeStyle = `rgba(99,102,241,${alpha})`
-            ctx!.lineWidth = 0.75
-            ctx!.moveTo(dots[i].x, dots[i].y)
-            ctx!.lineTo(dots[j].x, dots[j].y)
-            ctx!.stroke()
+            const alpha = (1 - dist / LINK_DIST) * 0.065
+            ctx.beginPath()
+            ctx.strokeStyle = `rgba(${ACCENT_RGB},${alpha})`
+            ctx.lineWidth = 0.65
+            ctx.moveTo(dots[i].x, dots[i].y)
+            ctx.lineTo(dots[j].x, dots[j].y)
+            ctx.stroke()
           }
         }
       }
 
       for (const d of dots) {
-        ctx!.beginPath()
-        ctx!.arc(d.x, d.y, d.r, 0, Math.PI * 2)
-        ctx!.fillStyle = 'rgba(99,102,241,0.38)'
-        ctx!.fill()
+        ctx.beginPath()
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(${NODE_RGB},0.22)`
+        ctx.fill()
       }
+    }
 
-      raf = requestAnimationFrame(tick)
+    function tick() {
+      drawFrame()
+      if (!reduceMotion) {
+        raf = requestAnimationFrame(tick)
+      }
     }
 
     resize()
@@ -88,6 +103,9 @@ export function HeroCanvas() {
     const ro = new ResizeObserver(() => {
       resize()
       init()
+      if (reduceMotion) {
+        drawFrame()
+      }
     })
     ro.observe(canvas)
 
