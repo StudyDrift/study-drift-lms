@@ -202,7 +202,7 @@ func (d Deps) runCanvasImport(
 	}
 	var canvasUserToLocal map[int64]uuid.UUID
 	if include.Grades {
-		canvasUserToLocal = buildCanvasUserIDToLexturesUserID(ctx, d.Pool, rowsForUserMatch)
+		canvasUserToLocal = buildCanvasUserIDToLexturesUserID(ctx, d.Pool, client, canvasBase, accessToken, canvasCourseID, rowsForUserMatch)
 	}
 
 	tx, err := d.Pool.Begin(ctx)
@@ -222,10 +222,9 @@ func (d Deps) runCanvasImport(
 
 	if include.Settings {
 		title := strAt(course, "name", "Imported Canvas course")
-		desc := markdownFromHTML(strAt(course, "public_description", ""))
-		if desc == "" {
-			desc = markdownFromHTML(strAt(course, "syllabus_body", ""))
-		}
+		// Avoid stuffing the syllabus (or HTML public description) into the short course
+		// blurb—the syllabus still lands on the dedicated syllabus record below.
+		desc := title
 		published := strAt(course, "workflow_state", "available") == "available"
 		_, err = tx.Exec(ctx, `UPDATE course.courses SET title = $1, description = $2, published = $3, updated_at = NOW() WHERE id = $4`, title, desc, published, courseID)
 		if err != nil {
@@ -408,6 +407,16 @@ func (d Deps) runCanvasImport(
 		if !progress("Importing assignment and quiz grades from Canvas...") {
 			return context.Canceled
 		}
+		// #region agent log
+		canvasAgentDebugLog("canvas-import", "H2", "canvas_import_ws.go:runCanvasImport", "invoking aggregated grade import (post-module maps)", map[string]any{
+			"includeModules":     include.Modules,
+			"includeAssignments": include.Assignments,
+			"includeQuizzes":     include.Quizzes,
+			"assignMapLen":       len(canvasAssignToItem),
+			"quizMapLen":         len(canvasQuizToItem),
+			"userMapLen":         len(canvasUserToLocal),
+		})
+		// #endregion agent log
 		if err := canvasImportAllCanvasGrades(ctx, tx, client, canvasBase, accessToken, canvasCourseID, courseID, canvasAssignToItem, canvasQuizToItem, canvasUserToLocal); err != nil {
 			return err
 		}
