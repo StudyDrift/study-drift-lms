@@ -190,6 +190,21 @@ func (d Deps) runCanvasImport(
 		}
 	}
 
+	rowsForUserMatch := enrollmentRows
+	if include.Grades && !include.Enrollments {
+		if !progress("Loading Canvas enrollments to match grades to learner accounts...") {
+			return context.Canceled
+		}
+		rowsForUserMatch, err = canvasGetArrayPaginated(ctx, client, canvasBase, accessToken, fmt.Sprintf("courses/%d/enrollments", canvasCourseID), url.Values{"state[]": []string{"active", "invited", "creation_pending"}})
+		if err != nil {
+			return err
+		}
+	}
+	var canvasUserToLocal map[int64]uuid.UUID
+	if include.Grades {
+		canvasUserToLocal = buildCanvasUserIDToLexturesUserID(ctx, d.Pool, rowsForUserMatch)
+	}
+
 	tx, err := d.Pool.Begin(ctx)
 	if err != nil {
 		return errors.New("Failed to start import transaction.")
@@ -245,6 +260,8 @@ func (d Deps) runCanvasImport(
 
 	nextSort := 0
 	_ = tx.QueryRow(ctx, `SELECT COALESCE(MAX(sort_order), -1) + 1 FROM course.course_structure_items WHERE course_id = $1`, courseID).Scan(&nextSort)
+	canvasAssignToItem := make(map[int64]uuid.UUID)
+	canvasQuizToItem := make(map[int64]uuid.UUID)
 	if include.Modules {
 		if !progress("Importing modules and items...") {
 			return context.Canceled
@@ -304,22 +321,28 @@ func (d Deps) runCanvasImport(
 					}
 				case "assignment":
 					markdown := ""
+					var pointsWorth *int
 					if cid := int64At(it, "content_id"); cid > 0 {
+						canvasAssignToItem[cid] = itemID
 						obj, e := canvasGetObject(ctx, client, canvasBase, accessToken, fmt.Sprintf("courses/%d/assignments/%d", canvasCourseID, cid), nil)
-						if e == nil {
+						if e == nil && obj != nil {
 							markdown = markdownFromHTML(strAt(obj, "description", ""))
+							pointsWorth = optionalPointsWorthFromCanvas(obj, "points_possible")
 						}
 					}
-					if _, err = tx.Exec(ctx, `INSERT INTO course.module_assignments (structure_item_id, markdown) VALUES ($1, $2)`, itemID, markdown); err != nil {
+					if _, err = tx.Exec(ctx, `INSERT INTO course.module_assignments (structure_item_id, markdown, points_worth) VALUES ($1, $2, $3)`, itemID, markdown, pointsWorth); err != nil {
 						return errors.New("Failed to save imported assignment.")
 					}
 				case "quiz":
 					markdown := ""
 					var questions []coursemodulequiz.QuizQuestion
+					var pointsWorth *int
 					if cid := int64At(it, "content_id"); cid > 0 {
+						canvasQuizToItem[cid] = itemID
 						obj, e := canvasGetObject(ctx, client, canvasBase, accessToken, fmt.Sprintf("courses/%d/quizzes/%d", canvasCourseID, cid), nil)
-						if e == nil {
+						if e == nil && obj != nil {
 							markdown = markdownFromHTML(strAt(obj, "description", ""))
+							pointsWorth = optionalPointsWorthFromCanvas(obj, "points_possible")
 						}
 						qq, qe := canvasImportQuizQuestions(ctx, client, canvasBase, accessToken, canvasCourseID, cid)
 						if qe != nil {
@@ -331,7 +354,7 @@ func (d Deps) runCanvasImport(
 					if mj != nil {
 						return errors.New("Failed to encode imported quiz questions.")
 					}
-					if _, err = tx.Exec(ctx, `INSERT INTO course.module_quizzes (structure_item_id, markdown, questions_json) VALUES ($1, $2, $3)`, itemID, markdown, qJSON); err != nil {
+					if _, err = tx.Exec(ctx, `INSERT INTO course.module_quizzes (structure_item_id, markdown, questions_json, points_worth) VALUES ($1, $2, $3, $4)`, itemID, markdown, qJSON, pointsWorth); err != nil {
 						return errors.New("Failed to save imported quiz.")
 					}
 				case "external":
@@ -378,6 +401,15 @@ func (d Deps) runCanvasImport(
 				ON CONFLICT (course_id, user_id) DO UPDATE SET role = EXCLUDED.role
 				WHERE course.course_enrollments.role <> 'owner'
 			`, courseID, userID, role)
+		}
+	}
+
+	if include.Grades {
+		if !progress("Importing assignment and quiz grades from Canvas...") {
+			return context.Canceled
+		}
+		if err := canvasImportAllCanvasGrades(ctx, tx, client, canvasBase, accessToken, canvasCourseID, courseID, canvasAssignToItem, canvasQuizToItem, canvasUserToLocal); err != nil {
+			return err
 		}
 	}
 

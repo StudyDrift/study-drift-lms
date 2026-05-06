@@ -10,6 +10,7 @@ import {
 import { Navigate, useLocation } from 'react-router-dom'
 import { ImageIcon, Monitor, Save, Upload, X } from 'lucide-react'
 import { settingsViewFromPathname } from '../../components/layout/side-nav-path-utils'
+import { usePlatformScimEnabled } from '../../hooks/use-platform-scim-enabled'
 import { ImageModelPicker } from '../../components/image-model-picker'
 import { RequirePermission } from '../../components/require-permission'
 import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-settings-panel'
@@ -144,6 +145,10 @@ export default function Settings() {
   const { allows, loading: permLoading } = usePermissions()
   const { density, setDensity } = useUiDensityControls()
   const activeView = settingsViewFromPathname(location.pathname)
+  const canManageRbac = !permLoading && allows(PERM_RBAC_MANAGE)
+  const { scimEnabled: platformScimEnabled, loading: platformScimFlagLoading } = usePlatformScimEnabled(
+    canManageRbac && activeView === 'scim-provisioning',
+  )
   const accountFormId = useId()
 
   const [systemPrompts, setSystemPrompts] = useState<SystemPromptItem[]>([])
@@ -270,10 +275,8 @@ export default function Settings() {
     void loadSystemPrompts()
   }, [activeView, allows, loadSystemPrompts, permLoading])
 
-  const canConfigureAi = !permLoading && allows(PERM_RBAC_MANAGE)
-
   useEffect(() => {
-    if (activeView !== 'ai-models' || !canConfigureAi) return
+    if (activeView !== 'ai-models' || !canManageRbac) return
     let cancelled = false
     ;(async () => {
       setAiLoading(true)
@@ -306,7 +309,7 @@ export default function Settings() {
     return () => {
       cancelled = true
     }
-  }, [activeView, canConfigureAi, loadModels])
+  }, [activeView, canManageRbac, loadModels])
 
   async function onSaveAi(e: FormEvent) {
     e.preventDefault()
@@ -722,6 +725,17 @@ export default function Settings() {
     if (!hasRbac && !((onOrgUnits || onTerms) && hasUnitAdmin)) {
       return <Navigate to="/settings/account" replace />
     }
+  }
+
+  if (activeView === 'scim-provisioning' && canManageRbac && platformScimFlagLoading) {
+    return (
+      <LmsPage title="Settings" description="Account and learning preferences.">
+        <p className="mt-8 text-sm text-slate-500 dark:text-neutral-400">Loading…</p>
+      </LmsPage>
+    )
+  }
+  if (activeView === 'scim-provisioning' && canManageRbac && !platformScimEnabled) {
+    return <Navigate to="/settings/platform" replace />
   }
 
   return (

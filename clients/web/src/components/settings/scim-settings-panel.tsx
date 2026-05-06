@@ -1,7 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { authorizedFetch, apiUrl } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
-import { usePlatformScimEnabled } from '../../hooks/use-platform-scim-enabled'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
 
 type ScimToken = {
@@ -28,7 +27,6 @@ export function ScimSettingsPanel() {
   const [loading, setLoading] = useState(false)
   const [newToken, setNewToken] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const { scimEnabled, loading: flagLoading } = usePlatformScimEnabled(true)
 
   const instOk = useMemo(() => {
     const s = institutionId.trim()
@@ -38,7 +36,7 @@ export function ScimSettingsPanel() {
   const scimBase = apiUrl('/scim/v2')
 
   const refresh = useCallback(async () => {
-    if (!scimEnabled || !instOk) return
+    if (!instOk) return
     setLoading(true)
     setError(null)
     try {
@@ -60,7 +58,7 @@ export function ScimSettingsPanel() {
     } finally {
       setLoading(false)
     }
-  }, [instOk, institutionId, scimEnabled])
+  }, [instOk, institutionId])
 
   useEffect(() => {
     void refresh()
@@ -105,19 +103,6 @@ export function ScimSettingsPanel() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Revoke failed.')
     }
-  }
-
-  if (flagLoading) {
-    return <p className="mt-4 text-sm text-slate-500 dark:text-neutral-400">Loading…</p>
-  }
-
-  if (!scimEnabled) {
-    return (
-      <p className="mt-4 text-sm text-slate-600 dark:text-neutral-400">
-        Enable SCIM under Global platform (feature flag) and set{' '}
-        <code className="font-mono text-xs">SCIM_ENABLED=1</code> in the server environment if needed, then save.
-      </p>
-    )
   }
 
   return (

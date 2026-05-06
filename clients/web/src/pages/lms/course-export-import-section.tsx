@@ -1,7 +1,12 @@
-import { type ChangeEvent, useRef, useState } from 'react'
+import { type ChangeEvent, useEffect, useRef, useState } from 'react'
 import { Download, GraduationCap, Upload } from 'lucide-react'
 import { BookLoader } from '../../components/quiz/book-loader'
 import { usePermissions } from '../../context/use-permissions'
+import {
+  clearCanvasImportCredentials,
+  loadCanvasImportCredentials,
+  saveCanvasImportCredentials,
+} from '../../lib/canvas-import-credentials'
 import {
   CANVAS_IMPORT_INCLUDE_ALL,
   courseItemCreatePermission,
@@ -28,6 +33,24 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
     key: number
     text: string
   } | null>(null)
+  const [rememberCanvasCredentials, setRememberCanvasCredentials] = useState(false)
+
+  useEffect(() => {
+    const saved = loadCanvasImportCredentials()
+    if (!saved) return
+    setCanvasBaseUrl((prev) => (prev.trim() ? prev : saved.canvasBaseUrl))
+    setCanvasToken((prev) => (prev.trim() ? prev : saved.accessToken))
+    setRememberCanvasCredentials(true)
+  }, [])
+
+  useEffect(() => {
+    if (!rememberCanvasCredentials) return
+    const u = canvasBaseUrl.trim()
+    const t = canvasToken.trim()
+    if (u && t) {
+      saveCanvasImportCredentials(u, t)
+    }
+  }, [rememberCanvasCredentials, canvasBaseUrl, canvasToken])
 
   async function onExport() {
     setFeedback(null)
@@ -107,7 +130,9 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
         kind: 'ok',
         text: 'Canvas course imported successfully. Reload the course if modules look stale.',
       })
-      setCanvasToken('')
+      if (!rememberCanvasCredentials) {
+        setCanvasToken('')
+      }
     } catch (e) {
       setFeedback({
         kind: 'err',
@@ -233,7 +258,9 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
             We map Canvas into this course; anyone with a matching email gets enrolled when
             enrollments are included; if they do not have a Lexters account yet, one is created with
             a random password (they can use password reset to sign in, if your deployment offers it).
-            The token is sent once for the import (HTTPS and WebSocket) and is not stored.
+            The token is sent once for the import (HTTPS and WebSocket); Lextures does not store
+            it on the server. You can optionally keep the URL and token in this browser for the next
+            course import.
           </p>
           <fieldset className="mt-4 rounded-xl border border-slate-200 p-4 dark:border-neutral-600">
             <legend className="px-1 text-xs font-medium text-slate-700 dark:text-neutral-300">
@@ -246,7 +273,11 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
                   ['assignments', 'Assignments', 'Assignment prompts, due dates, and submission settings.'] as const,
                   ['quizzes', 'Quizzes', 'Quizzes and questions when Canvas exposes them.'] as const,
                   ['enrollments', 'Enrollments', 'Active and invited roster (matched by email).'] as const,
-                  ['grades', 'Grades', 'Assignment groups and weighting from Canvas (gradebook layout).'] as const,
+                  [
+                    'grades',
+                    'Grades',
+                    'Per-learner scores on imported assignments and quizzes (max points + gradebook cells). Only students whose Canvas email matches a Lextures account are included.',
+                  ] as const,
                   ['settings', 'Settings', 'Course title, overview, dates, visibility, and syllabus sections.'] as const,
                 ] as const
               ).map(([key, label, hint]) => (
@@ -316,6 +347,29 @@ export function CourseExportImportSection({ courseCode }: { courseCode: string }
               />
             </label>
           </div>
+          <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 p-3 dark:border-neutral-600">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={rememberCanvasCredentials}
+              onChange={(e) => {
+                const on = e.target.checked
+                setRememberCanvasCredentials(on)
+                if (!on) {
+                  clearCanvasImportCredentials()
+                }
+              }}
+            />
+            <span>
+              <span className="block text-sm font-medium text-slate-900 dark:text-neutral-100">
+                Save Canvas URL and access token on this device
+              </span>
+              <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-500">
+                Reuses the same connection when you import into other courses in Lextures. Stored
+                only in this browser; avoid on shared computers.
+              </span>
+            </span>
+          </label>
           <p className="mt-3 text-xs text-slate-500 dark:text-neutral-500">
             In Canvas: Account or Profile → Settings → New access token. Use a token with
             permission to read the course, assignments, pages, quizzes, enrollments, and the course
