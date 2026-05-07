@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, BookOpen, Search } from 'lucide-react'
-import { useState, useMemo, useEffect, ChangeEvent } from 'react'
+import { useState, useMemo, useEffect, type ChangeEvent } from 'react'
 import { Header } from '../components/Header'
 import { allPosts, formatDate } from '../utils/blog'
 

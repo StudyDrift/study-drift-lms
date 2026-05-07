@@ -123,30 +123,30 @@ function HomePage() {
 
       <main id="main">
         {/* Hero */}
-        <section className="relative overflow-hidden border-b border-stone-200/90 bg-white py-20 sm:py-28 lg:py-32">
+        <section className="relative flex min-h-[85vh] items-center justify-center overflow-hidden border-b border-stone-200/90 bg-white py-20">
           <HeroCanvas />
           <div
-            className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white via-white/95 to-transparent"
+            className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-white"
             aria-hidden
           />
-          <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-stone-500">
+          <div className="relative z-10 mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
+            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-stone-500">
               Open-source learning management
             </p>
-            <h1 className="font-display mt-6 max-w-2xl text-[2.15rem] font-normal leading-[1.12] tracking-[-0.02em] text-stone-900 sm:text-5xl lg:text-[3.05rem]">
+            <h1 className="font-display mt-8 text-5xl font-normal leading-[1.05] tracking-[-0.03em] text-stone-900 sm:text-7xl lg:text-[5.5rem]">
               The LMS that{' '}
-              <span className="text-accent">adapts as learners move</span>
+              <span className="text-accent italic">adapts</span>
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-stone-600 sm:text-xl">
+            <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-stone-600 sm:text-xl">
               Adaptive quizzes, instructor workflows, and integrations that fit schools and programs
               running at real scale—not a slide deck with a gradebook attached.
             </p>
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <a href={LINKS.demo} className="btn-primary gap-2">
+            <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <a href={LINKS.demo} className="btn-primary h-12 gap-2 px-8 text-base">
                 Open the live demo
-                <ArrowRight className="h-4 w-4" aria-hidden />
+                <ArrowRight className="h-5 w-5" aria-hidden />
               </a>
-              <a href={LINKS.github} className="btn-secondary">
+              <a href={LINKS.github} className="btn-secondary h-12 px-8 text-base">
                 Browse the repository
               </a>
             </div>

@@ -1,4 +1,4 @@
-import { Menu, X } from 'lucide-react'
+import { Github, Menu, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 const LINKS = {
@@ -50,7 +50,15 @@ export function Header() {
           </nav>
 
           <div className="hidden items-center gap-3 md:flex">
-            <a href={LINKS.github} className="btn-secondary">Source</a>
+            <a
+              href={LINKS.github}
+              className="p-2 text-stone-600 transition-colors hover:text-stone-900"
+              aria-label="View on GitHub"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Github className="h-5 w-5" />
+            </a>
             <a href={LINKS.demo} className="btn-primary">Try the demo</a>
           </div>
 
@@ -105,7 +113,14 @@ export function Header() {
             <a href={LINKS.demo} onClick={closeMenu} className="btn-primary w-full justify-center">
               Try the demo
             </a>
-            <a href={LINKS.github} onClick={closeMenu} className="btn-secondary w-full justify-center">
+            <a
+              href={LINKS.github}
+              onClick={closeMenu}
+              className="btn-secondary w-full justify-center gap-2"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Github className="h-4 w-4" />
               View on GitHub
             </a>
           </div>
@@ -114,3 +129,4 @@ export function Header() {
     </>
   )
 }
+
