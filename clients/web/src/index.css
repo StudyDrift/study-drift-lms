@@ -70,6 +70,27 @@ html.dark {
   }
 }
 
+/* Logged-out auth: restrained backdrop (avoid centered “glow” templates). */
+.lex-auth-scene {
+  background-color: rgb(250 250 249);
+  background-image:
+    radial-gradient(ellipse 85% 55% at 100% 0%, rgba(15 118 110 / 0.055), transparent 52%),
+    radial-gradient(ellipse 70% 50% at 0% 100%, rgba(120 113 108 / 0.05), transparent 48%);
+}
+.dark .lex-auth-scene {
+  background-color: rgb(23 23 23);
+  background-image:
+    radial-gradient(ellipse 85% 55% at 100% 0%, rgba(45 212 191 / 0.07), transparent 52%),
+    radial-gradient(ellipse 70% 50% at 0% 100%, rgba(163 163 163 / 0.04), transparent 48%);
+}
+
+.lex-auth-display {
+  font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  font-feature-settings: "liga" 1, "kern" 1;
+}
+
 /* Feature help dock: subtle motion as a stand-in for a short demo clip. */
 @keyframes lex-help-clip-pan {
   0% {

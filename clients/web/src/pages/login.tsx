@@ -9,7 +9,15 @@ import { readApiErrorMessage } from '../lib/errors'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
 import { markPostLoginShortcutTip } from '../lib/post-login-shortcut-tip'
 import { setMfaFlow } from '../lib/mfa-flow-storage'
+import {
+  authCardClass,
+  authFieldClass,
+  authMutedLinkClass,
+  authOutlineButtonClass,
+  authPrimaryButtonClass,
+} from '../components/auth/auth-field-classes'
 import { MagicLinkRequestForm } from '../components/auth/magic-link-request-form'
+import { PublicAuthShell } from '../components/auth/public-auth-shell'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -121,44 +129,43 @@ export default function Login() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-50 px-4 py-12">
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(99,102,241,0.12),transparent)]"
-        aria-hidden
-      />
-      <div className="relative z-10 w-full max-w-md">
-        <header className="mb-10 text-center">
-          <div className="mb-6 flex justify-center px-2">
-            <BrandLogo />
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Sign in</h1>
-          <p className="mt-2 text-sm text-slate-500">Welcome back. Pick up where you left off.</p>
-        </header>
+    <PublicAuthShell>
+      <header className="mb-8 text-center">
+        <div className="mb-5 flex justify-center px-2">
+          <BrandLogo className="mx-auto h-14 w-auto max-w-[min(100%,240px)] object-contain" />
+        </div>
+        <h1 className="lex-auth-display text-[1.7rem] leading-snug text-stone-900 dark:text-neutral-50">
+          Sign in
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-stone-600 dark:text-neutral-400">
+          Use the email your course or school uses. SSO options appear when your organization connects them.
+        </p>
+      </header>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm shadow-slate-900/5">
-          <OidcSignInButtons nextPath={from} />
-          {saml?.enabled && saml.idp && (
-            <div className="mb-6">
-              <a
-                className="flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-indigo-300 hover:bg-slate-50"
-                href={apiUrl(
-                  `/auth/saml/login?idpId=${encodeURIComponent(saml.idp.id)}&RelayState=${encodeURIComponent(from)}`,
-                )}
-                aria-label="Log in with institutional single sign-on"
-              >
-                Log in with {saml.idp.label} SSO
-              </a>
-            </div>
-          )}
-          {saml?.enabled && saml.idp?.forceSaml && (
-            <p className="mb-4 text-center text-sm text-slate-500">
-              Your organization requires institutional sign-in.
-            </p>
-          )}
-          {!saml?.idp?.forceSaml && (
-            <form className="space-y-5" onSubmit={onSubmit}>
+      <div className={authCardClass}>
+        <OidcSignInButtons nextPath={from} />
+        {saml?.enabled && saml.idp && (
+          <div className="mb-6">
+            <a
+              className={authOutlineButtonClass}
+              href={apiUrl(
+                `/auth/saml/login?idpId=${encodeURIComponent(saml.idp.id)}&RelayState=${encodeURIComponent(from)}`,
+              )}
+              aria-label="Log in with institutional single sign-on"
+            >
+              Log in with {saml.idp.label} SSO
+            </a>
+          </div>
+        )}
+        {saml?.enabled && saml.idp?.forceSaml && (
+          <p className="mb-4 text-center text-sm text-stone-600 dark:text-neutral-400">
+            Your organization requires institutional sign-in.
+          </p>
+        )}
+        {!saml?.idp?.forceSaml && (
+          <form className="space-y-5" onSubmit={onSubmit}>
             <div>
-              <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-stone-800 dark:text-neutral-200">
                 Email
               </label>
               <input
@@ -169,12 +176,15 @@ export default function Login() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none ring-indigo-500/20 transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
+                className={authFieldClass}
                 placeholder="you@school.edu"
               />
             </div>
             <div>
-              <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label
+                htmlFor="password"
+                className="mb-1.5 block text-sm font-medium text-stone-800 dark:text-neutral-200"
+              >
                 Password
               </label>
               <input
@@ -185,50 +195,39 @@ export default function Login() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none ring-indigo-500/20 transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
+                className={authFieldClass}
                 placeholder="••••••••"
               />
               <div className="mt-2 text-right">
-                <Link
-                  to="/forgot-password"
-                  className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
-                >
+                <Link to="/forgot-password" className={`text-sm ${authMutedLinkClass}`}>
                   Forgot password?
                 </Link>
               </div>
             </div>
 
             {message && (
-              <p className="text-sm text-rose-600" role="status">
+              <p className="text-sm text-rose-600 dark:text-rose-400" role="status">
                 {message}
               </p>
             )}
 
-            <button
-              type="submit"
-              disabled={status === 'loading'}
-              style={{ backgroundColor: 'var(--lex-brand-primary, #4f46e5)' }}
-              className="flex w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-            >
+            <button type="submit" disabled={status === 'loading'} className={authPrimaryButtonClass}>
               {status === 'loading' ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
-          )}
+        )}
 
-          {!saml?.idp?.forceSaml && (
-            <MagicLinkRequestForm redirectTo={from} defaultEmail={email} />
-          )}
+        {!saml?.idp?.forceSaml && <MagicLinkRequestForm redirectTo={from} defaultEmail={email} />}
 
-          {!saml?.idp?.forceSaml && (
-            <p className="mt-6 text-center text-sm text-slate-500">
-              New here?{' '}
-              <Link to="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
-                Create an account
-              </Link>
-            </p>
-          )}
-        </div>
+        {!saml?.idp?.forceSaml && (
+          <p className="mt-6 text-center text-sm text-stone-600 dark:text-neutral-400">
+            New here?{' '}
+            <Link to="/signup" className={authMutedLinkClass}>
+              Create an account
+            </Link>
+          </p>
+        )}
       </div>
-    </div>
+    </PublicAuthShell>
   )
 }
