@@ -5,27 +5,21 @@ import {
   BrainCircuit,
   Code2,
   GraduationCap,
-  Menu,
   RefreshCw,
   ShieldCheck,
   Unplug,
-  X,
   Zap,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Header } from './components/Header'
 import { HeroCanvas } from './HeroCanvas'
+import { BlogIndex } from './pages/BlogIndex'
+import { BlogPost } from './pages/BlogPost'
 
 const LINKS = {
   demo: 'https://demo.lextures.com/',
   github: 'https://github.com/StudyDrift/lextures',
 } as const
-
-const NAV = [
-  { label: 'Features', href: '#features' },
-  { label: 'Adaptive AI', href: '#ai' },
-  { label: 'Institutions', href: '#institutions' },
-  { label: 'Integrations', href: '#integrations' },
-] as const
 
 const FEATURES = [
   {
@@ -97,33 +91,24 @@ const INTEGRATIONS = [
   },
 ] as const
 
-function LogoMark({ className = '' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 32 32"
-      className={className}
-      aria-hidden
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect width="32" height="32" rx="8" fill="var(--color-accent)" />
-      <path
-        d="M9 23V9h5.2c2.9 0 5.1 1.6 5.1 4.2 0 2.5-2.2 4.1-5.1 4.1H12.5V23H9Zm3.5-8.2h1.4c1.4 0 2.3-.7 2.3-1.8 0-1.2-.9-1.9-2.3-1.9h-1.4v3.7Z"
-        fill="white"
-      />
-    </svg>
-  )
+function useHashRoute() {
+  const [hash, setHash] = useState(() => window.location.hash)
+  useEffect(() => {
+    const handler = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', handler)
+    return () => window.removeEventListener('hashchange', handler)
+  }, [])
+  return hash
 }
 
-export default function App() {
-  const [menuOpen, setMenuOpen] = useState(false)
-
+function HomePage() {
   useEffect(() => {
-    document.body.style.overflow = menuOpen ? 'hidden' : ''
-    return () => { document.body.style.overflow = '' }
-  }, [menuOpen])
-
-  const closeMenu = () => setMenuOpen(false)
+    const hash = window.location.hash
+    if (hash && !hash.startsWith('#/')) {
+      const el = document.querySelector(hash)
+      if (el) el.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [])
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-stone-50 text-slate-700">
@@ -134,99 +119,12 @@ export default function App() {
         Skip to content
       </a>
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-stone-50/90 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <a href="#" className="flex items-center gap-2.5 no-underline">
-            <LogoMark className="h-8 w-8 shrink-0" />
-            <span className="text-base font-semibold tracking-tight text-stone-900">Lextures</span>
-          </a>
-
-          <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
-            {NAV.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 no-underline transition-colors hover:bg-stone-200/60 hover:text-stone-900"
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
-
-          <div className="hidden items-center gap-3 md:flex">
-            <a href={LINKS.github} className="btn-secondary">
-              Source
-            </a>
-            <a href={LINKS.demo} className="btn-primary">
-              Try the demo
-            </a>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-stone-200 text-stone-600 transition hover:bg-stone-200/50 md:hidden"
-            aria-expanded={menuOpen}
-            aria-controls="mobile-nav"
-            aria-label="Open menu"
-          >
-            <Menu className="h-4 w-4" />
-          </button>
-        </div>
-      </header>
-
-      {/* Mobile nav */}
-      {menuOpen && (
-        <div
-          className="fixed inset-0 z-[60] flex flex-col bg-stone-50 md:hidden"
-          id="mobile-nav"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Navigation"
-        >
-          <div className="flex h-16 items-center justify-between border-b border-stone-200 px-4">
-            <div className="flex items-center gap-2.5">
-              <LogoMark className="h-8 w-8" />
-              <span className="text-base font-semibold text-stone-900">Lextures</span>
-            </div>
-            <button
-              type="button"
-              onClick={closeMenu}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-200/50"
-              aria-label="Close menu"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <nav className="flex flex-1 flex-col gap-1 p-4" aria-label="Mobile primary">
-            {NAV.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                onClick={closeMenu}
-                className="rounded-lg px-4 py-3.5 text-base font-medium text-stone-800 no-underline transition hover:bg-stone-200/50"
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
-          <div className="flex flex-col gap-3 border-t border-stone-200 p-4 pb-8">
-            <a href={LINKS.demo} onClick={closeMenu} className="btn-primary w-full justify-center">
-              Try the demo
-            </a>
-            <a href={LINKS.github} onClick={closeMenu} className="btn-secondary w-full justify-center">
-              View on GitHub
-            </a>
-          </div>
-        </div>
-      )}
+      <Header />
 
       <main id="main">
         {/* Hero */}
         <section className="relative overflow-hidden border-b border-stone-200/90 bg-white py-20 sm:py-28 lg:py-32">
           <HeroCanvas />
-          {/* Fade keeps the canvas visible but never competes with copy */}
           <div
             className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white via-white/95 to-transparent"
             aria-hidden
@@ -252,9 +150,6 @@ export default function App() {
                 Browse the repository
               </a>
             </div>
-            <p className="mt-8 text-sm text-stone-400">
-              MIT license · Self-hosted Postgres · LTI 1.3
-            </p>
           </div>
         </section>
 
@@ -395,7 +290,7 @@ export default function App() {
                   <Code2 className="h-5 w-5" aria-hidden />
                 </div>
                 <h2 className="mt-5 text-2xl font-semibold tracking-tight text-stone-900 sm:text-3xl">
-                  Open source, MIT-licensed
+                  Open source, APGL-3.0 Licensed
                 </h2>
                 <p className="mt-4 leading-relaxed text-stone-600">
                   The full application stack—Go backend, React frontend, database migrations—is
@@ -464,7 +359,7 @@ export default function App() {
         <div className="mx-auto flex max-w-6xl flex-col gap-10 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
           <div>
             <div className="flex items-center gap-2.5">
-              <LogoMark className="h-8 w-8" />
+              <img src="./logo.svg" className="h-8 w-8" alt="" aria-hidden />
               <span className="text-base font-semibold text-stone-900">Lextures</span>
             </div>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-stone-500">
@@ -474,27 +369,25 @@ export default function App() {
             <p className="mt-4 text-sm text-stone-400">© {new Date().getFullYear()} Lextures contributors</p>
           </div>
           <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm font-medium text-stone-500">
-            <a href={LINKS.demo} className="no-underline transition-colors hover:text-stone-900">
-              Live demo
-            </a>
-            <a href={LINKS.github} className="no-underline transition-colors hover:text-stone-900">
-              GitHub
-            </a>
-            <a href="#features" className="no-underline transition-colors hover:text-stone-900">
-              Features
-            </a>
-            <a href="#ai" className="no-underline transition-colors hover:text-stone-900">
-              Adaptive AI
-            </a>
-            <a href="#institutions" className="no-underline transition-colors hover:text-stone-900">
-              Institutions
-            </a>
-            <a href="#integrations" className="no-underline transition-colors hover:text-stone-900">
-              Integrations
-            </a>
+            <a href={LINKS.demo} className="no-underline transition-colors hover:text-stone-900">Live demo</a>
+            <a href={LINKS.github} className="no-underline transition-colors hover:text-stone-900">GitHub</a>
+            <a href="#features" className="no-underline transition-colors hover:text-stone-900">Features</a>
+            <a href="#ai" className="no-underline transition-colors hover:text-stone-900">Adaptive AI</a>
+            <a href="#institutions" className="no-underline transition-colors hover:text-stone-900">Institutions</a>
+            <a href="#integrations" className="no-underline transition-colors hover:text-stone-900">Integrations</a>
+            <a href="#/blog" className="no-underline transition-colors hover:text-stone-900">Blog</a>
           </div>
         </div>
       </footer>
     </div>
   )
+}
+
+export default function App() {
+  const hash = useHashRoute()
+  const route = hash.startsWith('#/') ? hash.slice(1) : '/'
+
+  if (route === '/blog') return <BlogIndex />
+  if (route.startsWith('/blog/')) return <BlogPost slug={route.slice('/blog/'.length)} />
+  return <HomePage />
 }

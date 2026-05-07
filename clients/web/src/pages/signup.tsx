@@ -9,6 +9,13 @@ import { readApiErrorMessage } from '../lib/errors'
 import { passwordStrengthEnglish, passwordStrengthKey, type PasswordStrengthKey } from '../lib/password-strength'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
 import { markPostLoginShortcutTip } from '../lib/post-login-shortcut-tip'
+import {
+  authCardClass,
+  authFieldClass,
+  authMutedLinkClass,
+  authPrimaryButtonClass,
+} from '../components/auth/auth-field-classes'
+import { PublicAuthShell } from '../components/auth/public-auth-shell'
 
 export default function Signup() {
   const navigate = useNavigate()
@@ -103,26 +110,28 @@ export default function Signup() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-50 px-4 py-12">
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(99,102,241,0.12),transparent)]"
-        aria-hidden
-      />
-      <div className="relative z-10 w-full max-w-md">
-        <header className="mb-10 text-center">
-          <div className="mb-6 flex justify-center px-2">
-            <BrandLogo />
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Create your account</h1>
-          <p className="mt-2 text-sm text-slate-500">Start learning with a calm, focused workspace.</p>
-        </header>
+    <PublicAuthShell>
+      <header className="mb-8 text-center">
+        <div className="mb-5 flex justify-center px-2">
+          <BrandLogo className="mx-auto h-14 w-auto max-w-[min(100%,240px)] object-contain" />
+        </div>
+        <h1 className="lex-auth-display text-[1.7rem] leading-snug text-stone-900 dark:text-neutral-50">
+          Create your account
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-stone-600 dark:text-neutral-400">
+          One account for courses, assignments, and messages. If your school uses SSO, you can sign in that way later.
+        </p>
+      </header>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm shadow-slate-900/5">
-          <OidcSignInButtons nextPath="/" />
-          <form className="mt-4 space-y-5" onSubmit={onSubmit}>
+      <div className={authCardClass}>
+        <OidcSignInButtons nextPath="/" />
+        <form className="mt-4 space-y-5" onSubmit={onSubmit}>
             <div>
-              <label htmlFor="displayName" className="mb-1.5 block text-sm font-medium text-slate-700">
-                Display name <span className="font-normal text-slate-500">(optional)</span>
+              <label
+                htmlFor="displayName"
+                className="mb-1.5 block text-sm font-medium text-stone-800 dark:text-neutral-200"
+              >
+                Display name <span className="font-normal text-stone-500 dark:text-neutral-500">(optional)</span>
               </label>
               <input
                 id="displayName"
@@ -131,12 +140,12 @@ export default function Signup() {
                 autoComplete="nickname"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none ring-indigo-500/20 transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
+                className={authFieldClass}
                 placeholder="Alex"
               />
             </div>
             <div>
-              <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-stone-800 dark:text-neutral-200">
                 Email
               </label>
               <input
@@ -147,15 +156,21 @@ export default function Signup() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none ring-indigo-500/20 transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
+                className={authFieldClass}
                 placeholder="you@school.edu"
               />
             </div>
             <div>
-              <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label
+                htmlFor="password"
+                className="mb-1.5 block text-sm font-medium text-stone-800 dark:text-neutral-200"
+              >
                 Password
               </label>
-              <ul id="password-requirements" className="mb-2 list-inside list-disc text-xs text-slate-600">
+              <ul
+                id="password-requirements"
+                className="mb-2 list-inside list-disc text-xs text-stone-600 dark:text-neutral-400"
+              >
                 <li>At least {minLen} characters</li>
                 {policy?.requireUpper ? <li>One uppercase letter</li> : null}
                 {policy?.requireLower ? <li>One lowercase letter</li> : null}
@@ -176,13 +191,13 @@ export default function Signup() {
                 aria-describedby="password-requirements password-strength"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none ring-indigo-500/20 transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
+                className={authFieldClass}
                 placeholder={`At least ${minLen} characters`}
               />
               <div id="password-strength" className="mt-2 flex items-center gap-2" aria-live="polite">
-                <span className="text-xs font-medium text-slate-600">Strength:</span>
-                <span className="text-xs font-semibold text-slate-800">{strengthLabel}</span>
-                <div className="h-1.5 flex-1 rounded-full bg-slate-200" aria-hidden>
+                <span className="text-xs font-medium text-stone-600 dark:text-neutral-400">Strength:</span>
+                <span className="text-xs font-semibold text-stone-800 dark:text-neutral-200">{strengthLabel}</span>
+                <div className="h-1.5 flex-1 rounded-full bg-stone-200 dark:bg-neutral-700" aria-hidden>
                   <div
                     className={`h-full rounded-full ${
                       strengthKey === 'password.strength.weak'
@@ -197,28 +212,23 @@ export default function Signup() {
             </div>
 
             {message && (
-              <p className="text-sm text-rose-600" role="status">
+              <p className="text-sm text-rose-600 dark:text-rose-400" role="status">
                 {message}
               </p>
             )}
 
-            <button
-              type="submit"
-              disabled={status === 'loading'}
-              className="flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
+            <button type="submit" disabled={status === 'loading'} className={authPrimaryButtonClass}>
               {status === 'loading' ? 'Creating account…' : 'Create account'}
             </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-slate-500">
+          <p className="mt-6 text-center text-sm text-stone-600 dark:text-neutral-400">
             Already have an account?{' '}
-            <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+            <Link to="/login" className={authMutedLinkClass}>
               Sign in
             </Link>
           </p>
         </div>
-      </div>
-    </div>
+    </PublicAuthShell>
   )
 }

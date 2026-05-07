@@ -1,5 +1,12 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import {
+  authCardClass,
+  authFieldClass,
+  authMutedLinkClass,
+  authPrimaryButtonClass,
+} from '../components/auth/auth-field-classes'
+import { PublicAuthShell } from '../components/auth/public-auth-shell'
 import { BrandLogo } from '../components/brand-logo'
 import { getAccessToken } from '../lib/auth'
 import { apiUrl } from '../lib/api'
@@ -110,45 +117,47 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-50 px-4 py-12">
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(99,102,241,0.12),transparent)]"
-        aria-hidden
-      />
-      <div className="relative z-10 w-full max-w-md">
-        <header className="mb-10 text-center">
-          <div className="mb-6 flex justify-center px-2">
-            <BrandLogo />
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Set a new password</h1>
-          <p className="mt-2 text-sm text-slate-500">Choose a strong password you have not used elsewhere.</p>
-        </header>
+    <PublicAuthShell>
+      <header className="mb-8 text-center">
+        <div className="mb-5 flex justify-center px-2">
+          <BrandLogo className="mx-auto h-14 w-auto max-w-[min(100%,240px)] object-contain" />
+        </div>
+        <h1 className="lex-auth-display text-[1.7rem] leading-snug text-stone-900 dark:text-neutral-50">
+          Set a new password
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-stone-600 dark:text-neutral-400">
+          Choose a strong password you have not used on other sites.
+        </p>
+      </header>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm shadow-slate-900/5">
-          {status === 'done' ? (
-            <div className="space-y-4 text-center">
-              <p className="text-sm text-slate-700" role="status">
-                {message}
-              </p>
-              <Link
-                to="/login"
-                className="inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500"
-              >
-                Sign in
-              </Link>
-            </div>
-          ) : (
-            <form className="space-y-5" onSubmit={onSubmit}>
+      <div className={authCardClass}>
+        {status === 'done' ? (
+          <div className="space-y-4 text-center">
+            <p className="text-sm text-stone-700 dark:text-neutral-300" role="status">
+              {message}
+            </p>
+            <Link to="/login" className={`inline-block text-sm ${authMutedLinkClass}`}>
+              Sign in
+            </Link>
+          </div>
+        ) : (
+          <form className="space-y-5" onSubmit={onSubmit}>
               {!tokenFromUrl.trim() && (
                 <p className="text-sm text-amber-700" role="status">
                   Missing token. Use the link from your reset email, or request a new link from the sign-in page.
                 </p>
               )}
               <div>
-                <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
+                <label
+                  htmlFor="password"
+                  className="mb-1.5 block text-sm font-medium text-stone-800 dark:text-neutral-200"
+                >
                   New password
                 </label>
-                <ul id="password-requirements" className="mb-2 list-inside list-disc text-xs text-slate-600">
+                <ul
+                  id="password-requirements"
+                  className="mb-2 list-inside list-disc text-xs text-stone-600 dark:text-neutral-400"
+                >
                   <li>At least {minLen} characters</li>
                   {policy?.requireUpper ? <li>One uppercase letter</li> : null}
                   {policy?.requireLower ? <li>One lowercase letter</li> : null}
@@ -169,13 +178,13 @@ export default function ResetPassword() {
                   aria-describedby="password-requirements password-strength"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none ring-indigo-500/20 transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
+                  className={authFieldClass}
                   placeholder={`At least ${minLen} characters`}
                 />
                 <div id="password-strength" className="mt-2 flex items-center gap-2" aria-live="polite">
-                  <span className="text-xs font-medium text-slate-600">Strength:</span>
-                  <span className="text-xs font-semibold text-slate-800">{strengthLabel}</span>
-                  <div className="h-1.5 flex-1 rounded-full bg-slate-200" aria-hidden>
+                  <span className="text-xs font-medium text-stone-600 dark:text-neutral-400">Strength:</span>
+                  <span className="text-xs font-semibold text-stone-800 dark:text-neutral-200">{strengthLabel}</span>
+                  <div className="h-1.5 flex-1 rounded-full bg-stone-200 dark:bg-neutral-700" aria-hidden>
                     <div
                       className={`h-full rounded-full ${
                         strengthKey === 'password.strength.weak'
@@ -189,7 +198,10 @@ export default function ResetPassword() {
                 </div>
               </div>
               <div>
-                <label htmlFor="confirm" className="mb-1.5 block text-sm font-medium text-slate-700">
+                <label
+                  htmlFor="confirm"
+                  className="mb-1.5 block text-sm font-medium text-stone-800 dark:text-neutral-200"
+                >
                   Confirm password
                 </label>
                 <input
@@ -201,13 +213,13 @@ export default function ResetPassword() {
                   minLength={minLen}
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none ring-indigo-500/20 transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
+                  className={authFieldClass}
                   placeholder="Repeat password"
                 />
               </div>
 
               {message && status === 'error' && (
-                <p className="text-sm text-rose-600" role="status">
+                <p className="text-sm text-rose-600 dark:text-rose-400" role="status">
                   {message}
                 </p>
               )}
@@ -215,7 +227,7 @@ export default function ResetPassword() {
               <button
                 type="submit"
                 disabled={status === 'loading' || !tokenFromUrl.trim()}
-                className="flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className={authPrimaryButtonClass}
               >
                 {status === 'loading' ? 'Updating…' : 'Update password'}
               </button>
@@ -223,14 +235,13 @@ export default function ResetPassword() {
           )}
 
           {status !== 'done' && (
-            <p className="mt-6 text-center text-sm text-slate-500">
-              <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+            <p className="mt-6 text-center text-sm text-stone-600 dark:text-neutral-400">
+              <Link to="/login" className={authMutedLinkClass}>
                 Back to sign in
               </Link>
             </p>
           )}
         </div>
-      </div>
-    </div>
+    </PublicAuthShell>
   )
 }
