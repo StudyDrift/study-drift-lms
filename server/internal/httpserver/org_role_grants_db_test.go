@@ -295,14 +295,16 @@ VALUES ($1, $2, NULL, $3, $4, now() - interval '1 hour', now() - interval '1 min
 	if rr.Code != http.StatusOK {
 		t.Fatalf("list grants: %d %s", rr.Code, rr.Body.String())
 	}
-	var listed struct {
-		Grants []any `json:"grants"`
+	var n int64
+	err = pool.QueryRow(ctx, `
+SELECT COUNT(*)::bigint FROM tenant.org_role_grants
+WHERE org_id = $1 AND user_id = $2 AND role = $3
+`, defOrg, tUID, orgrolegrant.RoleOrgViewer).Scan(&n)
+	if err != nil {
+		t.Fatalf("count grants: %v", err)
 	}
-	if err := json.NewDecoder(rr.Body).Decode(&listed); err != nil {
-		t.Fatal(err)
-	}
-	for _, g := range listed.Grants {
-		t.Fatalf("expected no grants after expiry prune, got %+v", g)
+	if n != 0 {
+		t.Fatalf("expected expired org_viewer grant removed for user %s, count=%d", tUID, n)
 	}
 }
 
