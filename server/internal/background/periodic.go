@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lextures/lextures/server/internal/config"
+	"github.com/lextures/lextures/server/internal/repos/orgroles"
 	"github.com/lextures/lextures/server/internal/repos/terms"
 	"github.com/lextures/lextures/server/internal/service/quizautosubmit"
 )
@@ -35,6 +36,16 @@ func Start(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) {
 		}
 		if n > 0 {
 			slog.Info("term status sweep updated rows", "count", n)
+		}
+	})
+	go runEvery(ctx, 30*time.Second, func() {
+		n, err := orgroles.SweepExpired(context.Background(), pool, time.Now().UTC(), 200)
+		if err != nil {
+			slog.Warn("org role grant sweep failed", "err", err)
+			return
+		}
+		if n > 0 {
+			slog.Info("org role grant sweep deleted rows", "count", n)
 		}
 	})
 }

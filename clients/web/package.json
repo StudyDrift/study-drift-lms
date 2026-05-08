@@ -81,6 +81,7 @@
     "lint-staged": "^16.4.0",
     "msw": "^2.13.0",
     "openapi-typescript": "^7.13.0",
+    "playwright": "^1.59.1",
     "remark-parse": "^11.0.0",
     "rollup-plugin-visualizer": "^5.14.0",
     "storybook": "^10.3.5",

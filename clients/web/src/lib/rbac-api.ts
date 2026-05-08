@@ -10,6 +10,12 @@ export const PERM_COURSE_CREATE = 'global:app:course:create' as const
 /** Manage org hierarchy (schools / departments) within the user's org, or all orgs as platform admin. */
 export const PERM_TENANT_ORG_UNITS_ADMIN = 'tenant:org:units:admin' as const
 
+/** Manage org-level role grants (org admin). */
+export const PERM_TENANT_ORG_ROLES_MANAGE = 'tenant:org:roles:manage' as const
+
+/** View org-level role grants (org viewer). */
+export const PERM_TENANT_ORG_ROLES_VIEW = 'tenant:org:roles:view' as const
+
 /** Learning activity reports (`user.user_audit` aggregates). */
 export const PERM_REPORTS_VIEW = 'global:app:reports:view' as const
 
