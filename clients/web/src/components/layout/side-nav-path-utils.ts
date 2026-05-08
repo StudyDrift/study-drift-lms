@@ -10,6 +10,7 @@ export type SettingsNavView =
   | 'platform'
   | 'organizations'
   | 'org-units'
+  | 'org-roles'
   | 'terms'
   | 'org-branding'
   | 'scim-provisioning'
@@ -27,6 +28,7 @@ export function settingsViewFromPathname(pathname: string): SettingsNavView {
     raw === 'platform' ||
     raw === 'organizations' ||
     raw === 'org-units' ||
+    raw === 'org-roles' ||
     raw === 'terms' ||
     raw === 'org-branding' ||
     raw === 'scim-provisioning'

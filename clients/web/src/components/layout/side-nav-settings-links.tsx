@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { useOrgRoleCapabilities } from '../../hooks/use-org-role-capabilities'
 import {
   ArrowLeft,
   Bell,
@@ -24,6 +25,9 @@ import { sideNavActiveClass, sideNavLinkClass } from './side-nav-styles'
 export function SideNavSettingsLinks() {
   const { allows, loading: permLoading } = usePermissions()
   const canManageRbac = !permLoading && allows(PERM_RBAC_MANAGE)
+  const orgRoleCaps = useOrgRoleCapabilities()
+  const canOrgRolesNav =
+    canManageRbac || (!orgRoleCaps.loading && orgRoleCaps.canManageOrgRoleGrants)
   const canOrgUnits = !permLoading && (canManageRbac || allows(PERM_TENANT_ORG_UNITS_ADMIN))
   const { scimEnabled: platformScimEnabled } = usePlatformScimEnabled(canManageRbac)
   const location = useLocation()
@@ -64,7 +68,7 @@ export function SideNavSettingsLinks() {
         <Bell className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Notifications
       </NavLink>
-      {(canOrgUnits || canManageRbac) && (
+      {(canOrgUnits || canManageRbac || canOrgRolesNav) && (
         <>
           <p className="px-3 pb-1 pt-4 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
             System Settings
@@ -95,6 +99,15 @@ export function SideNavSettingsLinks() {
                 Branding
               </NavLink>
             </>
+          )}
+          {canOrgRolesNav && (
+            <NavLink
+              to="/settings/org-roles"
+              className={() => `${sideNavLinkClass} ${view === 'org-roles' ? sideNavActiveClass : ''}`}
+            >
+              <Shield className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+              Organization roles
+            </NavLink>
           )}
           {canManageRbac && (
             <>
