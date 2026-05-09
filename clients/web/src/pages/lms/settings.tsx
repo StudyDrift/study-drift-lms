@@ -16,14 +16,19 @@ import { ImageModelPicker } from '../../components/image-model-picker'
 import { RequirePermission } from '../../components/require-permission'
 import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-settings-panel'
 import { OrganizationsPanel } from '../../components/settings/organizations-panel'
-import { OrgRoleGrantsPanel } from '../../components/settings/org-role-grants-panel'
+import { OrgRolesPanel } from '../../components/settings/org-roles-panel'
 import { OrgUnitsPanel } from '../../components/settings/org-units-panel'
 import { TermsSettingsPanel } from '../../components/settings/terms-settings-panel'
 import { PlatformSettingsPanel } from '../../components/settings/platform-settings-panel'
 import { ScimSettingsPanel } from '../../components/settings/scim-settings-panel'
 import { RolesPermissionsPanel } from '../../components/settings/roles-permissions-panel'
 import { usePermissions } from '../../context/use-permissions'
-import { PERM_RBAC_MANAGE, PERM_TENANT_ORG_UNITS_ADMIN } from '../../lib/rbac-api'
+import {
+  PERM_RBAC_MANAGE,
+  PERM_TENANT_ORG_ROLES_MANAGE,
+  PERM_TENANT_ORG_ROLES_VIEW,
+  PERM_TENANT_ORG_UNITS_ADMIN,
+} from '../../lib/rbac-api'
 import { OidcConnectedAccountsPanel } from '../../components/oidc-connected-accounts-panel'
 import { MfaFactorsPanel } from '../../components/settings/mfa-factors-panel'
 import { LmsPage } from './lms-page'
@@ -40,13 +45,13 @@ function isSystemSettingsPath(pathname: string): boolean {
   if (pathname.startsWith('/settings/ai/')) return true
   return (
     pathname === '/settings/roles' ||
+    pathname === '/settings/org-roles' ||
     pathname === '/settings/lti-tools' ||
     pathname === '/settings/platform' ||
     pathname === '/settings/organizations' ||
     pathname === '/settings/org-units' ||
     pathname === '/settings/terms' ||
     pathname === '/settings/org-branding' ||
-    pathname === '/settings/org-roles' ||
     pathname === '/settings/scim-provisioning'
   )
 }
@@ -725,13 +730,18 @@ export default function Settings() {
   }
   if (!permLoading && isSystemSettingsPath(location.pathname)) {
     const onOrgUnits = location.pathname === '/settings/org-units'
+    const onOrgRoles = location.pathname === '/settings/org-roles'
     const onTerms = location.pathname === '/settings/terms'
     const onOrgBranding = location.pathname === '/settings/org-branding'
-    const onOrgRoles = location.pathname === '/settings/org-roles'
     const hasRbac = allows(PERM_RBAC_MANAGE)
     const hasUnitAdmin = allows(PERM_TENANT_ORG_UNITS_ADMIN)
     const orgRolesOk =
-      onOrgRoles && (orgRoleCaps.loading || orgRoleCaps.canManageOrgRoleGrants || hasRbac)
+      onOrgRoles &&
+      (orgRoleCaps.loading ||
+        allows(PERM_TENANT_ORG_ROLES_VIEW) ||
+        allows(PERM_TENANT_ORG_ROLES_MANAGE) ||
+        orgRoleCaps.canManageOrgRoleGrants ||
+        hasRbac)
     if (!hasRbac && !((onOrgUnits || onTerms || onOrgBranding) && hasUnitAdmin) && !orgRolesOk) {
       return <Navigate to="/settings/account" replace />
     }
@@ -753,11 +763,11 @@ export default function Settings() {
       <div
         className={`mt-8 ${
           activeView === 'roles' ||
+          activeView === 'org-roles' ||
           activeView === 'lti-tools' ||
           activeView === 'platform' ||
           activeView === 'organizations' ||
           activeView === 'org-units' ||
-          activeView === 'org-roles' ||
           activeView === 'terms' ||
           activeView === 'org-branding' ||
           activeView === 'scim-provisioning'
@@ -1455,12 +1465,11 @@ export default function Settings() {
 
         {activeView === 'org-roles' && (
           <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">Organization roles</h2>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">Roles &amp; permissions</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
-              District or school administrators scoped to your tenant. Grants are audited and can expire
-              automatically.
+              Assign org-level roles (org admin, org unit admin, org viewer) for your organization.
             </p>
-            <OrgRoleGrantsPanel />
+            <OrgRolesPanel />
           </div>
         )}
 

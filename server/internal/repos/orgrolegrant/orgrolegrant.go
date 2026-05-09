@@ -1,4 +1,4 @@
-// Package orgrolegrant stores and queries tenant.org_role_grants (plan 5.8 org role hierarchy).
+// Package orgrolegrant stores and queries user.org_role_grants (plan 5.8 org role hierarchy).
 package orgrolegrant
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Org-scoped role names stored in tenant.org_role_grants.role.
+// Org-scoped role names stored in user.org_role_grants.role.
 const (
 	RoleOrgAdmin     = "org_admin"
 	RoleOrgUnitAdmin = "org_unit_admin"
@@ -28,7 +28,7 @@ type Row struct {
 	UserID    uuid.UUID
 	OrgUnitID *uuid.UUID
 	Role      string
-	GrantedBy uuid.UUID
+	GrantedBy *uuid.UUID
 	GrantedAt time.Time
 	ExpiresAt *time.Time
 }
@@ -38,7 +38,7 @@ const activeGrantSQL = `(g.expires_at IS NULL OR g.expires_at > NOW())`
 // DeleteExpired removes expired grants (idempotent). Returns rows deleted.
 func DeleteExpired(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
 	tag, err := pool.Exec(ctx, `
-DELETE FROM tenant.org_role_grants
+DELETE FROM "user".org_role_grants
 WHERE expires_at IS NOT NULL AND expires_at <= NOW()
 `)
 	if err != nil {
@@ -52,7 +52,7 @@ func HasActiveOrgAdmin(ctx context.Context, pool *pgxpool.Pool, userID, orgID uu
 	var ok bool
 	err := pool.QueryRow(ctx, `
 SELECT EXISTS(
-  SELECT 1 FROM tenant.org_role_grants g
+  SELECT 1 FROM "user".org_role_grants g
   WHERE g.org_id = $1 AND g.user_id = $2 AND g.role = $3 AND g.org_unit_id IS NULL AND `+activeGrantSQL+`
 )
 `, orgID, userID, RoleOrgAdmin).Scan(&ok)
@@ -87,7 +87,7 @@ func ResolveOrgCourseAccess(ctx context.Context, pool *pgxpool.Pool, userID, org
 	var adminOrViewer bool
 	err := pool.QueryRow(ctx, `
 SELECT EXISTS(
-  SELECT 1 FROM tenant.org_role_grants g
+  SELECT 1 FROM "user".org_role_grants g
   WHERE g.org_id = $1 AND g.user_id = $2
     AND g.role IN ($3, $4)
     AND g.org_unit_id IS NULL
@@ -103,7 +103,7 @@ SELECT EXISTS(
 	var unitScoped bool
 	err = pool.QueryRow(ctx, `
 SELECT EXISTS(
-  SELECT 1 FROM tenant.org_role_grants g
+  SELECT 1 FROM "user".org_role_grants g
   WHERE g.org_id = $1 AND g.user_id = $2 AND g.role = $3 AND g.org_unit_id IS NOT NULL AND `+activeGrantSQL+`
 )
 `, orgID, userID, RoleOrgUnitAdmin).Scan(&unitScoped)
@@ -120,7 +120,7 @@ SELECT EXISTS(
 func ListOrgUnitAdminRootUnitIDs(ctx context.Context, pool *pgxpool.Pool, userID, orgID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := pool.Query(ctx, `
 SELECT DISTINCT g.org_unit_id
-FROM tenant.org_role_grants g
+FROM "user".org_role_grants g
 WHERE g.org_id = $1 AND g.user_id = $2 AND g.role = $3
   AND g.org_unit_id IS NOT NULL
   AND `+activeGrantSQL+`
@@ -144,7 +144,7 @@ WHERE g.org_id = $1 AND g.user_id = $2 AND g.role = $3
 func ListByOrg(ctx context.Context, pool *pgxpool.Pool, orgID uuid.UUID) ([]Row, error) {
 	rows, err := pool.Query(ctx, `
 SELECT g.id, g.org_id, g.user_id, g.org_unit_id, g.role, g.granted_by, g.granted_at, g.expires_at
-FROM tenant.org_role_grants g
+FROM "user".org_role_grants g
 WHERE g.org_id = $1 AND `+activeGrantSQL+`
 ORDER BY g.role ASC, g.granted_at DESC
 `, orgID)
@@ -161,10 +161,12 @@ func scanRows(rows pgx.Rows) ([]Row, error) {
 		var r Row
 		var unit *uuid.UUID
 		var exp *time.Time
-		if err := rows.Scan(&r.ID, &r.OrgID, &r.UserID, &unit, &r.Role, &r.GrantedBy, &r.GrantedAt, &exp); err != nil {
+		var gb *uuid.UUID
+		if err := rows.Scan(&r.ID, &r.OrgID, &r.UserID, &unit, &r.Role, &gb, &r.GrantedAt, &exp); err != nil {
 			return nil, err
 		}
 		r.OrgUnitID = unit
+		r.GrantedBy = gb
 		r.ExpiresAt = exp
 		out = append(out, r)
 	}
@@ -221,8 +223,12 @@ func Insert(
 	var unitOut *uuid.UUID
 	var expOut *time.Time
 	err = pool.QueryRow(ctx, `
-INSERT INTO tenant.org_role_grants (org_id, user_id, org_unit_id, role, granted_by, expires_at)
+INSERT INTO "user".org_role_grants (org_id, user_id, org_unit_id, role, granted_by, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (org_id, user_id, role, org_unit_id) DO UPDATE SET
+  granted_by = EXCLUDED.granted_by,
+  granted_at = NOW(),
+  expires_at = EXCLUDED.expires_at
 RETURNING id, org_id, user_id, org_unit_id, role, granted_by, granted_at, expires_at
 `, orgID, targetUserID, orgUnitID, role, grantedBy, expiresAt).Scan(
 		&r.ID, &r.OrgID, &r.UserID, &unitOut, &r.Role, &r.GrantedBy, &r.GrantedAt, &expOut,
@@ -241,7 +247,7 @@ RETURNING id, org_id, user_id, org_unit_id, role, granted_by, granted_at, expire
 
 // DeleteByID removes a grant in orgID; returns false if not found.
 func DeleteByID(ctx context.Context, pool *pgxpool.Pool, orgID, grantID uuid.UUID) (bool, error) {
-	tag, err := pool.Exec(ctx, `DELETE FROM tenant.org_role_grants WHERE id = $1 AND org_id = $2`, grantID, orgID)
+	tag, err := pool.Exec(ctx, `DELETE FROM "user".org_role_grants WHERE id = $1 AND org_id = $2`, grantID, orgID)
 	if err != nil {
 		return false, err
 	}

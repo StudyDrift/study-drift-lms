@@ -273,7 +273,7 @@ func TestOrgRoleGrants_ExpiredRemovedOnList_Pg(t *testing.T) {
 	}
 
 	_, err = pool.Exec(ctx, `
-INSERT INTO tenant.org_role_grants (org_id, user_id, org_unit_id, role, granted_by, granted_at, expires_at)
+INSERT INTO "user".org_role_grants (org_id, user_id, org_unit_id, role, granted_by, granted_at, expires_at)
 VALUES ($1, $2, NULL, $3, $4, now() - interval '1 hour', now() - interval '1 minute')
 `, defOrg, tUID, orgrolegrant.RoleOrgViewer, gaID)
 	if err != nil {
@@ -297,7 +297,7 @@ VALUES ($1, $2, NULL, $3, $4, now() - interval '1 hour', now() - interval '1 min
 	}
 	var n int64
 	err = pool.QueryRow(ctx, `
-SELECT COUNT(*)::bigint FROM tenant.org_role_grants
+SELECT COUNT(*)::bigint FROM "user".org_role_grants
 WHERE org_id = $1 AND user_id = $2 AND role = $3
 `, defOrg, tUID, orgrolegrant.RoleOrgViewer).Scan(&n)
 	if err != nil {

@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
+	"github.com/lextures/lextures/server/internal/repos/organization"
+	"github.com/lextures/lextures/server/internal/repos/orgroles"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
 )
 
@@ -33,7 +35,11 @@ func MyPermissions(
 		if strings.TrimSpace(viewAs) != "" {
 			return nil, &InvalidInput{Message: "courseCode is required when viewAs is set."}
 		}
-		return rbac.ListGrantedPermissionStrings(ctx, pool, userID)
+		base, err := rbac.ListGrantedPermissionStrings(ctx, pool, userID)
+		if err != nil {
+			return nil, err
+		}
+		return withOrgRolePermissions(ctx, pool, userID, base)
 	}
 	viewAsStudent, err := parseViewAs(viewAs)
 	if err != nil {
@@ -47,7 +53,11 @@ func MyPermissions(
 		if viewAsStudent {
 			return nil, ErrNotFound
 		}
-		return rbac.ListGrantedPermissionStrings(ctx, pool, userID)
+		base, err := rbac.ListGrantedPermissionStrings(ctx, pool, userID)
+		if err != nil {
+			return nil, err
+		}
+		return withOrgRolePermissions(ctx, pool, userID, base)
 	}
 	if viewAsStudent {
 		stu, err := enrollment.UserHasEnrollmentRole(ctx, pool, courseCode, userID, "student")
@@ -57,16 +67,61 @@ func MyPermissions(
 		if !stu {
 			return nil, &InvalidInput{Message: "Not enrolled as a student in this course."}
 		}
-		return rbac.ListGrantedPermissionStringsCourseView(ctx, pool, userID, courseCode, true)
+		base, err := rbac.ListGrantedPermissionStringsCourseView(ctx, pool, userID, courseCode, true)
+		if err != nil {
+			return nil, err
+		}
+		return withOrgRolePermissions(ctx, pool, userID, base)
 	}
 	isStaff, err := enrollment.UserIsCourseStaff(ctx, pool, courseCode, userID)
 	if err != nil {
 		return nil, err
 	}
 	if isStaff {
-		return rbac.ListGrantedPermissionStrings(ctx, pool, userID)
+		base, err := rbac.ListGrantedPermissionStrings(ctx, pool, userID)
+		if err != nil {
+			return nil, err
+		}
+		return withOrgRolePermissions(ctx, pool, userID, base)
 	}
-	return rbac.ListGrantedPermissionStringsCourseView(ctx, pool, userID, courseCode, true)
+	base, err := rbac.ListGrantedPermissionStringsCourseView(ctx, pool, userID, courseCode, true)
+	if err != nil {
+		return nil, err
+	}
+	return withOrgRolePermissions(ctx, pool, userID, base)
+}
+
+const (
+	permOrgRolesManage = "tenant:org:roles:manage"
+	permOrgRolesView   = "tenant:org:roles:view"
+)
+
+func withOrgRolePermissions(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, base []string) ([]string, error) {
+	orgID, err := organization.OrgIDForUser(ctx, pool, userID)
+	if err != nil {
+		return nil, err
+	}
+	isAdmin, err := orgroles.UserHasRole(ctx, pool, userID, orgID, orgroles.RoleOrgAdmin)
+	if err != nil {
+		return nil, err
+	}
+	isViewer, err := orgroles.UserHasRole(ctx, pool, userID, orgID, orgroles.RoleOrgViewer)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin && !isViewer {
+		return base, nil
+	}
+	out := append([]string{}, base...)
+	if isViewer {
+		out = append(out, permOrgRolesView)
+	}
+	if isAdmin {
+		out = append(out, permOrgRolesManage)
+		// org_admin implies org unit management for the org, even without unit-scoped grants.
+		out = append(out, "tenant:org:units:admin")
+	}
+	return out, nil
 }
 
 func parseViewAs(s string) (isStudent bool, _ error) {

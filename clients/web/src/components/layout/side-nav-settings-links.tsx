@@ -18,7 +18,12 @@ import {
 } from 'lucide-react'
 import { usePermissions } from '../../context/use-permissions'
 import { usePlatformScimEnabled } from '../../hooks/use-platform-scim-enabled'
-import { PERM_RBAC_MANAGE, PERM_TENANT_ORG_UNITS_ADMIN } from '../../lib/rbac-api'
+import {
+  PERM_RBAC_MANAGE,
+  PERM_TENANT_ORG_ROLES_MANAGE,
+  PERM_TENANT_ORG_ROLES_VIEW,
+  PERM_TENANT_ORG_UNITS_ADMIN,
+} from '../../lib/rbac-api'
 import { settingsViewFromPathname } from './side-nav-path-utils'
 import { sideNavActiveClass, sideNavLinkClass } from './side-nav-styles'
 
@@ -29,6 +34,7 @@ export function SideNavSettingsLinks() {
   const canOrgRolesNav =
     canManageRbac || (!orgRoleCaps.loading && orgRoleCaps.canManageOrgRoleGrants)
   const canOrgUnits = !permLoading && (canManageRbac || allows(PERM_TENANT_ORG_UNITS_ADMIN))
+  const canOrgRoles = !permLoading && (allows(PERM_TENANT_ORG_ROLES_MANAGE) || allows(PERM_TENANT_ORG_ROLES_VIEW))
   const { scimEnabled: platformScimEnabled } = usePlatformScimEnabled(canManageRbac)
   const location = useLocation()
   const view = settingsViewFromPathname(location.pathname)
@@ -68,46 +74,52 @@ export function SideNavSettingsLinks() {
         <Bell className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Notifications
       </NavLink>
-      {(canOrgUnits || canManageRbac || canOrgRolesNav) && (
+      {(canOrgUnits || canOrgRoles || canManageRbac || canOrgRolesNav) && (
         <>
           <p className="px-3 pb-1 pt-4 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
             System Settings
           </p>
-          {canOrgUnits && (
+          {(canOrgUnits || canOrgRoles || canOrgRolesNav) && (
             <>
-              <NavLink
-                to="/settings/org-units"
-                className={() => `${sideNavLinkClass} ${view === 'org-units' ? sideNavActiveClass : ''}`}
-              >
-                <FolderTree className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-                Org structure
-              </NavLink>
-              <NavLink
-                to="/settings/terms"
-                className={() => `${sideNavLinkClass} ${view === 'terms' ? sideNavActiveClass : ''}`}
-              >
-                <CalendarRange className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-                Academic terms
-              </NavLink>
-              <NavLink
-                to="/settings/org-branding"
-                className={() =>
-                  `${sideNavLinkClass} ${view === 'org-branding' ? sideNavActiveClass : ''}`
-                }
-              >
-                <Palette className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-                Branding
-              </NavLink>
+              {canOrgUnits && (
+                <NavLink
+                  to="/settings/org-units"
+                  className={() => `${sideNavLinkClass} ${view === 'org-units' ? sideNavActiveClass : ''}`}
+                >
+                  <FolderTree className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                  Org structure
+                </NavLink>
+              )}
+              {(canOrgRoles || canOrgRolesNav) && (
+                <NavLink
+                  to="/settings/org-roles"
+                  className={() => `${sideNavLinkClass} ${view === 'org-roles' ? sideNavActiveClass : ''}`}
+                >
+                  <Shield className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                  Roles &amp; permissions
+                </NavLink>
+              )}
+              {(canOrgUnits || canOrgRoles) && (
+                <>
+                  <NavLink
+                    to="/settings/terms"
+                    className={() => `${sideNavLinkClass} ${view === 'terms' ? sideNavActiveClass : ''}`}
+                  >
+                    <CalendarRange className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                    Academic terms
+                  </NavLink>
+                  <NavLink
+                    to="/settings/org-branding"
+                    className={() =>
+                      `${sideNavLinkClass} ${view === 'org-branding' ? sideNavActiveClass : ''}`
+                    }
+                  >
+                    <Palette className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                    Branding
+                  </NavLink>
+                </>
+              )}
             </>
-          )}
-          {canOrgRolesNav && (
-            <NavLink
-              to="/settings/org-roles"
-              className={() => `${sideNavLinkClass} ${view === 'org-roles' ? sideNavActiveClass : ''}`}
-            >
-              <Shield className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-              Organization roles
-            </NavLink>
           )}
           {canManageRbac && (
             <>

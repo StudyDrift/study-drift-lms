@@ -19,6 +19,7 @@ lerna-debug.log*
 # Dependencies & frontend build (clients/web — Vite, React, Vitest)
 node_modules/
 dist/
+.npm-cache/
 
 # Marketing site (www/) — built by CI or `npm run build` locally
 www/dist/
