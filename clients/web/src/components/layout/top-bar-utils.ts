@@ -17,8 +17,8 @@ export function profileName(profile: TopBarAccountProfile | null): string {
   return profile.email
 }
 
-export function initialsFromName(name: string): string {
-  const parts = name
+export function initialsFromName(name: string | null | undefined): string {
+  const parts = String(name ?? '')
     .split(/\s+/)
     .map((s) => s.trim())
     .filter(Boolean)

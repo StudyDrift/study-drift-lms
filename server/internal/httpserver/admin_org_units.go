@@ -12,6 +12,7 @@ import (
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/repos/organization"
 	"github.com/lextures/lextures/server/internal/repos/orgunit"
+	"github.com/lextures/lextures/server/internal/repos/orgroles"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
 )
 
@@ -36,6 +37,14 @@ func (d Deps) adminOrgOrUnitAccess(w http.ResponseWriter, r *http.Request, orgID
 	if err != nil || uOrg != orgID {
 		apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission for this action.")
 		return uuid.UUID{}, false, false
+	}
+	hasOrgAdmin, err := orgroles.UserHasRole(ctx, d.Pool, actorID, orgID, orgroles.RoleOrgAdmin)
+	if err != nil {
+		apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
+		return uuid.UUID{}, false, false
+	}
+	if hasOrgAdmin {
+		return actorID, false, true
 	}
 	has, err := rbac.UserHasPermission(ctx, d.Pool, actorID, permTenantOrgUnitsAdmin)
 	if err != nil {
