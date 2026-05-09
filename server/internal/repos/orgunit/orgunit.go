@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lextures/lextures/server/internal/repos/orgrolegrant"
 )
 
 // ValidUnitTypes for API validation.
@@ -35,15 +36,15 @@ type Row struct {
 
 // TreeNode is a nested unit for GET .../tree.
 type TreeNode struct {
-	ID           string       `json:"id"`
-	Name         string       `json:"name"`
-	UnitType     string       `json:"unitType"`
-	Status       string       `json:"status"`
-	Metadata     json.RawMessage `json:"metadata"`
-	CreatedAt    string       `json:"createdAt"`
-	UpdatedAt    string       `json:"updatedAt"`
-	ChildCourseCount int64    `json:"childCourseCount"`
-	Children     []TreeNode   `json:"children"`
+	ID               string          `json:"id"`
+	Name             string          `json:"name"`
+	UnitType         string          `json:"unitType"`
+	Status           string          `json:"status"`
+	Metadata         json.RawMessage `json:"metadata"`
+	CreatedAt        string          `json:"createdAt"`
+	UpdatedAt        string          `json:"updatedAt"`
+	ChildCourseCount int64           `json:"childCourseCount"`
+	Children         []TreeNode      `json:"children"`
 }
 
 func rowToTreeNode(r Row) TreeNode {
@@ -140,12 +141,34 @@ SELECT id FROM t
 	return out, rows.Err()
 }
 
-// ListSubtreeIDsForUserOrgUnitAdmin returns merged subtree ids for all unit-admin scopes of the user in orgID.
+// ListSubtreeIDsForUserOrgUnitAdmin returns merged subtree ids for all unit-admin scopes of the user in orgID
+// (legacy user_org_unit_roles + plan 5.8 org_role_grants org_unit_admin).
 func ListSubtreeIDsForUserOrgUnitAdmin(ctx context.Context, pool *pgxpool.Pool, userID, orgID uuid.UUID) ([]uuid.UUID, error) {
 	scopes, err := ListOrgUnitAdminScopes(ctx, pool, userID)
 	if err != nil {
 		return nil, err
 	}
+	grantRoots, err := orgrolegrant.ListOrgUnitAdminRootUnitIDs(ctx, pool, userID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	scopeSeen := make(map[uuid.UUID]struct{})
+	var uniqScopes []uuid.UUID
+	for _, id := range scopes {
+		if _, ok := scopeSeen[id]; ok {
+			continue
+		}
+		scopeSeen[id] = struct{}{}
+		uniqScopes = append(uniqScopes, id)
+	}
+	for _, id := range grantRoots {
+		if _, ok := scopeSeen[id]; ok {
+			continue
+		}
+		scopeSeen[id] = struct{}{}
+		uniqScopes = append(uniqScopes, id)
+	}
+	scopes = uniqScopes
 	if len(scopes) == 0 {
 		return nil, nil
 	}

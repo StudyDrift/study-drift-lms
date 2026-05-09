@@ -1,8 +1,10 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -11,24 +13,155 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/lextures/lextures/server/internal/apierr"
+	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/organization"
+	"github.com/lextures/lextures/server/internal/repos/orgrolegrant"
 	"github.com/lextures/lextures/server/internal/repos/orgroles"
 	"github.com/lextures/lextures/server/internal/repos/orgunit"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
 )
 
 type orgRoleGrantJSON struct {
-	ID         string  `json:"id"`
-	OrgID      string  `json:"orgId"`
-	UserID     string  `json:"userId"`
-	UserEmail  string  `json:"userEmail"`
+	ID          string  `json:"id"`
+	OrgID       string  `json:"orgId"`
+	UserID      string  `json:"userId"`
+	UserEmail   string  `json:"userEmail"`
 	DisplayName *string `json:"displayName"`
-	OrgUnitID  *string `json:"orgUnitId"`
+	OrgUnitID   *string `json:"orgUnitId"`
 	OrgUnitName *string `json:"orgUnitName"`
-	Role       string  `json:"role"`
-	GrantedBy  *string `json:"grantedBy"`
-	GrantedAt  string  `json:"grantedAt"`
-	ExpiresAt  *string `json:"expiresAt"`
+	Role        string  `json:"role"`
+	GrantedBy   *string `json:"grantedBy"`
+	GrantedAt   string  `json:"grantedAt"`
+	ExpiresAt   *string `json:"expiresAt"`
+}
+
+func (d Deps) parseOrgIDParam(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	s := strings.TrimSpace(chi.URLParam(r, "orgId"))
+	id, err := uuid.Parse(s)
+	if err != nil {
+		apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid organization id.")
+		return uuid.UUID{}, false
+	}
+	return id, true
+}
+
+func (d Deps) userBelongsToOrgOrGlobal(ctx context.Context, w http.ResponseWriter, userID, orgID uuid.UUID) (globalAdmin bool, ok bool) {
+	ga, err := rbac.UserHasPermission(ctx, d.Pool, userID, permGlobalRBACManage)
+	if err != nil {
+		apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
+		return false, false
+	}
+	if ga {
+		return true, true
+	}
+	uOrg, err := organization.OrgIDForUser(ctx, d.Pool, userID)
+	if err != nil {
+		apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify organization.")
+		return false, false
+	}
+	if uOrg != orgID {
+		apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission for this action.")
+		return false, false
+	}
+	return false, true
+}
+
+func (d Deps) handleMeOrgRoleCapabilities() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		userID, ok := d.meUserID(w, r)
+		if !ok {
+			return
+		}
+		ctx := r.Context()
+		orgID, err := organization.OrgIDForUser(ctx, d.Pool, userID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load organization.")
+			return
+		}
+		ga, err := rbac.UserHasPermission(ctx, d.Pool, userID, permGlobalRBACManage)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
+			return
+		}
+		canManage, err := orgrolegrant.CanManageOrgRoleGrants(ctx, d.Pool, userID, orgID, ga)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify org roles.")
+			return
+		}
+		access, err := orgrolegrant.ResolveOrgCourseAccess(ctx, d.Pool, userID, orgID, ga)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify org roles.")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"orgId":                   orgID.String(),
+			"canManageOrgRoleGrants":  canManage,
+			"canListOrgCourseCatalog": access != orgrolegrant.OrgCourseAccessNone,
+		})
+	}
+}
+
+func (d Deps) handleOrgCoursesCatalog() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		userID, ok := d.meUserID(w, r)
+		if !ok {
+			return
+		}
+		orgID, ok := d.parseOrgIDParam(w, r)
+		if !ok {
+			return
+		}
+		ctx := r.Context()
+		globalAdmin, ok := d.userBelongsToOrgOrGlobal(ctx, w, userID, orgID)
+		if !ok {
+			return
+		}
+		access, accessErr := orgrolegrant.ResolveOrgCourseAccess(ctx, d.Pool, userID, orgID, globalAdmin)
+		if accessErr != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to resolve org course access.")
+			return
+		}
+		if access == orgrolegrant.OrgCourseAccessNone {
+			apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission for this action.")
+			return
+		}
+		var list []course.CoursePublic
+		var listErr error
+		switch access {
+		case orgrolegrant.OrgCourseAccessAllInOrg:
+			list, listErr = course.ListPublicInOrg(ctx, d.Pool, orgID)
+		case orgrolegrant.OrgCourseAccessSubtree:
+			var subtrees []uuid.UUID
+			subtrees, listErr = orgunit.ListSubtreeIDsForUserOrgUnitAdmin(ctx, d.Pool, userID, orgID)
+			if listErr != nil {
+				break
+			}
+			list, listErr = course.ListPublicInOrgWithinOrgUnits(ctx, d.Pool, orgID, subtrees, false)
+		default:
+			apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission for this action.")
+			return
+		}
+		if listErr != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to list courses.")
+			return
+		}
+		if list == nil {
+			list = []course.CoursePublic{}
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(map[string]any{"courses": list})
+	}
 }
 
 func (d Deps) orgRoleAccess(w http.ResponseWriter, r *http.Request, orgID uuid.UUID, wantManage bool) (actor uuid.UUID, ok bool) {
@@ -82,15 +215,56 @@ func (d Deps) orgRoleAccess(w http.ResponseWriter, r *http.Request, orgID uuid.U
 	return actor, true
 }
 
-// GET /api/v1/orgs/{orgId}/role-grants
-// POST /api/v1/orgs/{orgId}/role-grants
-func (d Deps) handleOrgRoleGrantsCollection() http.HandlerFunc {
-	type postBody struct {
+func parseOrgRoleGrantPostBody(raw []byte) (
+	userID string,
+	role string,
+	orgUnitID *string,
+	expiresAt *string,
+	parseErr error,
+) {
+	type snake struct {
 		UserID    string  `json:"user_id"`
 		Role      string  `json:"role"`
 		OrgUnitID *string `json:"org_unit_id"`
 		ExpiresAt *string `json:"expires_at"`
 	}
+	type camel struct {
+		UserID    string  `json:"userId"`
+		Role      string  `json:"role"`
+		OrgUnitID *string `json:"orgUnitId"`
+		ExpiresAt *string `json:"expiresAt"`
+	}
+	var s snake
+	var c camel
+	_ = json.Unmarshal(raw, &s)
+	_ = json.Unmarshal(raw, &c)
+	userID = strings.TrimSpace(s.UserID)
+	if userID == "" {
+		userID = strings.TrimSpace(c.UserID)
+	}
+	role = strings.TrimSpace(s.Role)
+	if role == "" {
+		role = strings.TrimSpace(c.Role)
+	}
+	if s.OrgUnitID != nil {
+		orgUnitID = s.OrgUnitID
+	} else {
+		orgUnitID = c.OrgUnitID
+	}
+	if s.ExpiresAt != nil {
+		expiresAt = s.ExpiresAt
+	} else {
+		expiresAt = c.ExpiresAt
+	}
+	if userID == "" || role == "" {
+		parseErr = errors.New("missing user id or role")
+	}
+	return userID, role, orgUnitID, expiresAt, parseErr
+}
+
+// GET /api/v1/orgs/{orgId}/role-grants
+// POST /api/v1/orgs/{orgId}/role-grants
+func (d Deps) handleOrgRoleGrantsCollection() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		orgID, err := uuid.Parse(strings.TrimSpace(chi.URLParam(r, "orgId")))
 		if err != nil {
@@ -100,6 +274,10 @@ func (d Deps) handleOrgRoleGrantsCollection() http.HandlerFunc {
 		switch r.Method {
 		case http.MethodGet:
 			if _, ok := d.orgRoleAccess(w, r, orgID, false); !ok {
+				return
+			}
+			if _, err := orgroles.SweepExpired(r.Context(), d.Pool, time.Now().UTC(), 200); err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to prune expired grants.")
 				return
 			}
 			rows, err := d.Pool.Query(r.Context(), `
@@ -168,22 +346,26 @@ ORDER BY g.granted_at DESC
 			if !ok {
 				return
 			}
-			var body postBody
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			raw, err := io.ReadAll(r.Body)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid request body.")
+				return
+			}
+			targetStr, roleStr, unitStrPtr, expStrPtr, perr := parseOrgRoleGrantPostBody(raw)
+			if perr != nil {
 				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
 				return
 			}
-			targetUser, err := uuid.Parse(strings.TrimSpace(body.UserID))
+			targetUser, err := uuid.Parse(targetStr)
 			if err != nil {
-				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid user_id.")
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid user id.")
 				return
 			}
-			role := strings.TrimSpace(body.Role)
+			role := roleStr
 			if role != string(orgroles.RoleOrgAdmin) && role != string(orgroles.RoleOrgUnitAdmin) && role != string(orgroles.RoleOrgViewer) {
 				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid role.")
 				return
 			}
-			// Target user must belong to org.
 			uOrg, err := organization.OrgIDForUser(r.Context(), d.Pool, targetUser)
 			if err != nil {
 				apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "User not found.")
@@ -193,7 +375,6 @@ ORDER BY g.granted_at DESC
 				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "User must belong to the same organization.")
 				return
 			}
-			// Only platform admins can grant org_admin.
 			if role == string(orgroles.RoleOrgAdmin) {
 				ga, err := rbac.UserHasPermission(r.Context(), d.Pool, actor, permGlobalRBACManage)
 				if err != nil {
@@ -207,11 +388,11 @@ ORDER BY g.granted_at DESC
 			}
 			var unitID *uuid.UUID
 			if role == string(orgroles.RoleOrgUnitAdmin) {
-				if body.OrgUnitID == nil || strings.TrimSpace(*body.OrgUnitID) == "" {
+				if unitStrPtr == nil || strings.TrimSpace(*unitStrPtr) == "" {
 					apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "org_unit_id is required for org_unit_admin.")
 					return
 				}
-				id, err := uuid.Parse(strings.TrimSpace(*body.OrgUnitID))
+				id, err := uuid.Parse(strings.TrimSpace(*unitStrPtr))
 				if err != nil {
 					apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid org_unit_id.")
 					return
@@ -224,8 +405,8 @@ ORDER BY g.granted_at DESC
 				unitID = &id
 			}
 			var exp *time.Time
-			if body.ExpiresAt != nil && strings.TrimSpace(*body.ExpiresAt) != "" {
-				tm, err := time.Parse(time.RFC3339, strings.TrimSpace(*body.ExpiresAt))
+			if expStrPtr != nil && strings.TrimSpace(*expStrPtr) != "" {
+				tm, err := time.Parse(time.RFC3339, strings.TrimSpace(*expStrPtr))
 				if err != nil {
 					apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid expires_at (use RFC3339).")
 					return
@@ -239,12 +420,10 @@ ORDER BY g.granted_at DESC
 				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to grant role.")
 				return
 			}
-			// Mirror org_unit_admin into existing permission model.
 			if role == string(orgroles.RoleOrgUnitAdmin) && unitID != nil {
 				_ = orgunit.AssignOrgUnitAdmin(r.Context(), d.Pool, targetUser, *unitID)
 				_ = rbac.AssignUserRoleByName(r.Context(), d.Pool, targetUser, "Org Unit Admin")
 			}
-			// Audit event.
 			_, _ = d.Pool.Exec(r.Context(), `
 INSERT INTO tenant.organization_audit_events (actor_id, org_id, action, payload)
 VALUES ($1, $2, 'org_role_granted', jsonb_build_object(
@@ -266,7 +445,7 @@ VALUES ($1, $2, 'org_role_granted', jsonb_build_object(
 	}
 }
 
-// DELETE /api/v1/orgs/{orgId}/role-grants/{gid}
+// DELETE /api/v1/orgs/{orgId}/role-grants/{grantId}
 func (d Deps) handleOrgRoleGrantDelete() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
@@ -283,12 +462,15 @@ func (d Deps) handleOrgRoleGrantDelete() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		gid, err := uuid.Parse(strings.TrimSpace(chi.URLParam(r, "gid")))
+		gidStr := strings.TrimSpace(chi.URLParam(r, "grantId"))
+		if gidStr == "" {
+			gidStr = strings.TrimSpace(chi.URLParam(r, "gid"))
+		}
+		gid, err := uuid.Parse(gidStr)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid grant id.")
 			return
 		}
-		// Load before delete so we can enforce org_admin revocation rules.
 		var role string
 		err = d.Pool.QueryRow(r.Context(), `SELECT role FROM "user".org_role_grants WHERE id = $1 AND org_id = $2`, gid, orgID).Scan(&role)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -319,7 +501,6 @@ func (d Deps) handleOrgRoleGrantDelete() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Not found.")
 			return
 		}
-		// Audit event.
 		_, _ = d.Pool.Exec(r.Context(), `
 INSERT INTO tenant.organization_audit_events (actor_id, org_id, action, payload)
 VALUES ($1, $2, 'org_role_revoked', jsonb_build_object(
@@ -387,4 +568,3 @@ LIMIT 20
 		writeJSON(w, http.StatusOK, map[string]any{"users": out})
 	}
 }
-

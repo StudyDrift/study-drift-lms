@@ -70,6 +70,8 @@ function settingsSubLabel(view: ReturnType<typeof settingsViewFromPathname>): st
       return 'Organizations'
     case 'org-units':
       return 'Org structure'
+    case 'org-branding':
+      return 'Organization branding'
     case 'terms':
       return 'Academic terms'
     case 'scim-provisioning':

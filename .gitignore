@@ -59,6 +59,7 @@ iac/demo/override.tf
 # Local agent artifacts (screenshots, etc.)
 .cursor/artifacts/
 .artifacts/
+/artifacts/
 
 # Go Air (dev container)
 server/tmp/

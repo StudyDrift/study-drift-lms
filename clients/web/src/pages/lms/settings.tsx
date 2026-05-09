@@ -10,13 +10,14 @@ import {
 import { Navigate, useLocation } from 'react-router-dom'
 import { ImageIcon, Monitor, Save, Upload, X } from 'lucide-react'
 import { settingsViewFromPathname } from '../../components/layout/side-nav-path-utils'
+import { useOrgRoleCapabilities } from '../../hooks/use-org-role-capabilities'
 import { usePlatformScimEnabled } from '../../hooks/use-platform-scim-enabled'
 import { ImageModelPicker } from '../../components/image-model-picker'
 import { RequirePermission } from '../../components/require-permission'
 import { LtiToolsSettingsPanel } from '../../components/settings/lti-tools-settings-panel'
 import { OrganizationsPanel } from '../../components/settings/organizations-panel'
-import { OrgUnitsPanel } from '../../components/settings/org-units-panel'
 import { OrgRolesPanel } from '../../components/settings/org-roles-panel'
+import { OrgUnitsPanel } from '../../components/settings/org-units-panel'
 import { TermsSettingsPanel } from '../../components/settings/terms-settings-panel'
 import { PlatformSettingsPanel } from '../../components/settings/platform-settings-panel'
 import { ScimSettingsPanel } from '../../components/settings/scim-settings-panel'
@@ -155,6 +156,7 @@ export default function Settings() {
   const { density, setDensity } = useUiDensityControls()
   const activeView = settingsViewFromPathname(location.pathname)
   const canManageRbac = !permLoading && allows(PERM_RBAC_MANAGE)
+  const orgRoleCaps = useOrgRoleCapabilities()
   const { scimEnabled: platformScimEnabled, loading: platformScimFlagLoading } = usePlatformScimEnabled(
     canManageRbac && activeView === 'scim-provisioning',
   )
@@ -733,8 +735,14 @@ export default function Settings() {
     const onOrgBranding = location.pathname === '/settings/org-branding'
     const hasRbac = allows(PERM_RBAC_MANAGE)
     const hasUnitAdmin = allows(PERM_TENANT_ORG_UNITS_ADMIN)
-    const hasOrgRoleView = allows(PERM_TENANT_ORG_ROLES_VIEW) || allows(PERM_TENANT_ORG_ROLES_MANAGE)
-    if (!hasRbac && !((onOrgUnits || onTerms || onOrgBranding) && hasUnitAdmin) && !(onOrgRoles && hasOrgRoleView)) {
+    const orgRolesOk =
+      onOrgRoles &&
+      (orgRoleCaps.loading ||
+        allows(PERM_TENANT_ORG_ROLES_VIEW) ||
+        allows(PERM_TENANT_ORG_ROLES_MANAGE) ||
+        orgRoleCaps.canManageOrgRoleGrants ||
+        hasRbac)
+    if (!hasRbac && !((onOrgUnits || onTerms || onOrgBranding) && hasUnitAdmin) && !orgRolesOk) {
       return <Navigate to="/settings/account" replace />
     }
   }

@@ -33,4 +33,3 @@ VALUES (
     'View org-level role grants (org viewer).'
 )
 ON CONFLICT (permission_string) DO NOTHING;
-
