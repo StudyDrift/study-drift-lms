@@ -17,11 +17,6 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/rbac"
 )
 
-const (
-	permOrgRolesManage = "tenant:org:roles:manage"
-	permOrgRolesView   = "tenant:org:roles:view"
-)
-
 type orgRoleGrantJSON struct {
 	ID         string  `json:"id"`
 	OrgID      string  `json:"orgId"`
