@@ -27,6 +27,10 @@ type Config struct {
 	AllowInsecureJWT bool
 	RunMigrations    bool
 
+	// BootstrapAdminEmail, when non-empty, is the only email that may receive Global Admin
+	// on the first human password signup (empty DB besides system users). Loaded from BOOTSTRAP_ADMIN_EMAIL.
+	BootstrapAdminEmail string
+
 	OpenRouterAPIKey string
 	CourseFilesRoot  string
 
@@ -144,6 +148,8 @@ func Load() Config {
 		JWTSecret:        jwtSecret,
 		AllowInsecureJWT: allowInsecureJWT,
 		RunMigrations:    runMigrations(),
+
+		BootstrapAdminEmail: strings.ToLower(strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL"))),
 
 		OpenRouterAPIKey: firstNonEmptyTrimmed("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY"),
 		CourseFilesRoot:  stringDefault(firstNonEmptyTrimmed("COURSE_FILES_ROOT"), "data/course-files"),

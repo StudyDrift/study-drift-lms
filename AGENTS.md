@@ -20,6 +20,7 @@ Lextures is an LMS (Learning Management System) with two main services:
 Required env vars for the Go API (copy from `server/.env.example` to `server/.env`):
 - `DATABASE_URL=postgres://studydrift:studydrift@localhost:5432/studydrift?sslmode=disable`
 - `JWT_SECRET=change-me-use-at-least-32-characters-for-production`
+- `BOOTSTRAP_ADMIN_EMAIL` — optional; if set to your email, the **first** password signup on an empty human user table gets Global Admin. If unset, use `cd server && go run ./cmd/bootstrap-admin -email=you@example.com` after creating an account.
 - `RUN_MIGRATIONS=true`
 - `PORT=8080`
 - `PUBLIC_WEB_ORIGIN=http://localhost:5173`
@@ -32,6 +33,7 @@ Frontend env: `VITE_API_URL=http://localhost:8080` (set when running `npm run de
 | Task | Command | Working Directory |
 |------|---------|-------------------|
 | Go build | `go build -o bin/server ./cmd/server` | `server/` |
+| Grant Global Admin (CLI) | `go run ./cmd/bootstrap-admin -email=user@example.com` | `server/` (needs `DATABASE_URL`) |
 | Go test (short, no DB) | `go test ./... -count=1 -short -timeout=1m` | `server/` |
 | Go test (full, needs DB) | `make test` (needs `DATABASE_URL`) | `server/` |
 | Go lint | `golangci-lint run ./...` | `server/` |

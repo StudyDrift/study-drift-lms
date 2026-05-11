@@ -56,6 +56,8 @@ services:
       # sslmode=disable avoids TLS negotiation issues with the local Postgres container.
       DATABASE_URL: postgres://studydrift:studydrift@postgres:5432/studydrift?sslmode=disable
       JWT_SECRET: change-me-in-production-use-a-long-random-string
+      # First password Global Admin only when signup email matches (see docs/SECURITY_ISSUES.md C2).
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       RUN_MIGRATIONS: "true"
       OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
       COURSE_FILES_ROOT: /var/course-files
