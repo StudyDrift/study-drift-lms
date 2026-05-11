@@ -140,8 +140,9 @@ func Login(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg co
 	return issueAuthAfterCredentialSuccess(ctx, pool, jwt, cfg, row, MergeClientMeta(req.Client, "password"))
 }
 
-// Signup .
-func Signup(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, checker hibp.Checker, req SignupRequest) (AuthResponse, error) {
+// Signup creates a password account. The first human user receives Global Admin only when
+// cfg.BootstrapAdminEmail is set and matches the signup email (see docs/SECURITY_ISSUES.md C2).
+func Signup(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSigner, cfg config.Config, checker hibp.Checker, req SignupRequest) (AuthResponse, error) {
 	if err := validateSignup(&req); err != nil {
 		return AuthResponse{}, err
 	}
@@ -187,7 +188,7 @@ WHERE id <> $1::uuid`, communication.PlatformInboxSenderID.String()).Scan(&human
 	if err != nil {
 		return AuthResponse{}, err
 	}
-	if firstHuman {
+	if firstHuman && cfg.BootstrapAdminEmail != "" && email == cfg.BootstrapAdminEmail {
 		if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, "Global Admin"); err != nil {
 			return AuthResponse{}, err
 		}

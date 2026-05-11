@@ -10,6 +10,7 @@ import (
 	serverdata "github.com/lextures/lextures/server"
 	"github.com/lextures/lextures/server/internal/auth"
 	"github.com/lextures/lextures/server/internal/auth/hibp"
+	"github.com/lextures/lextures/server/internal/config"
 	"github.com/lextures/lextures/server/internal/db"
 	"github.com/lextures/lextures/server/internal/migrate"
 	"github.com/lextures/lextures/server/internal/repos/passwordcreditevents"
@@ -36,7 +37,7 @@ func TestSignup_RejectsBreachedPasswordWhenHIBPReportsHit_Pg(t *testing.T) {
 	jwt := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
 	email := "pwpol-" + time.Now().Format("20060102150405.000000000") + "@example.com"
 	checker := hibp.StubChecker{Result: hibp.Result{BreachFound: true, HIBPAvailable: true}}
-	_, err = Signup(ctx, pool, jwt, checker, SignupRequest{Email: email, Password: "any-pass-here"})
+	_, err = Signup(ctx, pool, jwt, config.Config{}, checker, SignupRequest{Email: email, Password: "any-pass-here"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -71,7 +72,7 @@ func TestChangePassword_AuditTrail_Pg(t *testing.T) {
 	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
 	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
 	email := "pwc-" + time.Now().Format("20060102150405.000000000") + "@example.com"
-	res, err := Signup(ctx, pool, jwt, stub, SignupRequest{Email: email, Password: pass})
+	res, err := Signup(ctx, pool, jwt, config.Config{}, stub, SignupRequest{Email: email, Password: pass})
 	if err != nil {
 		t.Fatalf("signup: %v", err)
 	}

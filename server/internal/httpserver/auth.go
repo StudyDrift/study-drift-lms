@@ -75,7 +75,7 @@ func (d Deps) handleSignup() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
 			return
 		}
-		res, err := authservice.Signup(r.Context(), d.Pool, d.JWTSigner, d.passwordChecker(), authservice.SignupRequest{
+		res, err := authservice.Signup(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), d.passwordChecker(), authservice.SignupRequest{
 			Email:       b.Email,
 			Password:    b.Password,
 			DisplayName: b.DisplayName,
