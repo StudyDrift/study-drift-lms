@@ -1,21 +1,18 @@
-# Development stack: live reload without restarting containers.
+# Development stack overrides (Air, Vite bind mounts). Merge with the base file — this file does
+# not define postgres/mongo or other base services:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 #
 # Go API (`server`) uses [Air](https://github.com/air-verse/air): edit `.go` files under ./server
 # and the binary rebuilds; no image rebuild required after the first `up --build`.
-# If the API never listens on 8080, rebuild:  docker compose -f docker-compose.dev.yml up --build
+# If the API never listens on 8080, rebuild:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 #
-# Prefer this single command (includes the base stack so Postgres + port 8080 exist):
-#   docker compose -f docker-compose.dev.yml up --build
-#
-# Or merge explicitly:
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Do not use `include:` in a compose file and also pass the same base with `-f` (duplicate base +
+# inline `services` caused "services.server conflicts with imported resource" on some Compose versions).
 #
 # - web: Vite dev server (HMR) → http://localhost:5173
 # - server: Go API (./server) → http://localhost:8080
 # - postgres / mongo: from docker-compose.yml (required for DATABASE_URL; mongo unused by the Go API today)
-
-include:
-  - docker-compose.yml
 
 services:
   # Go `server` from docker-compose.yml: use Air + bind mount for live recompile.
@@ -38,7 +35,7 @@ services:
       dockerfile: Dockerfile.dev
     # Source from host; node_modules is a named volume (see docker-entrypoint.dev.sh — npm ci when
     # package.json / package-lock.json change, or when expected packages like mark.js are missing).
-    # After adding npm dependencies: `docker compose -f docker-compose.dev.yml build web && up`, or
+    # After adding npm dependencies: `docker compose -f docker-compose.yml -f docker-compose.dev.yml build web && up`, or
     # one-shot `docker compose exec web npm ci`. If Vite still cannot resolve a package, remove the
     # volume `web_node_modules` once (`docker volume rm …` or `docker compose down -v` if safe) then `up --build`.
     volumes:

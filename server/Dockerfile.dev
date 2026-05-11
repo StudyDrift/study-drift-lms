@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Development image: [Air](https://github.com/air-verse/air) rebuilds and restarts ./cmd/server on .go changes.
-# Used by docker compose -f docker-compose.dev.yml (source is bind-mounted at /app at runtime).
+# Used by docker compose -f docker-compose.yml -f docker-compose.dev.yml (source is bind-mounted at /app at runtime).
 FROM golang:1.25-bookworm
 WORKDIR /app
 
