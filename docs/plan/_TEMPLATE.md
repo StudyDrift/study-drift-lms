@@ -142,6 +142,6 @@ Concrete, testable, Given/When/Then format. Each AC SHOULD map to at least one a
 
 ## 19. References
 
-- Existing files this work touches: `server/src/...`, `clients/web/src/...`.
+- Existing files this work touches: `server/internal/...`, `clients/web/src/...`.
 - External standards: RFCs, IMS Global specs, NIST guidance, etc.
 - Related plans: `../{section-folder}/{file}.md`.

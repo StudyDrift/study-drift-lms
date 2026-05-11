@@ -19,20 +19,17 @@ The themes that matter for a "ShinyHunters-style" intrusion are: **token theft s
   2. In `config.Load()` reject any `JWT_SECRET` that matches a known-default list (`change-me*`, `dev-secret-do-not-use*`, etc.) unless `ALLOW_INSECURE_JWT=1`.
   3. Rotate the secret on any environment that has ever booted with the default — invalidate all sessions.
 
-### C2. First signup self-promotes to Global Admin
-- **File:** [server/internal/service/authservice/credentials.go:165-197](../server/internal/service/authservice/credentials.go#L165) (`Signup`)
-- **Detail:** `Signup` takes a transactional advisory lock, counts non-system users, and if the count is zero assigns `Global Admin` to the new account. There is no environment gate, no invite check, no IP/host check.
-- **Risk:** If a fresh deployment is exposed to the internet for even a second before the operator signs up, a stranger can create the first account and become the platform's superuser. This is exactly the kind of misconfig that ShinyHunters-class attackers spray for.
-- **Fix:** Require an explicit bootstrap mechanism — environment variable (`BOOTSTRAP_ADMIN_EMAIL`), CLI subcommand (`server bootstrap-admin`), or signed invite token. Never derive admin status from "I happened to be first."
+### C2. First signup self-promotes to Global Admin — **fixed (2026-05-11)**
+- **File:** [server/internal/service/authservice/credentials.go](../server/internal/service/authservice/credentials.go) (`Signup`), [server/internal/config/config.go](../server/internal/config/config.go) (`BOOTSTRAP_ADMIN_EMAIL`), [server/cmd/bootstrap-admin/main.go](../server/cmd/bootstrap-admin/main.go)
+- **Detail (historical):** `Signup` used to assign `Global Admin` whenever the human user count was zero, with no environment gate.
+- **Risk (historical):** A stranger hitting a fresh internet-exposed deploy before the operator could seize superuser.
+- **Resolution:** Global Admin on first password signup only when `BOOTSTRAP_ADMIN_EMAIL` is set and equals the normalized signup email. Otherwise the first account is a normal Teacher. Operators can run `go run ./cmd/bootstrap-admin -email=…` from `server/` with `DATABASE_URL` to grant Global Admin after the fact.
 
-### C3. Live API keys present in repo-root `.env`
+### C3. Live API keys present in repo-root `.env` — **fixed (2026-05-11)**
 - **File:** [.env](../.env) (gitignored, but on developer machines and any tarball/backup that ignores `.gitignore`)
-- **Detail:** Contains what look like real `OPEN_ROUTER_API_KEY` and `GITHUB_TOKEN` (`github_pat_…`) values. `.env` is untracked but is not encrypted, not vaulted, and will end up in `tar`/`rsync`/IDE backups. Anyone who clones a developer's home directory or steals a laptop has them.
-- **Risk:** OpenRouter spend abuse, GitHub PAT pivoting (depending on scopes — `github_pat_` fine-grained tokens still grant per-repo write at minimum).
-- **Fix:**
-  1. Rotate **both** secrets now; assume compromise.
-  2. Move local secrets to a vault (1Password CLI, `op`, `direnv` + age-encrypted file, AWS SSM, Doppler).
-  3. Add a pre-commit hook (`gitleaks`/`trufflehog`) so a future `.env` slip is caught before push.
+- **Detail (historical):** The reported incident involved real-looking `OPEN_ROUTER_API_KEY` and `GITHUB_TOKEN` values in a local `.env`.
+- **Risk (historical):** OpenRouter spend abuse and GitHub PAT pivoting if those materials were copied or exfiltrated.
+- **Resolution:** Credentials were rotated/revoked. Keep `.env` out of version control; prefer a vault or secret manager for long-lived local keys. Automated secret scanning in CI/pre-commit remains tracked under **I2** if not already enabled.
 
 ---
 
@@ -225,7 +222,7 @@ At minimum:
 - 11 failed logins / 60 s → throttled (after H3 fix).
 - Upload a malicious SVG → either rejected (H4 fix) or stripped of script.
 - Upload an HTML course file → rendered as `text/html` only with `Content-Disposition: attachment` (H5 fix).
-- Sign up twice on a fresh DB → second signup must NOT receive Global Admin (C2 fix).
+- Fresh DB: first password signup must NOT become Global Admin unless `BOOTSTRAP_ADMIN_EMAIL` matches that user; a second signup never receives that bootstrap path (C2 fix).
 
 ### I5. Document a token-revocation runbook
 On suspected token leak (C1, H1, M3), what is the operator command? Today: rotate `JWT_SECRET` and bounce the server (kicks every active session). After M3 lands: bump `kid`. Codify this so it isn't invented mid-incident.
@@ -236,8 +233,8 @@ On suspected token leak (C1, H1, M3), what is the operator command? Today: rotat
 
 ### Block production launch
 1. **C1** Default JWT secret — remove and rotate.
-2. **C2** First-signup self-promotion — gate behind explicit bootstrap.
-3. **C3** Rotate the leaked-looking keys in repo `.env`.
+2. ~~**C2** First-signup self-promotion~~ — done (`BOOTSTRAP_ADMIN_EMAIL` + `bootstrap-admin` CLI).
+3. ~~**C3** Rotate the leaked-looking keys in repo `.env`~~ — done (rotated/revoked; hygiene ongoing).
 4. **H1** Move tokens to `HttpOnly` cookies (or at least the refresh token).
 5. **H2** Tighten CORS, add the security-headers middleware.
 6. **H3** Auth-endpoint rate limiting.

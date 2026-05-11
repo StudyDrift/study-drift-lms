@@ -39,7 +39,7 @@ func TestMagicLink_RequestRateLimit_Pg(t *testing.T) {
 	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
 	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
 	email := "magic-rl-" + time.Now().Format("20060102150405.000000000") + "@example.com"
-	if _, err := Signup(ctx, pool, jwt, stub, SignupRequest{Email: email, Password: pass}); err != nil {
+	if _, err := Signup(ctx, pool, jwt, config.Config{}, stub, SignupRequest{Email: email, Password: pass}); err != nil {
 		t.Fatalf("signup: %v", err)
 	}
 	cfg := config.Config{
@@ -85,7 +85,7 @@ func TestMagicLink_Consume_Pg(t *testing.T) {
 	stub := hibp.StubChecker{Result: hibp.Result{BreachFound: false, HIBPAvailable: true}}
 	pass := "J7q#xM2pL9vRkW4$hN8zT1cY5bU6nM0aS"
 	email := "magic-consume-" + time.Now().Format("20060102150405.000000000") + "@example.com"
-	su, err := Signup(ctx, pool, jwt, stub, SignupRequest{Email: email, Password: pass})
+	su, err := Signup(ctx, pool, jwt, config.Config{}, stub, SignupRequest{Email: email, Password: pass})
 	if err != nil {
 		t.Fatalf("signup: %v", err)
 	}
