@@ -1380,21 +1380,43 @@ export function viewerIsLearnerOnlyCourseEnrollment(
   if (!viewerEnrollmentRoles?.length) return true
   const roles = viewerEnrollmentRoles.map((r) => r.trim().toLowerCase())
   const hasStudent = roles.includes('student')
-  const hasStaff = roles.some((r) => r === 'teacher' || r === 'instructor' || r === 'ta')
+  const hasStaff = roles.some((r) => {
+    const x = r.trim().toLowerCase()
+    return (
+      x === 'teacher' ||
+      x === 'instructor' ||
+      x === 'ta' ||
+      x === 'designer' ||
+      x === 'observer' ||
+      x === 'auditor' ||
+      x === 'librarian'
+    )
+  })
   return hasStudent && !hasStaff
 }
 
 /**
- * Matches server `enrollment::user_is_course_staff`: enrolled as `teacher` or `instructor` for this
- * course. Use for roster/Enrollments UI — do not rely on permission strings alone (wildcards can
- * match students).
+ * Matches extended course staff for this course (plan 5.9): primary instructor roles plus
+ * `ta`, `designer`, `observer`, `auditor`, and `librarian`. Use for roster/Enrollments UI — do not
+ * rely on permission strings alone (wildcards can match students).
  */
 export function viewerIsCourseStaffEnrollment(
   viewerEnrollmentRoles: readonly string[] | null | undefined,
 ): boolean {
   if (!viewerEnrollmentRoles?.length) return false
   const roles = viewerEnrollmentRoles.map((r) => r.trim().toLowerCase())
-  return roles.some((r) => r === 'teacher' || r === 'instructor')
+  return roles.some((r) => {
+    const x = r.trim().toLowerCase()
+    return (
+      x === 'teacher' ||
+      x === 'instructor' ||
+      x === 'ta' ||
+      x === 'designer' ||
+      x === 'observer' ||
+      x === 'auditor' ||
+      x === 'librarian'
+    )
+  })
 }
 
 /** Hide course roster / Enrollments navigation for learners and when staff preview as a student. */

@@ -12,7 +12,7 @@ import (
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/coursestructure"
-	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/courseroles"
 )
 
 // handlePatchCourseStructureItem is PATCH /api/v1/courses/{course_code}/structure/items/{item_id}
@@ -32,7 +32,7 @@ func (d Deps) handlePatchCourseStructureItem() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		ok, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+		ok, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 			return
@@ -130,7 +130,7 @@ func (d Deps) handleDeleteCourseStructureItem() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		ok, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+		ok, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 			return

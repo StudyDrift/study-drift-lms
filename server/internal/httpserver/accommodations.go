@@ -14,6 +14,7 @@ import (
 	"github.com/lextures/lextures/server/internal/apierr"
 	acmodel "github.com/lextures/lextures/server/internal/models/accommodations"
 	"github.com/lextures/lextures/server/internal/repos/course"
+	"github.com/lextures/lextures/server/internal/courseroles"
 	"github.com/lextures/lextures/server/internal/repos/coursegrants"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
@@ -125,7 +126,7 @@ func (d Deps) handleEnrollmentAccommodationSummary() http.HandlerFunc {
 		}
 		required := coursegrants.CourseEnrollmentsReadPermission(en.CourseCode)
 		var hasPerm bool
-		hasPerm, err = rbac.UserHasPermission(ctx, d.Pool, uid, required)
+		hasPerm, err = courseroles.UserHasPermission(ctx, d.Pool, uid, required)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Server misconfiguration.")
 			return

@@ -14,7 +14,7 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/coursesections"
 	"github.com/lextures/lextures/server/internal/repos/coursestructure"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
-	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/courseroles"
 )
 
 func sectionJSON(s *coursesections.Section) map[string]any {
@@ -90,7 +90,7 @@ func (d Deps) handleCourseSectionsCollection() http.HandlerFunc {
 			return
 
 		case http.MethodPost:
-			can, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+			can, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 			if err != nil {
 				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 				return
@@ -188,7 +188,7 @@ func (d Deps) handleCourseSectionItem() http.HandlerFunc {
 
 		switch r.Method {
 		case http.MethodPatch:
-			can, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+			can, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 			if err != nil {
 				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 				return
@@ -271,7 +271,7 @@ func (d Deps) handleCourseSectionItem() http.HandlerFunc {
 			return
 
 		case http.MethodDelete:
-			can, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+			can, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 			if err != nil {
 				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 				return
@@ -341,7 +341,7 @@ WHERE ce.id = $1
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
 			return
 		}
-		can, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":enrollments:update")
+		can, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":enrollments:update")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 			return
@@ -411,7 +411,7 @@ WHERE s.id = $1
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
 			return
 		}
-		can, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+		can, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 		if err != nil || !can {
 			apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission to set overrides.")
 			return

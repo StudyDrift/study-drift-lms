@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 import { Pencil, Shuffle, Trash2, UsersRound, X } from 'lucide-react'
+import { EnrollmentRoleBadge } from './enrollment-role-badge'
 import { EnrollmentGroupsPanel } from './enrollment-groups-panel'
 import { EnrollmentsActionsMenu } from './enrollments-actions-menu'
 import { LmsPage } from './lms-page'
@@ -39,6 +40,7 @@ export type CourseEnrollment = {
   userId: string
   displayName: string | null
   role: string
+  roleDisplay?: string | null
   lastCourseAccessAt?: string | null
   groupMemberships?: EnrollmentGroupMembership[]
   sectionId?: string | null
@@ -56,16 +58,32 @@ type AddEnrollmentsResult = {
   notFound: string[]
 }
 
-function enrollmentRoleRank(roleDisplay: string): number {
-  switch (roleDisplay) {
-    case 'Teacher':
+function normEnrollmentRole(role: string): string {
+  return role.trim().toLowerCase()
+}
+
+function enrollmentRoleRank(role: string): number {
+  switch (normEnrollmentRole(role)) {
+    case 'owner':
       return 0
-    case 'Instructor':
+    case 'teacher':
+      return 0
+    case 'instructor':
       return 1
-    case 'Student':
+    case 'ta':
       return 2
-    default:
+    case 'designer':
       return 3
+    case 'observer':
+      return 4
+    case 'auditor':
+      return 5
+    case 'librarian':
+      return 6
+    case 'student':
+      return 7
+    default:
+      return 8
   }
 }
 
@@ -96,7 +114,9 @@ export default function CourseEnrollments() {
   const [selfStudentMessage, setSelfStudentMessage] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [editTarget, setEditTarget] = useState<CourseEnrollment | null>(null)
-  const [editSelectedAppRoleId, setEditSelectedAppRoleId] = useState('')
+  /** When set, POST /enrollments uses `courseRole` instead of a course-scoped app role. */
+  const [addCourseRole, setAddCourseRole] = useState('')
+  const [editBuiltinCourseRole, setEditBuiltinCourseRole] = useState('')
   const [editSaveStatus, setEditSaveStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [editMessage, setEditMessage] = useState<string | null>(null)
   const [demoteStatus, setDemoteStatus] = useState<'idle' | 'loading' | 'error'>('idle')
@@ -118,6 +138,15 @@ export default function CourseEnrollments() {
   const [sectionTransferPick, setSectionTransferPick] = useState('')
   const [sectionTransferStatus, setSectionTransferStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [sectionTransferMessage, setSectionTransferMessage] = useState<string | null>(null)
+
+  const viewerIsTeacher = useMemo(
+    () => viewerRoles.some((r) => normEnrollmentRole(r) === 'teacher'),
+    [viewerRoles],
+  )
+  const viewerHasStudent = useMemo(
+    () => viewerRoles.some((r) => normEnrollmentRole(r) === 'student'),
+    [viewerRoles],
+  )
 
   useEffect(() => {
     if (!courseCode) {
@@ -225,7 +254,13 @@ export default function CourseEnrollments() {
             : typeof o.display_name === 'string'
               ? o.display_name
               : null
-        const role = typeof o.role === 'string' ? o.role : 'Student'
+        const role = typeof o.role === 'string' ? o.role : 'student'
+        const roleDisplay =
+          typeof o.roleDisplay === 'string'
+            ? o.roleDisplay
+            : typeof o.role_display === 'string'
+              ? o.role_display
+              : null
         const lastCourseAccessAt =
           typeof o.lastCourseAccessAt === 'string'
             ? o.lastCourseAccessAt
@@ -277,6 +312,7 @@ export default function CourseEnrollments() {
           userId,
           displayName,
           role,
+          roleDisplay,
           lastCourseAccessAt,
           sectionId,
           sectionCode,
@@ -306,6 +342,7 @@ export default function CourseEnrollments() {
     setModalOpen(false)
     setEmailListText('')
     setSelectedAppRoleId('')
+    setAddCourseRole('')
     setAddStatus('idle')
     setAddMessage(null)
     setRolesError(null)
@@ -313,7 +350,7 @@ export default function CourseEnrollments() {
 
   const closeEditModal = useCallback(() => {
     setEditTarget(null)
-    setEditSelectedAppRoleId('')
+    setEditBuiltinCourseRole('')
     setEditSaveStatus('idle')
     setEditMessage(null)
     setDemoteStatus('idle')
@@ -399,7 +436,7 @@ export default function CourseEnrollments() {
   }
 
   useEffect(() => {
-    if ((!modalOpen && !editTarget) || !courseCode || !viewerRoles.includes('teacher')) {
+    if (!modalOpen || !courseCode || !viewerIsTeacher) {
       return
     }
     let cancelled = false
@@ -431,7 +468,7 @@ export default function CourseEnrollments() {
       cancelled = true
       window.clearTimeout(id)
     }
-  }, [modalOpen, editTarget, courseCode, viewerRoles])
+  }, [modalOpen, courseCode, viewerIsTeacher])
 
   useEffect(() => {
     if (!modalOpen && !editTarget && !groupAssignTarget && !sectionTransferTarget) return
@@ -464,7 +501,8 @@ export default function CourseEnrollments() {
       return
     }
 
-    if (viewerRoles.includes('teacher')) {
+    const builtinAdd = addCourseRole.trim()
+    if (viewerIsTeacher && !builtinAdd) {
       if (rolesLoading) {
         setAddMessage('Loading roles…')
         setAddStatus('error')
@@ -476,7 +514,9 @@ export default function CourseEnrollments() {
         return
       }
       if (!selectedAppRoleId) {
-        setAddMessage('Create a course-scoped role under Settings → Roles & Permissions, or select a role.')
+        setAddMessage(
+          'Pick a built-in course role, or create a course-scoped app role under Settings → Roles & Permissions.',
+        )
         setAddStatus('error')
         return
       }
@@ -485,8 +525,9 @@ export default function CourseEnrollments() {
     setAddStatus('loading')
     setAddMessage(null)
     try {
-      const body =
-        viewerRoles.includes('teacher')
+      const body = builtinAdd
+        ? { emails: emailListText, courseRole: normEnrollmentRole(builtinAdd) }
+        : viewerIsTeacher
           ? { emails: emailListText, appRoleId: selectedAppRoleId }
           : { emails: emailListText }
 
@@ -521,9 +562,9 @@ export default function CourseEnrollments() {
     }
   }
 
-  const isCourseCreator = viewerRoles.includes('teacher')
+  const isCourseCreator = viewerIsTeacher
 
-  const canEnrollSelfAsStudent = isCourseCreator && !viewerRoles.includes('student')
+  const canEnrollSelfAsStudent = isCourseCreator && !viewerHasStudent
 
   async function onEnrollAsStudent() {
     if (!courseCode) return
@@ -583,13 +624,13 @@ export default function CourseEnrollments() {
     }
   }
 
-  async function onSaveEditCourseRole() {
-    if (!editSelectedAppRoleId) {
+  async function onSaveEditBuiltinRole() {
+    if (!editBuiltinCourseRole.trim()) {
       setEditSaveStatus('error')
-      setEditMessage('Select a course role.')
+      setEditMessage('Select an enrollment role.')
       return
     }
-    await onPatchEnrollment({ appRoleId: editSelectedAppRoleId }, setEditSaveStatus)
+    await onPatchEnrollment({ courseRole: normEnrollmentRole(editBuiltinCourseRole) }, setEditSaveStatus)
   }
 
   async function onDemoteEnrollmentToStudent() {
@@ -658,10 +699,13 @@ export default function CourseEnrollments() {
     }
   }
 
+  const usingBuiltinAdd = addCourseRole.trim().length > 0
   const submitDisabled =
     addStatus === 'loading' ||
     !emailListText.trim() ||
-    (isCourseCreator && (rolesLoading || !selectedAppRoleId || !!rolesError))
+    (viewerIsTeacher &&
+      !usingBuiltinAdd &&
+      (rolesLoading || !selectedAppRoleId || !!rolesError))
 
   if (!courseCode) {
     return <Navigate to="/courses" replace />
@@ -695,6 +739,7 @@ export default function CourseEnrollments() {
               enrollAsStudentBusy={selfStudentStatus === 'loading'}
               onAddEnrollment={() => {
                 setModalOpen(true)
+                setAddCourseRole('')
                 setAddMessage(null)
                 setAddStatus('idle')
               }}
@@ -780,16 +825,18 @@ export default function CourseEnrollments() {
             </thead>
             <tbody>
               {enrollments.map((e) => {
+                const er = normEnrollmentRole(e.role)
                 const showRemove =
                   canUpdateEnrollments && !enrollmentMeta.isPrimaryRoleRow(e)
                 const showEdit =
                   canUpdateEnrollments &&
-                  e.role !== 'Teacher' &&
-                  (isCourseCreator || e.role === 'Instructor')
+                  er !== 'teacher' &&
+                  er !== 'student' &&
+                  (isCourseCreator || er === 'instructor')
                 const showGroupAssign =
-                  enrollmentGroupsEnabled && canUpdateEnrollments && e.role === 'Student'
+                  enrollmentGroupsEnabled && canUpdateEnrollments && er === 'student'
                 const showSectionTransfer =
-                  sectionsEnabled && canUpdateEnrollments && e.role === 'Student' && sections.length > 1
+                  sectionsEnabled && canUpdateEnrollments && er === 'student' && sections.length > 1
                 return (
                   <tr
                     key={e.id}
@@ -798,7 +845,9 @@ export default function CourseEnrollments() {
                     <td className="px-4 py-3 font-medium text-slate-900">
                       {e.displayName?.trim() || '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{e.role}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      <EnrollmentRoleBadge courseRoleKey={e.role} roleDisplay={e.roleDisplay} />
+                    </td>
                     {sectionsEnabled ? (
                       <td className="px-4 py-3 text-slate-600">
                         {e.sectionCode?.trim()
@@ -840,7 +889,7 @@ export default function CourseEnrollments() {
                                 type="button"
                                 onClick={() => {
                                   setEditTarget(e)
-                                  setEditSelectedAppRoleId('')
+                                  setEditBuiltinCourseRole(normEnrollmentRole(e.role))
                                   setEditSaveStatus('idle')
                                   setEditMessage(null)
                                   setDemoteStatus('idle')
@@ -1099,48 +1148,37 @@ export default function CourseEnrollments() {
                 Current enrollment role: <span className="font-medium text-slate-700">{editTarget.role}</span>
               </p>
 
-              {editTarget.role === 'Instructor' && !isCourseCreator && (
+              {normEnrollmentRole(editTarget.role) === 'instructor' && !isCourseCreator && (
                 <p className="mt-4 text-xs text-slate-600">
                   Demoting removes instructor access and per-course permissions for this course. Only
                   the course creator can assign a different course-scoped role.
                 </p>
               )}
 
-              {isCourseCreator && editTarget.role !== 'Teacher' && (
+              {isCourseCreator && normEnrollmentRole(editTarget.role) !== 'teacher' && (
                 <div className="mt-4">
-                  <label htmlFor="edit-enrollment-app-role" className="text-xs font-medium text-slate-600">
-                    Course role
+                  <label htmlFor="edit-builtin-course-role" className="text-xs font-medium text-slate-600">
+                    Enrollment role
                   </label>
                   <p className="mt-1 text-xs text-slate-500">
-                    App roles with scope <span className="font-mono">course</span> (configure under
-                    Settings → Roles & Permissions).
+                    Built-in roles (TA, designer, observer, etc.) control what this person can see and
+                    edit in this course.
                   </p>
-                  {rolesLoading ? (
-                    <p className="mt-2 text-sm text-slate-500">Loading roles…</p>
-                  ) : rolesError ? (
-                    <p className="mt-2 text-sm text-rose-700">{rolesError}</p>
-                  ) : courseScopedRoles.length === 0 ? (
-                    <p className="mt-2 text-sm text-amber-800">
-                      No course-scoped roles yet. Create one in Settings → Roles & Permissions (set
-                      scope to Course), then add permissions.
-                    </p>
-                  ) : (
-                    <select
-                      id="edit-enrollment-app-role"
-                      value={editSelectedAppRoleId}
-                      onChange={(e) => setEditSelectedAppRoleId(e.target.value)}
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
-                      disabled={editSaveStatus === 'loading' || demoteStatus === 'loading'}
-                    >
-                      <option value="">Select a course role…</option>
-                      {courseScopedRoles.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name}
-                          {r.description?.trim() ? ` — ${r.description.trim()}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  <select
+                    id="edit-builtin-course-role"
+                    value={editBuiltinCourseRole}
+                    onChange={(e) => setEditBuiltinCourseRole(e.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                    disabled={editSaveStatus === 'loading' || demoteStatus === 'loading'}
+                  >
+                    <option value="student">Student</option>
+                    <option value="instructor">Instructor</option>
+                    <option value="ta">Teaching assistant</option>
+                    <option value="designer">Designer</option>
+                    <option value="observer">Observer</option>
+                    <option value="auditor">Auditor</option>
+                    <option value="librarian">Librarian</option>
+                  </select>
                 </div>
               )}
 
@@ -1165,7 +1203,7 @@ export default function CourseEnrollments() {
                 >
                   Close
                 </button>
-                {editTarget.role === 'Instructor' && (
+                {normEnrollmentRole(editTarget.role) === 'instructor' && (
                   <button
                     type="button"
                     onClick={() => void onDemoteEnrollmentToStudent()}
@@ -1178,14 +1216,11 @@ export default function CourseEnrollments() {
                 {isCourseCreator && (
                   <button
                     type="button"
-                    onClick={() => void onSaveEditCourseRole()}
+                    onClick={() => void onSaveEditBuiltinRole()}
                     disabled={
                       editSaveStatus === 'loading' ||
                       demoteStatus === 'loading' ||
-                      rolesLoading ||
-                      !editSelectedAppRoleId ||
-                      !!rolesError ||
-                      courseScopedRoles.length === 0
+                      !editBuiltinCourseRole.trim()
                     }
                     className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -1242,10 +1277,38 @@ export default function CourseEnrollments() {
                 Only people who already have an account can be enrolled.
               </p>
 
-              {isCourseCreator && (
+              {viewerIsTeacher && (
+                <div className="mt-4">
+                  <label htmlFor="enrollment-builtin-role" className="text-xs font-medium text-slate-600">
+                    Built-in enrollment role (optional)
+                  </label>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Pick a Lextures role (TA, designer, …) or leave blank and choose a course-scoped
+                    app role instead.
+                  </p>
+                  <select
+                    id="enrollment-builtin-role"
+                    value={addCourseRole}
+                    onChange={(e) => setAddCourseRole(e.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                    disabled={addStatus === 'loading'}
+                  >
+                    <option value="">— Use app role below —</option>
+                    <option value="student">Student</option>
+                    <option value="instructor">Instructor</option>
+                    <option value="ta">Teaching assistant</option>
+                    <option value="designer">Designer</option>
+                    <option value="observer">Observer</option>
+                    <option value="auditor">Auditor</option>
+                    <option value="librarian">Librarian</option>
+                  </select>
+                </div>
+              )}
+
+              {isCourseCreator && !addCourseRole.trim() && (
                 <div className="mt-4">
                   <label htmlFor="enrollment-app-role" className="text-xs font-medium text-slate-600">
-                    Course role
+                    Course-scoped app role
                   </label>
                   <p className="mt-1 text-xs text-slate-500">
                     App roles with scope <span className="font-mono">course</span> (configure under
@@ -1258,7 +1321,7 @@ export default function CourseEnrollments() {
                   ) : courseScopedRoles.length === 0 ? (
                     <p className="mt-2 text-sm text-amber-800">
                       No course-scoped roles yet. Create one in Settings → Roles & Permissions (set
-                      scope to Course), then add permissions.
+                      scope to Course), then add permissions — or use a built-in role above.
                     </p>
                   ) : (
                     <select

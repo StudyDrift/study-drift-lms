@@ -8,7 +8,7 @@ import (
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/coursestructure"
-	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/courseroles"
 )
 
 type createModuleBody struct {
@@ -31,7 +31,7 @@ func (d Deps) handleCreateCourseModule() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		hasPerm, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+		hasPerm, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 			return

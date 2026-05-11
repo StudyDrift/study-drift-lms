@@ -52,16 +52,20 @@ describe('viewerIsLearnerOnlyCourseEnrollment', () => {
 })
 
 describe('viewerIsCourseStaffEnrollment', () => {
-  it('is true only for teacher or instructor enrollment (matches server staff check)', () => {
+  it('is true for primary instructor roles and extended course staff roles', () => {
     expect(viewerIsCourseStaffEnrollment(['teacher'])).toBe(true)
     expect(viewerIsCourseStaffEnrollment(['instructor'])).toBe(true)
     expect(viewerIsCourseStaffEnrollment(['Teacher'])).toBe(true)
     expect(viewerIsCourseStaffEnrollment(['student', 'teacher'])).toBe(true)
+    expect(viewerIsCourseStaffEnrollment(['ta'])).toBe(true)
+    expect(viewerIsCourseStaffEnrollment(['designer'])).toBe(true)
+    expect(viewerIsCourseStaffEnrollment(['observer'])).toBe(true)
+    expect(viewerIsCourseStaffEnrollment(['auditor'])).toBe(true)
+    expect(viewerIsCourseStaffEnrollment(['librarian'])).toBe(true)
   })
 
-  it('is false for student-only, ta, or unknown roles', () => {
+  it('is false for student-only or unknown roles', () => {
     expect(viewerIsCourseStaffEnrollment(['student'])).toBe(false)
-    expect(viewerIsCourseStaffEnrollment(['ta'])).toBe(false)
     expect(viewerIsCourseStaffEnrollment([])).toBe(false)
     expect(viewerIsCourseStaffEnrollment(null)).toBe(false)
   })

@@ -27,13 +27,15 @@ type EnrollSelfAsStudentResponse struct {
 }
 
 type PatchEnrollmentRequest struct {
-	AppRoleID *uuid.UUID `json:"appRoleId"`
-	Role      *string    `json:"role"`
+	AppRoleID  *uuid.UUID `json:"appRoleId"`
+	Role       *string    `json:"role"`
+	CourseRole *string    `json:"courseRole"`
 }
 
 type AddEnrollmentsRequest struct {
-	Emails    string     `json:"emails"`
-	AppRoleID *uuid.UUID `json:"appRoleId"`
+	Emails     string     `json:"emails"`
+	AppRoleID  *uuid.UUID `json:"appRoleId"`
+	CourseRole *string    `json:"courseRole"`
 }
 
 type AddEnrollmentsResponse struct {
