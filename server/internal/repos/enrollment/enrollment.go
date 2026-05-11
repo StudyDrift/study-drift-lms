@@ -99,7 +99,7 @@ func UserIsCourseStaff(ctx context.Context, pool *pgxpool.Pool, courseCode strin
 		return false, err
 	}
 	for _, r := range roles {
-		if r == "teacher" || r == "instructor" {
+		if r == "teacher" || r == "instructor" || r == "owner" {
 			return true, nil
 		}
 	}
@@ -134,9 +134,16 @@ INNER JOIN "user".users u ON u.id = ce.user_id
 WHERE c.course_code = $1 AND ce.user_id = $2 AND ce.active AND c.org_id = u.org_id
 ORDER BY
 	CASE ce.role
+		WHEN 'owner' THEN 0
 		WHEN 'teacher' THEN 0
 		WHEN 'instructor' THEN 1
-		ELSE 2
+		WHEN 'ta' THEN 2
+		WHEN 'designer' THEN 3
+		WHEN 'observer' THEN 4
+		WHEN 'auditor' THEN 5
+		WHEN 'librarian' THEN 6
+		WHEN 'student' THEN 7
+		ELSE 8
 	END,
 	ce.role ASC
 `, courseCode, userID)
@@ -162,7 +169,7 @@ SELECT c.course_code
 FROM course.course_enrollments ce
 INNER JOIN course.courses c ON c.id = ce.course_id
 INNER JOIN "user".users u ON u.id = ce.user_id
-WHERE ce.user_id = $1 AND ce.role IN ('teacher', 'instructor') AND ce.active AND c.org_id = u.org_id
+WHERE ce.user_id = $1 AND ce.role IN ('teacher', 'instructor', 'owner') AND ce.active AND c.org_id = u.org_id
 ORDER BY c.course_code ASC
 `, userID)
 	if err != nil {

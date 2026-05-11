@@ -8,7 +8,7 @@ import (
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/coursefiles"
-	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/courseroles"
 )
 
 // handlePostFactoryResetCourse is POST /api/v1/courses/{course_code}/factory-reset.
@@ -27,7 +27,7 @@ func (d Deps) handlePostFactoryResetCourse() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		canEdit, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+		canEdit, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 		if err != nil {
 			log.Printf("factory-reset: permission check failed course=%q viewer=%s err=%v", courseCode, viewer.String(), err)
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")

@@ -21,7 +21,7 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/crosslisting"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
 	"github.com/lextures/lextures/server/internal/repos/gradingschemes"
-	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/courseroles"
 )
 
 // gradebookGridColumn is the JSON column shape for the gradebook grid.
@@ -79,7 +79,7 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		ok, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":gradebook:view")
+		ok, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":gradebook:view")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 			return
@@ -111,7 +111,7 @@ func (d Deps) handleGradebookGrid() http.HandlerFunc {
 				if err == nil {
 					sec, err := coursesections.GetByID(r.Context(), d.Pool, courseID, sid)
 					if err == nil && sec != nil {
-						canManage, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+						canManage, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 						if err == nil && canManage {
 							sectionFilter = []uuid.UUID{sid}
 						}

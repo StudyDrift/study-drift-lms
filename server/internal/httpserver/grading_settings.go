@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/lextures/lextures/server/internal/apierr"
+	"github.com/lextures/lextures/server/internal/courseroles"
 	"github.com/lextures/lextures/server/internal/repos/coursegrading"
-	"github.com/lextures/lextures/server/internal/repos/rbac"
 )
 
 // handleGetCourseGrading is GET /api/v1/courses/{course_code}/grading (Rust `grading_get_handler`).
@@ -29,7 +29,7 @@ func (d Deps) handleGetCourseGrading() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		ok, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":gradebook:view")
+		ok, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":gradebook:view")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 			return
@@ -76,7 +76,7 @@ func (d Deps) handlePutCourseGrading() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		ok, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+		ok, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 			return

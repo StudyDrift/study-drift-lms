@@ -9,7 +9,7 @@ import (
 	"github.com/lextures/lextures/server/internal/gradingdisplay"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/gradingschemes"
-	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/courseroles"
 )
 
 type gradingSchemeResponse struct {
@@ -46,7 +46,7 @@ func (d Deps) handleGetCourseGradingScheme() http.HandlerFunc {
 			return
 		}
 		perm := "course:" + courseCode + ":gradebook:view"
-		hasPerm, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, perm)
+		hasPerm, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, perm)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 			return
@@ -104,7 +104,7 @@ func (d Deps) handlePutCourseGradingScheme() http.HandlerFunc {
 			return
 		}
 		perm := "course:" + courseCode + ":item:create"
-		hasPerm, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, perm)
+		hasPerm, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, perm)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 			return

@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lextures/lextures/server/internal/apierr"
+	"github.com/lextures/lextures/server/internal/courseroles"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/coursefeed"
 	"github.com/lextures/lextures/server/internal/repos/coursesections"
@@ -468,7 +469,7 @@ func (d Deps) handleCreateFeedChannel() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		canEdit, err := rbac.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+		canEdit, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
 			return
@@ -697,13 +698,14 @@ func (d Deps) handleFeedMessagePost() http.HandlerFunc {
 
 func (d Deps) handleCourseEnrollmentsList() http.HandlerFunc {
 	type row struct {
-		ID          string  `json:"id"`
-		UserID      string  `json:"userId"`
-		DisplayName *string `json:"displayName"`
-		Role        string  `json:"role"`
-		SectionID   *string `json:"sectionId,omitempty"`
-		SectionCode *string `json:"sectionCode,omitempty"`
-		SectionName *string `json:"sectionName,omitempty"`
+		ID           string  `json:"id"`
+		UserID       string  `json:"userId"`
+		DisplayName  *string `json:"displayName"`
+		Role         string  `json:"role"`
+		RoleDisplay  *string `json:"roleDisplay,omitempty"`
+		SectionID    *string `json:"sectionId,omitempty"`
+		SectionCode  *string `json:"sectionCode,omitempty"`
+		SectionName  *string `json:"sectionName,omitempty"`
 	}
 	type resp struct {
 		Enrollments []row `json:"enrollments"`
@@ -718,8 +720,17 @@ func (d Deps) handleCourseEnrollmentsList() http.HandlerFunc {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
-		courseCode, _, ok := d.requireCourseAccess(w, r)
+		courseCode, viewer, ok := d.requireCourseAccess(w, r)
 		if !ok {
+			return
+		}
+		canList, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":enrollments:read")
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
+			return
+		}
+		if !canList {
+			apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission to view the roster.")
 			return
 		}
 		roster, err := enrollment.ListRosterForCourse(r.Context(), d.Pool, courseCode)
@@ -734,6 +745,7 @@ func (d Deps) handleCourseEnrollmentsList() http.HandlerFunc {
 				UserID:      e.UserID.String(),
 				DisplayName: e.DisplayName,
 				Role:        e.Role,
+				RoleDisplay: e.RoleDisplay,
 			}
 			if e.SectionID != nil {
 				s := e.SectionID.String()

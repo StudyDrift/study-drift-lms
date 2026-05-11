@@ -21,7 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/lextures/lextures/server/internal/models/coursemodulequiz"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
-	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/courseroles"
 	"github.com/lextures/lextures/server/internal/repos/user"
 )
 
@@ -71,7 +71,7 @@ func (d Deps) handleCourseImportCanvasWS() http.HandlerFunc {
 		if err != nil || !hasAccess {
 			return
 		}
-		canImport, err := rbac.UserHasPermission(r.Context(), d.Pool, uid, "course:"+courseCode+":item:create")
+		canImport, err := courseroles.UserHasPermission(r.Context(), d.Pool, uid, "course:"+courseCode+":item:create")
 		if err != nil || !canImport {
 			return
 		}
