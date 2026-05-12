@@ -11,6 +11,8 @@ import {
   Sparkles,
   Users,
   Flame,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
@@ -239,6 +241,23 @@ export default function Dashboard() {
     chips: RecommendationItem[]
     degraded: boolean
   } | null>(null)
+
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('dashboard_collapsed_sections')
+      return saved ? JSON.parse(saved) : {}
+    } catch {
+      return {}
+    }
+  })
+
+  useEffect(() => {
+    localStorage.setItem('dashboard_collapsed_sections', JSON.stringify(collapsedSections))
+  }, [collapsedSections])
+
+  const toggleSection = (id: string) => {
+    setCollapsedSections((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
 
   const whatsNext = useMemo(() => {
     const uid = getJwtSubject()
@@ -690,318 +709,352 @@ export default function Dashboard() {
 
           {anyStudentExperience && (
             <section aria-label="Student overview">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
-                Learning
-              </h2>
-
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <p className="text-base font-semibold text-slate-900 dark:text-neutral-100">Due this week</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
-                      {weekStart.toLocaleDateString(undefined, { dateStyle: 'medium' })} –{' '}
-                      {weekEnd.toLocaleDateString(undefined, { dateStyle: 'medium' })}
-                    </p>
-                  </div>
-                  <div className="min-w-[140px] flex-1 max-w-xs">
-                    <div className="flex justify-between text-[0.65rem] font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-                      <span>Week</span>
-                      <span>{Math.round(weekFrac * 100)}%</span>
-                    </div>
-                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-neutral-800">
-                      <div
-                        className="h-full rounded-full bg-indigo-500 transition-[width]"
-                        style={{ width: `${Math.round(weekFrac * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <ul className="mt-4 space-y-3">
-                  {studentRows
-                    .flatMap((row) => {
-                      const dues = dueThisWeekItems(row.structure, weekStart, weekEnd)
-                      return dues.map((it) => ({ row, it }))
-                    })
-                    .slice(0, 24)
-                    .map(({ row, it }) => {
-                      const g = gradeSnippetForItem(row.myGrades, it.id)
-                      const base = `/courses/${encodeURIComponent(row.course.courseCode)}`
-                      const href =
-                        it.kind === 'quiz'
-                          ? `${base}/modules/quiz/${encodeURIComponent(it.id)}`
-                          : it.kind === 'assignment'
-                            ? `${base}/modules/assignment/${encodeURIComponent(it.id)}`
-                            : `${base}/modules/content/${encodeURIComponent(it.id)}`
-                      const dueLabel = new Date(it.dueAt!).toLocaleString(undefined, {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })
-                      return (
-                        <li key={`${row.course.courseCode}-${it.id}`}>
-                          <Link
-                            to={href}
-                            className="flex flex-col gap-1 rounded-xl border border-slate-100 px-3 py-3 transition hover:border-indigo-200 hover:bg-indigo-50/40 dark:border-neutral-800 dark:hover:border-indigo-900/50 dark:hover:bg-indigo-950/20 sm:flex-row sm:items-center sm:justify-between"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-xs font-medium text-slate-500 dark:text-neutral-400">
-                                {row.course.title}
-                                {courseSectionSubtitle(row.course)
-                                  ? ` · ${courseSectionSubtitle(row.course)}`
-                                  : ''}
-                              </p>
-                              <p className="truncate text-sm font-semibold text-slate-900 dark:text-neutral-100">
-                                {it.title}
-                              </p>
-                              <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500 dark:text-neutral-400">
-                                <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                                {dueLabel}
-                              </p>
-                            </div>
-                            {g ? (
-                              <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
-                                <span className="text-xs font-medium text-slate-600 dark:text-neutral-300">
-                                  {g.label}
-                                </span>
-                                <div className="h-1.5 w-full min-w-[96px] overflow-hidden rounded-full bg-slate-100 dark:bg-neutral-800 sm:w-28">
-                                  <div
-                                    className="h-full rounded-full bg-emerald-500"
-                                    style={{ width: `${Math.round(g.pct)}%` }}
-                                  />
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-400 dark:text-neutral-500">—</span>
-                            )}
-                          </Link>
-                        </li>
-                      )
-                    })}
-                </ul>
-                {studentRows.every((r) => dueThisWeekItems(r.structure, weekStart, weekEnd).length === 0) && (
-                  <p className="mt-2 text-sm text-slate-500 dark:text-neutral-400">
-                    Nothing due this calendar week.{' '}
-                    <Link className="font-medium text-indigo-600 hover:underline dark:text-indigo-400" to="/calendar">
-                      Open calendar
-                    </Link>{' '}
-                    for the full schedule.
-                  </p>
-                )}
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                  Learning
+                </h2>
+                <button
+                  onClick={() => toggleSection('student-overview')}
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+                  aria-label={collapsedSections['student-overview'] ? 'Expand Learning' : 'Collapse Learning'}
+                >
+                  {collapsedSections['student-overview'] ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronUp className="h-4 w-4" />
+                  )}
+                </button>
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {studentRows.map((row) => {
-                  const held = new Set(row.myGrades?.heldGradeItemIds ?? [])
-                  const cols: GradebookColumnForFinal[] = (row.myGrades?.columns ?? [])
-                    .filter((c) => !held.has(c.id))
-                    .map((c) => ({
-                      id: c.id,
-                      maxPoints: c.maxPoints,
-                      assignmentGroupId: c.assignmentGroupId ?? null,
-                      neverDrop: c.neverDrop === true,
-                      replaceWithFinal: c.replaceWithFinal === true,
-                    }))
-                  const weights: AssignmentGroupWeight[] = (row.myGrades?.assignmentGroups ?? []).map((g) => ({
-                    id: g.id,
-                    weightPercent: g.weightPercent,
-                    dropLowest: g.dropLowest,
-                    dropHighest: g.dropHighest,
-                    replaceLowestWithFinal: g.replaceLowestWithFinal,
-                  }))
-                  const exc: Record<string, boolean> = {}
-                  for (const [k, v] of Object.entries(row.myGrades?.gradeStatuses ?? {})) {
-                    if (v === 'excused') exc[k] = true
-                  }
-                  const finalPct = computeCourseFinalPercent(cols, row.myGrades?.grades ?? {}, weights, exc)
-                  const base = `/courses/${encodeURIComponent(row.course.courseCode)}`
-                  return (
-                    <div
-                      key={row.course.courseCode}
-                      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"
-                    >
-                      <Link
-                        to={base}
-                        className="text-base font-semibold text-slate-900 hover:text-indigo-600 dark:text-neutral-100 dark:hover:text-indigo-300"
-                      >
-                        {row.course.title}
-                      </Link>
-                      {courseSectionSubtitle(row.course) ? (
-                        <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
-                          {courseSectionSubtitle(row.course)}
+              {!collapsedSections['student-overview'] && (
+                <>
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                      <div>
+                        <p className="text-base font-semibold text-slate-900 dark:text-neutral-100">Due this week</p>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+                          {weekStart.toLocaleDateString(undefined, { dateStyle: 'medium' })} –{' '}
+                          {weekEnd.toLocaleDateString(undefined, { dateStyle: 'medium' })}
                         </p>
-                      ) : null}
-                      <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-                        Course grade (so far)
-                      </p>
-                      <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-neutral-50">
-                        {row.myGrades ? formatFinalPercent(finalPct) : '—'}
-                      </p>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <Link
-                          to={`${base}/modules`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
-                        >
-                          <ClipboardList className="h-3.5 w-3.5" aria-hidden />
-                          Modules
-                        </Link>
-                        <Link
-                          to={`${base}/feed`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
-                        >
-                          <MessageCircle className="h-3.5 w-3.5" aria-hidden />
-                          Feed
-                        </Link>
-                        <Link
-                          to={`${base}/my-grades`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
-                        >
-                          <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                          Grades
-                        </Link>
+                      </div>
+                      <div className="min-w-[140px] flex-1 max-w-xs">
+                        <div className="flex justify-between text-[0.65rem] font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                          <span>Week</span>
+                          <span>{Math.round(weekFrac * 100)}%</span>
+                        </div>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-neutral-800">
+                          <div
+                            className="h-full rounded-full bg-indigo-500 transition-[width]"
+                            style={{ width: `${Math.round(weekFrac * 100)}%` }}
+                          />
+                        </div>
                       </div>
                     </div>
-                  )
-                })}
-              </div>
+                    <ul className="mt-4 space-y-3">
+                      {studentRows
+                        .flatMap((row) => {
+                          const dues = dueThisWeekItems(row.structure, weekStart, weekEnd)
+                          return dues.map((it) => ({ row, it }))
+                        })
+                        .slice(0, 24)
+                        .map(({ row, it }) => {
+                          const g = gradeSnippetForItem(row.myGrades, it.id)
+                          const base = `/courses/${encodeURIComponent(row.course.courseCode)}`
+                          const href =
+                            it.kind === 'quiz'
+                              ? `${base}/modules/quiz/${encodeURIComponent(it.id)}`
+                              : it.kind === 'assignment'
+                                ? `${base}/modules/assignment/${encodeURIComponent(it.id)}`
+                                : `${base}/modules/content/${encodeURIComponent(it.id)}`
+                          const dueLabel = new Date(it.dueAt!).toLocaleString(undefined, {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                          })
+                          return (
+                            <li key={`${row.course.courseCode}-${it.id}`}>
+                              <Link
+                                to={href}
+                                className="flex flex-col gap-1 rounded-xl border border-slate-100 px-3 py-3 transition hover:border-indigo-200 hover:bg-indigo-50/40 dark:border-neutral-800 dark:hover:border-indigo-900/50 dark:hover:bg-indigo-950/20 sm:flex-row sm:items-center sm:justify-between"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-xs font-medium text-slate-500 dark:text-neutral-400">
+                                    {row.course.title}
+                                    {courseSectionSubtitle(row.course)
+                                      ? ` · ${courseSectionSubtitle(row.course)}`
+                                      : ''}
+                                  </p>
+                                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-neutral-100">
+                                    {it.title}
+                                  </p>
+                                  <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500 dark:text-neutral-400">
+                                    <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                    {dueLabel}
+                                  </p>
+                                </div>
+                                {g ? (
+                                  <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
+                                    <span className="text-xs font-medium text-slate-600 dark:text-neutral-300">
+                                      {g.label}
+                                    </span>
+                                    <div className="h-1.5 w-full min-w-[96px] overflow-hidden rounded-full bg-slate-100 dark:bg-neutral-800 sm:w-28">
+                                      <div
+                                        className="h-full rounded-full bg-emerald-500"
+                                        style={{ width: `${Math.round(g.pct)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-slate-400 dark:text-neutral-500">—</span>
+                                )}
+                              </Link>
+                            </li>
+                          )
+                        })}
+                    </ul>
+                    {studentRows.every((r) => dueThisWeekItems(r.structure, weekStart, weekEnd).length === 0) && (
+                      <p className="mt-2 text-sm text-slate-500 dark:text-neutral-400">
+                        Nothing due this calendar week.{' '}
+                        <Link
+                          className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                          to="/calendar"
+                        >
+                          Open calendar
+                        </Link>{' '}
+                        for the full schedule.
+                      </p>
+                    )}
+                  </div>
 
-              {announcements.length > 0 && (
-                <div className="mt-8">
-                  <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">From your courses</h3>
-                  <ul className="mt-3 space-y-3">
-                    {announcements.map((a) => (
-                      <li
-                        key={`${a.courseCode}-${a.createdAt}`}
-                        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Megaphone className="h-4 w-4 text-amber-500" aria-hidden />
+                  <div className="mt-6 grid gap-4 md:grid-cols-2">
+                    {studentRows.map((row) => {
+                      const held = new Set(row.myGrades?.heldGradeItemIds ?? [])
+                      const cols: GradebookColumnForFinal[] = (row.myGrades?.columns ?? [])
+                        .filter((c) => !held.has(c.id))
+                        .map((c) => ({
+                          id: c.id,
+                          maxPoints: c.maxPoints,
+                          assignmentGroupId: c.assignmentGroupId ?? null,
+                          neverDrop: c.neverDrop === true,
+                          replaceWithFinal: c.replaceWithFinal === true,
+                        }))
+                      const weights: AssignmentGroupWeight[] = (row.myGrades?.assignmentGroups ?? []).map((g) => ({
+                        id: g.id,
+                        weightPercent: g.weightPercent,
+                        dropLowest: g.dropLowest,
+                        dropHighest: g.dropHighest,
+                        replaceLowestWithFinal: g.replaceLowestWithFinal,
+                      }))
+                      const exc: Record<string, boolean> = {}
+                      for (const [k, v] of Object.entries(row.myGrades?.gradeStatuses ?? {})) {
+                        if (v === 'excused') exc[k] = true
+                      }
+                      const finalPct = computeCourseFinalPercent(cols, row.myGrades?.grades ?? {}, weights, exc)
+                      const base = `/courses/${encodeURIComponent(row.course.courseCode)}`
+                      return (
+                        <div
+                          key={row.course.courseCode}
+                          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        >
                           <Link
-                            to={`/courses/${encodeURIComponent(a.courseCode)}/feed`}
-                            className="text-sm font-semibold text-slate-900 hover:text-indigo-600 dark:text-neutral-100 dark:hover:text-indigo-300"
+                            to={base}
+                            className="text-base font-semibold text-slate-900 hover:text-indigo-600 dark:text-neutral-100 dark:hover:text-indigo-300"
                           >
-                            {a.courseTitle}
+                            {row.course.title}
                           </Link>
-                          {a.pinned ? (
-                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-900 dark:bg-amber-950/60 dark:text-amber-100">
-                              Pinned
-                            </span>
+                          {courseSectionSubtitle(row.course) ? (
+                            <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
+                              {courseSectionSubtitle(row.course)}
+                            </p>
                           ) : null}
+                          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                            Course grade (so far)
+                          </p>
+                          <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-neutral-50">
+                            {row.myGrades ? formatFinalPercent(finalPct) : '—'}
+                          </p>
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <Link
+                              to={`${base}/modules`}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                            >
+                              <ClipboardList className="h-3.5 w-3.5" aria-hidden />
+                              Modules
+                            </Link>
+                            <Link
+                              to={`${base}/feed`}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+                              Feed
+                            </Link>
+                            <Link
+                              to={`${base}/my-grades`}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                            >
+                              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                              Grades
+                            </Link>
+                          </div>
                         </div>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
-                          {a.channelName} · {a.author} ·{' '}
-                          {new Date(a.createdAt).toLocaleString(undefined, {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          })}
-                        </p>
-                        <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-neutral-200">
-                          {a.snippet}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                      )
+                    })}
+                  </div>
+
+                  {announcements.length > 0 && (
+                    <div className="mt-8">
+                      <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">From your courses</h3>
+                      <ul className="mt-3 space-y-3">
+                        {announcements.map((a) => (
+                          <li
+                            key={`${a.courseCode}-${a.createdAt}`}
+                            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Megaphone className="h-4 w-4 text-amber-500" aria-hidden />
+                              <Link
+                                to={`/courses/${encodeURIComponent(a.courseCode)}/feed`}
+                                className="text-sm font-semibold text-slate-900 hover:text-indigo-600 dark:text-neutral-100 dark:hover:text-indigo-300"
+                              >
+                                {a.courseTitle}
+                              </Link>
+                              {a.pinned ? (
+                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-900 dark:bg-amber-950/60 dark:text-amber-100">
+                                  Pinned
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+                              {a.channelName} · {a.author} ·{' '}
+                              {new Date(a.createdAt).toLocaleString(undefined, {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              })}
+                            </p>
+                            <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-neutral-200">
+                              {a.snippet}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           )}
 
           {anyStaffExperience && (
             <section aria-label="Teaching overview">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
-                Teaching
-              </h2>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                {staffRows.map((row) => {
-                  const base = `/courses/${encodeURIComponent(row.course.courseCode)}`
-                  return (
-                    <div
-                      key={row.course.courseCode}
-                      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"
-                    >
-                      <Link
-                        to={base}
-                        className="text-base font-semibold text-slate-900 hover:text-indigo-600 dark:text-neutral-100 dark:hover:text-indigo-300"
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                  Teaching
+                </h2>
+                <button
+                  onClick={() => toggleSection('teaching-overview')}
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+                  aria-label={collapsedSections['teaching-overview'] ? 'Expand Teaching' : 'Collapse Teaching'}
+                >
+                  {collapsedSections['teaching-overview'] ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronUp className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+
+              {!collapsedSections['teaching-overview'] && (
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  {staffRows.map((row) => {
+                    const base = `/courses/${encodeURIComponent(row.course.courseCode)}`
+                    return (
+                      <div
+                        key={row.course.courseCode}
+                        className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900"
                       >
-                        {row.course.title}
-                      </Link>
-                      {courseSectionSubtitle(row.course) ? (
-                        <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
-                          {courseSectionSubtitle(row.course)}
-                        </p>
-                      ) : null}
-                      <dl className="mt-4 space-y-3 text-sm">
-                        <div className="flex justify-between gap-3">
-                          <dt className="text-slate-500 dark:text-neutral-400">Gradebook gaps</dt>
-                          <dd className="font-semibold text-slate-900 dark:text-neutral-100">
-                            {row.emptyGradeCells == null ? (
-                              <span className="text-slate-400">No access</span>
-                            ) : (
-                              <>
-                                {row.emptyGradeCells}{' '}
-                                <span className="font-normal text-slate-500 dark:text-neutral-400">
-                                  empty cells
-                                </span>
-                              </>
-                            )}
-                          </dd>
-                        </div>
-                        <div className="flex justify-between gap-3">
-                          <dt className="text-slate-500 dark:text-neutral-400">Quizzes in progress</dt>
-                          <dd className="text-right text-xs text-slate-500 dark:text-neutral-400">
-                            Live attempts appear in the gradebook after students submit or auto-submit. Open the
-                            quiz or gradebook to review.
-                          </dd>
-                        </div>
-                      </dl>
-                      <div className="mt-4 flex flex-wrap gap-2">
                         <Link
-                          to={`${base}/gradebook`}
-                          className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-500"
+                          to={base}
+                          className="text-base font-semibold text-slate-900 hover:text-indigo-600 dark:text-neutral-100 dark:hover:text-indigo-300"
                         >
-                          Open gradebook
+                          {row.course.title}
                         </Link>
-                        <Link
-                          to={`${base}/modules`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
-                        >
-                          Modules
-                        </Link>
-                      </div>
-                      {row.recentLearners && row.recentLearners.length > 0 && (
-                        <div className="mt-5 border-t border-slate-100 pt-4 dark:border-neutral-800">
-                          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-                            <Users className="h-3.5 w-3.5" aria-hidden />
-                            Recent roster activity
+                        {courseSectionSubtitle(row.course) ? (
+                          <p className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
+                            {courseSectionSubtitle(row.course)}
                           </p>
-                          <ul className="mt-2 space-y-1.5">
-                            {row.recentLearners.map((p, i) => (
-                              <li
-                                key={`${p.name}-${i}`}
-                                className="flex justify-between gap-2 text-xs text-slate-600 dark:text-neutral-300"
-                              >
-                                <span className="truncate font-medium text-slate-800 dark:text-neutral-100">
-                                  {p.name}
-                                </span>
-                                <span className="shrink-0 text-slate-400 dark:text-neutral-500">
-                                  {formatTimeAgoFromIso(p.lastAt)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
+                        ) : null}
+                        <dl className="mt-4 space-y-3 text-sm">
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-500 dark:text-neutral-400">Gradebook gaps</dt>
+                            <dd className="font-semibold text-slate-900 dark:text-neutral-100">
+                              {row.emptyGradeCells == null ? (
+                                <span className="text-slate-400">No access</span>
+                              ) : (
+                                <>
+                                  {row.emptyGradeCells}{' '}
+                                  <span className="font-normal text-slate-500 dark:text-neutral-400">empty cells</span>
+                                </>
+                              )}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-500 dark:text-neutral-400">Quizzes in progress</dt>
+                            <dd className="text-right text-xs text-slate-500 dark:text-neutral-400">
+                              Live attempts appear in the gradebook after students submit or auto-submit. Open the quiz
+                              or gradebook to review.
+                            </dd>
+                          </div>
+                        </dl>
+                        <div className="mt-4 flex flex-wrap gap-2">
                           <Link
-                            to={`${base}/enrollments`}
-                            className="mt-3 inline-block text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                            to={`${base}/gradebook`}
+                            className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-500"
                           >
-                            Full roster
+                            Open gradebook
+                          </Link>
+                          <Link
+                            to={`${base}/modules`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                          >
+                            Modules
                           </Link>
                         </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+                        {row.recentLearners && row.recentLearners.length > 0 && (
+                          <div className="mt-5 border-t border-slate-100 pt-4 dark:border-neutral-800">
+                            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                              <Users className="h-3.5 w-3.5" aria-hidden />
+                              Recent roster activity
+                            </p>
+                            <ul className="mt-2 space-y-1.5">
+                              {row.recentLearners.map((p, i) => (
+                                <li
+                                  key={`${p.name}-${i}`}
+                                  className="flex justify-between gap-2 text-xs text-slate-600 dark:text-neutral-300"
+                                >
+                                  <span className="truncate font-medium text-slate-800 dark:text-neutral-100">
+                                    {p.name}
+                                  </span>
+                                  <span className="shrink-0 text-slate-400 dark:text-neutral-500">
+                                    {formatTimeAgoFromIso(p.lastAt)}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                            <Link
+                              to={`${base}/enrollments`}
+                              className="mt-3 inline-block text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                            >
+                              Full roster
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </section>
           )}
 
