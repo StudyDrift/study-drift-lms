@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { Pencil } from 'lucide-react'
+import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Pencil, FastForward } from 'lucide-react'
 import { SyllabusBlockEditor } from '../../components/syllabus/syllabus-block-editor'
 import { ContentPageReader } from '../../components/content-page/content-page-reader'
 import {
@@ -69,6 +69,54 @@ export default function CourseModuleContentPage() {
   const contentOpenSentForRef = useRef<string | null>(null)
   const [courseProfile, setCourseProfile] = useState<CoursePublic | null>(null)
   const [nextNav, setNextNav] = useState<{ href: string; title: string; live: string } | null>(null)
+  const [autoAdvance, setAutoAdvance] = useState(() => {
+    return localStorage.getItem('lms_auto_advance') === 'true'
+  })
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const nextNavRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    localStorage.setItem('lms_auto_advance', String(autoAdvance))
+  }, [autoAdvance])
+
+  useEffect(() => {
+    if (!autoAdvance || !nextNav || countdown !== null) {
+      if (!autoAdvance) setCountdown(null)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setCountdown(3)
+        } else {
+          setCountdown(null)
+        }
+      },
+      { threshold: 0.5 },
+    )
+
+    if (nextNavRef.current) {
+      observer.observe(nextNavRef.current)
+    }
+
+    return () => observer.disconnect()
+  }, [autoAdvance, nextNav, countdown])
+
+  useEffect(() => {
+    if (countdown === null) return
+    if (countdown <= 0) {
+      if (nextNav) navigate(nextNav.href)
+      return
+    }
+
+    const timer = setTimeout(() => {
+      setCountdown(countdown - 1)
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [countdown, nextNav, navigate])
 
   const canEdit = Boolean(
     courseCode && itemId && !permLoading && allows(permCourseItemCreate(courseCode)),
@@ -320,24 +368,45 @@ export default function CourseModuleContentPage() {
             />
             {nextNav ? (
               <div
+                ref={nextNavRef}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900/60"
                 aria-live="polite"
                 aria-atomic="true"
               >
-                <p className="text-sm text-slate-700 dark:text-neutral-200">
-                  <span className="font-medium">Suggested next:</span> {nextNav.title}
-                  {nextNav.live && nextNav.live !== `Next: ${nextNav.title}.` ? (
-                    <span className="mt-1 block text-xs text-slate-500 dark:text-neutral-400">
-                      {nextNav.live}
-                    </span>
-                  ) : null}
-                </p>
-                <Link
-                  to={nextNav.href}
-                  className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
-                >
-                  Continue
-                </Link>
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-700 dark:text-neutral-200">
+                    <span className="font-medium">Suggested next:</span> {nextNav.title}
+                    {nextNav.live && nextNav.live !== `Next: ${nextNav.title}.` ? (
+                      <span className="mt-1 block text-xs text-slate-500 dark:text-neutral-400">
+                        {nextNav.live}
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex cursor-pointer select-none items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={autoAdvance}
+                      onChange={(e) => setAutoAdvance(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs text-slate-500 dark:text-neutral-400">Auto-advance</span>
+                  </label>
+                  <Link
+                    to={nextNav.href}
+                    className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+                  >
+                    {countdown !== null ? (
+                      <>
+                        <FastForward className="h-4 w-4" />
+                        Next in {countdown}…
+                      </>
+                    ) : (
+                      'Continue'
+                    )}
+                  </Link>
+                </div>
               </div>
             ) : null}
           </div>
