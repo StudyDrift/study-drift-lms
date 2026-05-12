@@ -23,9 +23,12 @@ type loginBody struct {
 }
 
 type signupBody struct {
-	Email       string  `json:"email"`
-	Password    string  `json:"password"`
-	DisplayName *string `json:"display_name"`
+	Email            string  `json:"email"`
+	Password         string  `json:"password"`
+	DisplayName      *string `json:"display_name"`
+	DisplayNameCamel *string `json:"displayName"`
+	AccountTypeSnake *string `json:"account_type"`
+	AccountTypeCamel *string `json:"accountType"`
 }
 
 type forgotBody struct {
@@ -75,10 +78,22 @@ func (d Deps) handleSignup() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid JSON body.")
 			return
 		}
+		dn := b.DisplayName
+		if dn == nil {
+			dn = b.DisplayNameCamel
+		}
+		at := ""
+		if b.AccountTypeSnake != nil {
+			at = strings.TrimSpace(*b.AccountTypeSnake)
+		}
+		if at == "" && b.AccountTypeCamel != nil {
+			at = strings.TrimSpace(*b.AccountTypeCamel)
+		}
 		res, err := authservice.Signup(r.Context(), d.Pool, d.JWTSigner, d.effectiveConfig(), d.passwordChecker(), authservice.SignupRequest{
 			Email:       b.Email,
 			Password:    b.Password,
-			DisplayName: b.DisplayName,
+			DisplayName: dn,
+			AccountType: at,
 			Client:      authservice.ClientMetaFromRequest(r),
 		})
 		if err != nil {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
   BookOpen,
@@ -17,7 +17,7 @@ import { readApiErrorMessage } from '../../lib/errors'
 import { mapPool } from '../../lib/async-pool'
 import { fetchFeedChannels, fetchFeedMessages } from '../../lib/course-feed-api'
 import { getCourseViewAs } from '../../lib/course-view-as'
-import { getJwtSubject } from '../../lib/auth'
+import { getAccountType, getJwtSubject } from '../../lib/auth'
 import {
   courseEnrollmentsReadPermission,
   courseGradebookViewPermission,
@@ -201,6 +201,12 @@ async function loadAnnouncementPreview(course: CoursePublic): Promise<Announceme
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (getAccountType() === 'parent') {
+      navigate('/parent', { replace: true })
+    }
+  }, [navigate])
   const { allows, loading: permLoading } = usePermissions()
   const inboxUnread = useInboxUnreadCount()
   const { totalFeedUnread } = useCourseFeedUnread()

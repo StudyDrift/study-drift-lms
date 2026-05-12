@@ -18,14 +18,14 @@ func FindByCleverID(ctx context.Context, pool *pgxpool.Pool, cleverID string) (*
 		return nil, nil
 	}
 	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
-       login_blocked, deactivated_at
+       login_blocked, deactivated_at, account_type
 FROM "user".users WHERE clever_id = $1`
 	var r Row
 	var displayName, firstName, lastName, avatar, sid sql.NullString
 	var deactivatedAt sql.NullTime
 	err := pool.QueryRow(ctx, q, cid).Scan(
 		&r.ID, &r.Email, &r.PasswordHash, &displayName, &firstName, &lastName, &avatar, &r.UITheme, &sid,
-		&r.LoginBlocked, &deactivatedAt,
+		&r.LoginBlocked, &deactivatedAt, &r.AccountType,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -41,6 +41,9 @@ FROM "user".users WHERE clever_id = $1`
 	if deactivatedAt.Valid {
 		t := deactivatedAt.Time
 		r.DeactivatedAt = &t
+	}
+	if r.AccountType == "" {
+		r.AccountType = AccountTypeStandard
 	}
 	return &r, nil
 }
@@ -52,14 +55,14 @@ func FindByClassLinkID(ctx context.Context, pool *pgxpool.Pool, classlinkSub str
 		return nil, nil
 	}
 	const q = `SELECT id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
-       login_blocked, deactivated_at
+       login_blocked, deactivated_at, account_type
 FROM "user".users WHERE classlink_id = $1`
 	var r Row
 	var displayName, firstName, lastName, avatar, sid sql.NullString
 	var deactivatedAt sql.NullTime
 	err := pool.QueryRow(ctx, q, s).Scan(
 		&r.ID, &r.Email, &r.PasswordHash, &displayName, &firstName, &lastName, &avatar, &r.UITheme, &sid,
-		&r.LoginBlocked, &deactivatedAt,
+		&r.LoginBlocked, &deactivatedAt, &r.AccountType,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -75,6 +78,9 @@ FROM "user".users WHERE classlink_id = $1`
 	if deactivatedAt.Valid {
 		t := deactivatedAt.Time
 		r.DeactivatedAt = &t
+	}
+	if r.AccountType == "" {
+		r.AccountType = AccountTypeStandard
 	}
 	return &r, nil
 }
@@ -127,13 +133,13 @@ func InsertUserWithClever(ctx context.Context, pool *pgxpool.Pool, email, passwo
 	const q = `INSERT INTO "user".users (email, password_hash, display_name, clever_id, is_minor, org_id)
 VALUES ($1, $2, $3, $4, $5, (SELECT id FROM tenant.organizations WHERE slug = 'default' LIMIT 1))
 RETURNING id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
-  login_blocked, deactivated_at`
+  login_blocked, deactivated_at, account_type`
 	var r Row
 	var dn, fn, ln, av, sid sql.NullString
 	var deactivatedAt sql.NullTime
 	err := pool.QueryRow(ctx, q, email, passwordHash, displayName, cid, isMinor).Scan(
 		&r.ID, &r.Email, &r.PasswordHash, &dn, &fn, &ln, &av, &r.UITheme, &sid,
-		&r.LoginBlocked, &deactivatedAt,
+		&r.LoginBlocked, &deactivatedAt, &r.AccountType,
 	)
 	if err != nil {
 		return nil, err
@@ -143,6 +149,9 @@ RETURNING id::text, email, password_hash, display_name, first_name, last_name, a
 	r.LastName = strPtr(ln)
 	r.AvatarURL = strPtr(av)
 	r.Sid = strPtr(sid)
+	if r.AccountType == "" {
+		r.AccountType = AccountTypeStandard
+	}
 	if deactivatedAt.Valid {
 		t := deactivatedAt.Time
 		r.DeactivatedAt = &t
@@ -156,13 +165,13 @@ func InsertUserWithClassLink(ctx context.Context, pool *pgxpool.Pool, email, pas
 	const q = `INSERT INTO "user".users (email, password_hash, display_name, classlink_id, org_id)
 VALUES ($1, $2, $3, $4, (SELECT id FROM tenant.organizations WHERE slug = 'default' LIMIT 1))
 RETURNING id::text, email, password_hash, display_name, first_name, last_name, avatar_url, ui_theme, sid,
-  login_blocked, deactivated_at`
+  login_blocked, deactivated_at, account_type`
 	var r Row
 	var dn, fn, ln, av, sid sql.NullString
 	var deactivatedAt sql.NullTime
 	err := pool.QueryRow(ctx, q, email, passwordHash, displayName, s).Scan(
 		&r.ID, &r.Email, &r.PasswordHash, &dn, &fn, &ln, &av, &r.UITheme, &sid,
-		&r.LoginBlocked, &deactivatedAt,
+		&r.LoginBlocked, &deactivatedAt, &r.AccountType,
 	)
 	if err != nil {
 		return nil, err
@@ -172,6 +181,9 @@ RETURNING id::text, email, password_hash, display_name, first_name, last_name, a
 	r.LastName = strPtr(ln)
 	r.AvatarURL = strPtr(av)
 	r.Sid = strPtr(sid)
+	if r.AccountType == "" {
+		r.AccountType = AccountTypeStandard
+	}
 	if deactivatedAt.Valid {
 		t := deactivatedAt.Time
 		r.DeactivatedAt = &t

@@ -45,6 +45,7 @@ import PrivacyPolicyPage from './pages/privacy-policy-page'
 import MagicLinkPage from './pages/magic-link'
 import ResetPassword from './pages/reset-password'
 import Signup from './pages/signup'
+import ParentDashboard from './pages/lms/parent/ParentDashboard'
 import TermsOfUsePage from './pages/terms-of-use-page'
 
 export default function App() {
@@ -93,6 +94,7 @@ export default function App() {
           }
         >
           <Route path="/" element={<Dashboard />} />
+          <Route path="/parent" element={<ParentDashboard />} />
           <Route path="/ai" element={<AskAiPage />} />
           <Route path="/review" element={<ReviewSessionPage />} />
           <Route path="/courses" element={<Courses />} />

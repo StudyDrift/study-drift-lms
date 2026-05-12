@@ -20,7 +20,7 @@ One plan per feature gap identified in `[docs/MISSING_FEATURES.md](../MISSING_FE
 - [01 — Adaptive Learning Core](01-adaptive-learning-core/)
 - [02 — Assessment & Authoring](02-assessment-and-authoring/)
 - [03 — Submissions, Grading & Academic Integrity](03-submissions-grading-integrity/)
-- [05 — Multi-tenancy, Org Hierarchy & Roles](05-multi-tenancy-org-roles/)
+- [05 — Multi-tenancy, Org Hierarchy & Roles](../completed/05-multi-tenancy-org-roles/) (completed plans)
 - [06 — Communication & Collaboration](06-communication-collaboration/)
 - [07 — Mobile, Offline & Cross-Platform](07-mobile-offline-cross-platform/)
 - [08 — Content, Media & File Handling](08-content-media-files/)

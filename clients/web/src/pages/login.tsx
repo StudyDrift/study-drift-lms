@@ -4,6 +4,7 @@ import { BrandLogo } from '../components/brand-logo'
 import { OidcSignInButtons } from '../components/oidc-sign-in-buttons'
 import { getAccessToken } from '../lib/auth'
 import { applyAuthTokenResponse } from '../lib/session-tokens'
+import { pickPostAuthPath } from '../lib/post-auth-redirect'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
@@ -101,7 +102,7 @@ export default function Login() {
         mfa_pending_token?: string
         requires_mfa?: boolean
         mfa_setup_required?: boolean
-        user?: { email?: string; uiTheme?: string | null }
+        user?: { email?: string; uiTheme?: string | null; accountType?: string }
       }
       if (data.requires_mfa && data.mfa_pending_token) {
         setMfaFlow({ token: data.mfa_pending_token, mode: 'challenge' })
@@ -121,7 +122,7 @@ export default function Login() {
       applyAuthTokenResponse(data)
       applyUiTheme(parseUiTheme(data.user?.uiTheme))
       markPostLoginShortcutTip()
-      navigate(from, { replace: true })
+      navigate(pickPostAuthPath(from), { replace: true })
     } catch {
       setStatus('error')
       setMessage('Could not reach the server. Is the API running?')

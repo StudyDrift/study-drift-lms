@@ -84,4 +84,10 @@ func TestValidateLoginSignup(t *testing.T) {
 	if err := validateSignup(&SignupRequest{Email: "a@b.com", Password: "12345678"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := validateSignup(&SignupRequest{Email: "a@b.com", Password: "12345678", AccountType: "teacher"}); err == nil {
+		t.Fatal("want err for bad account type")
+	}
+	if err := validateSignup(&SignupRequest{Email: "a@b.com", Password: "12345678", AccountType: "parent"}); err != nil {
+		t.Fatal(err)
+	}
 }

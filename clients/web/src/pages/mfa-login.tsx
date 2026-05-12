@@ -3,6 +3,7 @@ import { type FormEvent, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { BrandLogo } from '../components/brand-logo'
 import { applyAuthTokenResponse } from '../lib/session-tokens'
+import { pickPostAuthPath } from '../lib/post-auth-redirect'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
@@ -45,17 +46,19 @@ export default function MfaLogin() {
 
   const authHeaders = { Authorization: `Bearer ${mfaFlow.token}` }
 
-  async function finishWithAccessToken(
-    tokens: { access_token?: string; refresh_token?: string; expires_in?: number },
-    uiTheme?: string | null,
-  ) {
+  async function finishWithAccessToken(data: {
+    access_token?: string
+    refresh_token?: string
+    expires_in?: number
+    user?: { uiTheme?: string | null; accountType?: string }
+  }) {
     clearMfaFlow()
     setTotpCredId(null)
     setTotpQrUrl(null)
-    applyAuthTokenResponse(tokens)
-    applyUiTheme(parseUiTheme(uiTheme))
+    applyAuthTokenResponse(data)
+    applyUiTheme(parseUiTheme(data.user?.uiTheme))
     markPostLoginShortcutTip()
-    navigate(from, { replace: true })
+    navigate(pickPostAuthPath(from), { replace: true })
   }
 
   async function completeSetup() {
@@ -78,7 +81,7 @@ export default function MfaLogin() {
         expires_in?: number
         user?: { uiTheme?: string | null }
       }
-      await finishWithAccessToken(data, data.user?.uiTheme)
+      await finishWithAccessToken(data)
     } catch {
       setStatus('error')
       setMessage('Could not reach the server.')
@@ -125,7 +128,7 @@ export default function MfaLogin() {
         expires_in?: number
         user?: { uiTheme?: string | null }
       }
-      await finishWithAccessToken(data, data.user?.uiTheme)
+      await finishWithAccessToken(data)
     } catch {
       setStatus('error')
       setMessage('Could not reach the server.')
@@ -155,7 +158,7 @@ export default function MfaLogin() {
         expires_in?: number
         user?: { uiTheme?: string | null }
       }
-      await finishWithAccessToken(data, data.user?.uiTheme)
+      await finishWithAccessToken(data)
     } catch {
       setStatus('error')
       setMessage('Could not reach the server.')
@@ -258,7 +261,7 @@ export default function MfaLogin() {
           expires_in?: number
           user?: { uiTheme?: string | null }
         }
-        await finishWithAccessToken(out, out.user?.uiTheme)
+        await finishWithAccessToken(out)
       }
     } catch {
       setMessage('Passkey was cancelled or failed.')

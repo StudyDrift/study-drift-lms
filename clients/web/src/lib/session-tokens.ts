@@ -2,6 +2,7 @@ import {
   clearAccessToken,
   notifyAuthTokenListeners,
   setAccessToken,
+  setCachedAccountTypeFromUser,
 } from './auth'
 
 const REFRESH_TOKEN_KEY = 'studydrift_refresh_token'
@@ -47,7 +48,9 @@ export function applyAuthTokenResponse(data: {
   access_token?: string
   refresh_token?: string
   expires_in?: number
+  user?: { accountType?: string | null; uiTheme?: string | null; email?: string }
 }): void {
+  setCachedAccountTypeFromUser(data.user)
   if (data.access_token) {
     setAccessToken(data.access_token)
   }
