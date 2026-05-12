@@ -4,6 +4,7 @@ import { BrandLogo } from '../components/brand-logo'
 import { OidcSignInButtons } from '../components/oidc-sign-in-buttons'
 import { getAccessToken } from '../lib/auth'
 import { applyAuthTokenResponse } from '../lib/session-tokens'
+import { pickPostAuthPath } from '../lib/post-auth-redirect'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
 import { passwordStrengthEnglish, passwordStrengthKey, type PasswordStrengthKey } from '../lib/password-strength'
@@ -22,6 +23,7 @@ export default function Signup() {
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [registerAsParent, setRegisterAsParent] = useState(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
   const [policy, setPolicy] = useState<{
@@ -85,6 +87,7 @@ export default function Signup() {
           email,
           password,
           display_name: displayName || undefined,
+          account_type: registerAsParent ? 'parent' : undefined,
         }),
       })
       let raw: unknown
@@ -98,11 +101,11 @@ export default function Signup() {
         setMessage(readApiErrorMessage(raw))
         return
       }
-      const data = raw as { access_token: string; user?: { uiTheme?: string | null } }
+      const data = raw as { access_token: string; user?: { uiTheme?: string | null; accountType?: string } }
       applyAuthTokenResponse(data)
       applyUiTheme(parseUiTheme(data.user?.uiTheme))
       markPostLoginShortcutTip()
-      navigate('/', { replace: true })
+      navigate(pickPostAuthPath('/'), { replace: true })
     } catch {
       setStatus('error')
       setMessage('Could not reach the server. Is the API running?')
@@ -209,6 +212,21 @@ export default function Signup() {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="flex items-start gap-3 rounded-lg border border-stone-200 bg-stone-50/80 px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900/40">
+              <input
+                id="registerAsParent"
+                name="registerAsParent"
+                type="checkbox"
+                checked={registerAsParent}
+                onChange={(e) => setRegisterAsParent(e.target.checked)}
+                className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-600"
+              />
+              <label htmlFor="registerAsParent" className="text-sm leading-snug text-stone-800 dark:text-neutral-200">
+                I am registering as a <span className="font-medium">parent or guardian</span> for read-only access when
+                my school links my account to a student.
+              </label>
             </div>
 
             {message && (

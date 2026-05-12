@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Accessibility,
@@ -8,7 +9,9 @@ import {
   Inbox,
   LayoutDashboard,
   Settings,
+  UsersRound,
 } from 'lucide-react'
+import { getAccountType } from '../../lib/auth'
 import { useInboxUnreadCount } from '../../context/use-inbox-unread'
 import { usePermissions } from '../../context/use-permissions'
 import { PERM_ACCOMMODATIONS_MANAGE, PERM_REPORTS_VIEW } from '../../lib/rbac-api'
@@ -17,6 +20,17 @@ import { sideNavActiveClass, sideNavLinkClass } from './side-nav-styles'
 export function SideNavMainLinks() {
   const unreadInboxCount = useInboxUnreadCount()
   const { allows, loading: permLoading } = usePermissions()
+  const [isParent, setIsParent] = useState(() => getAccountType() === 'parent')
+
+  useEffect(() => {
+    function sync() {
+      setIsParent(getAccountType() === 'parent')
+    }
+    sync()
+    window.addEventListener('studydrift-auth-token', sync)
+    return () => window.removeEventListener('studydrift-auth-token', sync)
+  }, [])
+
   const canViewReports = !permLoading && allows(PERM_REPORTS_VIEW)
   const canManageAccommodations = !permLoading && allows(PERM_ACCOMMODATIONS_MANAGE)
 
@@ -30,6 +44,15 @@ export function SideNavMainLinks() {
         <LayoutDashboard className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Dashboard
       </NavLink>
+      {isParent && (
+        <NavLink
+          to="/parent"
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <UsersRound className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Family
+        </NavLink>
+      )}
       <NavLink
         to="/courses"
         className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}

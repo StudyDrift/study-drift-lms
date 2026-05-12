@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { BrandLogo } from '../components/brand-logo'
 import { getAccessToken } from '../lib/auth'
 import { applyAuthTokenResponse } from '../lib/session-tokens'
+import { pickPostAuthPath } from '../lib/post-auth-redirect'
 import { apiUrl } from '../lib/api'
 import { readApiErrorMessage } from '../lib/errors'
 import { applyUiTheme, parseUiTheme } from '../lib/ui-theme'
@@ -76,9 +77,9 @@ export default function MagicLinkPage() {
         applyAuthTokenResponse(data)
         applyUiTheme(parseUiTheme(data.user?.uiTheme))
         markPostLoginShortcutTip()
-        const dest =
+        const rawDest =
           redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/'
-        navigate(dest, { replace: true })
+        navigate(pickPostAuthPath(rawDest), { replace: true })
       } catch {
         if (!cancelled) {
           setStatus('error')

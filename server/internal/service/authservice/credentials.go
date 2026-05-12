@@ -46,6 +46,7 @@ type SignupRequest struct {
 	Email       string
 	Password    string
 	DisplayName *string
+	AccountType string // empty or "parent" (plan 5.10)
 	Client      *ClientMeta
 }
 
@@ -59,6 +60,7 @@ type UserPublic struct {
 	AvatarURL   *string `json:"avatarUrl"`
 	UITheme     string  `json:"uiTheme"`
 	Sid         *string `json:"sid"`
+	AccountType string  `json:"accountType"`
 }
 
 // AuthResponse mirrors models/auth AuthResponse (field names are snake_case like the Rust `AuthResponse` struct).
@@ -188,13 +190,26 @@ WHERE id <> $1::uuid`, communication.PlatformInboxSenderID.String()).Scan(&human
 	if err != nil {
 		return AuthResponse{}, err
 	}
+	wantParent := strings.ToLower(strings.TrimSpace(req.AccountType)) == "parent"
+	if wantParent {
+		if _, err := tx.Exec(ctx, `UPDATE "user".users SET account_type = $2 WHERE id = $1`, uid, user.AccountTypeParent); err != nil {
+			return AuthResponse{}, err
+		}
+		row.AccountType = user.AccountTypeParent
+	}
 	if firstHuman && cfg.BootstrapAdminEmail != "" && email == cfg.BootstrapAdminEmail {
 		if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, "Global Admin"); err != nil {
 			return AuthResponse{}, err
 		}
 	}
-	if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, "Teacher"); err != nil {
-		return AuthResponse{}, err
+	if wantParent {
+		if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, "Student"); err != nil {
+			return AuthResponse{}, err
+		}
+	} else {
+		if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, "Teacher"); err != nil {
+			return AuthResponse{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return AuthResponse{}, err
@@ -419,6 +434,10 @@ func responseFromRow(ctx context.Context, pool *pgxpool.Pool, jwt *pauth.JWTSign
 }
 
 func userPublicFromRow(row *user.Row) UserPublic {
+	at := row.AccountType
+	if at == "" {
+		at = user.AccountTypeStandard
+	}
 	return UserPublic{
 		ID:          row.ID,
 		Email:       row.Email,
@@ -428,6 +447,7 @@ func userPublicFromRow(row *user.Row) UserPublic {
 		AvatarURL:   row.AvatarURL,
 		UITheme:     row.UITheme,
 		Sid:         row.Sid,
+		AccountType: at,
 	}
 }
 
@@ -438,6 +458,10 @@ func validateSignup(req *SignupRequest) error {
 	}
 	if req.Password == "" {
 		return FieldError{Message: "Password is required."}
+	}
+	acct := strings.ToLower(strings.TrimSpace(req.AccountType))
+	if acct != "" && acct != "parent" {
+		return FieldError{Message: "Unsupported account type."}
 	}
 	return nil
 }

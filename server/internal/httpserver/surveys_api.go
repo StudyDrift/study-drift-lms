@@ -332,6 +332,9 @@ func (d Deps) handleSurveyRespond() http.HandlerFunc {
 		if !ok {
 			return
 		}
+		if d.forbidParentViewerCourseWork(w, r, viewer) {
+			return
+		}
 		id, err := uuid.Parse(chi.URLParam(r, "id"))
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid id.")

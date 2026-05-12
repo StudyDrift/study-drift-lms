@@ -18,6 +18,7 @@ type accountProfileResponse struct {
 	UITheme                      string  `json:"uiTheme"`
 	Sid                          *string `json:"sid"`
 	SessionManagementUIEnabled   bool    `json:"sessionManagementUiEnabled"`
+	AccountType                  string  `json:"accountType"`
 }
 
 type patchAccountBody struct {
@@ -97,6 +98,10 @@ func (d Deps) handleGetSettingsAccount() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "User not found.")
 			return
 		}
+		at := row.AccountType
+		if at == "" {
+			at = user.AccountTypeStandard
+		}
 		writeJSON(w, http.StatusOK, accountProfileResponse{
 			Email:                      row.Email,
 			DisplayName:                row.DisplayName,
@@ -106,6 +111,7 @@ func (d Deps) handleGetSettingsAccount() http.HandlerFunc {
 			UITheme:                    row.UITheme,
 			Sid:                        row.Sid,
 			SessionManagementUIEnabled: d.effectiveConfig().SessionManagementUIEnabled,
+			AccountType:                at,
 		})
 	}
 }
@@ -155,6 +161,10 @@ func (d Deps) handlePatchSettingsAccount() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "User not found.")
 			return
 		}
+		at := row.AccountType
+		if at == "" {
+			at = user.AccountTypeStandard
+		}
 		writeJSON(w, http.StatusOK, accountProfileResponse{
 			Email:                      row.Email,
 			DisplayName:                row.DisplayName,
@@ -164,6 +174,7 @@ func (d Deps) handlePatchSettingsAccount() http.HandlerFunc {
 			UITheme:                    row.UITheme,
 			Sid:                        row.Sid,
 			SessionManagementUIEnabled: d.effectiveConfig().SessionManagementUIEnabled,
+			AccountType:                at,
 		})
 	}
 }
