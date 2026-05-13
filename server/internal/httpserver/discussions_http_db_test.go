@@ -15,6 +15,7 @@ import (
 	serverdata "github.com/lextures/lextures/server"
 	"github.com/lextures/lextures/server/internal/auth"
 	"github.com/lextures/lextures/server/internal/config"
+	"github.com/lextures/lextures/server/internal/courseroles"
 	"github.com/lextures/lextures/server/internal/db"
 	"github.com/lextures/lextures/server/internal/migrate"
 	"github.com/lextures/lextures/server/internal/repos/user"
@@ -58,6 +59,17 @@ INSERT INTO course.courses (course_code, title, created_by_user_id) VALUES ($1, 
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO course.course_enrollments (course_id, user_id, role) VALUES ($1, $2, 'teacher')`, courseID, uid); err != nil {
 		t.Fatalf("enroll: %v", err)
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if err := courseroles.RefreshManagedGrantsForCourseUser(ctx, tx, uid, courseID, cc); err != nil {
+		_ = tx.Rollback(ctx)
+		t.Fatalf("managed grants: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit: %v", err)
 	}
 	signer := auth.NewJWTSignerWithPool("01234567890123456789012345678901", pool)
 	tok, err := signer.Sign(ctx, row.ID, em, "", "", nil)
