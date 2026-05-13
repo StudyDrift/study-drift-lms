@@ -48,14 +48,18 @@ backend capabilities not yet automatable in the current test infrastructure.
 
 - [x] Course detail page loads with hero image area and basic info
 - [x] Published/draft badge visible
-- [ ] Edit course title and description (instructor)
+- [x] Edit course title and description (instructor)
 
 ---
 
 ## Course Settings (`/courses/:code/settings`)
 
 - [x] Settings page loads
-- [x] General settings tab: update title saves successfully
+- [x] General settings tab: update title and description saves successfully
+- [x] General settings tab: toggle published status
+- [x] General settings tab: toggle schedule mode
+- [x] General settings tab: change reading theme preset
+- [x] Archive course (delete)
 - [ ] Grading tab: change grading scheme
 - [ ] Enrollments tab: access from settings
 

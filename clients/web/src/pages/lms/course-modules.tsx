@@ -42,7 +42,7 @@ import { AddCourseItemMenu } from './add-course-item-menu'
 import { AddModuleItemMenu, type ModuleItemKind } from './add-module-item-menu'
 import { CourseModulesLoadingSkeleton } from '../../components/ui/lms-content-skeletons'
 import { FeatureHelpTrigger } from '../../components/feature-help/feature-help-trigger'
-import { toastWithUndo } from '../../lib/lms-toast'
+import { toast, toastWithUndo } from '../../lib/lms-toast'
 import { LmsPage } from './lms-page'
 import { ModuleExternalLinkModal } from './module-external-link-modal'
 import { ModuleLtiLinkModal } from './module-lti-link-modal'
@@ -58,7 +58,9 @@ import {
   unarchiveCourseStructureItem,
   createModuleExternalLink,
   createModuleLtiLink,
+  deleteCourseModule,
   fetchCourseLtiExternalTools,
+  fetchCourseModuleDeletePreview,
   createModuleQuiz,
   createStructurePathRule,
   deleteStructurePathRule,
@@ -74,6 +76,7 @@ import {
   type CourseGradebookGridColumn,
   type CoursePublic,
   type CourseStructureItem,
+  type ModuleGradedChild,
   type PathConceptOption,
   type StructurePathRule,
 } from '../../lib/courses-api'
@@ -1193,6 +1196,7 @@ function StaticModuleCard({
 export default function CourseModules() {
   const { courseCode } = useParams<{ courseCode: string }>()
   const archiveDialogTitleId = useId()
+  const moduleDeleteDialogTitleId = useId()
   const { allows, loading: permissionsLoading, error: permissionsError } = usePermissions()
   const viewerEnrollmentRoles = useViewerEnrollmentRoles(courseCode)
   const [items, setItems] = useState<CourseStructureItem[]>([])
@@ -1259,6 +1263,14 @@ export default function CourseModules() {
   const [moduleSettingsSaving, setModuleSettingsSaving] = useState(false)
   const [moduleSettingsSaveError, setModuleSettingsSaveError] = useState<string | null>(null)
   const [archiveConfirmItem, setArchiveConfirmItem] = useState<CourseStructureItem | null>(null)
+  /** Module pending hard-delete (or archive when graded). Null when no confirm is open. */
+  const [moduleDeleteTarget, setModuleDeleteTarget] = useState<CourseStructureItem | null>(null)
+  /** True while we fetch the delete-preview to decide between delete vs archive copy. */
+  const [moduleDeletePreviewLoading, setModuleDeletePreviewLoading] = useState(false)
+  /** Children that the server reports have recorded grades; the dialog warns about these. */
+  const [moduleDeleteGradedItems, setModuleDeleteGradedItems] = useState<ModuleGradedChild[]>([])
+  const [moduleDeleting, setModuleDeleting] = useState(false)
+  const [moduleDeleteError, setModuleDeleteError] = useState<string | null>(null)
 
   const [isDraggingModule, setIsDraggingModule] = useState(false)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
@@ -1318,7 +1330,9 @@ export default function CourseModules() {
     moduleSettingsOpen ||
     editItemSaving ||
     editItemModalOpen ||
-    archiveConfirmItem !== null
+    archiveConfirmItem !== null ||
+    moduleDeleteTarget !== null ||
+    moduleDeleting
 
   const anyModalBusy = blockingUi || reorderSaving
 
@@ -1709,6 +1723,66 @@ export default function CourseModules() {
     },
     [courseCode, moduleSettingsModuleId, load],
   )
+
+  /** Open the delete-confirm dialog from inside Module Settings. Fetches a preview so we know
+   *  whether the server is going to archive (grades present) or fully delete the module. */
+  const requestDeleteModule = useCallback(async () => {
+    if (!courseCode || !moduleSettingsModuleId) return
+    const target = items.find((i) => i.id === moduleSettingsModuleId) ?? null
+    if (!target) return
+    setModuleDeleteError(null)
+    setModuleDeleteGradedItems([])
+    setModuleDeleteTarget(target)
+    setModuleSettingsOpen(false)
+    setModuleDeletePreviewLoading(true)
+    try {
+      const preview = await fetchCourseModuleDeletePreview(courseCode, target.id)
+      setModuleDeleteGradedItems(preview.gradedItems)
+    } catch (e) {
+      setModuleDeleteError(e instanceof Error ? e.message : 'Could not load module info.')
+    } finally {
+      setModuleDeletePreviewLoading(false)
+    }
+  }, [courseCode, items, moduleSettingsModuleId])
+
+  const confirmDeleteModule = useCallback(async () => {
+    if (!courseCode || !moduleDeleteTarget) return
+    const target = moduleDeleteTarget
+    setModuleDeleteError(null)
+    setModuleDeleting(true)
+    try {
+      const result = await deleteCourseModule(courseCode, target.id)
+      await load({ silent: true })
+      setModuleDeleteTarget(null)
+      setModuleDeleteGradedItems([])
+      setModuleSettingsModuleId(null)
+      const label = target.title?.trim() || 'Module'
+      /** Both outcomes are effectively destructive (deleted rows are gone; archived rows are
+       *  hidden from the outline and student view) so we surface a plain toast rather than the
+       *  undo pattern used for single-item archive. */
+      if (result.action === 'archived') {
+        toast(`Archived “${label}” to preserve student grades.`)
+      } else {
+        toast(`Deleted “${label}”.`)
+      }
+    } catch (e) {
+      setModuleDeleteError(e instanceof Error ? e.message : 'Could not delete module.')
+    } finally {
+      setModuleDeleting(false)
+    }
+  }, [courseCode, moduleDeleteTarget, load])
+
+  useEffect(() => {
+    if (!moduleDeleteTarget) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (moduleDeleting) return
+      e.preventDefault()
+      setModuleDeleteTarget(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [moduleDeleteTarget, moduleDeleting])
 
   const settingsTargetItem = useMemo(
     () => items.find((i) => i.id === moduleSettingsModuleId) ?? null,
@@ -2169,9 +2243,121 @@ export default function CourseModules() {
           }
         }}
         onSave={(payload) => void saveModuleSettings(payload)}
+        onDelete={() => void requestDeleteModule()}
         saving={moduleSettingsSaving}
         errorMessage={moduleSettingsSaveError}
       />
+
+      {moduleDeleteTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={moduleDeleteDialogTitleId}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !moduleDeleting) {
+              setModuleDeleteTarget(null)
+              setModuleDeleteGradedItems([])
+            }
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-neutral-600 dark:bg-neutral-800">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-neutral-600">
+              <h3
+                id={moduleDeleteDialogTitleId}
+                className="text-sm font-semibold text-slate-900 dark:text-neutral-100"
+              >
+                Delete module
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!moduleDeleting) {
+                    setModuleDeleteTarget(null)
+                    setModuleDeleteGradedItems([])
+                  }
+                }}
+                disabled={moduleDeleting}
+                className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <div className="p-4">
+              {moduleDeletePreviewLoading ? (
+                <p className="text-sm text-slate-600 dark:text-neutral-300">
+                  Checking module contents…
+                </p>
+              ) : moduleDeleteGradedItems.length > 0 ? (
+                <>
+                  <p className="text-sm leading-relaxed text-slate-600 dark:text-neutral-300">
+                    Delete <span className="font-medium text-slate-900 dark:text-neutral-100">{moduleDeleteTarget.title}</span> and everything inside?
+                  </p>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-neutral-300">
+                    Some items have student grades. To preserve those records, these items will be
+                    <span className="font-medium text-slate-900 dark:text-neutral-100"> archived</span> instead of deleted:
+                  </p>
+                  <ul className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200">
+                    {moduleDeleteGradedItems.map((g) => (
+                      <li key={g.id} className="truncate py-0.5">
+                        {g.title || 'Untitled'}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-neutral-400">
+                    The module and any items without grades will be archived alongside them so the
+                    outline stays consistent. You can restore archived content from course settings.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm leading-relaxed text-slate-600 dark:text-neutral-300">
+                    Delete <span className="font-medium text-slate-900 dark:text-neutral-100">{moduleDeleteTarget.title}</span> and every assignment, page, quiz, and other item inside it?
+                  </p>
+                  <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-neutral-400">
+                    This cannot be undone.
+                  </p>
+                </>
+              )}
+              {moduleDeleteError ? (
+                <p className="mt-3 text-sm text-rose-700 dark:text-rose-300" role="status">
+                  {moduleDeleteError}
+                </p>
+              ) : null}
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!moduleDeleting) {
+                      setModuleDeleteTarget(null)
+                      setModuleDeleteGradedItems([])
+                    }
+                  }}
+                  disabled={moduleDeleting}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700/80"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmDeleteModule()}
+                  disabled={moduleDeleting || moduleDeletePreviewLoading}
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-rose-500 dark:hover:bg-rose-400"
+                >
+                  {moduleDeleting
+                    ? moduleDeleteGradedItems.length > 0
+                      ? 'Archiving…'
+                      : 'Deleting…'
+                    : moduleDeleteGradedItems.length > 0
+                      ? 'Archive module'
+                      : 'Delete module'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {archiveConfirmItem ? (
         <div

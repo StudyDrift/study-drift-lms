@@ -103,6 +103,9 @@ ON CONFLICT (course_id, user_id, role) DO NOTHING
 `, courseID, createdByUserID); err != nil {
 		return nil, false, err
 	}
+	if err := SeedTeacherCourseGrants(ctx, tx, createdByUserID, courseID, courseCodeOut); err != nil {
+		return nil, false, err
+	}
 
 	if err = tx.Commit(ctx); err != nil {
 		return nil, false, err

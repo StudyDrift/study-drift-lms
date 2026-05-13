@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -76,7 +75,6 @@ func (d Deps) handlePublicBrandingResolve() http.HandlerFunc {
 		if slugLog == "" {
 			slugLog = "(default)"
 		}
-		log.Printf("branding resolve: host=%q org_slug=%s", host, slugLog)
 
 		warnPrimary := false
 		var ratioPrimary *float64

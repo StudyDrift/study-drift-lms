@@ -142,6 +142,177 @@ func (d Deps) handlePatchCourseModule() http.HandlerFunc {
 	}
 }
 
+// gradedChildJSON is the API view of a child item that has student grades.
+type gradedChildJSON struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Kind  string `json:"kind"`
+}
+
+// resolveCourseModuleForMutation runs the auth + permission + blueprint checks
+// shared by module-mutation endpoints. Returns the resolved course/module ids
+// when the caller may proceed.
+func (d Deps) resolveCourseModuleForMutation(
+	w http.ResponseWriter, r *http.Request,
+) (cid uuid.UUID, moduleID uuid.UUID, ok bool) {
+	courseCode, viewer, ok := d.requireCourseAccess(w, r)
+	if !ok {
+		return uuid.UUID{}, uuid.UUID{}, false
+	}
+	hasPerm, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, "course:"+courseCode+":item:create")
+	if err != nil {
+		apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
+		return uuid.UUID{}, uuid.UUID{}, false
+	}
+	if !hasPerm {
+		apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission to edit course structure.")
+		return uuid.UUID{}, uuid.UUID{}, false
+	}
+	moduleID, err = uuid.Parse(chi.URLParam(r, "module_id"))
+	if err != nil {
+		apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid module id.")
+		return uuid.UUID{}, uuid.UUID{}, false
+	}
+	cidPtr, err := course.GetIDByCourseCode(r.Context(), d.Pool, courseCode)
+	if err != nil {
+		apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load course.")
+		return uuid.UUID{}, uuid.UUID{}, false
+	}
+	if cidPtr == nil {
+		apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
+		return uuid.UUID{}, uuid.UUID{}, false
+	}
+	if !d.guardCourseItemCreateBlueprint(w, r, courseCode, viewer, *cidPtr, moduleID) {
+		return uuid.UUID{}, uuid.UUID{}, false
+	}
+	return *cidPtr, moduleID, true
+}
+
+// handleCourseModuleDeletePreview is GET
+// /api/v1/courses/{course_code}/structure/modules/{module_id}/delete-preview.
+// Returns which child items have recorded grades so the UI can warn the user
+// that those items will be archived (not deleted) before confirming.
+func (d Deps) handleCourseModuleDeletePreview() http.HandlerFunc {
+	type response struct {
+		GradedItems []gradedChildJSON `json:"gradedItems"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet+","+http.MethodOptions)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		cid, moduleID, ok := d.resolveCourseModuleForMutation(w, r)
+		if !ok {
+			return
+		}
+		exists, err := coursestructure.ModuleExists(r.Context(), d.Pool, cid, moduleID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load module.")
+			return
+		}
+		if !exists {
+			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Module not found.")
+			return
+		}
+		graded, err := coursestructure.ListModuleChildrenWithGrades(r.Context(), d.Pool, cid, moduleID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load module grades.")
+			return
+		}
+		out := response{GradedItems: make([]gradedChildJSON, 0, len(graded))}
+		for _, g := range graded {
+			out.GradedItems = append(out.GradedItems, gradedChildJSON{
+				ID:    g.ID.String(),
+				Title: g.Title,
+				Kind:  g.Kind,
+			})
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(out)
+	}
+}
+
+// handleDeleteCourseModule is DELETE
+// /api/v1/courses/{course_code}/structure/modules/{module_id}.
+//
+// When any child item has recorded grades the module + its children are
+// archived (so grades are preserved) and the response is
+// {"action":"archived","archivedItems":[...]}. Otherwise the module is deleted
+// outright and dependent rows fall away via ON DELETE CASCADE; the response is
+// {"action":"deleted"}.
+func (d Deps) handleDeleteCourseModule() http.HandlerFunc {
+	type response struct {
+		Action         string            `json:"action"`
+		ArchivedItems  []gradedChildJSON `json:"archivedItems,omitempty"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.Method != http.MethodDelete {
+			w.Header().Set("Allow", http.MethodDelete+","+http.MethodOptions)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		cid, moduleID, ok := d.resolveCourseModuleForMutation(w, r)
+		if !ok {
+			return
+		}
+		exists, err := coursestructure.ModuleExists(r.Context(), d.Pool, cid, moduleID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load module.")
+			return
+		}
+		if !exists {
+			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Module not found.")
+			return
+		}
+		graded, err := coursestructure.ListModuleChildrenWithGrades(r.Context(), d.Pool, cid, moduleID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load module grades.")
+			return
+		}
+		out := response{}
+		if len(graded) > 0 {
+			if err := coursestructure.ArchiveCourseModuleAndChildren(r.Context(), d.Pool, cid, moduleID); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Module not found.")
+					return
+				}
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to archive module.")
+				return
+			}
+			out.Action = "archived"
+			out.ArchivedItems = make([]gradedChildJSON, 0, len(graded))
+			for _, g := range graded {
+				out.ArchivedItems = append(out.ArchivedItems, gradedChildJSON{
+					ID:    g.ID.String(),
+					Title: g.Title,
+					Kind:  g.Kind,
+				})
+			}
+		} else {
+			if err := coursestructure.DeleteCourseModule(r.Context(), d.Pool, cid, moduleID); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Module not found.")
+					return
+				}
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to delete module.")
+				return
+			}
+			out.Action = "deleted"
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(out)
+	}
+}
+
 // handleCourseLtiExternalTools is GET /api/v1/courses/{course_code}/lti-external-tools.
 func (d Deps) handleCourseLtiExternalTools() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

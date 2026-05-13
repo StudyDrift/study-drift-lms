@@ -224,6 +224,9 @@ INSERT INTO course.course_enrollments (course_id, user_id, role, active)
 VALUES ($1, $2, 'teacher', TRUE)
 ON CONFLICT (course_id, user_id, role) DO UPDATE SET active = TRUE
 `, cid, p.ActorUserID)
+		if err := course.SeedTeacherCourseGrants(ctx, tx, p.ActorUserID, cid, code); err != nil {
+			return "", err
+		}
 		log("class", "create", sourcedID, &cid, "")
 		return "create", nil
 	}
