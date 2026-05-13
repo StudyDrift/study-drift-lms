@@ -1,0 +1,66 @@
+# Ephemeral stack for e2e testing — NO named volumes so all data is discarded on `docker compose down -v`.
+#
+# Usage (from repo root):
+#   docker compose -f docker-compose.e2e.yml up -d --build --wait
+#   <run Playwright tests>
+#   docker compose -f docker-compose.e2e.yml down -v
+#
+# Note: SQLite is not used here because the migration files rely on PostgreSQL-specific
+# syntax (UUID generation, JSONB, advisory locks, etc.) and cannot run on SQLite without
+# a full rewrite.  Using an ephemeral Postgres container achieves the same goal: all data
+# is destroyed when `docker compose down -v` is called.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: e2e
+      POSTGRES_PASSWORD: e2e
+      POSTGRES_DB: e2e
+    # Intentionally no named volume — data lives only in the anonymous volume for this run.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e -d e2e"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://e2e:e2e@postgres:5432/e2e?sslmode=disable
+      JWT_SECRET: e2e-test-secret-do-not-use-outside-tests
+      BOOTSTRAP_ADMIN_EMAIL: admin@e2e.test
+      RUN_MIGRATIONS: "true"
+      COURSE_FILES_ROOT: /var/course-files
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      context: ./clients/web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8080
+    ports:
+      - "5173:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
