@@ -648,6 +648,11 @@ export default function CourseSettings() {
                       type="button"
                       role="switch"
                       aria-checked={published}
+                      aria-label={
+                        published
+                          ? 'Published to catalog'
+                          : 'Draft — not published to catalog'
+                      }
                       onClick={() => void onPublishedToggle()}
                       disabled={saveStatus === 'saving'}
                       className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
@@ -701,6 +706,11 @@ export default function CourseSettings() {
                     type="button"
                     role="switch"
                     aria-checked={scheduleMode === 'relative'}
+                    aria-label={
+                      scheduleMode === 'relative'
+                        ? 'Relative schedule from each enrollment'
+                        : 'Fixed calendar schedule (not relative to enrollment)'
+                    }
                     onClick={() =>
                       setScheduleMode((m) => (m === 'fixed' ? 'relative' : 'fixed'))
                     }

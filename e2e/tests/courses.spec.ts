@@ -11,11 +11,13 @@
  *   [x] Published/draft badge visible
  *   [x] Edit course title and description (instructor)
  *   [x] Settings page loads
- *   [x] General settings tab: update title saves successfully
+ *   [x] General settings tab: update title and description saves successfully
+ *   [x] Toggle published status
+ *   [x] Toggle schedule mode
+ *   [x] Change reading theme preset
+ *   [x] Archive (delete) course
  */
-import { test, expect } from '../fixtures/test.js'
-import { injectToken, uniqueEmail } from '../fixtures/test.js'
-import { apiSignup, apiEnroll, apiCreateCourse } from '../fixtures/api.js'
+import { test, expect, injectToken } from '../fixtures/test.js'
 
 test.describe('Courses list', () => {
   test('page loads and "New course" button is visible to an instructor', async ({
@@ -91,9 +93,12 @@ test.describe('Create course', () => {
 })
 
 test.describe('Course detail', () => {
-  test('page loads with course title', async ({ coursePage: page, seededCourse }) => {
+  test('page loads with course title and description', async ({ coursePage: page, seededCourse }) => {
     await page.goto(`/courses/${seededCourse.courseCode}`)
     await expect(page.getByRole('heading', { name: seededCourse.title })).toBeVisible()
+    if (seededCourse.description) {
+      await expect(page.getByText(seededCourse.description)).toBeVisible()
+    }
   })
 
   test('unpublished status indicator is visible on a draft course', async ({
@@ -104,28 +109,126 @@ test.describe('Course detail', () => {
     // The course detail page shows "Published: Off — Staff-only until published".
     await expect(page.getByText(/off|staff.only|draft/i).first()).toBeVisible({ timeout: 8000 })
   })
+
+  test('settings link is visible to instructor', async ({ coursePage: page, seededCourse }) => {
+    await page.goto(`/courses/${seededCourse.courseCode}`)
+    await expect(page.getByRole('link', { name: /course settings/i })).toBeVisible()
+  })
 })
 
 test.describe('Course settings', () => {
-  test('settings page loads', async ({ coursePage: page, seededCourse }) => {
+  test('settings page loads and shows multiple tabs', async ({ coursePage: page, seededCourse }) => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings`)
-    // The General tab heading includes the course name.
+    // Tabs like General, Grading, etc. are implicitly navigated via URL or visible as links/buttons.
+    // The default landing is /settings/general.
     await expect(page.getByText(/general|settings/i).first()).toBeVisible()
-    // The Title input is pre-filled with the course title.
     await expect(page.getByRole('textbox', { name: /^title$/i })).toBeVisible()
+
+    // Verify presence of some other sections/tabs in the sidebar or menu if applicable, 
+    // but here they are handled by the CourseSettings layout which we can verify by URL navigation.
+    await page.goto(`/courses/${seededCourse.courseCode}/settings/grading`)
+    await expect(page.getByText(/grading scale|weighted/i).first()).toBeVisible()
   })
 
-  test('general tab: update course title saves successfully', async ({
+  test('update course title and description saves successfully', async ({
     coursePage: page,
     seededCourse,
   }) => {
-    await page.goto(`/courses/${seededCourse.courseCode}/settings`)
+    await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
+    
     const titleInput = page.getByRole('textbox', { name: /^title$/i })
     await titleInput.clear()
     await titleInput.fill('Updated E2E Title')
+
+    const descInput = page.getByRole('textbox', { name: /description/i })
+    await descInput.clear()
+    await descInput.fill('Updated E2E Description')
+
     // The save button is at the bottom of the general form.
     await page.getByRole('button', { name: /save/i }).first().click()
+    
     // After saving the updated title should appear in the breadcrumb or heading.
     await expect(page.getByText('Updated E2E Title')).toBeVisible({ timeout: 8000 })
+    
+    // Navigate back to course detail to verify description update.
+    await page.goto(`/courses/${seededCourse.courseCode}`)
+    await expect(page.getByText('Updated E2E Description')).toBeVisible()
+  })
+
+  test('toggling published status', async ({ coursePage: page, seededCourse }) => {
+    await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
+    
+    const publishSwitch = page.getByRole('switch', { name: /published/i })
+    const isInitiallyPublished = await publishSwitch.getAttribute('aria-checked') === 'true'
+    
+    // Toggle it.
+    await publishSwitch.click()
+    await expect(page.getByText(/saved|published|draft/i).first()).toBeVisible()
+    
+    const isNowPublished = await publishSwitch.getAttribute('aria-checked') === 'true'
+    expect(isNowPublished).not.toBe(isInitiallyPublished)
+    
+    // Verify badge on course detail.
+    await page.goto(`/courses/${seededCourse.courseCode}`)
+    if (isNowPublished) {
+      await expect(page.getByText(/active|published/i).first()).toBeVisible()
+    } else {
+      await expect(page.getByText(/off|staff.only|draft/i).first()).toBeVisible()
+    }
+  })
+
+  test('change reading theme preset', async ({ coursePage: page, seededCourse }) => {
+    await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
+    
+    // Look for a theme preset button, e.g., "Night" or "Reader".
+    const nightTheme = page.getByRole('button', { name: /night/i })
+    await expect(nightTheme).toBeVisible()
+    await nightTheme.click()
+    
+    // Theme selection usually saves immediately as per UI note.
+    await expect(page.getByText(/reading theme saved/i)).toBeVisible()
+  })
+
+  test('toggle schedule mode between fixed and relative', async ({ coursePage: page, seededCourse }) => {
+    await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
+    
+    const scheduleSwitch = page.getByRole('switch', { name: /relative/i })
+    const isInitiallyRelative = await scheduleSwitch.getAttribute('aria-checked') === 'true'
+    
+    // Toggle it.
+    await scheduleSwitch.click()
+    
+    // Verify fields change.
+    if (isInitiallyRelative) {
+      // Should now be fixed.
+      await expect(page.getByLabel(/^start$/i)).toBeVisible()
+    } else {
+      // Should now be relative.
+      await expect(page.getByLabel(/^end after$/i)).toBeVisible()
+    }
+    
+    // Save changes.
+    await page.getByRole('button', { name: /save/i }).first().click()
+    await expect(page.getByText(/saved/i).first()).toBeVisible()
+  })
+
+  test('archive (delete) course', async ({ coursePage: page, seededCourse }) => {
+    await page.goto(`/courses/${seededCourse.courseCode}/settings/archive`)
+    
+    await page.getByRole('button', { name: /delete course/i }).click()
+    
+    // Confirm modal appears.
+    const modal = page.getByRole('dialog')
+    await expect(modal).toBeVisible()
+    await expect(modal.getByText(/archives the entire course/i)).toBeVisible()
+    
+    // Click confirm.
+    await modal.getByRole('button', { name: /archive course/i }).click()
+    
+    // Should be redirected to /courses.
+    await expect(page).toHaveURL(/\/courses$/)
+    
+    // Verify it's no longer in the list.
+    await expect(page.getByText(seededCourse.title)).not.toBeVisible()
   })
 })

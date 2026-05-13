@@ -1961,6 +1961,79 @@ export async function patchCourseModule(
   return parseApiResponse('CourseStructureItem', courseStructureItemSchema, raw)
 }
 
+/** A module child item that has student grades; surfaced before deleting so the UI can warn. */
+export type ModuleGradedChild = {
+  id: string
+  title: string
+  kind: string
+}
+
+export type CourseModuleDeletePreview = {
+  gradedItems: ModuleGradedChild[]
+}
+
+/** Tells callers whether the server fully deleted the module or had to archive it to preserve grades. */
+export type CourseModuleDeleteResult =
+  | { action: 'deleted' }
+  | { action: 'archived'; archivedItems: ModuleGradedChild[] }
+
+function readGradedItems(raw: unknown): ModuleGradedChild[] {
+  if (!raw || typeof raw !== 'object') return []
+  const arr = (raw as { gradedItems?: unknown }).gradedItems
+  if (!Array.isArray(arr)) return []
+  const out: ModuleGradedChild[] = []
+  for (const entry of arr) {
+    if (!entry || typeof entry !== 'object') continue
+    const obj = entry as Record<string, unknown>
+    if (typeof obj.id !== 'string' || typeof obj.title !== 'string' || typeof obj.kind !== 'string') continue
+    out.push({ id: obj.id, title: obj.title, kind: obj.kind })
+  }
+  return out
+}
+
+function readArchivedItems(raw: unknown): ModuleGradedChild[] {
+  if (!raw || typeof raw !== 'object') return []
+  const arr = (raw as { archivedItems?: unknown }).archivedItems
+  if (!Array.isArray(arr)) return []
+  const out: ModuleGradedChild[] = []
+  for (const entry of arr) {
+    if (!entry || typeof entry !== 'object') continue
+    const obj = entry as Record<string, unknown>
+    if (typeof obj.id !== 'string' || typeof obj.title !== 'string' || typeof obj.kind !== 'string') continue
+    out.push({ id: obj.id, title: obj.title, kind: obj.kind })
+  }
+  return out
+}
+
+export async function fetchCourseModuleDeletePreview(
+  courseCode: string,
+  moduleId: string,
+): Promise<CourseModuleDeletePreview> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/modules/${encodeURIComponent(moduleId)}/delete-preview`,
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  return { gradedItems: readGradedItems(raw) }
+}
+
+export async function deleteCourseModule(
+  courseCode: string,
+  moduleId: string,
+): Promise<CourseModuleDeleteResult> {
+  const res = await authorizedFetch(
+    `/api/v1/courses/${encodeURIComponent(courseCode)}/structure/modules/${encodeURIComponent(moduleId)}`,
+    { method: 'DELETE' },
+  )
+  const raw = await parseJson(res)
+  if (!res.ok) throw new Error(readApiErrorMessage(raw))
+  const action = (raw as { action?: unknown }).action
+  if (action === 'archived') {
+    return { action: 'archived', archivedItems: readArchivedItems(raw) }
+  }
+  return { action: 'deleted' }
+}
+
 export async function createCourseModule(
   courseCode: string,
   body: { title: string },

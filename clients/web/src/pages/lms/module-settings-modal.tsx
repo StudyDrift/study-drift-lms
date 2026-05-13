@@ -24,6 +24,7 @@ type ModuleSettingsModalProps = {
   initialVisibleFrom: string | null
   onClose: () => void
   onSave: (payload: { title: string; published: boolean; visibleFrom: string | null }) => void | Promise<void>
+  onDelete?: () => void
   saving?: boolean
   errorMessage?: string | null
 }
@@ -39,6 +40,7 @@ function ModuleSettingsModalInner({
   initialVisibleFrom,
   onClose,
   onSave,
+  onDelete,
   saving = false,
   errorMessage,
 }: ModuleSettingsModalProps) {
@@ -147,22 +149,34 @@ function ModuleSettingsModalInner({
               {errorMessage}
             </p>
           )}
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => onClose()}
-              disabled={saving}
-              className="rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving || !title.trim()}
-              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {onDelete ? (
+              <button
+                type="button"
+                onClick={() => onDelete()}
+                disabled={saving}
+                className="rounded-xl px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-rose-300 dark:hover:bg-rose-950/40"
+              >
+                Delete module
+              </button>
+            ) : null}
+            <div className="ml-auto flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => onClose()}
+                disabled={saving}
+                className="rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving || !title.trim()}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

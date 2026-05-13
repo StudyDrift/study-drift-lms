@@ -108,22 +108,32 @@ done
 "${CREATEDB}" -h localhost -p "${E2E_PG_PORT}" -U "${E2E_PG_USER}" "${E2E_PG_DB}"
 DATABASE_URL="postgres://${E2E_PG_USER}@localhost:${E2E_PG_PORT}/${E2E_PG_DB}?sslmode=disable"
 
+# Avoid colliding with a dev API already bound to 8080 (curl would pass while `go run` exited).
+E2E_API_PORT="${E2E_API_PORT:-}"
+if [[ -z "${E2E_API_PORT}" ]]; then
+  if command -v python3 &>/dev/null; then
+    E2E_API_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')"
+  else
+    E2E_API_PORT="8080"
+  fi
+fi
+
 # Start the Go API server.
-echo "==> Starting Go API server..."
+echo "==> Starting Go API server on port ${E2E_API_PORT}..."
 cd "${REPO_ROOT}/server"
 DATABASE_URL="${DATABASE_URL}" \
   JWT_SECRET="${E2E_JWT_SECRET}" \
   BOOTSTRAP_ADMIN_EMAIL="${E2E_ADMIN_EMAIL}" \
   RUN_MIGRATIONS="true" \
   COURSE_FILES_ROOT="${REPO_ROOT}/data/course-files" \
-  PORT="8080" \
+  PORT="${E2E_API_PORT}" \
   go run ./cmd/server &
 PIDS+=($!)
 cd "${REPO_ROOT}"
 
-echo "==> Waiting for API server at http://localhost:8080/health"
+echo "==> Waiting for API server at http://localhost:${E2E_API_PORT}/health"
 for i in $(seq 1 30); do
-  curl -sf http://localhost:8080/health &>/dev/null && break
+  curl -sf "http://localhost:${E2E_API_PORT}/health" &>/dev/null && break
   sleep 2
   if [[ "${i}" -eq 30 ]]; then
     echo "ERROR: API server did not become healthy. Check output above."
@@ -135,7 +145,7 @@ echo "    API server healthy."
 # Start the Vite web client.
 echo "==> Starting web client on port 5173..."
 cd "${REPO_ROOT}/clients/web"
-VITE_API_URL="http://localhost:8080" npm run dev -- --port 5173 --strictPort &
+VITE_API_URL="http://localhost:${E2E_API_PORT}" npm run dev -- --port 5173 --strictPort &
 PIDS+=($!)
 cd "${REPO_ROOT}"
 
@@ -156,5 +166,5 @@ cd "${REPO_ROOT}/e2e"
 npm ci --prefer-offline --quiet
 npx playwright install --with-deps chromium
 E2E_BASE_URL="http://localhost:5173" \
-  E2E_API_URL="http://localhost:8080" \
+  E2E_API_URL="http://localhost:${E2E_API_PORT}" \
   npx playwright test

@@ -18,6 +18,9 @@ import (
 var (
 	MeasurementLevels = []string{"diagnostic", "formative", "summative", "performance"}
 	IntensityLevels   = []string{"low", "medium", "high"}
+
+	// ErrLearningOutcomeNotInCourse is returned by InsertSubOutcome when outcome_id is missing or not in course_id.
+	ErrLearningOutcomeNotInCourse = errors.New("learning outcome not found for course")
 )
 
 type LearningOutcomeRow struct {
@@ -270,7 +273,7 @@ func InsertSubOutcome(ctx context.Context, pool *pgxpool.Pool, courseID, outcome
 		return nil, err
 	}
 	if !ok {
-		return nil, errors.New("outcome not found")
+		return nil, ErrLearningOutcomeNotInCourse
 	}
 	var nextSort int32
 	if err := pool.QueryRow(ctx, `SELECT COALESCE(MAX(sort_order), -1) + 1 FROM course.course_outcome_sub_outcomes WHERE outcome_id = $1`, outcomeID).Scan(&nextSort); err != nil {
