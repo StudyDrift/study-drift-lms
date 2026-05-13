@@ -317,7 +317,6 @@ WHERE t.id = $1
 		}
 		sets = append(sets, "title = $"+strconv.Itoa(argi))
 		args = append(args, t)
-		argi++
 	}
 	q := `UPDATE course.discussion_threads SET ` + strings.Join(sets, ", ") + ` WHERE id = $1`
 	ct, err := pool.Exec(ctx, q, args...)
