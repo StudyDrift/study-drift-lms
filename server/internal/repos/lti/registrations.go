@@ -113,3 +113,41 @@ RETURNING id, name, client_id, tool_issuer, tool_jwks_url, tool_oidc_auth_url, t
 	out.ID = id.String()
 	return &out, nil
 }
+
+// ExternalToolSummary is id and name for course module authoring (LTI link picker).
+type ExternalToolSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ListActiveExternalToolsForCourse returns active external tools ordered by name.
+func ListActiveExternalToolsForCourse(ctx context.Context, pool *pgxpool.Pool) ([]ExternalToolSummary, error) {
+	if pool == nil {
+		return nil, errors.New("db pool is nil")
+	}
+	rows, err := pool.Query(ctx, `
+SELECT id::text, name
+FROM settings.lti_external_tools
+WHERE active = true
+ORDER BY lower(name) ASC
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ExternalToolSummary
+	for rows.Next() {
+		var s ExternalToolSummary
+		if err := rows.Scan(&s.ID, &s.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []ExternalToolSummary{}
+	}
+	return out, nil
+}
