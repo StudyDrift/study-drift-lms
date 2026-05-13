@@ -24,7 +24,8 @@ SELECT
     c.srs_enabled,
     c.diagnostic_assessments_enabled,
     c.hint_scaffolding_enabled,
-    c.misconception_detection_enabled
+    c.misconception_detection_enabled,
+    c.discussions_enabled
 FROM course.courses c
 LEFT JOIN course.user_course_catalog_order o ON o.user_id = $1 AND o.course_id = c.id
 WHERE c.id IN (SELECT e.course_id FROM course.course_enrollments e WHERE e.user_id = $1 AND e.active)
@@ -52,6 +53,7 @@ ORDER BY o.sort_order NULLS LAST, c.title ASC
 			&it.DiagnosticAssessmentsEnabled,
 			&it.HintScaffoldingEnabled,
 			&it.MisconceptionDetectionEnabled,
+			&it.DiscussionsEnabled,
 		); err != nil {
 			return nil, err
 		}

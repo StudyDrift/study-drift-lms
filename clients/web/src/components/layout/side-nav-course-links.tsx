@@ -11,6 +11,7 @@ import {
   Lightbulb,
   ListChecks,
   MessageSquare,
+  MessagesSquare,
   NotebookPen,
   Settings,
   Users,
@@ -42,6 +43,7 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
     calendarEnabled,
     questionBankEnabled,
     standardsAlignmentEnabled,
+    discussionsEnabled,
     sbgEnabled,
   } = useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
@@ -90,6 +92,15 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
         >
           <MessageSquare className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
           Feed
+        </NavLink>
+      )}
+      {discussionsEnabled && (
+        <NavLink
+          to={`${base}/discussions`}
+          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        >
+          <MessagesSquare className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+          Discussions
         </NavLink>
       )}
       <NavLink

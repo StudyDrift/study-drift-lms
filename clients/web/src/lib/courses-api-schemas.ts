@@ -58,6 +58,7 @@ export const courseSchema = z
     hintScaffoldingEnabled: z.boolean().optional(),
     misconceptionDetectionEnabled: z.boolean().optional(),
     sectionsEnabled: z.boolean().optional(),
+    discussionsEnabled: z.boolean().optional(),
     courseType: z.string().optional(),
     createdAt: z.string(),
     updatedAt: z.string(),

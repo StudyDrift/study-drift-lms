@@ -8,6 +8,8 @@ export type SearchCourseItem = {
   notebookEnabled?: boolean
   feedEnabled?: boolean
   calendarEnabled?: boolean
+  /** Plan 6.1 — discussion forums in the course menu. */
+  discussionsEnabled?: boolean
   questionBankEnabled?: boolean
   standardsAlignmentEnabled?: boolean
 }
