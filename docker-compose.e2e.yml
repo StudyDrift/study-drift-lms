@@ -43,7 +43,8 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      # Server image installs curl (not wget); wget would keep the container unhealthy and break `compose up --wait`.
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/health -o /dev/null || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -60,7 +61,7 @@ services:
       server:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:80/ -o /dev/null || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
