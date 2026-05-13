@@ -8,7 +8,7 @@
  *   [x] Redirect to /login when visiting protected route unauthenticated
  *   [x] Log out → session cleared, redirected to /login
  */
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { apiSignup } from '../fixtures/api.js'
 
 const PASSWORD = 'E2eTestPass1!'
@@ -17,27 +17,42 @@ function uniqueEmail() {
   return `e2e-auth-${Date.now()}-${Math.random().toString(36).slice(2)}@test.invalid`
 }
 
-/** Inject a JWT into localStorage so the app considers the browser session authenticated. */
-async function injectToken(page: import('@playwright/test').Page, token: string) {
+/** Inject a JWT into localStorage so the app considers the browser session authenticated.
+ *  Also marks all one-time onboarding modals as dismissed so they don't overlay
+ *  the UI and block pointer events during tests. */
+async function injectToken(page: Page, token: string) {
   await page.goto('/')
-  await page.evaluate((t) => localStorage.setItem('studydrift_access_token', t), token)
+  await page.evaluate((t) => {
+    localStorage.setItem('studydrift_access_token', t)
+    // Suppress the search-shortcut tip modal (post-login, one-time).
+    localStorage.setItem('lextures-search-shortcut-tip-dismissed', '1')
+    // Suppress the role onboarding tour (Step 1-of-4 overlay) for all role buckets.
+    localStorage.setItem('lextures.onboarding.v1', JSON.stringify({ student: true, teacher: true, admin: true }))
+  }, token)
   await page.goto('/')
 }
+
+/**
+ * The app renders 5 <nav> elements (main sidebar, course menu, course settings,
+ * settings, breadcrumb).  Playwright strict mode rejects an ambiguous locator,
+ * so we always target the main sidebar nav by its aria-label.
+ */
+const mainNav = (page: Page) => page.getByRole('navigation', { name: 'Main' })
 
 test.describe('Sign up', () => {
   test('creates account and redirects to dashboard', async ({ page }) => {
     const email = uniqueEmail()
 
     await page.goto('/signup')
-
+    // Signup page has one email input — no ambiguity here.
     await page.getByLabel('Email').fill(email)
     await page.getByLabel('Password').fill(PASSWORD)
     await page.getByRole('button', { name: /create account/i }).click()
 
     // After signup the user lands on the dashboard (root path).
     await expect(page).toHaveURL('/')
-    // The app shell nav is present — confirms the user is authenticated.
-    await expect(page.getByRole('navigation')).toBeVisible()
+    // The main sidebar nav is present — confirms the user is authenticated.
+    await expect(mainNav(page)).toBeVisible()
   })
 })
 
@@ -48,12 +63,14 @@ test.describe('Log in', () => {
     await apiSignup({ email, password: PASSWORD })
 
     await page.goto('/login')
-    await page.getByLabel('Email').fill(email)
+    // The login page has two email inputs (form + magic-link form); { exact: true }
+    // matches only the label text "Email" and not "Email for magic link".
+    await page.getByLabel('Email', { exact: true }).fill(email)
     await page.getByLabel('Password').fill(PASSWORD)
     await page.getByRole('button', { name: /sign in/i }).click()
 
     await expect(page).toHaveURL('/')
-    await expect(page.getByRole('navigation')).toBeVisible()
+    await expect(mainNav(page)).toBeVisible()
   })
 
   test('wrong password shows error message', async ({ page }) => {
@@ -61,7 +78,7 @@ test.describe('Log in', () => {
     await apiSignup({ email, password: PASSWORD })
 
     await page.goto('/login')
-    await page.getByLabel('Email').fill(email)
+    await page.getByLabel('Email', { exact: true }).fill(email)
     await page.getByLabel('Password').fill('WrongPassword99!')
     await page.getByRole('button', { name: /sign in/i }).click()
 
@@ -89,7 +106,7 @@ test.describe('Log out', () => {
 
     // Authenticate by injecting the JWT directly.
     await injectToken(page, access_token)
-    await expect(page.getByRole('navigation')).toBeVisible()
+    await expect(mainNav(page)).toBeVisible()
 
     // Open the user menu (top-bar button with aria-label="User menu").
     await page.getByRole('button', { name: 'User menu' }).click()

@@ -89,7 +89,8 @@ PGDATA_DIR=$(mktemp -d /tmp/lextures-e2e-pgdata.XXXXXX)
 echo "==> Initialising ephemeral Postgres in ${PGDATA_DIR}"
 "${INITDB}" -D "${PGDATA_DIR}" \
   --username="${E2E_PG_USER}" \
-  --no-locale --encoding=UTF8 --auth=trust -q
+  --no-locale --encoding=UTF8 --auth=trust \
+  > /dev/null
 
 echo "==> Starting Postgres on port ${E2E_PG_PORT}"
 "${PG_CTL}" -D "${PGDATA_DIR}" \
