@@ -10,34 +10,13 @@
  */
 import { test, expect, type Page } from '@playwright/test'
 import { apiSignup } from '../fixtures/api.js'
+import { injectToken, mainNav } from '../fixtures/test.js'
 
 const PASSWORD = 'E2eTestPass1!'
 
 function uniqueEmail() {
   return `e2e-auth-${Date.now()}-${Math.random().toString(36).slice(2)}@test.invalid`
 }
-
-/** Inject a JWT into localStorage so the app considers the browser session authenticated.
- *  Also marks all one-time onboarding modals as dismissed so they don't overlay
- *  the UI and block pointer events during tests. */
-async function injectToken(page: Page, token: string) {
-  await page.goto('/')
-  await page.evaluate((t) => {
-    localStorage.setItem('studydrift_access_token', t)
-    // Suppress the search-shortcut tip modal (post-login, one-time).
-    localStorage.setItem('lextures-search-shortcut-tip-dismissed', '1')
-    // Suppress the role onboarding tour (Step 1-of-4 overlay) for all role buckets.
-    localStorage.setItem('lextures.onboarding.v1', JSON.stringify({ student: true, teacher: true, admin: true }))
-  }, token)
-  await page.goto('/')
-}
-
-/**
- * The app renders 5 <nav> elements (main sidebar, course menu, course settings,
- * settings, breadcrumb).  Playwright strict mode rejects an ambiguous locator,
- * so we always target the main sidebar nav by its aria-label.
- */
-const mainNav = (page: Page) => page.getByRole('navigation', { name: 'Main' })
 
 test.describe('Sign up', () => {
   test('creates account and redirects to dashboard', async ({ page }) => {
