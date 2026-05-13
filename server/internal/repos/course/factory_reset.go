@@ -41,6 +41,9 @@ func FactoryResetCourse(ctx context.Context, pool *pgxpool.Pool, courseCode stri
 	if err = execResetStep(ctx, tx, courseCode, "delete course_learning_outcomes", `DELETE FROM course.course_learning_outcomes WHERE course_id = $1`, *courseID); err != nil {
 		return nil, err
 	}
+	if err = execResetStep(ctx, tx, courseCode, "delete discussion forums", `DELETE FROM course.discussion_forums WHERE course_id = $1`, *courseID); err != nil {
+		return nil, err
+	}
 	if err = execResetStep(ctx, tx, courseCode, "delete structure children", `DELETE FROM course.course_structure_items WHERE course_id = $1 AND parent_id IS NOT NULL`, *courseID); err != nil {
 		return nil, err
 	}
@@ -110,6 +113,7 @@ func FactoryResetCourse(ctx context.Context, pool *pgxpool.Pool, courseCode stri
 			diagnostic_assessments_enabled = false,
 			hint_scaffolding_enabled = false,
 			misconception_detection_enabled = false,
+			discussions_enabled = false,
 			sbg_enabled = false,
 			sbg_proficiency_scale_json = NULL,
 			sbg_aggregation_rule = 'most_recent',

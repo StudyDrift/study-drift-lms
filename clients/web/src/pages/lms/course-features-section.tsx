@@ -67,6 +67,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const hintScaffoldingEnabled = course.hintScaffoldingEnabled === true
   const misconceptionDetectionEnabled = course.misconceptionDetectionEnabled === true
   const sectionsEnabled = course.sectionsEnabled === true
+  const discussionsEnabled = course.discussionsEnabled === true
 
   const persist = useCallback(
     async (patch: {
@@ -82,6 +83,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       hintScaffoldingEnabled?: boolean
       misconceptionDetectionEnabled?: boolean
       sectionsEnabled?: boolean
+      discussionsEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -102,6 +104,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           misconceptionDetectionEnabled:
             patch.misconceptionDetectionEnabled ?? misconceptionDetectionEnabled,
           sectionsEnabled: patch.sectionsEnabled ?? sectionsEnabled,
+          discussionsEnabled: patch.discussionsEnabled ?? discussionsEnabled,
         }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
@@ -123,6 +126,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       hintScaffoldingEnabled,
       misconceptionDetectionEnabled,
       sectionsEnabled,
+      discussionsEnabled,
       calendarEnabled,
       courseCode,
       feedEnabled,
@@ -157,6 +161,13 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           enabled={feedEnabled}
           disabled={saving}
           onToggle={() => void persist({ feedEnabled: !feedEnabled })}
+        />
+        <FeatureToggleRow
+          label="Discussion forums"
+          description="Threaded discussion boards with replies, upvotes, graded threads, and instructor moderation (plan 6.1)."
+          enabled={discussionsEnabled}
+          disabled={saving}
+          onToggle={() => void persist({ discussionsEnabled: !discussionsEnabled })}
         />
         <FeatureToggleRow
           label="Calendar"

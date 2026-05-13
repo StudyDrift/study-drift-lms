@@ -22,6 +22,7 @@ type patchCourseFeaturesBody struct {
 	HintScaffoldingEnabled        *bool `json:"hintScaffoldingEnabled"`
 	MisconceptionDetectionEnabled *bool `json:"misconceptionDetectionEnabled"`
 	SectionsEnabled               *bool `json:"sectionsEnabled"`
+	DiscussionsEnabled            bool  `json:"discussionsEnabled"`
 }
 
 // handlePatchCourseFeatures is PATCH /api/v1/courses/{course_code}/features.
@@ -92,6 +93,7 @@ func (d Deps) handlePatchCourseFeatures() http.HandlerFunc {
 			r.Context(), d.Pool, courseCode,
 			req.NotebookEnabled, req.FeedEnabled, req.CalendarEnabled, req.QuestionBankEnabled,
 			req.LockdownModeEnabled, standards, adaptivePaths, srs, diagnostic, hint, misconception,
+			req.DiscussionsEnabled,
 		)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to patch course features.")

@@ -7,6 +7,7 @@ import Calendar from './pages/lms/calendar'
 import CourseCalendarPage from './pages/lms/course-calendar-page'
 import CourseEnrollments from './pages/lms/course-enrollments'
 import CourseFeedPage from './pages/lms/course-feed-page'
+import CourseDiscussionsPage from './pages/lms/course-discussions-page'
 import CourseGradebook from './pages/lms/course-gradebook'
 import CourseMyGrades from './pages/lms/course-my-grades'
 import AdminAccommodationsPage from './pages/lms/admin-accommodations-page'
@@ -103,6 +104,7 @@ export default function App() {
           <Route path="/courses/:courseCode" element={<CourseLayout />}>
             <Route path="settings/*" element={<CourseSettings />} />
             <Route path="feed" element={<CourseFeedPage />} />
+            <Route path="discussions" element={<CourseDiscussionsPage />} />
             <Route path="syllabus" element={<CourseSyllabus />} />
             <Route path="modules/content/:itemId" element={<CourseModuleContentPage />} />
             <Route path="modules/assignment/:itemId" element={<CourseModuleAssignmentPage />} />

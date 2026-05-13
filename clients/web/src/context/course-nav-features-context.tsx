@@ -17,6 +17,7 @@ export type CourseNavFeatures = {
   calendarEnabled: boolean
   questionBankEnabled: boolean
   standardsAlignmentEnabled: boolean
+  discussionsEnabled: boolean
   /** Plan 3.7 — standards-based grading enabled for the course. */
   sbgEnabled: boolean
   /** True while loading or re-fetching flags for the active course. */
@@ -31,6 +32,7 @@ const defaultFeatures: CourseNavFeatures = {
   calendarEnabled: true,
   questionBankEnabled: false,
   standardsAlignmentEnabled: false,
+  discussionsEnabled: false,
   sbgEnabled: false,
   loading: false,
   refresh: async () => {},
@@ -49,6 +51,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
   const [calendarEnabled, setCalendarEnabled] = useState(true)
   const [questionBankEnabled, setQuestionBankEnabled] = useState(false)
   const [standardsAlignmentEnabled, setStandardsAlignmentEnabled] = useState(false)
+  const [discussionsEnabled, setDiscussionsEnabled] = useState(false)
   const [sbgEnabled, setSbgEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -59,6 +62,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setCalendarEnabled(true)
       setQuestionBankEnabled(false)
       setStandardsAlignmentEnabled(false)
+      setDiscussionsEnabled(false)
       setSbgEnabled(false)
       return
     }
@@ -70,6 +74,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setCalendarEnabled(c.calendarEnabled !== false)
       setQuestionBankEnabled(c.questionBankEnabled === true)
       setStandardsAlignmentEnabled(c.standardsAlignmentEnabled === true)
+      setDiscussionsEnabled(c.discussionsEnabled === true)
       setSbgEnabled(c.sbgEnabled === true)
     } catch {
       setNotebookEnabled(true)
@@ -77,6 +82,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setCalendarEnabled(true)
       setQuestionBankEnabled(false)
       setStandardsAlignmentEnabled(false)
+      setDiscussionsEnabled(false)
       setSbgEnabled(false)
     } finally {
       setLoading(false)
@@ -94,6 +100,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       calendarEnabled,
       questionBankEnabled,
       standardsAlignmentEnabled,
+      discussionsEnabled,
       sbgEnabled,
       loading,
       refresh,
@@ -104,6 +111,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       calendarEnabled,
       questionBankEnabled,
       standardsAlignmentEnabled,
+      discussionsEnabled,
       sbgEnabled,
       loading,
       refresh,

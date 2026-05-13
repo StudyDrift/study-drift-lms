@@ -5,19 +5,20 @@ import "github.com/google/uuid"
 
 // CourseItem is a catalog row in the search index.
 type CourseItem struct {
-	CourseCode                      string `json:"courseCode"`
-	Title                           string `json:"title"`
-	NotebookEnabled                 bool   `json:"notebookEnabled"`
-	FeedEnabled                     bool   `json:"feedEnabled"`
-	CalendarEnabled                 bool   `json:"calendarEnabled"`
-	QuestionBankEnabled             bool   `json:"questionBankEnabled"`
-	LockdownModeEnabled             bool   `json:"lockdownModeEnabled"`
-	StandardsAlignmentEnabled       bool   `json:"standardsAlignmentEnabled"`
-	AdaptivePathsEnabled            bool   `json:"adaptivePathsEnabled"`
-	SRSEnabled                      bool   `json:"srsEnabled"`
-	DiagnosticAssessmentsEnabled    bool   `json:"diagnosticAssessmentsEnabled"`
-	HintScaffoldingEnabled          bool   `json:"hintScaffoldingEnabled"`
-	MisconceptionDetectionEnabled   bool   `json:"misconceptionDetectionEnabled"`
+	CourseCode                    string `json:"courseCode"`
+	Title                         string `json:"title"`
+	NotebookEnabled               bool   `json:"notebookEnabled"`
+	FeedEnabled                   bool   `json:"feedEnabled"`
+	CalendarEnabled               bool   `json:"calendarEnabled"`
+	QuestionBankEnabled           bool   `json:"questionBankEnabled"`
+	LockdownModeEnabled           bool   `json:"lockdownModeEnabled"`
+	StandardsAlignmentEnabled     bool   `json:"standardsAlignmentEnabled"`
+	AdaptivePathsEnabled          bool   `json:"adaptivePathsEnabled"`
+	SRSEnabled                    bool   `json:"srsEnabled"`
+	DiagnosticAssessmentsEnabled  bool   `json:"diagnosticAssessmentsEnabled"`
+	HintScaffoldingEnabled        bool   `json:"hintScaffoldingEnabled"`
+	MisconceptionDetectionEnabled bool   `json:"misconceptionDetectionEnabled"`
+	DiscussionsEnabled            bool   `json:"discussionsEnabled"`
 }
 
 // PersonItem is a roster person visible to the caller (when they have enrollments:read for that course).

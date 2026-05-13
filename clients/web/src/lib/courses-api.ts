@@ -129,6 +129,8 @@ export type CoursePublic = {
   misconceptionDetectionEnabled?: boolean
   /** Plan 5.4 — multiple teaching sections with scoped rosters and gradebook. */
   sectionsEnabled?: boolean
+  /** Plan 6.1 — threaded discussion forums (default off when omitted). */
+  discussionsEnabled?: boolean
   /** `traditional` or `competency_based` (server default when omitted: traditional). */
   courseType?: string
   createdAt: string
@@ -714,6 +716,7 @@ export async function patchCourseFeatures(
     hintScaffoldingEnabled?: boolean
     misconceptionDetectionEnabled?: boolean
     sectionsEnabled?: boolean
+    discussionsEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -733,6 +736,7 @@ export async function patchCourseFeatures(
         diagnosticAssessmentsEnabled: body.diagnosticAssessmentsEnabled,
         hintScaffoldingEnabled: body.hintScaffoldingEnabled,
         misconceptionDetectionEnabled: body.misconceptionDetectionEnabled,
+        discussionsEnabled: body.discussionsEnabled ?? false,
         ...(body.sectionsEnabled !== undefined ? { sectionsEnabled: body.sectionsEnabled } : {}),
       }),
     },
