@@ -71,10 +71,6 @@ func (d Deps) handlePublicBrandingResolve() http.HandlerFunc {
 				SecondaryColor: orgbranding.DefaultSecondaryHex,
 			}
 		}
-		slugLog := res.OrgSlug
-		if slugLog == "" {
-			slugLog = "(default)"
-		}
 
 		warnPrimary := false
 		var ratioPrimary *float64
