@@ -30,6 +30,8 @@ type putCourseBody struct {
 	RelativeEndAfter    *string    `json:"relativeEndAfter"`
 	RelativeHiddenAfter *string    `json:"relativeHiddenAfter"`
 	TermID              *string    `json:"termId"`
+	CourseHomeLanding       *string `json:"courseHomeLanding"`
+	CourseHomeContentItemID *string `json:"courseHomeContentItemId"`
 }
 
 // handlePutCourse is PUT /api/v1/courses/{course_code} (parity: server `update_handler`).
@@ -138,11 +140,71 @@ func (d Deps) handlePutCourse() http.HandlerFunc {
 			startsAt, endsAt, visibleFrom, hiddenAt = body.StartsAt, body.EndsAt, body.VisibleFrom, body.HiddenAt
 		}
 		desc := strings.TrimSpace(body.Description)
+		homeLanding := strings.TrimSpace(existing.CourseHomeLanding)
+		if homeLanding == "" {
+			homeLanding = "data"
+		}
+		if body.CourseHomeLanding != nil {
+			v := strings.TrimSpace(*body.CourseHomeLanding)
+			if v != "" {
+				homeLanding = v
+			}
+		}
+		if homeLanding != "data" && homeLanding != "calendar" && homeLanding != "content_page" {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid courseHomeLanding.")
+			return
+		}
+
+		var homeContentItemID *uuid.UUID
+		if homeLanding == "content_page" {
+			if body.CourseHomeContentItemID != nil {
+				s := strings.TrimSpace(*body.CourseHomeContentItemID)
+				if s != "" {
+					id, err := uuid.Parse(s)
+					if err != nil {
+						apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid courseHomeContentItemId.")
+						return
+					}
+					homeContentItemID = &id
+				}
+			}
+			if homeContentItemID == nil && existing.CourseHomeContentItemID != nil {
+				s := strings.TrimSpace(*existing.CourseHomeContentItemID)
+				if s != "" {
+					id, err := uuid.Parse(s)
+					if err == nil {
+						homeContentItemID = &id
+					}
+				}
+			}
+			if homeContentItemID == nil {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Pick a content page when courseHomeLanding is content_page.")
+				return
+			}
+			courseUUID, err := uuid.Parse(existing.ID)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Invalid course id.")
+				return
+			}
+			ok, err := course.ValidHomeContentPage(r.Context(), d.Pool, courseUUID, *homeContentItemID)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify content page.")
+				return
+			}
+			if !ok {
+				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "courseHomeContentItemId must be a content page in this course.")
+				return
+			}
+		} else {
+			homeContentItemID = nil
+		}
+
 		out, err := course.UpdateCourse(
 			r.Context(), d.Pool, courseCode,
 			title, desc, body.Published,
 			startsAt, endsAt, visibleFrom, hiddenAt,
 			outMode, relEndAfter, relHiddenAfter, relAnchor,
+			homeLanding, homeContentItemID,
 		)
 		if err != nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to update course.")

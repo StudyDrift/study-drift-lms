@@ -6,8 +6,13 @@ import { usePermissions } from '../../context/use-permissions'
 import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
-import { courseItemCreatePermission, patchCourseMarkdownTheme } from '../../lib/courses-api'
-import type { CoursePublic } from '../../lib/courses-api'
+import {
+  courseItemCreatePermission,
+  fetchCourseStructure,
+  patchCourseMarkdownTheme,
+  type CoursePublic,
+  type CourseStructureItem,
+} from '../../lib/courses-api'
 import {
   MARKDOWN_THEME_PRESET_META,
   markdownThemeCustomSeed,
@@ -70,6 +75,13 @@ Description: ${courseDescription}
 `
 }
 
+type CourseHomeLanding = 'data' | 'calendar' | 'content_page'
+
+function normalizeCourseHomeLanding(v: string | undefined): CourseHomeLanding {
+  if (v === 'calendar' || v === 'content_page') return v
+  return 'data'
+}
+
 type SavePayload = {
   title: string
   description: string
@@ -81,6 +93,8 @@ type SavePayload = {
   scheduleMode: 'fixed' | 'relative'
   relativeEndAfter: string | null
   relativeHiddenAfter: string | null
+  courseHomeLanding: CourseHomeLanding
+  courseHomeContentItemId: string | null
 }
 
 type SettingsSection =
@@ -153,6 +167,10 @@ export default function CourseSettings() {
   const [relHiddenAmount, setRelHiddenAmount] = useState('')
   const [relHiddenUnit, setRelHiddenUnit] = useState<RelativeDurationUnit>('M')
 
+  const [courseHomeLanding, setCourseHomeLanding] = useState<CourseHomeLanding>('data')
+  const [courseHomeContentItemId, setCourseHomeContentItemId] = useState('')
+  const [structureForHomePicker, setStructureForHomePicker] = useState<CourseStructureItem[]>([])
+
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
 
@@ -206,6 +224,14 @@ export default function CourseSettings() {
       setDescription(c.description)
       setPublished(c.published)
       applyScheduleStateFromCourse(c)
+      setCourseHomeLanding(normalizeCourseHomeLanding(c.courseHomeLanding))
+      setCourseHomeContentItemId((c.courseHomeContentItemId ?? '').trim())
+      try {
+        const items = await fetchCourseStructure(courseCode)
+        setStructureForHomePicker(items)
+      } catch {
+        setStructureForHomePicker([])
+      }
     } catch {
       setLoadError('Could not load this course.')
     } finally {
@@ -275,6 +301,11 @@ export default function CourseSettings() {
         mode === 'relative' ? partsToIsoDuration(relEndAmount, relEndUnit) : null,
       relativeHiddenAfter:
         mode === 'relative' ? partsToIsoDuration(relHiddenAmount, relHiddenUnit) : null,
+      courseHomeLanding,
+      courseHomeContentItemId:
+        courseHomeLanding === 'content_page' && courseHomeContentItemId.trim()
+          ? courseHomeContentItemId.trim()
+          : null,
     }
   }
 
@@ -297,6 +328,8 @@ export default function CourseSettings() {
           scheduleMode: payload.scheduleMode,
           relativeEndAfter: payload.relativeEndAfter,
           relativeHiddenAfter: payload.relativeHiddenAfter,
+          courseHomeLanding: payload.courseHomeLanding,
+          courseHomeContentItemId: payload.courseHomeContentItemId,
         }),
       })
       const raw: unknown = await res.json().catch(() => ({}))
@@ -312,6 +345,8 @@ export default function CourseSettings() {
       setCourse(updated)
       setPublished(updated.published)
       applyScheduleStateFromCourse(updated)
+      setCourseHomeLanding(normalizeCourseHomeLanding(updated.courseHomeLanding))
+      setCourseHomeContentItemId((updated.courseHomeContentItemId ?? '').trim())
       setSaveStatus('saved')
       setSaveMessage('Saved.')
       toastSaveOk('Course settings saved')
@@ -329,6 +364,11 @@ export default function CourseSettings() {
     if (!payload.title) {
       setSaveStatus('error')
       setSaveMessage('Title is required.')
+      return
+    }
+    if (payload.courseHomeLanding === 'content_page' && !payload.courseHomeContentItemId) {
+      setSaveStatus('error')
+      setSaveMessage('Choose a content page for the course home, or switch to another layout.')
       return
     }
     await persistCourse(payload)
@@ -568,7 +608,7 @@ export default function CourseSettings() {
 
   const pageDescription =
     section === 'general'
-      ? 'Basics, schedule, visibility, hero image, and reading theme for this course.'
+      ? 'Basics, course home, schedule, visibility, hero image, and reading theme for this course.'
       : section === 'grading'
         ? 'Grading scale, weighted assignment groups, and how items map to each group.'
         : section === 'outcomes'
@@ -669,6 +709,99 @@ export default function CourseSettings() {
                       {published ? 'Published' : 'Draft'}
                     </span>
                   </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-700 dark:bg-neutral-900">
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Course home</h2>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+                    What learners and staff see first when they open this course (the course dashboard).
+                  </p>
+                  <fieldset className="mt-4 space-y-3">
+                    <legend className="sr-only">Course home layout</legend>
+                    <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-100 p-3 hover:border-indigo-200 dark:border-neutral-800 dark:hover:border-indigo-800">
+                      <input
+                        type="radio"
+                        name="courseHomeLanding"
+                        checked={courseHomeLanding === 'data'}
+                        onChange={() => {
+                          setCourseHomeLanding('data')
+                          setCourseHomeContentItemId('')
+                        }}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium text-slate-900 dark:text-neutral-50">
+                          Data dashboard
+                        </span>
+                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-400">
+                          Deadlines, announcements, grades, and course details at a glance.
+                        </span>
+                      </span>
+                    </label>
+                    <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-100 p-3 hover:border-indigo-200 dark:border-neutral-800 dark:hover:border-indigo-800">
+                      <input
+                        type="radio"
+                        name="courseHomeLanding"
+                        checked={courseHomeLanding === 'calendar'}
+                        onChange={() => {
+                          setCourseHomeLanding('calendar')
+                          setCourseHomeContentItemId('')
+                        }}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium text-slate-900 dark:text-neutral-50">
+                          Course calendar
+                        </span>
+                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-400">
+                          Due dates and the month / week views as the landing experience.
+                        </span>
+                      </span>
+                    </label>
+                    <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-100 p-3 hover:border-indigo-200 dark:border-neutral-800 dark:hover:border-indigo-800">
+                      <input
+                        type="radio"
+                        name="courseHomeLanding"
+                        checked={courseHomeLanding === 'content_page'}
+                        onChange={() => setCourseHomeLanding('content_page')}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium text-slate-900 dark:text-neutral-50">
+                          A specific content page
+                        </span>
+                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-400">
+                          Open the course directly on a page from the module outline (for example, a welcome page).
+                        </span>
+                      </span>
+                    </label>
+                  </fieldset>
+                  {courseHomeLanding === 'content_page' ? (
+                    <label className="mt-4 block">
+                      <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-neutral-300">
+                        Content page
+                      </span>
+                      <select
+                        value={courseHomeContentItemId}
+                        onChange={(e) => setCourseHomeContentItemId(e.target.value)}
+                        className="w-full max-w-lg rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-50"
+                      >
+                        <option value="">Select a page…</option>
+                        {structureForHomePicker
+                          .filter((i) => i.kind === 'content_page')
+                          .map((i) => (
+                            <option key={i.id} value={i.id}>
+                              {i.title}
+                            </option>
+                          ))}
+                      </select>
+                      {structureForHomePicker.filter((i) => i.kind === 'content_page').length === 0 ? (
+                        <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">
+                          Add a content page in Modules first, then pick it here.
+                        </p>
+                      ) : null}
+                    </label>
+                  ) : null}
                 </section>
 
                 {saveMessage && (

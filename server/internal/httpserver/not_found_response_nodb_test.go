@@ -28,7 +28,7 @@ func TestNotFound_UnknownPath_JSONAndCode(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&b); err != nil {
 		t.Fatalf("json: %v", err)
 	}
-	if b.Error.Code != apierr.CodeNotImplementedInGo {
+	if b.Error.Code != apierr.CodeNotFound {
 		t.Fatalf("code: %q", b.Error.Code)
 	}
 	if !strings.Contains(b.Error.Message, "No HTTP route") {

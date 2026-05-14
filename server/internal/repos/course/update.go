@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,6 +16,8 @@ func UpdateCourse(
 	scheduleMode string,
 	relativeEndAfter, relativeHiddenAfter *string,
 	relativeScheduleAnchorAt *time.Time,
+	courseHomeLanding string,
+	courseHomeContentItemID *uuid.UUID,
 ) (*CoursePublic, error) {
 	const q = `
 		UPDATE course.courses
@@ -30,13 +33,16 @@ func UpdateCourse(
 			relative_end_after = $9,
 			relative_hidden_after = $10,
 			relative_schedule_anchor_at = $11,
+			course_home_landing = $12,
+			course_home_content_item_id = $13,
 			updated_at = NOW()
-		WHERE course_code = $12
+		WHERE course_code = $14
 	`
 	tag, err := pool.Exec(ctx, q,
 		title, description, published,
 		startsAt, endsAt, visibleFrom, hiddenAt,
 		scheduleMode, relativeEndAfter, relativeHiddenAfter, relativeScheduleAnchorAt,
+		courseHomeLanding, courseHomeContentItemID,
 		courseCode,
 	)
 	if err != nil {

@@ -323,9 +323,9 @@ function ChildRowContent({
   return (
     <>
       {child.kind === 'content_page' ? (
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <span
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-600 dark:border-indigo-500/35 dark:bg-indigo-950/60 dark:text-indigo-300"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-600 dark:border-indigo-500/35 dark:bg-indigo-950/60 dark:text-indigo-300"
             aria-hidden
           >
             <FileText className="h-4 w-4" strokeWidth={2} />
@@ -345,9 +345,9 @@ function ChildRowContent({
           </div>
         </div>
       ) : child.kind === 'assignment' ? (
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <span
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/90 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-200"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/90 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-200"
             aria-hidden
           >
             <ClipboardList className="h-4 w-4" strokeWidth={2} />
@@ -367,12 +367,12 @@ function ChildRowContent({
           </div>
         </div>
       ) : child.kind === 'quiz' ? (
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <span
             className={
               child.isAdaptive
-                ? 'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/90 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200'
-                : 'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 dark:border-emerald-500/35 dark:bg-emerald-950/50 dark:text-emerald-200'
+                ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/90 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200'
+                : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 dark:border-emerald-500/35 dark:bg-emerald-950/50 dark:text-emerald-200'
             }
             aria-hidden
           >
@@ -405,9 +405,9 @@ function ChildRowContent({
           </div>
         </div>
       ) : child.kind === 'external_link' ? (
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <span
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sky-200/90 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-950/55 dark:text-sky-200"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sky-200/90 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-950/55 dark:text-sky-200"
             aria-hidden
           >
             <ExternalLink className="h-4 w-4" strokeWidth={2} />
@@ -438,9 +438,9 @@ function ChildRowContent({
           </div>
         </div>
       ) : child.kind === 'lti_link' ? (
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <span
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/90 bg-violet-50 text-violet-800 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/90 bg-violet-50 text-violet-800 dark:border-violet-500/40 dark:bg-violet-950/55 dark:text-violet-200"
             aria-hidden
           >
             <Plug className="h-4 w-4" strokeWidth={2} />
@@ -619,12 +619,12 @@ function SortableChildRow({
 
   return (
     <li ref={setNodeRef} style={style} className="group py-3 first:pt-0">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-2">
-        <div className="flex min-w-0 flex-1 items-start gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           {(!disabled || dragHandlesVisible || isDragging) && (
             <button
               type="button"
-              className={`mt-0.5 flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300 ${
+              className={`flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent p-0 text-slate-400 shadow-none transition hover:text-slate-600 active:cursor-grabbing sm:h-9 sm:w-9 dark:text-neutral-500 dark:hover:text-neutral-300 ${
                 gripAlwaysOn
                   ? 'opacity-100'
                   : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto'

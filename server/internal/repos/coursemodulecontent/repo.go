@@ -48,6 +48,51 @@ WHERE c.id = $1 AND c.course_id = $2 AND c.kind = 'content_page'
 	return &r, nil
 }
 
+// PatchContentPage updates markdown and optionally due_at on the structure row, in one transaction.
+func PatchContentPage(ctx context.Context, pool *pgxpool.Pool, courseID, itemID uuid.UUID, markdown string, touchDueAt bool, dueAt *time.Time) (*CourseItemContentRow, error) {
+	if pool == nil {
+		return nil, errors.New("db pool is nil")
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	tag, err := tx.Exec(ctx, `
+UPDATE course.module_content_pages m
+SET markdown = $3, updated_at = NOW()
+FROM course.course_structure_items c
+WHERE m.structure_item_id = c.id
+  AND c.id = $1
+  AND c.course_id = $2
+  AND c.kind = 'content_page'
+`, itemID, courseID, markdown)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, pgx.ErrNoRows
+	}
+	if touchDueAt {
+		tag2, err := tx.Exec(ctx, `
+UPDATE course.course_structure_items
+SET due_at = $2, updated_at = NOW()
+WHERE id = $1 AND course_id = $3 AND kind = 'content_page' AND parent_id IS NOT NULL
+`, itemID, dueAt, courseID)
+		if err != nil {
+			return nil, err
+		}
+		if tag2.RowsAffected() == 0 {
+			return nil, pgx.ErrNoRows
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return GetForCourseItem(ctx, pool, courseID, itemID)
+}
+
 func UpdateMarkdown(ctx context.Context, pool *pgxpool.Pool, courseID, itemID uuid.UUID, markdown string) (*time.Time, error) {
 	if pool == nil {
 		return nil, errors.New("db pool is nil")

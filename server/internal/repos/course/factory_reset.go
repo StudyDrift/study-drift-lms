@@ -117,6 +117,8 @@ func FactoryResetCourse(ctx context.Context, pool *pgxpool.Pool, courseCode stri
 			sbg_enabled = false,
 			sbg_proficiency_scale_json = NULL,
 			sbg_aggregation_rule = 'most_recent',
+			course_home_landing = 'data',
+			course_home_content_item_id = NULL,
 			updated_at = NOW()
 		WHERE c.course_code = $1
 	`, courseCode)
