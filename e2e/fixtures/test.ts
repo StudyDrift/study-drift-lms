@@ -13,6 +13,7 @@ export interface UserCredentials {
 export interface SeededCourse {
   courseCode: string
   title: string
+  description?: string
   instructorToken: string
   instructorEmail: string
   studentToken: string
@@ -53,7 +54,7 @@ export function mainNav(page: Page) {
 }
 
 export const test = base.extend<TestFixtures>({
-  authedToken: async ({}, use) => {
+  authedToken: async ({ }, use) => {
     const { access_token } = await apiSignup({
       email: uniqueEmail('auth'),
       password: 'E2eTestPass1!',
@@ -67,7 +68,7 @@ export const test = base.extend<TestFixtures>({
   },
 
   seededCourse: [
-    async ({}, use) => {
+    async ({ }, use) => {
       const instructorEmail = uniqueEmail('inst')
       const { access_token: instructorToken } = await apiSignup({
         email: instructorEmail,

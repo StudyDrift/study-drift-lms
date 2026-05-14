@@ -9,6 +9,7 @@ export function SideNavCommandPaletteTrigger() {
     <div className="shrink-0 px-3 pb-3 pt-0.5">
       <button
         type="button"
+        role='searchbox'
         aria-label="Search courses, people, pages, and actions"
         data-command-palette-anchor="sidebar"
         data-onboarding="command-palette"

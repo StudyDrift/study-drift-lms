@@ -93,6 +93,12 @@ export function buildSearchItems(
       path: '/notebooks',
       hint: 'notebooks notes journal',
     },
+    {
+      title: 'Global notebook',
+      subtitle: 'Notes not tied to one course',
+      path: '/notebooks/global',
+      hint: 'global notebook cross course personal notes',
+    },
     { title: 'Calendar', subtitle: 'Your schedule', path: '/calendar', hint: 'calendar schedule' },
     { title: 'Inbox', subtitle: 'Messages', path: '/inbox', hint: 'inbox messages mail' },
     {
