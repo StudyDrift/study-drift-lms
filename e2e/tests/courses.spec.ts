@@ -168,12 +168,14 @@ test.describe('Course settings', () => {
     const isNowPublished = await publishSwitch.getAttribute('aria-checked') === 'true'
     expect(isNowPublished).not.toBe(isInitiallyPublished)
     
-    // Verify badge on course detail.
+    // Catalog visibility lives in the collapsible "Course details" block (not in the page chrome).
     await page.goto(`/courses/${seededCourse.courseCode}`)
+    const courseDetails = page.locator('details').filter({ hasText: 'Course details' })
+    await courseDetails.locator('summary').click()
     if (isNowPublished) {
-      await expect(page.getByText(/active|published/i).first()).toBeVisible()
+      await expect(page.getByTitle('Published — learners can see when released')).toBeVisible()
     } else {
-      await expect(page.getByText(/off|staff.only|draft/i).first()).toBeVisible()
+      await expect(page.getByTitle('Unpublished — staff only')).toBeVisible()
     }
   })
 

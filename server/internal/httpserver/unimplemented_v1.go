@@ -1,10 +1,10 @@
 package httpserver
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/lextures/lextures/server/internal/apierr"
 )
 
 // registerUnimplementedV1 adds HTTP 501 for unported /api/v1 sub-trees.
@@ -26,10 +26,6 @@ func http501Handler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusNotImplemented)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"code":  "NOT_IMPLEMENTED_IN_GO",
-		"error": "This API area is not implemented yet.",
-	})
+	apierr.WriteJSON(w, http.StatusNotImplemented, apierr.CodeNotImplemented,
+		"This API area is not implemented yet.")
 }

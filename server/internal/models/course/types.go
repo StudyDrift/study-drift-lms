@@ -63,6 +63,8 @@ type CoursePublic struct {
 	SbgEnabled                    bool            `json:"sbgEnabled"`
 	SbgProficiencyScaleJSON       json.RawMessage `json:"sbgProficiencyScaleJson"`
 	SbgAggregationRule            string          `json:"sbgAggregationRule"`
+	CourseHomeLanding             string          `json:"courseHomeLanding"`
+	CourseHomeContentItemID       *string         `json:"courseHomeContentItemId,omitempty"`
 }
 
 type CoursesResponse struct {
@@ -77,9 +79,11 @@ type UpdateCourseRequest struct {
 	EndsAt             *time.Time `json:"endsAt"`
 	VisibleFrom        *time.Time `json:"visibleFrom"`
 	HiddenAt           *time.Time `json:"hiddenAt"`
-	ScheduleMode       *string    `json:"scheduleMode"`
-	RelativeEndAfter   *string    `json:"relativeEndAfter"`
-	RelativeHiddenAfter *string   `json:"relativeHiddenAfter"`
+	ScheduleMode            *string    `json:"scheduleMode"`
+	RelativeEndAfter        *string    `json:"relativeEndAfter"`
+	RelativeHiddenAfter     *string    `json:"relativeHiddenAfter"`
+	CourseHomeLanding       *string    `json:"courseHomeLanding"`
+	CourseHomeContentItemID *string    `json:"courseHomeContentItemId"`
 }
 
 type SetHeroImageRequest struct {

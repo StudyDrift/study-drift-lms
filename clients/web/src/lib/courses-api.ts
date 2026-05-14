@@ -159,6 +159,10 @@ export type CoursePublic = {
   orgId?: string
   /** Embedded term metadata when `termId` is set. */
   term?: TermSummary | null
+  /** What the course root shows: `data` overview, `calendar`, or `content_page`. */
+  courseHomeLanding?: string
+  /** When `courseHomeLanding` is `content_page`, the module item id. */
+  courseHomeContentItemId?: string | null
 }
 
 export type OrgTerm = {

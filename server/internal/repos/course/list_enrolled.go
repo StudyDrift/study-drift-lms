@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -61,6 +62,8 @@ type CoursePublic struct {
 	BlueprintParentID             *string          `json:"blueprintParentId,omitempty"`
 	BlueprintParentCourseCode     *string          `json:"blueprintParentCourseCode,omitempty"`
 	BlueprintLastSyncAt           *time.Time       `json:"blueprintLastSyncAt,omitempty"`
+	CourseHomeLanding             string           `json:"courseHomeLanding"`
+	CourseHomeContentItemID       *string          `json:"courseHomeContentItemId,omitempty"`
 }
 
 // coursePublicSelect is columns for `course.courses` joined to `tenant.terms` (alias `tr`) for public APIs.
@@ -109,6 +112,8 @@ const coursePublicSelect = `
     c.blueprint_parent_id,
     bp.course_code AS blueprint_parent_course_code,
     c.blueprint_last_sync_at,
+    c.course_home_landing,
+    c.course_home_content_item_id,
     c.term_id,
     tr.id,
     tr.name,
@@ -135,6 +140,8 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 	var orgIDCol sql.NullString
 	var bpParentID, bpParentCode sql.NullString
 	var bpLastSync sql.NullTime
+	var homeLanding string
+	var homeContentItem pgtype.UUID
 	var termIDCol, trID sql.NullString
 	var trName, trType, trStart, trEnd, trStatus sql.NullString
 
@@ -183,6 +190,8 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 		&bpParentID,
 		&bpParentCode,
 		&bpLastSync,
+		&homeLanding,
+		&homeContentItem,
 		&termIDCol,
 		&trID,
 		&trName,
@@ -212,6 +221,17 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 		p.BlueprintParentCourseCode = &s
 	}
 	p.BlueprintLastSyncAt = nullTimePtr(bpLastSync)
+	p.CourseHomeLanding = strings.TrimSpace(homeLanding)
+	if p.CourseHomeLanding == "" {
+		p.CourseHomeLanding = "data"
+	}
+	if homeContentItem.Valid {
+		u, err := uuid.FromBytes(homeContentItem.Bytes[:])
+		if err == nil {
+			s := u.String()
+			p.CourseHomeContentItemID = &s
+		}
+	}
 	if hero.Valid {
 		s := hero.String
 		p.HeroImageURL = &s

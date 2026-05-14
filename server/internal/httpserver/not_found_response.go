@@ -49,7 +49,7 @@ func routerNotFoundHandler(w http.ResponseWriter, r *http.Request) {
 		slog.String("request_id", reqID),
 		slog.String("why", "no matching route; /health and registered /api/* paths return 200/401, not this"),
 	)
-	apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotImplementedInGo, msg)
+	apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, msg)
 }
 
 func requestIDString(r *http.Request) string {
@@ -73,6 +73,6 @@ func routerMethodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
 		slog.String("request_id", requestIDString(r)),
 		slog.String("why", "e.g. POST to a path that only has GET, or the opposite"),
 	)
-	apierr.WriteJSON(w, http.StatusMethodNotAllowed, apierr.CodeNotImplementedInGo,
+	apierr.WriteJSON(w, http.StatusMethodNotAllowed, apierr.CodeMethodNotAllowed,
 		"HTTP method not allowed: "+r.Method+" "+r.URL.Path+". A route may exist for a different method.")
 }
