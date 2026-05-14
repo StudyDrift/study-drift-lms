@@ -47,6 +47,17 @@ export type CourseCalendarAssignment = {
   /** Quizzes: summed question points when not adaptive. */
   pointsPossible?: number | null
   isAdaptive?: boolean
+  /**
+   * When set (e.g. global `/calendar`), item links use this course instead of the
+   * parent `CourseCalendar` `courseCode` prop.
+   */
+  linkCourseCode?: string
+  /** Optional line in the hover card (e.g. course title or code). */
+  courseTitle?: string
+  /** Short prefix in month chips / week rows (e.g. course code). */
+  courseLabel?: string
+  /** Tint index for aggregated views (`0`–`6`, wraps). */
+  paletteIndex?: number
 }
 
 type ViewId = 'month' | 'week' | 'todo'
@@ -81,6 +92,41 @@ function calendarItemPointsSummary(a: CourseCalendarAssignment): string | null {
 type CalendarAssignmentHoverOpen = {
   assignment: CourseCalendarAssignment
   anchor: HTMLElement
+}
+
+const MONTH_CHIP_PALETTE = [
+  'block w-full truncate rounded-md bg-indigo-50/90 px-1 py-0.5 text-left text-[11px] font-semibold leading-tight text-indigo-900 transition hover:bg-indigo-100 hover:ring-1 hover:ring-indigo-200/80 dark:bg-indigo-950/50 dark:text-indigo-100 dark:hover:bg-indigo-900/60 dark:hover:ring-indigo-500/40',
+  'block w-full truncate rounded-md bg-violet-50/90 px-1 py-0.5 text-left text-[11px] font-semibold leading-tight text-violet-900 transition hover:bg-violet-100 hover:ring-1 hover:ring-violet-200/80 dark:bg-violet-950/50 dark:text-violet-100 dark:hover:bg-violet-900/60 dark:hover:ring-violet-500/40',
+  'block w-full truncate rounded-md bg-emerald-50/90 px-1 py-0.5 text-left text-[11px] font-semibold leading-tight text-emerald-900 transition hover:bg-emerald-100 hover:ring-1 hover:ring-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-100 dark:hover:bg-emerald-900/60 dark:hover:ring-emerald-500/40',
+  'block w-full truncate rounded-md bg-amber-50/90 px-1 py-0.5 text-left text-[11px] font-semibold leading-tight text-amber-950 transition hover:bg-amber-100 hover:ring-1 hover:ring-amber-200/80 dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-900/60 dark:hover:ring-amber-500/40',
+  'block w-full truncate rounded-md bg-rose-50/90 px-1 py-0.5 text-left text-[11px] font-semibold leading-tight text-rose-900 transition hover:bg-rose-100 hover:ring-1 hover:ring-rose-200/80 dark:bg-rose-950/50 dark:text-rose-100 dark:hover:bg-rose-900/60 dark:hover:ring-rose-500/40',
+  'block w-full truncate rounded-md bg-sky-50/90 px-1 py-0.5 text-left text-[11px] font-semibold leading-tight text-sky-900 transition hover:bg-sky-100 hover:ring-1 hover:ring-sky-200/80 dark:bg-sky-950/50 dark:text-sky-100 dark:hover:bg-sky-900/60 dark:hover:ring-sky-500/40',
+  'block w-full truncate rounded-md bg-fuchsia-50/90 px-1 py-0.5 text-left text-[11px] font-semibold leading-tight text-fuchsia-900 transition hover:bg-fuchsia-100 hover:ring-1 hover:ring-fuchsia-200/80 dark:bg-fuchsia-950/50 dark:text-fuchsia-100 dark:hover:bg-fuchsia-900/60 dark:hover:ring-fuchsia-500/40',
+] as const
+
+const WEEK_CARD_PALETTE = [
+  'group flex flex-col gap-0.5 rounded-xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50/40 dark:border-neutral-600 dark:bg-neutral-800/80 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-950/40',
+  'group flex flex-col gap-0.5 rounded-xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm transition hover:border-violet-200 hover:bg-violet-50/40 dark:border-neutral-600 dark:bg-neutral-800/80 dark:hover:border-violet-500/50 dark:hover:bg-violet-950/40',
+  'group flex flex-col gap-0.5 rounded-xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/40 dark:border-neutral-600 dark:bg-neutral-800/80 dark:hover:border-emerald-500/50 dark:hover:bg-emerald-950/40',
+  'group flex flex-col gap-0.5 rounded-xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm transition hover:border-amber-200 hover:bg-amber-50/40 dark:border-neutral-600 dark:bg-neutral-800/80 dark:hover:border-amber-500/50 dark:hover:bg-amber-950/40',
+  'group flex flex-col gap-0.5 rounded-xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm transition hover:border-rose-200 hover:bg-rose-50/40 dark:border-neutral-600 dark:bg-neutral-800/80 dark:hover:border-rose-500/50 dark:hover:bg-rose-950/40',
+  'group flex flex-col gap-0.5 rounded-xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm transition hover:border-sky-200 hover:bg-sky-50/40 dark:border-neutral-600 dark:bg-neutral-800/80 dark:hover:border-sky-500/50 dark:hover:bg-sky-950/40',
+  'group flex flex-col gap-0.5 rounded-xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm transition hover:border-fuchsia-200 hover:bg-fuchsia-50/40 dark:border-neutral-600 dark:bg-neutral-800/80 dark:hover:border-fuchsia-500/50 dark:hover:bg-fuchsia-950/40',
+] as const
+
+function monthChipClassForAssignment(a: CourseCalendarAssignment, canDrag: boolean): string {
+  const base =
+    MONTH_CHIP_PALETTE[Math.abs(a.paletteIndex ?? 0) % MONTH_CHIP_PALETTE.length] ??
+    MONTH_CHIP_PALETTE[0]
+  const drag = canDrag ? 'cursor-grab touch-manipulation active:cursor-grabbing' : ''
+  return `${base} ${drag}`.trim()
+}
+
+function weekCardClassForAssignment(a: CourseCalendarAssignment): string {
+  return (
+    WEEK_CARD_PALETTE[Math.abs(a.paletteIndex ?? 0) % WEEK_CARD_PALETTE.length] ??
+    WEEK_CARD_PALETTE[0]
+  )
 }
 
 function AssignmentHoverPortal({ open }: { open: CalendarAssignmentHoverOpen | null }) {
@@ -136,6 +182,9 @@ function AssignmentHoverPortal({ open }: { open: CalendarAssignmentHoverOpen | n
       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
         {calendarItemKindLabel(a.kind)}
       </p>
+      {a.courseTitle ? (
+        <p className="mt-1 text-xs font-medium text-slate-600 dark:text-neutral-300">{a.courseTitle}</p>
+      ) : null}
       <p className="mt-1 font-semibold tracking-tight text-slate-950 dark:text-neutral-100">
         {a.title || 'Untitled'}
       </p>
@@ -156,6 +205,7 @@ type CalendarMonthDraggableDueLinkProps = {
   a: CourseCalendarAssignment
   to: string
   canDrag: boolean
+  chipClassName: string
   onShowAssignmentHover: (a: CourseCalendarAssignment, el: HTMLElement) => void
   onHideAssignmentHover: () => void
 }
@@ -164,6 +214,7 @@ function CalendarMonthDraggableDueLink({
   a,
   to,
   canDrag,
+  chipClassName,
   onShowAssignmentHover,
   onHideAssignmentHover,
 }: CalendarMonthDraggableDueLinkProps) {
@@ -172,6 +223,8 @@ function CalendarMonthDraggableDueLink({
     disabled: !canDrag,
   })
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined
+  const label = a.courseLabel?.trim()
+  const chipText = label ? `${label} · ${a.title || 'Untitled'}` : a.title || 'Untitled'
   return (
     <li className="min-w-0">
       <Link
@@ -179,16 +232,14 @@ function CalendarMonthDraggableDueLink({
         style={style}
         {...(canDrag ? { ...listeners, ...attributes } : {})}
         to={to}
-        aria-label={`${calendarItemKindLabel(a.kind)}: ${a.title || 'Untitled'}. Due ${formatDueShort(a.dueAt)}.`}
+        aria-label={`${calendarItemKindLabel(a.kind)}: ${chipText}. Due ${formatDueShort(a.dueAt)}.`}
         onMouseEnter={(e) => onShowAssignmentHover(a, e.currentTarget)}
         onMouseLeave={onHideAssignmentHover}
         onFocus={(e) => onShowAssignmentHover(a, e.currentTarget)}
         onBlur={onHideAssignmentHover}
-        className={`block w-full truncate rounded-md bg-indigo-50/90 px-1 py-0.5 text-left text-[11px] font-semibold leading-tight text-indigo-900 transition hover:bg-indigo-100 hover:ring-1 hover:ring-indigo-200/80 dark:bg-indigo-950/50 dark:text-indigo-100 dark:hover:bg-indigo-900/60 dark:hover:ring-indigo-500/40 ${
-          canDrag ? 'cursor-grab touch-manipulation active:cursor-grabbing' : ''
-        } ${isDragging ? 'opacity-40' : ''}`}
+        className={`${chipClassName} ${isDragging ? 'opacity-40' : ''}`}
       >
-        {a.title || 'Untitled'}
+        {chipText}
       </Link>
     </li>
   )
@@ -253,10 +304,11 @@ function CalendarMonthDayCell({
         <ul className="mt-1 min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain">
           {dayItems.map((a) => (
             <CalendarMonthDraggableDueLink
-              key={a.id}
+              key={`${a.linkCourseCode ?? ''}:${a.id}`}
               a={a}
               to={itemPath(a)}
               canDrag={canDragReschedule}
+              chipClassName={monthChipClassForAssignment(a, canDragReschedule)}
               onShowAssignmentHover={onShowAssignmentHover}
               onHideAssignmentHover={onHideAssignmentHover}
             />
@@ -370,6 +422,8 @@ export function CourseCalendar({
       const dayKey = overId.slice(CAL_DAY_ID.length)
       const assignment = assignments.find((x) => x.id === itemId)
       if (!assignment) return
+      const patchCourse = assignment.linkCourseCode ?? courseCode
+      if (!patchCourse) return
       if (dateKeyLocal(new Date(assignment.dueAt)) === dayKey) return
 
       const cells = monthGridCells(monthAnchor)
@@ -380,7 +434,7 @@ export function CourseCalendar({
       setRescheduleBusy(true)
       setRescheduleError(null)
       try {
-        await patchCourseStructureItemDueAt(courseCode, itemId, { dueAt: nextIso })
+        await patchCourseStructureItemDueAt(patchCourse, itemId, { dueAt: nextIso })
         await onDueDatesChanged?.()
       } catch (e) {
         setRescheduleError(e instanceof Error ? e.message : 'Could not update due date.')
@@ -417,27 +471,27 @@ export function CourseCalendar({
     return sorted.filter((a) => isInTodoWindow(new Date(a.dueAt), t))
   }, [sorted])
 
-  const modulesBase = useMemo(
-    () => `/courses/${encodeURIComponent(courseCode)}/modules`,
+  const itemPath = useCallback(
+    (a: CourseCalendarAssignment) => {
+      const code = a.linkCourseCode ?? courseCode
+      const base = `/courses/${encodeURIComponent(code)}/modules`
+      if (a.kind === 'assignment') return `${base}/assignment/${encodeURIComponent(a.id)}`
+      if (a.kind === 'quiz') return `${base}/quiz/${encodeURIComponent(a.id)}`
+      return `${base}/content/${encodeURIComponent(a.id)}`
+    },
     [courseCode],
   )
 
-  const itemPath = useCallback(
-    (a: CourseCalendarAssignment) => {
-      if (a.kind === 'assignment') return `${modulesBase}/assignment/${encodeURIComponent(a.id)}`
-      if (a.kind === 'quiz') return `${modulesBase}/quiz/${encodeURIComponent(a.id)}`
-      return `${modulesBase}/content/${encodeURIComponent(a.id)}`
-    },
-    [modulesBase],
-  )
-
   function assignmentRow(a: CourseCalendarAssignment) {
+    const label = a.courseLabel?.trim()
     return (
-      <li key={a.id}>
-        <Link
-          to={itemPath(a)}
-          className="group flex flex-col gap-0.5 rounded-xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50/40 dark:border-neutral-600 dark:bg-neutral-800/80 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-950/40"
-        >
+      <li key={`${a.linkCourseCode ?? courseCode}:${a.id}`}>
+        <Link to={itemPath(a)} className={weekCardClassForAssignment(a)}>
+          {label ? (
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+              {label}
+            </span>
+          ) : null}
           <span className="text-sm font-semibold tracking-tight text-slate-950 group-hover:text-indigo-800 dark:text-neutral-100 dark:group-hover:text-indigo-300">
             {a.title || 'Untitled'}
           </span>
