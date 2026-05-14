@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Run the e2e suite without Docker using an ephemeral local Postgres cluster.
 #
+# Usage:
+#   ./e2e/scripts/e2e-local.sh              # full suite (cwd: repo root)
+#   ./e2e/scripts/e2e-local.sh tests/inbox.spec.ts
+#   ./e2e/scripts/e2e-local.sh e2e/tests/inbox.spec.ts   # same; e2e/ prefix is stripped
+# Any extra arguments are passed through to `playwright test` (e.g. --headed, --grep).
+#
 # Steps:
 #   1. Locate system PostgreSQL binaries (Homebrew, Linux packages, pg_config).
 #   2. initdb a fresh data directory in /tmp.
@@ -24,10 +30,39 @@
 
 set -euo pipefail
 
+# Declared up-front so `set -u` never trips on `"${PLAYWRIGHT_TEST_ARGS[@]}"` when the
+# suite is invoked with no extra args (e.g. `make e2e`) on Bash 3.2 / strict nounset.
+declare -a PLAYWRIGHT_TEST_ARGS=()
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PIDS=()
 PGDATA_DIR=""
 E2E_PG_PORT="${E2E_PG_PORT:-5454}"
+
+# `go run` and `npm run dev` are parents of the real long-lived processes. A plain
+# `kill $pid` often stops only the wrapper, leaving the API or Vite child alive.
+# Those orphans keep hitting DATABASE_URL (ephemeral Postgres) after teardown.
+kill_tree() {
+  local pid="$1"
+  local children
+  children="$(pgrep -P "${pid}" 2>/dev/null || true)"
+  for c in ${children}; do
+    kill_tree "${c}"
+  done
+  if kill -0 "${pid}" 2>/dev/null; then
+    kill -TERM "${pid}" 2>/dev/null || true
+  fi
+}
+
+force_kill_tree() {
+  local pid="$1"
+  local children
+  children="$(pgrep -P "${pid}" 2>/dev/null || true)"
+  for c in ${children}; do
+    force_kill_tree "${c}"
+  done
+  kill -KILL "${pid}" 2>/dev/null || true
+}
 E2E_PG_DB="lextures_e2e"
 E2E_PG_USER="e2e"
 # These are intentionally weak secrets used only for the throwaway test cluster.
@@ -39,7 +74,14 @@ cleanup() {
   echo ""
   echo "==> Tearing down local e2e stack..."
   for pid in "${PIDS[@]-}"; do
-    kill "$pid" 2>/dev/null || true
+    kill_tree "${pid}"
+  done
+  # Let child processes (compiled server, Vite) exit after the wrapper receives SIGTERM.
+  sleep 1
+  for pid in "${PIDS[@]-}"; do
+    if kill -0 "${pid}" 2>/dev/null; then
+      force_kill_tree "${pid}"
+    fi
   done
   if [[ -n "${PGDATA_DIR}" && -d "${PGDATA_DIR}" ]]; then
     "${PG_CTL:-pg_ctl}" -D "${PGDATA_DIR}" stop -m fast 2>/dev/null || true
@@ -160,11 +202,26 @@ for i in $(seq 1 30); do
 done
 echo "    Web client healthy."
 
-# Run Playwright.
+# Run Playwright. Optional args are forwarded to `playwright test` (paths relative to
+# e2e/ after cd). Paths given as e2e/tests/... from repo root are normalized.
 echo "==> Running Playwright tests..."
 cd "${REPO_ROOT}/e2e"
 npm ci --prefer-offline --quiet
 npx playwright install --with-deps chromium
-E2E_BASE_URL="http://localhost:5173" \
-  E2E_API_URL="http://localhost:${E2E_API_PORT}" \
-  npx playwright test
+PLAYWRIGHT_TEST_ARGS=()
+for arg in "$@"; do
+  if [[ "${arg}" == e2e/* ]]; then
+    PLAYWRIGHT_TEST_ARGS+=("${arg#e2e/}")
+  else
+    PLAYWRIGHT_TEST_ARGS+=("${arg}")
+  fi
+done
+if [[ "${#PLAYWRIGHT_TEST_ARGS[@]}" -gt 0 ]]; then
+  E2E_BASE_URL="http://localhost:5173" \
+    E2E_API_URL="http://localhost:${E2E_API_PORT}" \
+    npx playwright test "${PLAYWRIGHT_TEST_ARGS[@]}"
+else
+  E2E_BASE_URL="http://localhost:5173" \
+    E2E_API_URL="http://localhost:${E2E_API_PORT}" \
+    npx playwright test
+fi
