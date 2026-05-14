@@ -135,7 +135,7 @@ test.describe('Course settings', () => {
     seededCourse,
   }) => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
-    
+
     const titleInput = page.getByRole('textbox', { name: /^title$/i })
     await titleInput.clear()
     await titleInput.fill('Updated E2E Title')
@@ -146,10 +146,10 @@ test.describe('Course settings', () => {
 
     // The save button is at the bottom of the general form.
     await page.getByRole('button', { name: /save/i }).first().click()
-    
+
     // After saving the updated title should appear in the breadcrumb or heading.
     await expect(page.getByText('Updated E2E Title')).toBeVisible({ timeout: 8000 })
-    
+
     // Navigate back to course detail to verify description update.
     await page.goto(`/courses/${seededCourse.courseCode}`)
     await expect(page.getByText('Updated E2E Description')).toBeVisible()
@@ -157,17 +157,17 @@ test.describe('Course settings', () => {
 
   test('toggling published status', async ({ coursePage: page, seededCourse }) => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
-    
+
     const publishSwitch = page.getByRole('switch', { name: /published/i })
     const isInitiallyPublished = await publishSwitch.getAttribute('aria-checked') === 'true'
-    
+
     // Toggle it.
     await publishSwitch.click()
     await expect(page.getByText(/saved|published|draft/i).first()).toBeVisible()
-    
+
     const isNowPublished = await publishSwitch.getAttribute('aria-checked') === 'true'
     expect(isNowPublished).not.toBe(isInitiallyPublished)
-    
+
     // Catalog visibility lives in the collapsible "Course details" block (not in the page chrome).
     await page.goto(`/courses/${seededCourse.courseCode}`)
     const courseDetails = page.locator('details').filter({ hasText: 'Course details' })
@@ -181,25 +181,25 @@ test.describe('Course settings', () => {
 
   test('change reading theme preset', async ({ coursePage: page, seededCourse }) => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
-    
+
     // Look for a theme preset button, e.g., "Night" or "Reader".
     const nightTheme = page.getByRole('button', { name: /night/i })
     await expect(nightTheme).toBeVisible()
     await nightTheme.click()
-    
+
     // Theme selection usually saves immediately as per UI note.
     await expect(page.getByText(/reading theme saved/i)).toBeVisible()
   })
 
   test('toggle schedule mode between fixed and relative', async ({ coursePage: page, seededCourse }) => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
-    
+
     const scheduleSwitch = page.getByRole('switch', { name: /relative/i })
     const isInitiallyRelative = await scheduleSwitch.getAttribute('aria-checked') === 'true'
-    
+
     // Toggle it.
     await scheduleSwitch.click()
-    
+
     // Verify fields change.
     if (isInitiallyRelative) {
       // Should now be fixed.
@@ -208,7 +208,7 @@ test.describe('Course settings', () => {
       // Should now be relative.
       await expect(page.getByLabel(/^end after$/i)).toBeVisible()
     }
-    
+
     // Save changes.
     await page.getByRole('button', { name: /save/i }).first().click()
     await expect(page.getByText(/saved/i).first()).toBeVisible()
@@ -216,21 +216,24 @@ test.describe('Course settings', () => {
 
   test('archive (delete) course', async ({ coursePage: page, seededCourse }) => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/archive`)
-    
+
     await page.getByRole('button', { name: /delete course/i }).click()
-    
+
     // Confirm modal appears.
     const modal = page.getByRole('dialog')
     await expect(modal).toBeVisible()
     await expect(modal.getByText(/archives the entire course/i)).toBeVisible()
-    
+
     // Click confirm.
     await modal.getByRole('button', { name: /archive course/i }).click()
-    
+
     // Should be redirected to /courses.
     await expect(page).toHaveURL(/\/courses$/)
-    
-    // Verify it's no longer in the list.
-    await expect(page.getByText(seededCourse.title)).not.toBeVisible()
+
+    // Verify it's no longer in the list. Use an exact link match so we do not
+    // collide with headings like "E2E Test Course — archive" (substring match).
+    await expect(
+      page.getByRole('link', { name: seededCourse.title, exact: true }),
+    ).not.toBeVisible()
   })
 })
