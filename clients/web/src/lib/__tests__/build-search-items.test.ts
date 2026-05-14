@@ -146,6 +146,7 @@ describe('buildSearchItems', () => {
     expect(dashboard?.group).toBe('page')
     expect(items.some((i) => i.path === '/courses')).toBe(true)
     expect(items.some((i) => i.path === '/notebooks')).toBe(true)
+    expect(items.some((i) => i.path === '/notebooks/global')).toBe(true)
     expect(items.some((i) => i.path === '/settings/ai/models')).toBe(false)
   })
 

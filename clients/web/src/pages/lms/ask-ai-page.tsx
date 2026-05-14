@@ -8,6 +8,11 @@ import { authorizedFetch } from '../../lib/api'
 import { type CoursePublic } from '../../lib/courses-api'
 import { readApiErrorMessage } from '../../lib/errors'
 import {
+  GLOBAL_STUDENT_NOTEBOOK_KEY,
+  GLOBAL_STUDENT_NOTEBOOK_TITLE,
+  getStudentCourseNotebook,
+  hrefForStudentNotebook,
+  isGlobalStudentNotebookKey,
   listStudentCourseNotebooks,
   subscribeStudentNotebooks,
 } from '../../lib/student-notebook-storage'
@@ -90,7 +95,12 @@ export default function AskAiPage() {
     return m
   }, [courses])
 
-  const entries = useMemo(() => {
+  const globalPreview = useMemo(() => {
+    void notebookVersion
+    return getStudentCourseNotebook(GLOBAL_STUDENT_NOTEBOOK_KEY)
+  }, [notebookVersion])
+
+  const courseEntries = useMemo(() => {
     void notebookVersion
     const stored = listStudentCourseNotebooks()
     const rows = Object.entries(stored)
@@ -105,7 +115,28 @@ export default function AskAiPage() {
     return rows
   }, [titleByCode, notebookVersion])
 
-  const hasNotes = entries.length > 0
+  const entries = useMemo(() => {
+    const globalBody = globalPreview?.body ?? ''
+    const globalUpdated = globalPreview?.updatedAt ?? new Date(0).toISOString()
+    const globalTitle = globalPreview?.courseTitle ?? GLOBAL_STUDENT_NOTEBOOK_TITLE
+    const globalRow = {
+      courseCode: GLOBAL_STUDENT_NOTEBOOK_KEY,
+      body: globalBody,
+      updatedAt: globalUpdated,
+      courseTitle: globalTitle,
+    }
+    return [globalRow, ...courseEntries]
+  }, [courseEntries, globalPreview])
+
+  const hasNotes = useMemo(
+    () => entries.some((e) => e.body.trim().length > 0),
+    [entries],
+  )
+
+  const notebooksForRag = useMemo(
+    () => entries.filter((e) => e.body.trim().length > 0),
+    [entries],
+  )
 
   const submitAsk = useCallback(async () => {
     const q = askText.trim()
@@ -119,7 +150,7 @@ export default function AskAiPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: q,
-          notebooks: entries.map((e) => ({
+          notebooks: notebooksForRag.map((e) => ({
             courseCode: e.courseCode,
             courseTitle: e.courseTitle,
             markdown: e.body,
@@ -145,12 +176,12 @@ export default function AskAiPage() {
     } finally {
       setAskLoading(false)
     }
-  }, [askText, entries, hasNotes])
+  }, [askText, hasNotes, notebooksForRag])
 
   return (
     <LmsPage
       title="Ask AI"
-      description="Ask questions grounded in your saved course notebooks on this device. Answers use only excerpts the model retrieves from your notes."
+      description="Ask questions grounded in your saved notebooks on this device (global plus each course). Answers use only excerpts the model retrieves from your notes."
       actions={<ReadingFocusToggle />}
     >
       {coursesError && (
@@ -189,7 +220,7 @@ export default function AskAiPage() {
                   placeholder={
                     hasNotes
                       ? 'e.g. What themes did I write about across my courses?'
-                      : 'Save notes in a course notebook first — then you can ask here.'
+                      : 'Save notes in your global or a course notebook first — then you can ask here.'
                   }
                   className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-indigo-500/0 transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500/50 dark:disabled:bg-neutral-900 dark:disabled:text-neutral-500"
                   onKeyDown={(e) => {
@@ -243,12 +274,16 @@ export default function AskAiPage() {
                     {ragResult.sources.map((s, i) => (
                       <li key={`${s.courseCode}-${i}`} className="text-xs text-slate-600 dark:text-neutral-300">
                         <Link
-                          to={`/courses/${encodeURIComponent(s.courseCode)}/notebook`}
+                          to={hrefForStudentNotebook(s.courseCode)}
                           className="font-medium text-indigo-700 hover:underline dark:text-indigo-300"
                         >
                           {s.courseTitle}
                         </Link>
-                        <span className="text-slate-400 dark:text-neutral-500"> · {s.courseCode}</span>
+                        <span className="text-slate-400 dark:text-neutral-500">
+                          {' '}
+                          ·{' '}
+                          {isGlobalStudentNotebookKey(s.courseCode) ? 'Global' : s.courseCode}
+                        </span>
                         <p className="mt-0.5 text-slate-500 dark:text-neutral-400">{s.excerpt}</p>
                       </li>
                     ))}

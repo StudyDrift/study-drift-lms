@@ -6,6 +6,24 @@ export type { CourseNotebookPage } from './course-notebook-tree'
 
 export const STUDENT_NOTEBOOKS_CHANGED = 'lextures-student-notebooks-changed'
 
+/**
+ * Storage key for the learner-wide notebook (not tied to a course). Must not collide with real
+ * course codes; kept opaque and namespaced.
+ */
+export const GLOBAL_STUDENT_NOTEBOOK_KEY = '__lextures_global__' as const
+
+export const GLOBAL_STUDENT_NOTEBOOK_TITLE = 'Global notebook' as const
+
+export function isGlobalStudentNotebookKey(courseCode: string): boolean {
+  return courseCode === GLOBAL_STUDENT_NOTEBOOK_KEY
+}
+
+export function hrefForStudentNotebook(courseCode: string): string {
+  return isGlobalStudentNotebookKey(courseCode)
+    ? '/notebooks/global'
+    : `/courses/${encodeURIComponent(courseCode)}/notebook`
+}
+
 /** Legacy v1 row (single body). */
 export type StudentCourseNotebookLegacy = {
   body: string
@@ -145,10 +163,12 @@ export function getStudentCourseNotebook(courseCode: string): StudentCourseNoteb
   }
 }
 
+/** Course-scoped notebooks only (excludes {@link GLOBAL_STUDENT_NOTEBOOK_KEY}). */
 export function listStudentCourseNotebooks(): Record<string, StudentCourseNotebookLegacy> {
   const file = readFile()
   const out: Record<string, StudentCourseNotebookLegacy> = {}
   for (const code of Object.keys(file.notebooks)) {
+    if (code === GLOBAL_STUDENT_NOTEBOOK_KEY) continue
     const prev = getStudentCourseNotebook(code)
     if (prev) out[code] = prev
   }

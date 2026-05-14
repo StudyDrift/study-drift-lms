@@ -34,6 +34,7 @@ import Dashboard from './pages/lms/dashboard'
 import AskAiPage from './pages/lms/ask-ai-page'
 import ReviewSessionPage from './pages/lms/review-session-page'
 import Inbox from './pages/lms/inbox'
+import GlobalNotebookPage from './pages/lms/global-notebook-page'
 import MyNotebooksPage from './pages/lms/my-notebooks-page'
 import Reports from './pages/lms/reports'
 import Settings from './pages/lms/settings'
@@ -99,6 +100,7 @@ export default function App() {
           <Route path="/ai" element={<AskAiPage />} />
           <Route path="/review" element={<ReviewSessionPage />} />
           <Route path="/courses" element={<Courses />} />
+          <Route path="/notebooks/global" element={<GlobalNotebookPage />} />
           <Route path="/notebooks" element={<MyNotebooksPage />} />
           <Route path="/courses/create" element={<CourseCreate />} />
           <Route path="/courses/:courseCode" element={<CourseLayout />}>
