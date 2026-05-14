@@ -144,17 +144,19 @@ export default function Calendar() {
     let cancelled = false
     const targets = enabledCourses
 
-    if (targets.length === 0) {
-      setStructuresLoading(false)
-      setStructureByCourseId({})
+    void (async () => {
+      if (targets.length === 0) {
+        await Promise.resolve()
+        if (cancelled) return
+        setStructuresLoading(false)
+        setStructureByCourseId({})
+        setStructureErrors({})
+        return
+      }
+
+      setStructuresLoading(true)
       setStructureErrors({})
-      return
-    }
 
-    setStructuresLoading(true)
-    setStructureErrors({})
-
-    ;(async () => {
       const next: Record<string, CourseStructureItem[] | null> = {}
       const errs: Record<string, string> = {}
 
