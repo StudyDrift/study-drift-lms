@@ -140,6 +140,8 @@ func (d Deps) handleCreateCourse() http.HandlerFunc {
 			return
 		}
 
+		d.notifyCourses(userID)
+
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(out)

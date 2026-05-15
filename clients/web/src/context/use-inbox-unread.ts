@@ -9,6 +9,10 @@ export function useMailboxRevision() {
   return useContext(InboxUnreadContext)?.mailboxRevision ?? 0
 }
 
+export function useCoursesRevision() {
+  return useContext(InboxUnreadContext)?.coursesRevision ?? 0
+}
+
 export function useRefreshUnread() {
   return useContext(InboxUnreadContext)?.refreshUnread ?? (async () => {})
 }

@@ -23,6 +23,7 @@ import { CoursesCatalogSkeleton } from '../../components/ui/lms-content-skeleton
 import { LmsPage } from './lms-page'
 import { RequirePermission } from '../../components/require-permission'
 import { usePermissions } from '../../context/use-permissions'
+import { useCoursesRevision } from '../../context/use-inbox-unread'
 import { authorizedFetch } from '../../lib/api'
 import { putCourseCatalogOrder, type CoursePublic, fetchOrgTerms, type OrgTerm } from '../../lib/courses-api'
 import { decodeJwtPayload } from '../../lib/jwt-payload'
@@ -165,6 +166,7 @@ function SortableCourseCard({
 
 export default function Courses() {
   const { allows, loading: permLoading } = usePermissions()
+  const coursesRevision = useCoursesRevision()
   const [courses, setCourses] = useState<CoursePublic[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [termFilter, setTermFilter] = useState<string>('')
@@ -215,7 +217,7 @@ export default function Courses() {
     return () => {
       cancelled = true
     }
-  }, [termFilter])
+  }, [termFilter, coursesRevision])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),

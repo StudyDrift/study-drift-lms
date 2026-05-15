@@ -17,6 +17,7 @@ import (
 )
 
 const mailboxUpdateJSON = `{"type":"mailbox_updated"}`
+const coursesUpdateJSON = `{"type":"courses_updated"}`
 
 func validateListFolder(f string) bool {
 	switch f {
@@ -41,6 +42,13 @@ func (d Deps) notifyMailbox(userID uuid.UUID) {
 		return
 	}
 	d.Comm.Broadcast(userID, mailboxUpdateJSON)
+}
+
+func (d Deps) notifyCourses(userID uuid.UUID) {
+	if d.Comm == nil {
+		return
+	}
+	d.Comm.Broadcast(userID, coursesUpdateJSON)
 }
 
 // handleCommMessagesList is GET /api/v1/communication/messages?folder&...
