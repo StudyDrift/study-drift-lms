@@ -358,41 +358,6 @@ func (d Deps) handleCourseStructure() http.HandlerFunc {
 	}
 }
 
-func (d Deps) handleCourseMyGrades() http.HandlerFunc {
-	type resp struct {
-		Columns          []any             `json:"columns"`
-		Grades           map[string]string `json:"grades"`
-		DisplayGrades    map[string]string `json:"displayGrades"`
-		AssignmentGroups any               `json:"assignmentGroups,omitempty"`
-		HeldGradeItemIds []string          `json:"heldGradeItemIds,omitempty"`
-		DroppedGrades    map[string]bool   `json:"droppedGrades,omitempty"`
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		if r.Method != http.MethodGet {
-			w.Header().Set("Allow", http.MethodGet)
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-			return
-		}
-		if _, _, ok := d.requireCourseAccess(w, r); !ok {
-			return
-		}
-		emptyGrades := map[string]string{}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_ = json.NewEncoder(w).Encode(resp{
-			Columns:          []any{},
-			Grades:           emptyGrades,
-			DisplayGrades:    emptyGrades,
-			AssignmentGroups: []any{},
-			HeldGradeItemIds: []string{},
-			DroppedGrades:    map[string]bool{},
-		})
-	}
-}
-
 func (d Deps) handleFeedChannels() http.HandlerFunc {
 	type ch struct {
 		ID        string `json:"id"`

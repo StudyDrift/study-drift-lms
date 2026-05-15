@@ -755,7 +755,8 @@ const courseOutcomeLinkProgressSchema = z.object({
 
 export const courseOutcomeLinkSchema = z.object({
   id: z.string(),
-  subOutcomeId: z.string().optional(),
+  // Server sends JSON null when unset (*uuid.UUID without omitempty).
+  subOutcomeId: z.string().nullable().optional(),
   structureItemId: z.string(),
   targetKind: z.enum(['assignment', 'quiz', 'quiz_question']),
   quizQuestionId: z.string(),

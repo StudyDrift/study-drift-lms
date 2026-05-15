@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,11 +9,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/courseroles"
 	"github.com/lextures/lextures/server/internal/models/courseoutcomesapi"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/courseoutcomes"
+	"github.com/lextures/lextures/server/internal/repos/enrollment"
 	outcomessvc "github.com/lextures/lextures/server/internal/service/outcomes"
 )
 
@@ -66,6 +69,101 @@ func learningOutcomeRowToAPI(row courseoutcomes.LearningOutcomeRow) courseOutcom
 		RollupAvgScorePercent: nil,
 		Links:                 []courseOutcomeLinkAPI{},
 	}
+}
+
+func outcomeLinkProgress(ctx context.Context, pool *pgxpool.Pool, courseID uuid.UUID, enrolled int32, link courseoutcomes.OutcomeLinkWithItemRow) (courseoutcomes.OutcomeLinkProgress, error) {
+	switch link.TargetKind {
+	case "quiz_question":
+		qid := strings.TrimSpace(link.QuizQuestionID)
+		return courseoutcomes.ProgressForQuizQuestion(ctx, pool, courseID, link.StructureItemID, qid, enrolled)
+	case "quiz", "assignment":
+		return courseoutcomes.ProgressForGradedItem(ctx, pool, courseID, link.StructureItemID, link.ItemKind, enrolled)
+	default:
+		return courseoutcomes.OutcomeLinkProgress{
+			GradedLearners:   0,
+			EnrolledLearners: enrolled,
+		}, nil
+	}
+}
+
+func courseOutcomeLinkHTTP(link courseoutcomes.OutcomeLinkWithItemRow, prog courseoutcomes.OutcomeLinkProgress) courseOutcomeLinkAPI {
+	var sub *string
+	if link.SubOutcomeID != nil {
+		s := link.SubOutcomeID.String()
+		sub = &s
+	}
+	var avg *float64
+	if prog.AvgScorePercent != nil {
+		v := float64(*prog.AvgScorePercent)
+		avg = &v
+	}
+	return courseOutcomeLinkAPI{
+		ID:               link.ID.String(),
+		SubOutcomeID:     sub,
+		StructureItemID:  link.StructureItemID.String(),
+		TargetKind:       link.TargetKind,
+		QuizQuestionID:   link.QuizQuestionID,
+		MeasurementLevel: link.MeasurementLevel,
+		IntensityLevel:   link.IntensityLevel,
+		ItemTitle:        link.ItemTitle,
+		ItemKind:         link.ItemKind,
+		Progress: courseOutcomeLinkProgress{
+			AvgScorePercent:  avg,
+			GradedLearners:   int(prog.GradedLearners),
+			EnrolledLearners: int(prog.EnrolledLearners),
+		},
+	}
+}
+
+func courseOutcomeLinkModel(link courseoutcomes.OutcomeLinkWithItemRow, prog courseoutcomes.OutcomeLinkProgress) courseoutcomesapi.CourseOutcomeLinkAPI {
+	return courseoutcomesapi.CourseOutcomeLinkAPI{
+		ID:               link.ID,
+		SubOutcomeID:     link.SubOutcomeID,
+		StructureItemID:  link.StructureItemID,
+		TargetKind:       link.TargetKind,
+		QuizQuestionID:   link.QuizQuestionID,
+		MeasurementLevel: link.MeasurementLevel,
+		IntensityLevel:   link.IntensityLevel,
+		ItemTitle:        link.ItemTitle,
+		ItemKind:         link.ItemKind,
+		Progress:         courseoutcomes.ProgressToMapJSON(prog),
+	}
+}
+
+func buildCourseOutcomeAPI(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	courseID uuid.UUID,
+	row courseoutcomes.LearningOutcomeRow,
+	links []courseoutcomes.OutcomeLinkWithItemRow,
+	enrolled int32,
+) (courseOutcomeAPI, error) {
+	modelLinks := make([]courseoutcomesapi.CourseOutcomeLinkAPI, 0, len(links))
+	httpLinks := make([]courseOutcomeLinkAPI, 0, len(links))
+	for i := range links {
+		prog, err := outcomeLinkProgress(ctx, pool, courseID, enrolled, links[i])
+		if err != nil {
+			return courseOutcomeAPI{}, err
+		}
+		modelLinks = append(modelLinks, courseOutcomeLinkModel(links[i], prog))
+		httpLinks = append(httpLinks, courseOutcomeLinkHTTP(links[i], prog))
+	}
+	api := learningOutcomeRowToAPI(row)
+	api.Links = httpLinks
+	if rollup := outcomessvc.RollupAvgForOutcomeLinks(modelLinks); rollup != nil {
+		v := float64(*rollup)
+		api.RollupAvgScorePercent = &v
+	}
+	return api, nil
+}
+
+func groupOutcomeLinksByOutcome(links []courseoutcomes.OutcomeLinkWithItemRow) map[uuid.UUID][]courseoutcomes.OutcomeLinkWithItemRow {
+	by := make(map[uuid.UUID][]courseoutcomes.OutcomeLinkWithItemRow)
+	for i := range links {
+		id := links[i].OutcomeID
+		by[id] = append(by[id], links[i])
+	}
+	return by
 }
 
 func outcomeSubOutcomeRowToAPI(row courseoutcomes.OutcomeSubOutcomeRow) courseOutcomeSubOutcomeAPI {
@@ -209,7 +307,24 @@ func (d Deps) handleCourseOutcomePatch() http.HandlerFunc {
 			return
 		}
 
-		out := learningOutcomeRowToAPI(*updated)
+		students, err := enrollment.ListStudentUsersForCourseCode(ctx, d.Pool, courseCode, nil)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load enrollments.")
+			return
+		}
+		enrolled := int32(len(students))
+
+		linkRows, err := courseoutcomes.ListLinksForOutcome(ctx, d.Pool, *cid, outcomeID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load outcome links.")
+			return
+		}
+
+		out, err := buildCourseOutcomeAPI(ctx, d.Pool, *cid, *updated, linkRows, enrolled)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to build outcome response.")
+			return
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(out)
 	}
@@ -324,13 +439,34 @@ func (d Deps) handleCourseOutcomesList() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load outcomes.")
 			return
 		}
+
+		students, err := enrollment.ListStudentUsersForCourseCode(ctx, d.Pool, courseCode, nil)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load enrollments.")
+			return
+		}
+		enrolled := int32(len(students))
+
+		allLinks, err := courseoutcomes.ListLinksForCourse(ctx, d.Pool, *cid)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load outcome links.")
+			return
+		}
+		byOutcome := groupOutcomeLinksByOutcome(allLinks)
+
 		outcomes := make([]courseOutcomeAPI, 0, len(rows))
 		for i := range rows {
-			outcomes = append(outcomes, learningOutcomeRowToAPI(rows[i]))
+			linksForO := byOutcome[rows[i].ID]
+			apiO, err := buildCourseOutcomeAPI(ctx, d.Pool, *cid, rows[i], linksForO, enrolled)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to build outcomes response.")
+				return
+			}
+			outcomes = append(outcomes, apiO)
 		}
 
 		out := courseOutcomesListResponse{
-			EnrolledLearners: 0,
+			EnrolledLearners: len(students),
 			Outcomes:         outcomes,
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -489,5 +625,118 @@ func (d Deps) handleCourseOutcomeLinksPost() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(apiLink)
+	}
+}
+
+// handleCourseOutcomeDelete is DELETE /api/v1/courses/{course_code}/outcomes/{outcome_id}.
+func (d Deps) handleCourseOutcomeDelete() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.Method != http.MethodDelete {
+			w.Header().Set("Allow", http.MethodDelete+","+http.MethodOptions)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		courseCode, viewer, ok := d.requireCourseAccess(w, r)
+		if !ok {
+			return
+		}
+		perm := "course:" + courseCode + ":item:create"
+		hasPerm, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, perm)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
+			return
+		}
+		if !hasPerm {
+			apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission to edit outcomes.")
+			return
+		}
+		outcomeID, err := uuid.Parse(chi.URLParam(r, "outcome_id"))
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid outcome id.")
+			return
+		}
+		ctx := r.Context()
+		cid, err := course.GetIDByCourseCode(ctx, d.Pool, courseCode)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load course.")
+			return
+		}
+		if cid == nil {
+			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
+			return
+		}
+		deleted, err := courseoutcomes.DeleteOutcome(ctx, d.Pool, *cid, outcomeID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to delete outcome.")
+			return
+		}
+		if !deleted {
+			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Outcome not found.")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleCourseOutcomeLinkDelete is DELETE /api/v1/courses/{course_code}/outcomes/{outcome_id}/links/{link_id}.
+func (d Deps) handleCourseOutcomeLinkDelete() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.Method != http.MethodDelete {
+			w.Header().Set("Allow", http.MethodDelete+","+http.MethodOptions)
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		courseCode, viewer, ok := d.requireCourseAccess(w, r)
+		if !ok {
+			return
+		}
+		perm := "course:" + courseCode + ":item:create"
+		hasPerm, err := courseroles.UserHasPermission(r.Context(), d.Pool, viewer, perm)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify permissions.")
+			return
+		}
+		if !hasPerm {
+			apierr.WriteJSON(w, http.StatusForbidden, apierr.CodeForbidden, "You do not have permission to edit outcomes.")
+			return
+		}
+		outcomeID, err := uuid.Parse(chi.URLParam(r, "outcome_id"))
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid outcome id.")
+			return
+		}
+		linkID, err := uuid.Parse(chi.URLParam(r, "link_id"))
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid link id.")
+			return
+		}
+		ctx := r.Context()
+		cid, err := course.GetIDByCourseCode(ctx, d.Pool, courseCode)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to load course.")
+			return
+		}
+		if cid == nil {
+			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Course not found.")
+			return
+		}
+		deleted, err := courseoutcomes.DeleteLink(ctx, d.Pool, *cid, outcomeID, linkID)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to delete outcome link.")
+			return
+		}
+		if !deleted {
+			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Link not found.")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

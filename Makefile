@@ -39,3 +39,6 @@ e2e-run:
 # Force-remove the Docker e2e stack and ephemeral volumes.
 e2e-teardown:
 	docker compose -f docker-compose.e2e.yml down -v
+
+cli:
+	cd clients/cli && go build -o lextures main.go && mkdir -p ~/.local/bin && mv lextures ~/.local/bin/lextures

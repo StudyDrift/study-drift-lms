@@ -1,37 +1,37 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta
-      name="description"
-      content="Lextures is a learning workspace for courses: deadlines, modules, feedback, and grading together in one place."
-    />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..700;1,400..700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&display=swap"
-      rel="stylesheet"
-    />
-    <script>
-      ;(() => {
-        try {
-          const key = 'lextures.uiTheme'
-          const theme = (localStorage.getItem(key) || '').trim().toLowerCase()
-          const isDark = theme === 'dark'
-          document.documentElement.classList.toggle('dark', isDark)
-          document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
-        } catch {
-          document.documentElement.classList.remove('dark')
-          document.documentElement.style.colorScheme = 'light'
-        }
-      })()
-    </script>
-    <title>Lextures</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<html lang="en" style="overflow:hidden;">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description"
+    content="Lextures is a learning workspace for courses: deadlines, modules, feedback, and grading together in one place." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..700;1,400..700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&display=swap"
+    rel="stylesheet" />
+  <script>
+    ; (() => {
+      try {
+        const key = 'lextures.uiTheme'
+        const theme = (localStorage.getItem(key) || '').trim().toLowerCase()
+        const isDark = theme === 'dark'
+        document.documentElement.classList.toggle('dark', isDark)
+        document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+      } catch {
+        document.documentElement.classList.remove('dark')
+        document.documentElement.style.colorScheme = 'light'
+      }
+    })()
+  </script>
+  <title>Lextures</title>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>

@@ -18,9 +18,10 @@ type PatchWrite struct {
 	AvailableFrom                *time.Time
 	AvailableUntil               *time.Time
 	AssignmentAccessCode         *string
-	SubmissionAllowText          bool
-	SubmissionAllowFileUpload    bool
-	SubmissionAllowURL           bool
+	// Nil = leave existing values (PATCH merge). Non-nil replaces.
+	SubmissionAllowText          *bool
+	SubmissionAllowFileUpload    *bool
+	SubmissionAllowURL           *bool
 	LateSubmissionPolicy         string
 	LatePenaltyPercent           *int
 	RubricJSON                   *json.RawMessage
@@ -62,6 +63,27 @@ func PatchForCourseItem(ctx context.Context, pool *pgxpool.Pool, courseID, itemI
 		return false, nil
 	}
 
+	var curText, curFile, curURL bool
+	if err := tx.QueryRow(ctx, `
+		SELECT submission_allow_text, submission_allow_file_upload, submission_allow_url
+		FROM course.module_assignments
+		WHERE structure_item_id = $1
+	`, itemID).Scan(&curText, &curFile, &curURL); err != nil {
+		return false, err
+	}
+	subText := curText
+	if w.SubmissionAllowText != nil {
+		subText = *w.SubmissionAllowText
+	}
+	subFile := curFile
+	if w.SubmissionAllowFileUpload != nil {
+		subFile = *w.SubmissionAllowFileUpload
+	}
+	subURL := curURL
+	if w.SubmissionAllowURL != nil {
+		subURL = *w.SubmissionAllowURL
+	}
+
 	var rubric any = nil
 	if w.RubricJSON != nil {
 		rubric = []byte(*w.RubricJSON)
@@ -95,7 +117,7 @@ func PatchForCourseItem(ctx context.Context, pool *pgxpool.Pool, courseID, itemI
 		    updated_at = NOW()
 		WHERE structure_item_id = $1
 	`, itemID, w.Markdown, w.PointsWorth, w.AvailableFrom, w.AvailableUntil, w.AssignmentAccessCode,
-		w.SubmissionAllowText, w.SubmissionAllowFileUpload, w.SubmissionAllowURL, w.LateSubmissionPolicy,
+		subText, subFile, subURL, w.LateSubmissionPolicy,
 		w.LatePenaltyPercent, rubric, w.BlindGrading, w.ModeratedGrading, w.ModerationThresholdPct,
 		w.ModeratorUserID, w.ProvisionalGraderUserIDs, w.OriginalityDetection, w.OriginalityStudentVisibility,
 		w.GradingType, w.PostingPolicy, w.ReleaseAt, w.NeverDrop, w.ReplaceWithFinal)
