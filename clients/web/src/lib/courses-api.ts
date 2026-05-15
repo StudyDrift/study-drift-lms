@@ -4469,7 +4469,7 @@ export type OutcomeIntensityLevelId = (typeof OUTCOME_INTENSITY_LEVEL_IDS)[numbe
 
 export type CourseOutcomeLink = {
   id: string
-  subOutcomeId?: string
+  subOutcomeId?: string | null
   structureItemId: string
   targetKind: 'assignment' | 'quiz' | 'quiz_question'
   quizQuestionId: string

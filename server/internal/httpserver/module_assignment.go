@@ -291,9 +291,9 @@ func (d Deps) handlePatchModuleAssignment() http.HandlerFunc {
 			AvailableFrom                *time.Time       `json:"availableFrom"`
 			AvailableUntil               *time.Time       `json:"availableUntil"`
 			AssignmentAccessCode         *string          `json:"assignmentAccessCode"`
-			SubmissionAllowText          bool             `json:"submissionAllowText"`
-			SubmissionAllowFileUpload    bool             `json:"submissionAllowFileUpload"`
-			SubmissionAllowURL           bool             `json:"submissionAllowUrl"`
+			SubmissionAllowText          *bool            `json:"submissionAllowText"`
+			SubmissionAllowFileUpload    *bool            `json:"submissionAllowFileUpload"`
+			SubmissionAllowURL           *bool            `json:"submissionAllowUrl"`
 			LateSubmissionPolicy         string           `json:"lateSubmissionPolicy"`
 			LatePenaltyPercent           *int             `json:"latePenaltyPercent"`
 			Rubric                       *json.RawMessage `json:"rubric"`

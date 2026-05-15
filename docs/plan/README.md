@@ -36,3 +36,4 @@ One plan per feature gap identified in `[docs/MISSING_FEATURES.md](../MISSING_FE
 - [18 — Admin Experience](18-admin-experience/)
 - [19 — AI-Specific Capabilities](19-ai-capabilities/)
 - [20 — Documentation & Trust Surfaces](20-docs-trust/)
+- [21 — CLI](21-cli/)

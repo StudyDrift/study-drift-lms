@@ -111,20 +111,27 @@ find_pg_bin() {
   return 1
 }
 
-INITDB=$(find_pg_bin initdb || true)
+# Use initdb / createdb / pg_ctl from the same directory. Mixing binaries (e.g. initdb from
+# postgresql@16 and pg_ctl from /opt/homebrew/bin) breaks the data directory and yields only
+# “could not start server” with no useful stderr.
 PG_CTL=$(find_pg_bin pg_ctl || true)
-CREATEDB=$(find_pg_bin createdb || true)
-
-if [[ -z "${INITDB}" || -z "${PG_CTL}" || -z "${CREATEDB}" ]]; then
-  echo "ERROR: PostgreSQL binaries not found."
+if [[ -z "${PG_CTL}" ]]; then
+  echo "ERROR: pg_ctl not found."
   echo ""
   echo "  macOS (Homebrew):  brew install postgresql@16"
   echo "  Ubuntu/Debian:     sudo apt install postgresql"
   echo "  Or run with Docker: make e2e  (with Docker Desktop running)"
   exit 1
 fi
+PG_BINDIR="$(cd "$(dirname "${PG_CTL}")" && pwd)"
+INITDB="${PG_BINDIR}/initdb"
+CREATEDB="${PG_BINDIR}/createdb"
+if [[ ! -x "${INITDB}" || ! -x "${CREATEDB}" ]]; then
+  echo "ERROR: Expected initdb and createdb next to pg_ctl in ${PG_BINDIR}."
+  exit 1
+fi
 
-echo "  pg_ctl: ${PG_CTL}"
+echo "  PostgreSQL bindir: ${PG_BINDIR}"
 
 # Create a fresh, isolated Postgres cluster in a temp directory.
 PGDATA_DIR=$(mktemp -d /tmp/lextures-e2e-pgdata.XXXXXX)
@@ -135,16 +142,29 @@ echo "==> Initialising ephemeral Postgres in ${PGDATA_DIR}"
   > /dev/null
 
 echo "==> Starting Postgres on port ${E2E_PG_PORT}"
-"${PG_CTL}" -D "${PGDATA_DIR}" \
+if ! "${PG_CTL}" -D "${PGDATA_DIR}" \
   -l "${PGDATA_DIR}/pg.log" \
   -o "-p ${E2E_PG_PORT} -c listen_addresses=localhost" \
-  start
+  start; then
+  echo ""
+  echo "ERROR: pg_ctl start failed. Recent log (${PGDATA_DIR}/pg.log):"
+  tail -n 80 "${PGDATA_DIR}/pg.log" 2>/dev/null || echo "  (could not read log file)"
+  echo ""
+  echo "  If you see “Address already in use”, free the port or pick another:"
+  echo "    E2E_PG_PORT=5545 ./e2e/scripts/e2e-local.sh …"
+  exit 1
+fi
 
 # Wait until Postgres is accepting connections.
 for i in $(seq 1 20); do
   "${PG_CTL}" -D "${PGDATA_DIR}" status &>/dev/null && break
   sleep 0.5
-  if [[ "${i}" -eq 20 ]]; then echo "ERROR: Postgres did not start."; exit 1; fi
+  if [[ "${i}" -eq 20 ]]; then
+    echo "ERROR: Postgres did not become ready in time."
+    echo "Recent log (${PGDATA_DIR}/pg.log):"
+    tail -n 80 "${PGDATA_DIR}/pg.log" 2>/dev/null || echo "  (could not read log file)"
+    exit 1
+  fi
 done
 
 "${CREATEDB}" -h localhost -p "${E2E_PG_PORT}" -U "${E2E_PG_USER}" "${E2E_PG_DB}"

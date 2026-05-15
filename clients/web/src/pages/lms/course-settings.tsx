@@ -590,21 +590,21 @@ export default function CourseSettings() {
               ? course?.title
                 ? `${course.title} — sections`
                 : 'Sections'
-            : section === 'import-export'
-              ? course?.title
-                ? `${course.title} — import / export`
-                : 'Import / export'
-              : section === 'blueprint'
+              : section === 'import-export'
                 ? course?.title
-                  ? `${course.title} — blueprint`
-                  : 'Blueprint'
-              : section === 'archive'
-                ? course?.title
-                  ? `${course.title} — archive`
-                  : 'Archive'
-                : course?.title
-                  ? `${course.title} — settings`
-                  : 'Course settings'
+                  ? `${course.title} — import / export`
+                  : 'Import / export'
+                : section === 'blueprint'
+                  ? course?.title
+                    ? `${course.title} — blueprint`
+                    : 'Blueprint'
+                  : section === 'archive'
+                    ? course?.title
+                      ? `${course.title} — archive`
+                      : 'Archive'
+                    : course?.title
+                      ? `${course.title} — settings`
+                      : 'Course settings'
 
   const pageDescription =
     section === 'general'
@@ -618,12 +618,12 @@ export default function CourseSettings() {
             : section === 'sections'
               ? 'Create teaching sections, manage rosters, and set per-section assignment due dates.'
               : section === 'import-export'
-              ? 'Download the full course as JSON or restore from a backup file.'
-              : section === 'blueprint'
-                ? 'District curriculum blueprint: link child courses, push structural updates, and review sync history.'
-              : section === 'archive'
-                ? 'Module items you archived from the outline. Restore them when you want them visible again.'
-                : ''
+                ? 'Download the full course as JSON or restore from a backup file.'
+                : section === 'blueprint'
+                  ? 'District curriculum blueprint: link child courses, push structural updates, and review sync history.'
+                  : section === 'archive'
+                    ? 'Module items you archived from the outline. Restore them when you want them visible again.'
+                    : ''
 
   return (
     <LmsPage title={pageTitle} description={pageDescription}>
@@ -687,6 +687,7 @@ export default function CourseSettings() {
                     <button
                       type="button"
                       role="switch"
+                      name="publishCourse"
                       aria-checked={published}
                       aria-label={
                         published
@@ -695,14 +696,12 @@ export default function CourseSettings() {
                       }
                       onClick={() => void onPublishedToggle()}
                       disabled={saveStatus === 'saving'}
-                      className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
-                        published ? 'bg-indigo-600' : 'bg-slate-200'
-                      }`}
+                      className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${published ? 'bg-indigo-600' : 'bg-slate-200'
+                        }`}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition ${
-                          published ? 'translate-x-5' : 'translate-x-0.5'
-                        }`}
+                        className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition ${published ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
                       />
                     </button>
                     <span className="text-sm font-medium text-slate-800">
@@ -818,6 +817,7 @@ export default function CourseSettings() {
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     type="submit"
+                    name="saveGeneral"
                     disabled={saveStatus === 'saving'}
                     className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -826,126 +826,124 @@ export default function CourseSettings() {
                 </div>
               </form>
 
-            <form onSubmit={onSaveForm} className="space-y-6">
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
-                <h2 className="text-sm font-semibold text-slate-900">Fixed Schedule & Visibility</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Control whether the course uses fixed calendar dates or a timeline from each
-                  student’s enrollment. Module release and due dates follow the same mode: relative
-                  courses shift those dates by the same offset.
-                </p>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={scheduleMode === 'relative'}
-                    aria-label={
-                      scheduleMode === 'relative'
-                        ? 'Relative schedule from each enrollment'
-                        : 'Fixed calendar schedule (not relative to enrollment)'
+              <form onSubmit={onSaveForm} className="space-y-6">
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
+                  <h2 className="text-sm font-semibold text-slate-900">Fixed Schedule & Visibility</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Control whether the course uses fixed calendar dates or a timeline from each
+                    student’s enrollment. Module release and due dates follow the same mode: relative
+                    courses shift those dates by the same offset.
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={scheduleMode === 'relative'}
+                      aria-label={
+                        scheduleMode === 'relative'
+                          ? 'Relative schedule from each enrollment'
+                          : 'Fixed calendar schedule (not relative to enrollment)'
+                      }
+                      onClick={() =>
+                        setScheduleMode((m) => (m === 'fixed' ? 'relative' : 'fixed'))
+                      }
+                      disabled={saveStatus === 'saving'}
+                      className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${scheduleMode === 'relative' ? 'bg-indigo-600' : 'bg-slate-200'
+                        }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition ${scheduleMode === 'relative' ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
+                      />
+                    </button>
+                    <span className="text-sm font-medium text-slate-800">
+                      {scheduleMode === 'fixed'
+                        ? 'Fixed (calendar dates)'
+                        : 'Relative (from enrollment)'}
+                    </span>
+                  </div>
+                  {scheduleMode === 'fixed' ? (
+                    <>
+                      <p className="mt-3 text-sm text-slate-500">
+                        Clear a field to remove that date. Times use your local timezone.
+                      </p>
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        <DateField
+                          label="Start"
+                          value={startsAt}
+                          onChange={setStartsAt}
+                          onClear={() => setStartsAt('')}
+                        />
+                        <DateField
+                          label="End"
+                          value={endsAt}
+                          onChange={setEndsAt}
+                          onClear={() => setEndsAt('')}
+                        />
+                        <DateField
+                          label="Visible from"
+                          value={visibleFrom}
+                          onChange={setVisibleFrom}
+                          onClear={() => setVisibleFrom('')}
+                        />
+                        <DateField
+                          label="Hidden after"
+                          value={hiddenAt}
+                          onChange={setHiddenAt}
+                          onClear={() => setHiddenAt('')}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-3 text-sm text-slate-500">
+                        Start and catalog visibility begin when the student is enrolled. Set how long
+                        the course runs and when it drops from the catalog (optional). Durations use
+                        ISO-style lengths (days, weeks, months, or years).
+                      </p>
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        <RelativeDurationField
+                          label="End after"
+                          amount={relEndAmount}
+                          unit={relEndUnit}
+                          onAmountChange={setRelEndAmount}
+                          onUnitChange={setRelEndUnit}
+                          onClear={() => setRelEndAmount('')}
+                        />
+                        <RelativeDurationField
+                          label="Hidden from catalog after"
+                          amount={relHiddenAmount}
+                          unit={relHiddenUnit}
+                          onAmountChange={setRelHiddenAmount}
+                          onUnitChange={setRelHiddenUnit}
+                          onClear={() => setRelHiddenAmount('')}
+                        />
+                      </div>
+                    </>
+                  )}
+                </section>
+
+                {saveMessage && (
+                  <p
+                    className={
+                      saveStatus === 'error' ? 'text-sm text-rose-700' : 'text-sm text-emerald-700'
                     }
-                    onClick={() =>
-                      setScheduleMode((m) => (m === 'fixed' ? 'relative' : 'fixed'))
-                    }
-                    disabled={saveStatus === 'saving'}
-                    className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
-                      scheduleMode === 'relative' ? 'bg-indigo-600' : 'bg-slate-200'
-                    }`}
+                    role="status"
                   >
-                    <span
-                      className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition ${
-                        scheduleMode === 'relative' ? 'translate-x-5' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
-                  <span className="text-sm font-medium text-slate-800">
-                    {scheduleMode === 'fixed'
-                      ? 'Fixed (calendar dates)'
-                      : 'Relative (from enrollment)'}
-                  </span>
-                </div>
-                {scheduleMode === 'fixed' ? (
-                  <>
-                    <p className="mt-3 text-sm text-slate-500">
-                      Clear a field to remove that date. Times use your local timezone.
-                    </p>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                      <DateField
-                        label="Start"
-                        value={startsAt}
-                        onChange={setStartsAt}
-                        onClear={() => setStartsAt('')}
-                      />
-                      <DateField
-                        label="End"
-                        value={endsAt}
-                        onChange={setEndsAt}
-                        onClear={() => setEndsAt('')}
-                      />
-                      <DateField
-                        label="Visible from"
-                        value={visibleFrom}
-                        onChange={setVisibleFrom}
-                        onClear={() => setVisibleFrom('')}
-                      />
-                      <DateField
-                        label="Hidden after"
-                        value={hiddenAt}
-                        onChange={setHiddenAt}
-                        onClear={() => setHiddenAt('')}
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="mt-3 text-sm text-slate-500">
-                      Start and catalog visibility begin when the student is enrolled. Set how long
-                      the course runs and when it drops from the catalog (optional). Durations use
-                      ISO-style lengths (days, weeks, months, or years).
-                    </p>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                      <RelativeDurationField
-                        label="End after"
-                        amount={relEndAmount}
-                        unit={relEndUnit}
-                        onAmountChange={setRelEndAmount}
-                        onUnitChange={setRelEndUnit}
-                        onClear={() => setRelEndAmount('')}
-                      />
-                      <RelativeDurationField
-                        label="Hidden from catalog after"
-                        amount={relHiddenAmount}
-                        unit={relHiddenUnit}
-                        onAmountChange={setRelHiddenAmount}
-                        onUnitChange={setRelHiddenUnit}
-                        onClear={() => setRelHiddenAmount('')}
-                      />
-                    </div>
-                  </>
+                    {saveMessage}
+                  </p>
                 )}
-              </section>
 
-              {saveMessage && (
-                <p
-                  className={
-                    saveStatus === 'error' ? 'text-sm text-rose-700' : 'text-sm text-emerald-700'
-                  }
-                  role="status"
-                >
-                  {saveMessage}
-                </p>
-              )}
-
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="submit"
-                  disabled={saveStatus === 'saving'}
-                  className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saveStatus === 'saving' ? 'Saving…' : 'Save changes'}
-                </button>
-              </div>
-            </form>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="submit"
+                    disabled={saveStatus === 'saving'}
+                    className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saveStatus === 'saving' ? 'Saving…' : 'Save changes'}
+                  </button>
+                </div>
+              </form>
 
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
                 <h2 className="text-sm font-semibold text-slate-900">Hero image</h2>
@@ -1011,11 +1009,10 @@ export default function CourseSettings() {
                         type="button"
                         onClick={() => void selectMarkdownPreset(meta.id)}
                         disabled={mdThemeStatus === 'saving'}
-                        className={`relative flex flex-col rounded-xl border p-4 text-left transition ${
-                          selected
-                            ? 'border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-500/30'
-                            : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50/80'
-                        } disabled:opacity-60`}
+                        className={`relative flex flex-col rounded-xl border p-4 text-left transition ${selected
+                          ? 'border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-500/30'
+                          : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50/80'
+                          } disabled:opacity-60`}
                       >
                         {selected && (
                           <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white">
@@ -1025,19 +1022,18 @@ export default function CourseSettings() {
                         <span className="text-sm font-semibold text-slate-900">{meta.title}</span>
                         <span className="mt-1 text-xs leading-snug text-slate-600">{meta.description}</span>
                         <span
-                          className={`mt-3 block h-8 rounded-md ${
-                            meta.id === 'night'
-                              ? 'bg-slate-900'
-                              : meta.id === 'reader'
-                                ? 'bg-stone-100 ring-1 ring-stone-200'
-                                : meta.id === 'contrast'
-                                  ? 'border-2 border-black bg-white'
-                                  : meta.id === 'serif'
-                                    ? 'bg-amber-50/80'
-                                    : meta.id === 'accent'
-                                      ? 'bg-violet-100/80'
-                                      : 'bg-slate-100'
-                          }`}
+                          className={`mt-3 block h-8 rounded-md ${meta.id === 'night'
+                            ? 'bg-slate-900'
+                            : meta.id === 'reader'
+                              ? 'bg-stone-100 ring-1 ring-stone-200'
+                              : meta.id === 'contrast'
+                                ? 'border-2 border-black bg-white'
+                                : meta.id === 'serif'
+                                  ? 'bg-amber-50/80'
+                                  : meta.id === 'accent'
+                                    ? 'bg-violet-100/80'
+                                    : 'bg-slate-100'
+                            }`}
                           aria-hidden
                         />
                       </button>
@@ -1220,9 +1216,8 @@ export default function CourseSettings() {
                 course cards (same height as the catalog banner).
               </p>
               <div
-                className={`relative mt-4 h-36 w-full touch-none select-none overflow-hidden rounded-xl border border-slate-200 bg-slate-100 ${
-                  positionDragging ? 'cursor-grabbing' : 'cursor-grab'
-                }`}
+                className={`relative mt-4 h-36 w-full touch-none select-none overflow-hidden rounded-xl border border-slate-200 bg-slate-100 ${positionDragging ? 'cursor-grabbing' : 'cursor-grab'
+                  }`}
                 role="presentation"
                 onPointerDown={(e) => {
                   if (e.button !== 0) return
