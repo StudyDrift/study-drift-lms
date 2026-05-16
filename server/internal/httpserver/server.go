@@ -137,6 +137,9 @@ func NewHandler(d Deps) http.Handler {
 	r.Post("/api/v1/orgs/{orgId}/branding/logo", d.handleOrgBrandingUpload("logo"))
 	r.Post("/api/v1/orgs/{orgId}/branding/favicon", d.handleOrgBrandingUpload("favicon"))
 	r.Get("/api/v1/orgs/{orgId}/users", d.handleOrgUsersSearch())
+	r.Get("/api/v1/users", d.handleUsersList())
+	r.Get("/api/v1/users/{user_id}", d.handleUsersGet())
+	r.Post("/api/v1/users", d.handleUsersCreate())
 	// Course calendar feed (iCalendar) — must register before /api/v1/courses/{course_code} static routes that might shadow.
 	r.Get("/api/v1/courses/{course_code}/calendar.ics", d.handleCourseICS())
 	// One Route for /api/v1/courses/{course_code} so GET and PATCH /markdown-theme share the same chi subtree
