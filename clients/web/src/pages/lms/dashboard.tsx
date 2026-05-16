@@ -42,7 +42,7 @@ import {
 import { getMostRecentLastVisited, hrefForLastVisited } from '../../lib/last-visited-module-item'
 import { hrefForRecommendationItem, surfaceLabel } from '../../lib/recommendation-nav'
 import { formatTimeAgoFromIso } from '../../lib/format-time-ago'
-import { useInboxUnreadCount } from '../../context/use-inbox-unread'
+import { useInboxUnreadCount, useCoursesRevision } from '../../context/use-inbox-unread'
 import { useCourseFeedUnread } from '../../context/use-course-feed-unread'
 import { usePermissions } from '../../context/use-permissions'
 import {
@@ -211,6 +211,7 @@ export default function Dashboard() {
   }, [navigate])
   const { allows, loading: permLoading } = usePermissions()
   const inboxUnread = useInboxUnreadCount()
+  const coursesRevision = useCoursesRevision()
   const { totalFeedUnread } = useCourseFeedUnread()
 
   const [catalog, setCatalog] = useState<CoursePublic[] | null>(null)
@@ -313,7 +314,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [coursesRevision])
 
   useEffect(() => {
     if (catalog === null || permLoading) return

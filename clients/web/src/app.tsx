@@ -49,6 +49,7 @@ import ResetPassword from './pages/reset-password'
 import Signup from './pages/signup'
 import ParentDashboard from './pages/lms/parent/ParentDashboard'
 import TermsOfUsePage from './pages/terms-of-use-page'
+import CliAuthPage from './pages/cli-auth'
 
 export default function App() {
   const navigate = useNavigate()
@@ -88,6 +89,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<RequireAuth />}>
+        <Route path="/cli-auth" element={<CliAuthPage />} />
         <Route
           element={
             <ApiErrorBoundary>

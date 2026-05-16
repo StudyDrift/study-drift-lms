@@ -290,7 +290,7 @@ function HomePage() {
                   <Code2 className="h-5 w-5" aria-hidden />
                 </div>
                 <h2 className="mt-5 text-2xl font-semibold tracking-tight text-stone-900 sm:text-3xl">
-                  Open source, APGL-3.0 Licensed
+                  Open source, AGPL-3.0 Licensed
                 </h2>
                 <p className="mt-4 leading-relaxed text-stone-600">
                   The full application stack—Go backend, React frontend, database migrations—is

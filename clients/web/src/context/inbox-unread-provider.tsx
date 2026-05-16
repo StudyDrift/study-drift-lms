@@ -19,6 +19,7 @@ export function InboxUnreadProvider({ children }: { children: ReactNode }) {
   const location = useLocation()
   const [unreadInboxCount, setUnreadInboxCount] = useState(0)
   const [mailboxRevision, setMailboxRevision] = useState(0)
+  const [coursesRevision, setCoursesRevision] = useState(0)
   const wsRef = useRef<WebSocket | null>(null)
 
   const refreshUnread = useCallback(async () => {
@@ -75,6 +76,8 @@ export function InboxUnreadProvider({ children }: { children: ReactNode }) {
       if (msg?.type === 'mailbox_updated') {
         void refreshUnread()
         setMailboxRevision((r) => r + 1)
+      } else if (msg?.type === 'courses_updated') {
+        setCoursesRevision((r) => r + 1)
       }
     }
 
@@ -87,8 +90,8 @@ export function InboxUnreadProvider({ children }: { children: ReactNode }) {
   }, [location.pathname, refreshUnread])
 
   const value = useMemo(
-    () => ({ unreadInboxCount, mailboxRevision, refreshUnread }),
-    [unreadInboxCount, mailboxRevision, refreshUnread],
+    () => ({ unreadInboxCount, mailboxRevision, coursesRevision, refreshUnread }),
+    [unreadInboxCount, mailboxRevision, coursesRevision, refreshUnread],
   )
 
   return <InboxUnreadContext.Provider value={value}>{children}</InboxUnreadContext.Provider>

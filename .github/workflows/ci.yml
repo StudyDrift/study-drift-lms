@@ -79,6 +79,40 @@ jobs:
       - name: go build
         run: go build -o /dev/null ./cmd/server
 
+  client-cli:
+    name: Client (CLI)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/cli
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.3"
+          cache-dependency-path: clients/cli/go.sum
+
+      - name: go mod download
+        run: go mod download
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          # v1.x binaries were built with Go < 1.25 and cannot load configs for go 1.25 modules.
+          version: v2.11.4
+          working-directory: clients/cli
+          args: --timeout=4m
+
+      - name: go test
+        run: go test ./... -count=1 -timeout=5m
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: go build
+        run: go build -o /dev/null main.go
+
   clients:
     name: Client (${{ matrix.client }})
     runs-on: ubuntu-latest
