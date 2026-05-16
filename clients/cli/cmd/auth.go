@@ -61,7 +61,7 @@ func runAuthLogin(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("requesting CLI auth session: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("server returned HTTP %d", resp.StatusCode)
 	}
@@ -76,11 +76,11 @@ func runAuthLogin(cmd *cobra.Command, args []string) error {
 	webURL := strings.TrimRight(Cfg.WebURL, "/")
 	approveURL := webURL + "/cli-auth?token=" + sessionResp.Token
 
-	fmt.Fprintln(cmd.OutOrStdout(), "Opening your browser to complete login...")
-	fmt.Fprintln(cmd.OutOrStdout())
-	fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", approveURL)
-	fmt.Fprintln(cmd.OutOrStdout())
-	fmt.Fprintln(cmd.OutOrStdout(), "If it did not open automatically, copy the URL above into your browser.")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Opening your browser to complete login...")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", approveURL)
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "If it did not open automatically, copy the URL above into your browser.")
 
 	_ = openBrowser(approveURL)
 
@@ -177,7 +177,7 @@ func runAuthStatus(cmd *cobra.Command, args []string) error {
 	if Cfg.APIKey != "" {
 		me, err := fetchMe(Cfg.Server, Cfg.APIKey)
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "API key set; could not fetch identity: %v\n", err)
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "API key set; could not fetch identity: %v\n", err)
 			return nil
 		}
 		return printIdentity(cmd, me, nil, "api_key")
@@ -194,7 +194,7 @@ func runAuthStatus(cmd *cobra.Command, args []string) error {
 
 	me, err := fetchMe(Cfg.Server, tok.AccessToken)
 	if err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Token loaded (backend: %s); could not fetch identity: %v\n",
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Token loaded (backend: %s); could not fetch identity: %v\n",
 			mgr.Backend(), err)
 		return nil
 	}

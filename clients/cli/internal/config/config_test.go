@@ -20,7 +20,7 @@ func writeYAML(t *testing.T, content string) string {
 	if _, err := fmt.Fprint(f, content); err != nil {
 		t.Fatalf("write temp file: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 	return f.Name()
 }
 
@@ -67,9 +67,7 @@ func TestMissingConfigFile(t *testing.T) {
 	// So we use an empty LoadOptions (no file, custom home).
 	// Instead, create a temp home dir with no config file inside.
 	home := t.TempDir()
-	origHome := os.Getenv("HOME")
 	t.Setenv("HOME", home)
-	defer os.Setenv("HOME", origHome)
 
 	cfg, err := config.Load(config.LoadOptions{})
 	if err != nil {
@@ -96,10 +94,6 @@ api_key: file-key
 `
 	t.Setenv("LEXTURES_SERVER", "https://env-server.example.com")
 	t.Setenv("LEXTURES_API_KEY", "env-key")
-	defer func() {
-		os.Unsetenv("LEXTURES_SERVER")
-		os.Unsetenv("LEXTURES_API_KEY")
-	}()
 
 	cfg, err := config.Load(config.LoadOptions{ConfigFile: writeYAML(t, yaml)})
 	if err != nil {
@@ -120,7 +114,6 @@ server: https://file-server.example.com
 api_key: file-key
 `
 	t.Setenv("LEXTURES_SERVER", "https://env-server.example.com")
-	defer os.Unsetenv("LEXTURES_SERVER")
 
 	cfg, err := config.Load(config.LoadOptions{
 		ConfigFile: writeYAML(t, yaml),
@@ -147,7 +140,6 @@ func TestPrecedenceAllLayers(t *testing.T) {
 	fileYAML := "version: 1\nserver: https://file-server.example.com\n"
 
 	t.Setenv("LEXTURES_SERVER", "https://env-server.example.com")
-	defer os.Unsetenv("LEXTURES_SERVER")
 
 	// Flag wins over env and file.
 	cfg, err := config.Load(config.LoadOptions{
@@ -243,11 +235,13 @@ func TestFilePermissionWarning(t *testing.T) {
 
 	_, err := config.Load(config.LoadOptions{ConfigFile: path})
 
-	w.Close()
+	_ = w.Close()
 	os.Stderr = oldStderr
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("reading pipe: %v", err)
+	}
 
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -269,11 +263,13 @@ func TestNoPermissionWarningFor0600(t *testing.T) {
 
 	_, err := config.Load(config.LoadOptions{ConfigFile: path})
 
-	w.Close()
+	_ = w.Close()
 	os.Stderr = oldStderr
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("reading pipe: %v", err)
+	}
 
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -285,7 +281,6 @@ func TestNoPermissionWarningFor0600(t *testing.T) {
 
 func TestJSONEnvVar(t *testing.T) {
 	t.Setenv("LEXTURES_JSON", "true")
-	defer os.Unsetenv("LEXTURES_JSON")
 
 	path := filepath.Join(t.TempDir(), "cfg.yaml")
 	os.WriteFile(path, []byte("version: 1\n"), 0o600)

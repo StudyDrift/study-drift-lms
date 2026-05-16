@@ -77,7 +77,7 @@ func (m *Manager) doRefresh(refreshToken string) (*TokenData, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("refresh returned HTTP %d", resp.StatusCode)
 	}

@@ -53,7 +53,6 @@ func TestVersionOutput(t *testing.T) {
 
 func TestJSONEnvVarWired(t *testing.T) {
 	t.Setenv("LEXTURES_JSON", "true")
-	defer os.Unsetenv("LEXTURES_JSON")
 
 	if os.Getenv("LEXTURES_JSON") != "true" {
 		t.Fatal("env var not set")
@@ -62,7 +61,6 @@ func TestJSONEnvVarWired(t *testing.T) {
 
 func TestServerEnvVar(t *testing.T) {
 	t.Setenv("LEXTURES_SERVER", "https://staging.example.com")
-	defer os.Unsetenv("LEXTURES_SERVER")
 
 	if v := os.Getenv("LEXTURES_SERVER"); v != "https://staging.example.com" {
 		t.Errorf("env = %q", v)
