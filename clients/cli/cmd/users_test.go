@@ -23,19 +23,19 @@ func newUsersServer(t *testing.T, cfg usersServerConfig) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/users":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/users":
 			if cfg.listHandler != nil {
 				cfg.listHandler(w, r)
 			} else {
 				http.NotFound(w, r)
 			}
-		case r.Method == http.MethodPost && r.URL.Path == "/api/users":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/users":
 			if cfg.createHandler != nil {
 				cfg.createHandler(w, r)
 			} else {
 				http.NotFound(w, r)
 			}
-		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/users/"):
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/"):
 			if cfg.getHandler != nil {
 				cfg.getHandler(w, r)
 			} else {

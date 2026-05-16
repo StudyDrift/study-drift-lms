@@ -388,7 +388,7 @@ func runAssignmentsSubmit(cmd *cobra.Command, _ []string) error {
 	info, err := os.Stat(cleanPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("File not found: %s", filePath)
+			return fmt.Errorf("file not found: %s", filePath)
 		}
 		return fmt.Errorf("accessing file %s: %w", filePath, err)
 	}

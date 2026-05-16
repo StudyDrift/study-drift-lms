@@ -70,7 +70,7 @@ func runUsersList(cmd *cobra.Command, args []string) error {
 		params.Set("page", fmt.Sprintf("%d", usersListFlags.page))
 	}
 
-	path := "/api/users"
+	path := "/api/v1/users"
 	if len(params) > 0 {
 		path += "?" + params.Encode()
 	}
@@ -120,7 +120,7 @@ var usersGetCmd = &cobra.Command{
 func runUsersGet(cmd *cobra.Command, args []string) error {
 	c := client.New(Cfg.Server, Cfg.APIKey)
 
-	req, err := c.NewRequest(http.MethodGet, "/api/users/"+url.PathEscape(args[0]), nil)
+	req, err := c.NewRequest(http.MethodGet, "/api/v1/users/"+url.PathEscape(args[0]), nil)
 	if err != nil {
 		return fmt.Errorf("building request: %w", err)
 	}
@@ -198,7 +198,7 @@ func runUsersCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("encoding request: %w", err)
 	}
 
-	req, err := c.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(raw))
+	req, err := c.NewRequest(http.MethodPost, "/api/v1/users", bytes.NewReader(raw))
 	if err != nil {
 		return fmt.Errorf("building request: %w", err)
 	}
@@ -283,7 +283,7 @@ func runUsersEnroll(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("encoding request: %w", err)
 	}
 
-	path := "/api/courses/" + url.PathEscape(usersEnrollFlags.course) + "/enrollments"
+	path := "/api/v1/courses/" + url.PathEscape(usersEnrollFlags.course) + "/enrollments"
 	req, err := c.NewRequest(http.MethodPost, path, bytes.NewReader(raw))
 	if err != nil {
 		return fmt.Errorf("building request: %w", err)
@@ -328,7 +328,7 @@ func resolveUserID(c *client.Client, idOrEmail string) (id, name string, err err
 		return idOrEmail, "", nil
 	}
 
-	req, err := c.NewRequest(http.MethodGet, "/api/users/"+url.PathEscape(idOrEmail), nil)
+	req, err := c.NewRequest(http.MethodGet, "/api/v1/users/"+url.PathEscape(idOrEmail), nil)
 	if err != nil {
 		return "", "", err
 	}
