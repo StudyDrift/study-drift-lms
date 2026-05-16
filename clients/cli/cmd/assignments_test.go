@@ -677,8 +677,8 @@ func TestAssignmentsSubmit_FileNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing file, got nil")
 	}
-	if !strings.Contains(err.Error(), "File not found") {
-		t.Errorf("err = %q; want 'File not found'", err.Error())
+	if !strings.Contains(err.Error(), "file not found") {
+		t.Errorf("err = %q; want 'file not found'", err.Error())
 	}
 	if !strings.Contains(err.Error(), "/nonexistent/path/submission.zip") {
 		t.Errorf("err = %q; want the file path in error message", err.Error())
