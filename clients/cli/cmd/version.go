@@ -19,7 +19,7 @@ var versionCmd = &cobra.Command{
 				"commit":  BuildCommit,
 			})
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "lextures %s (%s)\n", Version, BuildCommit)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "lextures %s (%s)\n", Version, BuildCommit)
 		return nil
 	},
 }
