@@ -83,7 +83,7 @@ func runCoursesList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("listing courses: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return apiError(resp, 2)
@@ -116,9 +116,9 @@ func runCoursesList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "CODE\tTITLE\tTYPE\tPUBLISHED\tARCHIVED")
+	_, _ = fmt.Fprintln(w, "CODE\tTITLE\tTYPE\tPUBLISHED\tARCHIVED")
 	for _, co := range courses {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%v\t%v\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%v\t%v\n",
 			co.CourseCode, co.Title, co.CourseType, co.Published, co.Archived)
 	}
 	return w.Flush()
@@ -145,7 +145,7 @@ func runCoursesGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting course: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return apiError(resp, 2)
@@ -170,19 +170,19 @@ func runCoursesGet(cmd *cobra.Command, args []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "Code:       %s\n", co.CourseCode)
-	fmt.Fprintf(out, "Title:      %s\n", co.Title)
-	fmt.Fprintf(out, "Type:       %s\n", co.CourseType)
-	fmt.Fprintf(out, "Published:  %v\n", co.Published)
-	fmt.Fprintf(out, "Archived:   %v\n", co.Archived)
+	_, _ = fmt.Fprintf(out, "Code:       %s\n", co.CourseCode)
+	_, _ = fmt.Fprintf(out, "Title:      %s\n", co.Title)
+	_, _ = fmt.Fprintf(out, "Type:       %s\n", co.CourseType)
+	_, _ = fmt.Fprintf(out, "Published:  %v\n", co.Published)
+	_, _ = fmt.Fprintf(out, "Archived:   %v\n", co.Archived)
 	if co.StartsAt != nil {
-		fmt.Fprintf(out, "Starts at:  %s\n", co.StartsAt.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(out, "Starts at:  %s\n", co.StartsAt.Format(time.RFC3339))
 	}
 	if co.EndsAt != nil {
-		fmt.Fprintf(out, "Ends at:    %s\n", co.EndsAt.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(out, "Ends at:    %s\n", co.EndsAt.Format(time.RFC3339))
 	}
-	fmt.Fprintf(out, "Created:    %s\n", co.CreatedAt.Format(time.RFC3339))
-	fmt.Fprintf(out, "Updated:    %s\n", co.UpdatedAt.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(out, "Created:    %s\n", co.CreatedAt.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(out, "Updated:    %s\n", co.UpdatedAt.Format(time.RFC3339))
 	return nil
 }
 
@@ -240,7 +240,7 @@ func runCoursesCreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("creating course: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		return apiError(resp, 2)
@@ -260,7 +260,7 @@ func runCoursesCreate(cmd *cobra.Command, args []string) error {
 	if err := json.Unmarshal(respBody, &co); err != nil {
 		return fmt.Errorf("decoding response: %w", err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Created course %s (%s)\n", co.CourseCode, co.ID)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created course %s (%s)\n", co.CourseCode, co.ID)
 	return nil
 }
 
@@ -293,10 +293,10 @@ func runCoursesDelete(cmd *cobra.Command, args []string) error {
 			in = os.Stdin
 		}
 		r := bufio.NewReader(in)
-		fmt.Fprintf(cmd.OutOrStdout(), "Are you sure you want to delete course %q? (y/N) ", courseCode)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Are you sure you want to delete course %q? (y/N) ", courseCode)
 		line, _ := r.ReadString('\n')
 		if !strings.EqualFold(strings.TrimSpace(line), "y") {
-			fmt.Fprintln(cmd.OutOrStdout(), "Aborted.")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Aborted.")
 			return nil
 		}
 	}
@@ -313,7 +313,7 @@ func runCoursesDelete(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("archiving course: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return apiError(resp, 2)
@@ -325,7 +325,7 @@ func runCoursesDelete(cmd *cobra.Command, args []string) error {
 	if globalFlags.jsonOut {
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]string{"archived": courseCode})
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Archived course %s\n", courseCode)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Archived course %s\n", courseCode)
 	return nil
 }
 

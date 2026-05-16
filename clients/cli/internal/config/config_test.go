@@ -283,7 +283,9 @@ func TestJSONEnvVar(t *testing.T) {
 	t.Setenv("LEXTURES_JSON", "true")
 
 	path := filepath.Join(t.TempDir(), "cfg.yaml")
-	os.WriteFile(path, []byte("version: 1\n"), 0o600)
+	if err := os.WriteFile(path, []byte("version: 1\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 
 	cfg, err := config.Load(config.LoadOptions{ConfigFile: path})
 	if err != nil {

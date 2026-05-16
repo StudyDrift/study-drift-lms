@@ -94,7 +94,7 @@ func runAuthLogin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("saving token: %w", err)
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "\nLogged in successfully.")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nLogged in successfully.")
 	return nil
 }
 
@@ -111,7 +111,7 @@ func pollCLIAuth(server, token string, expiresIn int) (*auth.TokenData, error) {
 
 	for i := 0; time.Now().Before(deadline); i++ {
 		time.Sleep(cliAuthPollInterval)
-		fmt.Printf("\r%s Waiting for browser approval...", spinFrames[i%len(spinFrames)])
+		_, _ = fmt.Printf("\r%s Waiting for browser approval...", spinFrames[i%len(spinFrames)])
 
 		resp, err := http.Get(server + "/api/v1/auth/cli/poll?token=" + token)
 		if err != nil {
@@ -124,13 +124,13 @@ func pollCLIAuth(server, token string, expiresIn int) (*auth.TokenData, error) {
 			ExpiresIn    int    `json:"expires_in"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&r)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode == http.StatusNotFound {
 			return nil, fmt.Errorf("CLI auth session expired")
 		}
 		if r.Status == "approved" {
-			fmt.Print("\r                                         \r")
+			_, _ = fmt.Print("\r                                         \r")
 			expiry := time.Time{}
 			if r.ExpiresIn > 0 {
 				expiry = time.Now().Add(time.Duration(r.ExpiresIn) * time.Second)
@@ -164,7 +164,7 @@ func runAuthLogout(cmd *cobra.Command, args []string) error {
 	if err := mgr.Delete(activeProfile()); err != nil {
 		return fmt.Errorf("clearing token: %w", err)
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
 	return nil
 }
 
@@ -217,7 +217,7 @@ func fetchMe(server, token string) (*meResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("server returned HTTP %d", resp.StatusCode)
 	}
@@ -245,10 +245,10 @@ func printIdentity(cmd *cobra.Command, me *meResponse, expiry *time.Time, backen
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Email:   %s\nName:    %s\nBackend: %s\n",
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Email:   %s\nName:    %s\nBackend: %s\n",
 		me.Email, name, backend)
 	if expiry != nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "Expiry:  %s\n", expiry.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Expiry:  %s\n", expiry.Format(time.RFC3339))
 	}
 	return nil
 }
