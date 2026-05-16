@@ -27,9 +27,9 @@ func runInit(cmd *cobra.Command, in io.Reader, localMode bool) error {
 	out := cmd.OutOrStdout()
 	r := bufio.NewReader(in)
 
-	fmt.Fprintln(out, "Lextures CLI setup")
-	fmt.Fprintln(out, "==================")
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Lextures CLI setup")
+	_, _ = fmt.Fprintln(out, "==================")
+	_, _ = fmt.Fprintln(out)
 
 	defaultServer := config.DefaultServer
 	defaultWebURL := ""
@@ -57,11 +57,11 @@ func runInit(cmd *cobra.Command, in io.Reader, localMode bool) error {
 
 	// Warn and confirm before overwriting an existing file.
 	if _, err := os.Stat(cfgPath); err == nil {
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out)
 		answer := promptLine(r, out,
 			fmt.Sprintf("%s already exists. Overwrite? [y/N]", cfgPath), "N")
 		if !strings.EqualFold(strings.TrimSpace(answer), "y") {
-			fmt.Fprintln(out, "Aborted — existing config unchanged.")
+			_, _ = fmt.Fprintln(out, "Aborted — existing config unchanged.")
 			return nil
 		}
 	}
@@ -80,18 +80,18 @@ func runInit(cmd *cobra.Command, in io.Reader, localMode bool) error {
 		return fmt.Errorf("encoding config: %w", err)
 	}
 
-	fmt.Fprintln(out)
-	fmt.Fprintf(out, "Writing %s...", cfgPath)
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintf(out, "Writing %s...", cfgPath)
 	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
-	fmt.Fprintln(out, " done.")
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, " done.")
+	_, _ = fmt.Fprintln(out)
 
 	if apiKey == "" {
-		fmt.Fprintln(out, "Run 'lextures auth login' to authenticate.")
+		_, _ = fmt.Fprintln(out, "Run 'lextures auth login' to authenticate.")
 	} else {
-		fmt.Fprintln(out, "You're all set!")
+		_, _ = fmt.Fprintln(out, "You're all set!")
 	}
 	return nil
 }
@@ -100,9 +100,9 @@ func runInit(cmd *cobra.Command, in io.Reader, localMode bool) error {
 // When the user enters nothing, defaultVal is returned.
 func promptLine(r *bufio.Reader, out io.Writer, label, defaultVal string) string {
 	if defaultVal != "" {
-		fmt.Fprintf(out, "%s [%s]: ", label, defaultVal)
+		_, _ = fmt.Fprintf(out, "%s [%s]: ", label, defaultVal)
 	} else {
-		fmt.Fprintf(out, "%s: ", label)
+		_, _ = fmt.Fprintf(out, "%s: ", label)
 	}
 	line, _ := r.ReadString('\n')
 	line = strings.TrimSpace(line)

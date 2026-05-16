@@ -84,7 +84,7 @@ func runUsersList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("listing users: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return apiError(resp, 2)
@@ -100,9 +100,9 @@ func runUsersList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tEMAIL\tROLE\tCREATED")
+	_, _ = fmt.Fprintln(w, "ID\tNAME\tEMAIL\tROLE\tCREATED")
 	for _, u := range body.Users {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			u.ID, u.Name, u.Email, u.Role, u.CreatedAt.Format(time.RFC3339))
 	}
 	return w.Flush()
@@ -129,7 +129,7 @@ func runUsersGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting user: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return apiError(resp, 2)
@@ -154,11 +154,11 @@ func runUsersGet(cmd *cobra.Command, args []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "ID:       %s\n", u.ID)
-	fmt.Fprintf(out, "Name:     %s\n", u.Name)
-	fmt.Fprintf(out, "Email:    %s\n", u.Email)
-	fmt.Fprintf(out, "Role:     %s\n", u.Role)
-	fmt.Fprintf(out, "Created:  %s\n", u.CreatedAt.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(out, "ID:       %s\n", u.ID)
+	_, _ = fmt.Fprintf(out, "Name:     %s\n", u.Name)
+	_, _ = fmt.Fprintf(out, "Email:    %s\n", u.Email)
+	_, _ = fmt.Fprintf(out, "Role:     %s\n", u.Role)
+	_, _ = fmt.Fprintf(out, "Created:  %s\n", u.CreatedAt.Format(time.RFC3339))
 	return nil
 }
 
@@ -207,7 +207,7 @@ func runUsersCreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("creating user: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusConflict {
 		return fmt.Errorf("user with email %q already exists", usersCreateFlags.email)
@@ -230,7 +230,7 @@ func runUsersCreate(cmd *cobra.Command, args []string) error {
 	if err := json.Unmarshal(respBody, &u); err != nil {
 		return fmt.Errorf("decoding response: %w", err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Created user %s (%s)\n", u.Email, u.ID)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created user %s (%s)\n", u.Email, u.ID)
 	return nil
 }
 
@@ -261,7 +261,7 @@ func init() {
 
 func runUsersEnroll(cmd *cobra.Command, args []string) error {
 	if usersEnrollFlags.dryRun {
-		fmt.Fprintf(cmd.OutOrStdout(), "Would enroll user %q as %s in course %s\n",
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Would enroll user %q as %s in course %s\n",
 			usersEnrollFlags.user, usersEnrollFlags.role, usersEnrollFlags.course)
 		return nil
 	}
@@ -293,10 +293,10 @@ func runUsersEnroll(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("enrolling user: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusConflict {
-		fmt.Fprintln(cmd.OutOrStdout(), "warning: already enrolled")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "warning: already enrolled")
 		return nil
 	}
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
@@ -315,7 +315,7 @@ func runUsersEnroll(cmd *cobra.Command, args []string) error {
 	if displayName == "" {
 		displayName = usersEnrollFlags.user
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Enrolled %s as %s in course %s\n",
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Enrolled %s as %s in course %s\n",
 		displayName, usersEnrollFlags.role, usersEnrollFlags.course)
 	return nil
 }
@@ -360,7 +360,7 @@ func looksLikeUUID(s string) bool {
 				return false
 			}
 		default:
-			if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+			if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') && (ch < 'A' || ch > 'F') {
 				return false
 			}
 		}

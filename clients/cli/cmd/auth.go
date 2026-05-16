@@ -170,7 +170,7 @@ func runAuthLogout(cmd *cobra.Command, args []string) error {
 
 // errNotAuthenticated is returned by auth status (and injected by PersistentPreRunE
 // for resource commands) when no valid token is found.
-var errNotAuthenticated = errors.New("Not authenticated. Run 'lextures auth login'.")
+var errNotAuthenticated = errors.New("not authenticated, run 'lextures auth login'")
 
 func runAuthStatus(cmd *cobra.Command, args []string) error {
 	// API key takes priority over stored token.

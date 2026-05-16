@@ -10,15 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// executeRoot runs the root command with the given args and captures stdout/stderr.
-func executeRoot(args ...string) (stdout, stderr string, err error) {
-	// Re-import via cmd package — use the exported Execute indirectly by
-	// constructing a fresh cobra invocation that mirrors the real command tree.
-	// Since rootCmd is unexported we drive it through os.Args substitution and
-	// a helper that calls Execute().  Instead, expose a testable helper.
-	return "", "", nil
-}
-
 // newTestCmd builds a minimal cobra command for integration assertions.
 func newVersionCmd(version, commit string, jsonOut bool) *cobra.Command {
 	root := &cobra.Command{Use: "lextures", SilenceUsage: true, SilenceErrors: true}
