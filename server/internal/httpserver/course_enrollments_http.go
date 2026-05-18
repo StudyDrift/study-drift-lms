@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/courseroles"
 	modelenrollment "github.com/lextures/lextures/server/internal/models/enrollment"
@@ -38,13 +40,28 @@ func normalizeCourseEnrollmentRole(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
-func isValidEnrollmentRoleForAdd(role string) bool {
-	switch role {
-	case "student", "ta", "designer", "observer", "auditor", "librarian", "teacher", "instructor":
-		return true
-	default:
-		return false
+// enrollmentRoleCapabilities holds catalog capability bits for a role.
+type enrollmentRoleCapabilities struct {
+	Valid    bool
+	IsStaff  bool
+}
+
+// lookupEnrollmentRoleCapabilities queries course.enrollment_roles for capability bits.
+// Returns {Valid: false} when the role_key does not exist in the catalog.
+func lookupEnrollmentRoleCapabilities(ctx context.Context, pool *pgxpool.Pool, role string) (enrollmentRoleCapabilities, error) {
+	var caps enrollmentRoleCapabilities
+	err := pool.QueryRow(ctx, `
+SELECT true, is_staff
+FROM course.enrollment_roles
+WHERE role_key = $1
+`, role).Scan(&caps.Valid, &caps.IsStaff)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return enrollmentRoleCapabilities{Valid: false}, nil
+		}
+		return enrollmentRoleCapabilities{}, err
 	}
+	return caps, nil
 }
 
 func chiCourseCode(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -115,11 +132,16 @@ func (d Deps) handleCourseEnrollmentsPost() http.HandlerFunc {
 
 		if body.CourseRole != nil && strings.TrimSpace(*body.CourseRole) != "" {
 			role := normalizeCourseEnrollmentRole(*body.CourseRole)
-			if !isValidEnrollmentRoleForAdd(role) {
+			roleCaps, err := lookupEnrollmentRoleCapabilities(ctx, d.Pool, role)
+			if err != nil {
+				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify role.")
+				return
+			}
+			if !roleCaps.Valid {
 				apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid courseRole.")
 				return
 			}
-			if role == "teacher" || role == "instructor" {
+			if roleCaps.IsStaff {
 				staff, err := enrollment.UserIsCourseStaff(ctx, d.Pool, courseCode, viewer)
 				if err != nil {
 					apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify access.")
@@ -388,11 +410,16 @@ func (d Deps) handleCourseEnrollmentsPatch() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Provide courseRole or role=student.")
 			return
 		}
-		if !isValidEnrollmentRoleForAdd(newRole) {
+		roleCaps, err := lookupEnrollmentRoleCapabilities(r.Context(), d.Pool, newRole)
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify role.")
+			return
+		}
+		if !roleCaps.Valid {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, "Invalid course role.")
 			return
 		}
-		if newRole == "teacher" || newRole == "instructor" {
+		if roleCaps.IsStaff {
 			staff, err := enrollment.UserIsCourseStaff(r.Context(), d.Pool, courseCode, viewer)
 			if err != nil {
 				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to verify access.")

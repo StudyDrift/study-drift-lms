@@ -239,14 +239,17 @@ func TransferEnrollment(ctx context.Context, pool *pgxpool.Pool, enrollmentID, n
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var courseID uuid.UUID
-	var role string
+	var isStudentEquiv bool
 	err = tx.QueryRow(ctx, `
-SELECT ce.course_id, ce.role FROM course.course_enrollments ce WHERE ce.id = $1 AND ce.active
-`, enrollmentID).Scan(&courseID, &role)
+SELECT ce.course_id, COALESCE(er.is_student_equivalent, false)
+FROM course.course_enrollments ce
+LEFT JOIN course.enrollment_roles er ON er.role_key = ce.role
+WHERE ce.id = $1 AND ce.active
+`, enrollmentID).Scan(&courseID, &isStudentEquiv)
 	if err != nil {
 		return err
 	}
-	if role != "student" {
+	if !isStudentEquiv {
 		return ErrNotStudentEnrollment
 	}
 	var secCourse uuid.UUID

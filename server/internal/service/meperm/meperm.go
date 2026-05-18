@@ -26,6 +26,12 @@ type InvalidInput struct {
 
 func (e *InvalidInput) Error() string { return e.Message }
 
+// Permission string constants for role-derived capabilities (FR-1).
+const (
+	permCourseRoleStaff   = "course:%s:enrollments:role-staff"
+	permCourseRoleStudent = "course:%s:enrollments:role-student"
+)
+
 // MyPermissions returns permissionStrings for the authenticated user.
 func MyPermissions(
 	ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, courseCode, viewAs string,
@@ -60,7 +66,8 @@ func MyPermissions(
 		return withOrgRolePermissions(ctx, pool, userID, base)
 	}
 	if viewAsStudent {
-		stu, err := enrollment.UserHasEnrollmentRole(ctx, pool, courseCode, userID, "student")
+		// Validate the caller actually holds a student-equivalent enrollment.
+		stu, err := enrollment.UserHasStudentEquivalentEnrollment(ctx, pool, courseCode, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -71,9 +78,14 @@ func MyPermissions(
 		if err != nil {
 			return nil, err
 		}
+		base = appendCourseRolePermissions(base, courseCode, false, true)
 		return withOrgRolePermissions(ctx, pool, userID, base)
 	}
 	isStaff, err := enrollment.UserIsCourseStaff(ctx, pool, courseCode, userID)
+	if err != nil {
+		return nil, err
+	}
+	isStudent, err := enrollment.UserHasStudentEquivalentEnrollment(ctx, pool, courseCode, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -82,13 +94,28 @@ func MyPermissions(
 		if err != nil {
 			return nil, err
 		}
+		base = appendCourseRolePermissions(base, courseCode, true, isStudent)
 		return withOrgRolePermissions(ctx, pool, userID, base)
 	}
 	base, err := rbac.ListGrantedPermissionStringsCourseView(ctx, pool, userID, courseCode, true)
 	if err != nil {
 		return nil, err
 	}
+	base = appendCourseRolePermissions(base, courseCode, false, isStudent)
 	return withOrgRolePermissions(ctx, pool, userID, base)
+}
+
+// appendCourseRolePermissions emits the FR-1 role-capability permission strings.
+func appendCourseRolePermissions(base []string, courseCode string, isStaff, isStudent bool) []string {
+	out := make([]string, len(base))
+	copy(out, base)
+	if isStaff {
+		out = append(out, fmt.Sprintf(permCourseRoleStaff, courseCode))
+	}
+	if isStudent {
+		out = append(out, fmt.Sprintf(permCourseRoleStudent, courseCode))
+	}
+	return out
 }
 
 const (
@@ -124,6 +151,8 @@ func withOrgRolePermissions(ctx context.Context, pool *pgxpool.Pool, userID uuid
 	return out, nil
 }
 
+// parseViewAs resolves the public "teacher"/"student" viewAs contract.
+// The string "student" maps to isStudent=true regardless of the actual role name in the catalog.
 func parseViewAs(s string) (isStudent bool, _ error) {
 	s = strings.TrimSpace(s)
 	if s == "" {

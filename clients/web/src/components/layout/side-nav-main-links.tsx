@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Accessibility,
@@ -11,28 +10,22 @@ import {
   Settings,
   UsersRound,
 } from 'lucide-react'
-import { getAccountType } from '../../lib/auth'
 import { useInboxUnreadCount } from '../../context/use-inbox-unread'
 import { usePermissions } from '../../context/use-permissions'
-import { PERM_ACCOMMODATIONS_MANAGE, PERM_REPORTS_VIEW } from '../../lib/rbac-api'
+import {
+  PERM_ACCOMMODATIONS_MANAGE,
+  PERM_PARENT_DASHBOARD,
+  PERM_REPORTS_VIEW,
+} from '../../lib/rbac-api'
 import { sideNavActiveClass, sideNavLinkClass } from './side-nav-styles'
 
 export function SideNavMainLinks() {
   const unreadInboxCount = useInboxUnreadCount()
   const { allows, loading: permLoading } = usePermissions()
-  const [isParent, setIsParent] = useState(() => getAccountType() === 'parent')
-
-  useEffect(() => {
-    function sync() {
-      setIsParent(getAccountType() === 'parent')
-    }
-    sync()
-    window.addEventListener('studydrift-auth-token', sync)
-    return () => window.removeEventListener('studydrift-auth-token', sync)
-  }, [])
 
   const canViewReports = !permLoading && allows(PERM_REPORTS_VIEW)
   const canManageAccommodations = !permLoading && allows(PERM_ACCOMMODATIONS_MANAGE)
+  const isParent = !permLoading && allows(PERM_PARENT_DASHBOARD)
 
   return (
     <>

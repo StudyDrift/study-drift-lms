@@ -198,7 +198,7 @@ ON CONFLICT DO NOTHING
 		return nil, err
 	}
 
-	if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, roleName); err != nil {
+	if _, err := rbac.AssignUserRoleFromProvisioningMapTx(ctx, tx, uid, "scim", strings.ToLower(roleName), "Student"); err != nil {
 		return nil, err
 	}
 	var roleCount int
@@ -387,7 +387,7 @@ UPDATE "user".users SET email = $2, display_name = $3, scim_external_id = $4 WHE
 	}
 
 	roleName := mapAppRoleName(in.Enterprise)
-	if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, roleName); err != nil {
+	if _, err := rbac.AssignUserRoleFromProvisioningMapTx(ctx, tx, uid, "scim", strings.ToLower(roleName), "Student"); err != nil {
 		return nil, err
 	}
 	var roleCount int
