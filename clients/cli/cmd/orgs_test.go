@@ -178,7 +178,7 @@ func TestOrgsList_PermissionDenied(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 403, got nil")
 	}
-	if !strings.Contains(err.Error(), "Permission denied") {
+	if !strings.Contains(err.Error(), "permission denied") {
 		t.Errorf("err = %v, want 'Permission denied'", err)
 	}
 	if !strings.Contains(err.Error(), "super-admin") {
@@ -387,7 +387,7 @@ func TestOrgsGet_PermissionDenied(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 403, got nil")
 	}
-	if !strings.Contains(err.Error(), "Permission denied") {
+	if !strings.Contains(err.Error(), "permission denied") {
 		t.Errorf("err = %v, want 'Permission denied'", err)
 	}
 }
@@ -570,7 +570,7 @@ func TestOrgsCreate_PermissionDenied(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 403, got nil")
 	}
-	if !strings.Contains(err.Error(), "Permission denied") {
+	if !strings.Contains(err.Error(), "permission denied") {
 		t.Errorf("err = %v, want 'Permission denied'", err)
 	}
 }

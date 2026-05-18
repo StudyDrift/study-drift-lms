@@ -83,7 +83,7 @@ func runOrgsList(cmd *cobra.Command, args []string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusForbidden {
-		return fmt.Errorf("Permission denied: super-admin role required")
+		return fmt.Errorf("permission denied: super-admin role required")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return apiError(resp, 2)
@@ -158,7 +158,7 @@ func fetchOrgByID(c *client.Client, id string) (*orgPublic, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("Permission denied: super-admin role required")
+		return nil, fmt.Errorf("permission denied: super-admin role required")
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, apiError(resp, 2)
@@ -186,7 +186,7 @@ func fetchOrgBySlug(c *client.Client, slug string) (*orgPublic, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("Permission denied: super-admin role required")
+		return nil, fmt.Errorf("permission denied: super-admin role required")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, apiError(resp, 2)
@@ -262,7 +262,7 @@ func runOrgsCreate(cmd *cobra.Command, args []string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusForbidden {
-		return fmt.Errorf("Permission denied: super-admin role required")
+		return fmt.Errorf("permission denied: super-admin role required")
 	}
 	if resp.StatusCode == http.StatusConflict {
 		return fmt.Errorf("org with that slug already exists")
