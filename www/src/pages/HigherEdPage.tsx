@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart3, BookOpen, BrainCircuit, GraduationCap, RefreshCw, ShieldCheck, Unplug } from 'lucide-react'
+import { ArrowRight, BarChart3, BookOpen, BrainCircuit, GraduationCap, ShieldCheck, Unplug } from 'lucide-react'
 import { Header } from '../components/Header'
 
 const LINKS = {

@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart3, BrainCircuit, GraduationCap, RefreshCw, ShieldCheck, Users, Zap } from 'lucide-react'
+import { ArrowRight, BarChart3, GraduationCap, RefreshCw, ShieldCheck, Users, Zap } from 'lucide-react'
 import { Header } from '../components/Header'
 
 const LINKS = {
