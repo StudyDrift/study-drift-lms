@@ -180,6 +180,7 @@ func (d Deps) runCanvasImport(
 		}
 	}
 	enrollmentRows := []map[string]any{}
+	rosterEmailByCanvasUID := make(map[int64]string)
 	if include.Enrollments {
 		if !progress("Loading Canvas enrollments...") {
 			return context.Canceled
@@ -187,6 +188,20 @@ func (d Deps) runCanvasImport(
 		enrollmentRows, err = canvasGetArrayPaginated(ctx, client, canvasBase, accessToken, fmt.Sprintf("courses/%d/enrollments", canvasCourseID), url.Values{"state[]": []string{"active", "invited", "creation_pending"}})
 		if err != nil {
 			return err
+		}
+		// Load the full user roster so we can resolve emails; Canvas enrollment
+		// mini-user objects often omit the email field entirely.
+		if rosterUsers, re := canvasGetArrayPaginated(ctx, client, canvasBase, accessToken,
+			fmt.Sprintf("courses/%d/users", canvasCourseID),
+			url.Values{"include[]": []string{"email"}}); re == nil {
+			for _, ru := range rosterUsers {
+				uid := int64At(ru, "id")
+				if uid > 0 {
+					if eg := normalizedLexturesEmailGuessFromCanvasUserMap(ru); eg != "" {
+						rosterEmailByCanvasUID[uid] = eg
+					}
+				}
+			}
 		}
 	}
 
@@ -375,9 +390,11 @@ func (d Deps) runCanvasImport(
 		}
 		for _, e := range enrollmentRows {
 			u := objAt(e, "user")
-			email := strings.ToLower(strings.TrimSpace(strAt(u, "email", "")))
+			canvasUID := int64At(u, "id")
+			// Prefer full-roster email; enrollment mini-user objects often omit it.
+			email := rosterEmailByCanvasUID[canvasUID]
 			if email == "" {
-				email = strings.ToLower(strings.TrimSpace(strAt(u, "login_id", "")))
+				email = normalizedLexturesEmailGuessFromCanvasUserMap(u)
 			}
 			if !strings.Contains(email, "@") {
 				continue
@@ -390,16 +407,22 @@ func (d Deps) runCanvasImport(
 			if pe != nil {
 				continue
 			}
-			role := "student"
-			if strings.Contains(strings.ToLower(strAt(e, "type", "")), "teacher") || strings.Contains(strings.ToLower(strAt(e, "type", "")), "ta") {
-				role = "instructor"
-			}
-			_, _ = tx.Exec(ctx, `
+			role := canvasEnrollmentTypeToRole(strAt(e, "type", ""))
+			// Use the three-column unique constraint (course_id, user_id, role) that
+			// replaced the old two-column one in migration 041. Skip owner rows so we
+			// never overwrite the course creator's ownership grant.
+			tag, ie := tx.Exec(ctx, `
 				INSERT INTO course.course_enrollments (course_id, user_id, role)
-				VALUES ($1, $2, $3)
-				ON CONFLICT (course_id, user_id) DO UPDATE SET role = EXCLUDED.role
-				WHERE course.course_enrollments.role <> 'owner'
+				SELECT $1, $2, $3
+				WHERE NOT EXISTS (
+					SELECT 1 FROM course.course_enrollments
+					WHERE course_id = $1 AND user_id = $2 AND role = 'owner'
+				)
+				ON CONFLICT (course_id, user_id, role) DO NOTHING
 			`, courseID, userID, role)
+			if ie == nil && tag.RowsAffected() > 0 {
+				_ = courseroles.RefreshManagedGrantsForCourseUser(ctx, tx, userID, courseID, courseCode)
+			}
 		}
 	}
 
@@ -661,6 +684,16 @@ func htmlToPlainText(html string) string {
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// canvasEnrollmentTypeToRole converts a Canvas enrollment type string (e.g.
+// "TeacherEnrollment", "TaEnrollment") to the Lextures course role it maps to.
+func canvasEnrollmentTypeToRole(canvasType string) string {
+	t := strings.ToLower(canvasType)
+	if strings.Contains(t, "teacher") || strings.Contains(t, "ta") {
+		return "instructor"
+	}
+	return "student"
 }
 
 func mapCanvasTypeToKind(t string) (kind string, bodyTable string) {
