@@ -113,6 +113,9 @@ type Config struct {
 
 	// SessionManagementUIEnabled gates /api/v1/me/sessions and related UI (plan 4.9).
 	SessionManagementUIEnabled bool
+
+	// EmailNotificationsEnabled gates event-driven transactional email (plan 6.2).
+	EmailNotificationsEnabled bool
 }
 
 // Load reads configuration from the environment.
@@ -223,6 +226,8 @@ func Load() Config {
 		MagicLinkEnrolledOnly: boolEnv("MAGIC_LINK_ENROLLED_ONLY"),
 
 		SessionManagementUIEnabled: boolEnv("SESSION_MANAGEMENT_UI_ENABLED"),
+
+		EmailNotificationsEnabled: boolEnv("EMAIL_NOTIFICATIONS_ENABLED"),
 	}
 }
 

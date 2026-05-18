@@ -510,6 +510,9 @@ func (d Deps) handleCreateModuleAssignment() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to create assignment.")
 			return
 		}
+		if code, err := course.GetCourseCodeByID(r.Context(), d.Pool, cid); err == nil && code != nil {
+			d.emitAssignmentCreatedNotifications(r.Context(), *code, b.Title)
+		}
 		d.writeCreatedStructureItem(w, r, cid, row)
 	}
 }

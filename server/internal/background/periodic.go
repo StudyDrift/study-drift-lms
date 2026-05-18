@@ -48,6 +48,13 @@ func Start(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) {
 			slog.Info("org role grant sweep deleted rows", "count", n)
 		}
 	})
+	go runEvery(ctx, 15*time.Second, func() {
+		now := time.Now().UTC()
+		sweepEmailJobs(context.Background(), pool, cfg, now)
+	})
+	go runEvery(ctx, time.Minute, func() {
+		sweepDailyDigests(context.Background(), pool, cfg, time.Now().UTC())
+	})
 }
 
 func runEvery(ctx context.Context, d time.Duration, fn func()) {

@@ -9,6 +9,7 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/coursegrades"
 	"github.com/lextures/lextures/server/internal/repos/rbac"
+	"github.com/lextures/lextures/server/internal/service/notifications"
 )
 
 // handlePutCourseGradebookGrades is PUT /api/v1/courses/{course_code}/gradebook/grades.
@@ -86,6 +87,7 @@ func (d Deps) handlePutCourseGradebookGrades() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, err.Error())
 			return
 		}
+		notifications.NotifyAutoPostedFromGradebookPut(r.Context(), d.Pool, d.effectiveConfig(), *cid, b.Grades)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
