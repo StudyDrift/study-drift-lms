@@ -58,7 +58,7 @@ func deliverPushJob(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, 
 			slog.Warn("push_jobs.send", "job_id", job.ID, "endpoint_prefix", sub.Endpoint[:min(len(sub.Endpoint), 30)], "err", err)
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode == http.StatusGone {
 			_ = pushsubscriptions.DeleteByEndpoint(ctx, pool, sub.Endpoint)
