@@ -1,4 +1,3 @@
-import { NavLink } from 'react-router-dom'
 import {
   Accessibility,
   BarChart3,
@@ -17,7 +16,7 @@ import {
   PERM_PARENT_DASHBOARD,
   PERM_REPORTS_VIEW,
 } from '../../lib/rbac-api'
-import { sideNavActiveClass, sideNavLinkClass } from './side-nav-styles'
+import { SideNavLink } from './side-nav-link'
 
 export function SideNavMainLinks() {
   const unreadInboxCount = useInboxUnreadCount()
@@ -27,92 +26,55 @@ export function SideNavMainLinks() {
   const canManageAccommodations = !permLoading && allows(PERM_ACCOMMODATIONS_MANAGE)
   const isParent = !permLoading && allows(PERM_PARENT_DASHBOARD)
 
+  const unreadBadge = unreadInboxCount > 0 && (
+    <span
+      className="inline-flex min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-semibold tabular-nums leading-none text-white"
+      aria-label={`${unreadInboxCount} unread`}
+    >
+      {unreadInboxCount > 99 ? '99+' : unreadInboxCount}
+    </span>
+  )
+
   return (
     <>
-      <NavLink
-        to="/"
-        end
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <LayoutDashboard className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+      <SideNavLink to="/" end icon={<LayoutDashboard className="h-5 w-5" />}>
         Dashboard
-      </NavLink>
+      </SideNavLink>
       {isParent && (
-        <NavLink
-          to="/parent"
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <UsersRound className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to="/parent" icon={<UsersRound className="h-5 w-5" />}>
           Family
-        </NavLink>
+        </SideNavLink>
       )}
-      <NavLink
-        to="/courses"
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <BookOpen className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+      <SideNavLink to="/courses" icon={<BookOpen className="h-5 w-5" />}>
         Courses
-      </NavLink>
-      <NavLink
-        to="/notebooks"
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <BookMarked className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+      </SideNavLink>
+      <SideNavLink to="/notebooks" icon={<BookMarked className="h-5 w-5" />}>
         My Notebooks
-      </NavLink>
-      <NavLink
-        to="/calendar"
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <Calendar className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+      </SideNavLink>
+      <SideNavLink to="/calendar" icon={<Calendar className="h-5 w-5" />}>
         Calendar
-      </NavLink>
+      </SideNavLink>
       {canViewReports && (
-        <NavLink
-          to="/reports"
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <BarChart3 className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to="/reports" icon={<BarChart3 className="h-5 w-5" />}>
           Reports
-        </NavLink>
+        </SideNavLink>
       )}
       {canManageAccommodations && (
-        <NavLink
-          to="/admin/accommodations"
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <Accessibility className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to="/admin/accommodations" icon={<Accessibility className="h-5 w-5" />}>
           Accommodations
-        </NavLink>
+        </SideNavLink>
       )}
-      <NavLink
+      <SideNavLink
         to="/inbox"
         data-onboarding="nav-inbox"
-        className={({ isActive }) =>
-          `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''} justify-between gap-2`
-        }
+        icon={<Inbox className="h-5 w-5" />}
+        badge={unreadBadge}
       >
-        <span className="flex min-w-0 flex-1 items-center gap-3">
-          <Inbox className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
-          <span className="truncate">Inbox</span>
-        </span>
-        {unreadInboxCount > 0 && (
-          <span
-            className="inline-flex min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-semibold tabular-nums leading-none text-white"
-            aria-label={`${unreadInboxCount} unread`}
-          >
-            {unreadInboxCount > 99 ? '99+' : unreadInboxCount}
-          </span>
-        )}
-      </NavLink>
-      <NavLink
-        to="/settings"
-        data-onboarding="nav-settings"
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <Settings className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        Inbox
+      </SideNavLink>
+      <SideNavLink to="/settings" data-onboarding="nav-settings" icon={<Settings className="h-5 w-5" />}>
         Settings
-      </NavLink>
+      </SideNavLink>
     </>
   )
 }

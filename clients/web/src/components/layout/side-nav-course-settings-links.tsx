@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import {
   Archive,
   ArrowLeft,
@@ -11,7 +11,9 @@ import {
   Target,
 } from 'lucide-react'
 import { courseSettingsSectionFromPathname } from './side-nav-path-utils'
-import { sideNavActiveClass, sideNavLinkClass } from './side-nav-styles'
+import { sideNavActiveClass } from './side-nav-styles'
+import { SideNavLink } from './side-nav-link'
+import { useShellNav } from './use-shell-nav'
 
 type SideNavCourseSettingsLinksProps = {
   courseCode: string
@@ -19,85 +21,79 @@ type SideNavCourseSettingsLinksProps = {
 
 export function SideNavCourseSettingsLinks({ courseCode }: SideNavCourseSettingsLinksProps) {
   const location = useLocation()
+  const { sideNavCollapsed } = useShellNav()
   const section = courseSettingsSectionFromPathname(location.pathname)
   const base = `/courses/${encodeURIComponent(courseCode)}/settings`
 
   return (
     <>
-      <NavLink
+      <SideNavLink
         to={`/courses/${encodeURIComponent(courseCode)}`}
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
+        icon={<ArrowLeft className="h-5 w-5" />}
       >
-        <ArrowLeft className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Back
-      </NavLink>
-      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
-        Course Settings
-      </p>
-      <NavLink
+      </SideNavLink>
+      {!sideNavCollapsed && (
+        <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
+          Course Settings
+        </p>
+      )}
+      <SideNavLink
         to={`${base}/general`}
-        className={() => `${sideNavLinkClass} ${section === 'general' ? sideNavActiveClass : ''}`}
+        className={() => (section === 'general' ? sideNavActiveClass : '')}
+        icon={<Info className="h-5 w-5" />}
       >
-        <Info className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         General
-      </NavLink>
-      <NavLink
+      </SideNavLink>
+      <SideNavLink
         to={`${base}/grading`}
-        className={() => `${sideNavLinkClass} ${section === 'grading' ? sideNavActiveClass : ''}`}
+        className={() => (section === 'grading' ? sideNavActiveClass : '')}
+        icon={<Scale className="h-5 w-5" />}
       >
-        <Scale className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Grading
-      </NavLink>
-      <NavLink
+      </SideNavLink>
+      <SideNavLink
         to={`${base}/outcomes`}
-        className={() => `${sideNavLinkClass} ${section === 'outcomes' ? sideNavActiveClass : ''}`}
+        className={() => (section === 'outcomes' ? sideNavActiveClass : '')}
+        icon={<Target className="h-5 w-5" />}
       >
-        <Target className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Outcomes
-      </NavLink>
-      <NavLink
+      </SideNavLink>
+      <SideNavLink
         to={`${base}/features`}
-        className={() =>
-          `${sideNavLinkClass} ${section === 'features' ? sideNavActiveClass : ''}`
-        }
+        className={() => (section === 'features' ? sideNavActiveClass : '')}
+        icon={<SlidersHorizontal className="h-5 w-5" />}
       >
-        <SlidersHorizontal className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Features
-      </NavLink>
-      <NavLink
+      </SideNavLink>
+      <SideNavLink
         to={`${base}/sections`}
-        className={() =>
-          `${sideNavLinkClass} ${section === 'sections' ? sideNavActiveClass : ''}`
-        }
+        className={() => (section === 'sections' ? sideNavActiveClass : '')}
+        icon={<LayoutGrid className="h-5 w-5" />}
       >
-        <LayoutGrid className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Sections
-      </NavLink>
-      <NavLink
+      </SideNavLink>
+      <SideNavLink
         to={`${base}/import-export`}
-        className={() =>
-          `${sideNavLinkClass} ${section === 'import-export' ? sideNavActiveClass : ''}`
-        }
+        className={() => (section === 'import-export' ? sideNavActiveClass : '')}
+        icon={<FolderInput className="h-5 w-5" />}
       >
-        <FolderInput className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Import / export
-      </NavLink>
-      <NavLink
+      </SideNavLink>
+      <SideNavLink
         to={`${base}/blueprint`}
-        className={() =>
-          `${sideNavLinkClass} ${section === 'blueprint' ? sideNavActiveClass : ''}`
-        }
+        className={() => (section === 'blueprint' ? sideNavActiveClass : '')}
+        icon={<BookCopy className="h-5 w-5" />}
       >
-        <BookCopy className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Blueprint
-      </NavLink>
-      <NavLink
+      </SideNavLink>
+      <SideNavLink
         to={`${base}/archive`}
-        className={() => `${sideNavLinkClass} ${section === 'archive' ? sideNavActiveClass : ''}`}
+        className={() => (section === 'archive' ? sideNavActiveClass : '')}
+        icon={<Archive className="h-5 w-5" />}
       >
-        <Archive className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
         Archived
-      </NavLink>
+      </SideNavLink>
     </>
   )
 }

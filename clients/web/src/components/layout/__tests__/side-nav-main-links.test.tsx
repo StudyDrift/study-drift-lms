@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { PERM_REPORTS_VIEW } from '../../../lib/rbac-api'
+import { ShellNavProvider } from '../shell-nav-context'
 import { SideNavMainLinks } from '../side-nav-main-links'
 
 vi.mock('../../../context/use-inbox-unread', () => ({
@@ -19,7 +20,9 @@ describe('SideNavMainLinks', () => {
   it('renders core navigation and unread badge when inbox has items', () => {
     render(
       <MemoryRouter>
-        <SideNavMainLinks />
+        <ShellNavProvider>
+          <SideNavMainLinks />
+        </ShellNavProvider>
       </MemoryRouter>,
     )
     expect(screen.getByRole('link', { name: /^dashboard$/i })).toHaveAttribute('href', '/')

@@ -1,9 +1,10 @@
+import { getMarkRange } from '@tiptap/core'
 import { Markdown } from '@tiptap/markdown'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { Image as ImageIcon } from 'lucide-react'
+import { ExternalLink, Image as ImageIcon, Trash2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/core'
@@ -79,6 +80,17 @@ type MentionUi = {
   top: number
 }
 
+type LinkPopoverState = {
+  href: string
+  text: string
+  editHref: string
+  editText: string
+  from: number
+  to: number
+  left: number
+  top: number
+}
+
 /**
  * WYSIWYG Markdown body: stores Markdown on the wire, renders formatted content while editing.
  */
@@ -112,6 +124,7 @@ export function MarkdownBodyEditor({
   const [structureError, setStructureError] = useState(false)
   const [mentionUi, setMentionUi] = useState<MentionUi | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  const [linkPopover, setLinkPopover] = useState<LinkPopoverState | null>(null)
 
   const mentionCtxRef = useRef({
     mentionUi: null as MentionUi | null,
@@ -228,7 +241,35 @@ export function MarkdownBodyEditor({
         })()
         return true
       },
+      handleClick(view: EditorView, pos: number, event: MouseEvent) {
+        if (disabledRef.current) return false
+        const { state } = view
+        const linkMarkType = state.schema.marks.link
+        if (!linkMarkType) return false
+        const $pos = state.doc.resolve(pos)
+        const linkMark = $pos.marks().find((m) => m.type === linkMarkType)
+        if (!linkMark) return false
+        event.preventDefault()
+        const range = getMarkRange($pos, linkMarkType)
+        if (!range) return false
+        const text = state.doc.textBetween(range.from, range.to)
+        const domCoords = view.coordsAtPos(pos)
+        const initialHref = (linkMark.attrs.href as string) ?? ''
+        setLinkPopover({
+          href: initialHref,
+          text,
+          editHref: initialHref,
+          editText: text,
+          from: range.from,
+          to: range.to,
+          left: domCoords.left,
+          top: domCoords.bottom + 6,
+        })
+        return true
+      },
     }),
+    // setLinkPopover is stable; disabledRef is a ref — no deps needed
+     
     [],
   )
 
@@ -403,6 +444,47 @@ export function MarkdownBodyEditor({
     editor.chain().focus().deleteRange({ from: mu.from, to: mu.to }).run()
     setMentionUi(null)
   }, [editor])
+
+  const applyLinkEdit = useCallback(() => {
+    if (!editor || !linkPopover) return
+    const href = linkPopover.editHref.trim()
+    const text = linkPopover.editText.trim() || linkPopover.href
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(
+        { from: linkPopover.from, to: linkPopover.to },
+        href
+          ? { type: 'text', text, marks: [{ type: 'link', attrs: { href } }] }
+          : { type: 'text', text },
+      )
+      .run()
+    setLinkPopover(null)
+  }, [editor, linkPopover])
+
+  const removeLinkFromPopover = useCallback(() => {
+    if (!editor || !linkPopover) return
+    editor
+      .chain()
+      .focus()
+      .setTextSelection({ from: linkPopover.from, to: linkPopover.to })
+      .unsetMark('link')
+      .run()
+    setLinkPopover(null)
+  }, [editor, linkPopover])
+
+  useEffect(() => {
+    if (!editor || !linkPopover) return
+    const close = () => {
+      const { state } = editor
+      const $pos = state.doc.resolve(state.selection.from)
+      if (!$pos.marks().some((m) => m.type.name === 'link')) {
+        setLinkPopover(null)
+      }
+    }
+    editor.on('selectionUpdate', close)
+    return () => { editor.off('selectionUpdate', close) }
+  }, [editor, linkPopover])
 
   useEffect(() => {
     if (!editor) return
@@ -628,6 +710,100 @@ export function MarkdownBodyEditor({
                   </button>
                 ))
               )}
+            </div>,
+            document.body,
+          )
+        : null}
+      {linkPopover
+        ? createPortal(
+            <div
+              role="dialog"
+              aria-label="Edit link"
+              style={{
+                position: 'fixed',
+                left: Math.min(linkPopover.left, window.innerWidth - 320),
+                top: linkPopover.top,
+                zIndex: 60,
+                width: 'min(20rem, calc(100vw - 2rem))',
+              }}
+              className="rounded-xl border border-slate-200 bg-white p-3 shadow-lg shadow-slate-900/15 dark:border-neutral-600 dark:bg-neutral-900"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                  Edit link
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLinkPopover(null)}
+                  className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                  aria-label="Close link editor"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="flex flex-col gap-2">
+                <div>
+                  <label className="mb-1 block text-xs text-slate-600 dark:text-neutral-300">URL</label>
+                  <input
+                    type="url"
+                    value={linkPopover.editHref}
+                    onChange={(e) => setLinkPopover((p) => p && { ...p, editHref: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); applyLinkEdit() }
+                      if (e.key === 'Escape') { e.preventDefault(); setLinkPopover(null) }
+                    }}
+                    placeholder="https://"
+                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-600 dark:text-neutral-300">Display text</label>
+                  <input
+                    type="text"
+                    value={linkPopover.editText}
+                    onChange={(e) => setLinkPopover((p) => p && { ...p, editText: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); applyLinkEdit() }
+                      if (e.key === 'Escape') { e.preventDefault(); setLinkPopover(null) }
+                    }}
+                    placeholder="Link text"
+                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-500"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={removeLinkFromPopover}
+                    className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remove link
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {linkPopover.editHref.trim() ? (
+                      <a
+                        href={linkPopover.editHref.trim()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-100 dark:text-neutral-300 dark:hover:bg-neutral-700"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Visit
+                      </a>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={applyLinkEdit}
+                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>,
             document.body,
           )
