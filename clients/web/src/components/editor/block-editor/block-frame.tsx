@@ -32,18 +32,6 @@ export function BlockFrame({ blockId, toolbar, children, className }: BlockFrame
       role="group"
       aria-label="Content block"
     >
-      {toolbar && (
-        <div
-          className={[
-            'absolute bottom-full left-0 z-20 mb-1 flex w-full justify-start transition-opacity duration-150',
-            selected
-              ? 'visible opacity-100'
-              : 'invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100',
-          ].join(' ')}
-        >
-          {toolbar}
-        </div>
-      )}
       <div
         className={[
           'border-l-2 border-transparent pl-3 transition-colors',
@@ -51,6 +39,20 @@ export function BlockFrame({ blockId, toolbar, children, className }: BlockFrame
           disabled ? 'opacity-60' : '',
         ].join(' ')}
       >
+        {toolbar && (
+          <div
+            className={[
+              'sticky top-0 z-20 w-full overflow-hidden transition-all duration-150',
+              selected
+                ? 'mb-2 h-9 opacity-100'
+                : 'h-0 opacity-0 group-hover:mb-2 group-hover:h-9 group-hover:opacity-100 group-focus-within:mb-2 group-focus-within:h-9 group-focus-within:opacity-100',
+            ].join(' ')}
+          >
+            <div className="flex justify-start">
+              {toolbar}
+            </div>
+          </div>
+        )}
         {children}
       </div>
     </div>

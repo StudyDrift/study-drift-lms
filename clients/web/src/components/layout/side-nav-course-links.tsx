@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import {
   ArrowLeft,
   Award,
@@ -29,7 +29,9 @@ import {
 } from '../../lib/courses-api'
 import { useCourseViewAs } from '../../lib/course-view-as'
 import { useViewerEnrollmentRoles } from '../../lib/use-viewer-enrollment-roles'
-import { sideNavActiveClass, sideNavLinkClass } from './side-nav-styles'
+import { sideNavActiveClass } from './side-nav-styles'
+import { SideNavLink } from './side-nav-link'
+import { useShellNav } from './use-shell-nav'
 
 type SideNavCourseLinksProps = {
   courseCode: string
@@ -37,6 +39,7 @@ type SideNavCourseLinksProps = {
 
 export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
   const location = useLocation()
+  const { sideNavCollapsed } = useShellNav()
   const {
     notebookEnabled,
     feedEnabled,
@@ -51,8 +54,7 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
   const viewerEnrollmentRoles = useViewerEnrollmentRoles(courseCode)
 
   const base = `/courses/${encodeURIComponent(courseCode)}`
-  const canViewGradebook =
-    !permLoading && allows(courseGradebookViewPermission(courseCode))
+  const canViewGradebook = !permLoading && allows(courseGradebookViewPermission(courseCode))
   const canViewEnrollments =
     viewerEnrollmentRoles !== null &&
     viewerIsCourseStaffEnrollment(viewerEnrollmentRoles) &&
@@ -60,158 +62,97 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
     !permLoading &&
     allows(courseEnrollmentsReadPermission(courseCode))
   const canViewMyGrades = viewerShouldShowMyGradesNav(viewerEnrollmentRoles, courseViewPreview)
-  const canManageCourse =
-    !permLoading && allows(courseItemCreatePermission(courseCode))
-  const canManageQuestionBank =
-    !permLoading && allows(courseItemsCreatePermission(courseCode))
+  const canManageCourse = !permLoading && allows(courseItemCreatePermission(courseCode))
+  const canManageQuestionBank = !permLoading && allows(courseItemsCreatePermission(courseCode))
 
   return (
     <>
-      <NavLink
-        to="/courses"
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <ArrowLeft className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+      <SideNavLink to="/courses" icon={<ArrowLeft className="h-5 w-5" />}>
         Back
-      </NavLink>
-      <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
-        Course Menu
-      </p>
-      <NavLink
-        to={base}
-        end
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <LayoutDashboard className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+      </SideNavLink>
+      {!sideNavCollapsed && (
+        <p className="px-3 pb-1 pt-3 text-sm font-bold tracking-tight text-slate-900 dark:text-neutral-100">
+          Course Menu
+        </p>
+      )}
+      <SideNavLink to={base} end icon={<LayoutDashboard className="h-5 w-5" />}>
         Dashboard
-      </NavLink>
+      </SideNavLink>
       {feedEnabled && (
-        <NavLink
-          to={`${base}/feed`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <MessageSquare className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/feed`} icon={<MessageSquare className="h-5 w-5" />}>
           Feed
-        </NavLink>
+        </SideNavLink>
       )}
       {discussionsEnabled && (
-        <NavLink
-          to={`${base}/discussions`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <MessagesSquare className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/discussions`} icon={<MessagesSquare className="h-5 w-5" />}>
           Discussions
-        </NavLink>
+        </SideNavLink>
       )}
-      <NavLink
-        to={`${base}/syllabus`}
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <FileText className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+      <SideNavLink to={`${base}/syllabus`} icon={<FileText className="h-5 w-5" />}>
         Syllabus
-      </NavLink>
-      <NavLink
-        to={`${base}/modules`}
-        className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-      >
-        <Layers className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+      </SideNavLink>
+      <SideNavLink to={`${base}/modules`} icon={<Layers className="h-5 w-5" />}>
         Modules
-      </NavLink>
+      </SideNavLink>
       {canManageQuestionBank && questionBankEnabled && (
-        <NavLink
-          to={`${base}/questions`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <ListChecks className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/questions`} icon={<ListChecks className="h-5 w-5" />}>
           Question bank
-        </NavLink>
+        </SideNavLink>
       )}
       {canManageQuestionBank && questionBankEnabled && (
-        <NavLink
-          to={`${base}/misconception-report`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <Lightbulb className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/misconception-report`} icon={<Lightbulb className="h-5 w-5" />}>
           Misconceptions
-        </NavLink>
+        </SideNavLink>
       )}
       {notebookEnabled && (
-        <NavLink
-          to={`${base}/notebook`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <NotebookPen className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/notebook`} icon={<NotebookPen className="h-5 w-5" />}>
           Notebook
-        </NavLink>
+        </SideNavLink>
       )}
       {calendarEnabled && (
-        <NavLink
-          to={`${base}/calendar`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <Calendar className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/calendar`} icon={<Calendar className="h-5 w-5" />}>
           Calendar
-        </NavLink>
+        </SideNavLink>
       )}
       {canViewMyGrades && (
-        <NavLink
-          to={`${base}/my-grades`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <Award className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/my-grades`} icon={<Award className="h-5 w-5" />}>
           My grades
-        </NavLink>
+        </SideNavLink>
       )}
       {canViewGradebook && (
-        <NavLink
-          to={`${base}/gradebook`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <ClipboardList className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/gradebook`} icon={<ClipboardList className="h-5 w-5" />}>
           Gradebook
-        </NavLink>
+        </SideNavLink>
       )}
       {sbgEnabled && canViewGradebook && (
-        <NavLink
-          to={`${base}/standards-gradebook`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <BookMarked className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/standards-gradebook`} icon={<BookMarked className="h-5 w-5" />}>
           Standards gradebook
-        </NavLink>
+        </SideNavLink>
       )}
       {standardsAlignmentEnabled && (canViewGradebook || canManageCourse) && (
-        <NavLink
-          to={`${base}/standards-coverage`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <BookMarked className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/standards-coverage`} icon={<BookMarked className="h-5 w-5" />}>
           Standards coverage
-        </NavLink>
+        </SideNavLink>
       )}
       {canViewEnrollments && (
-        <NavLink
-          to={`${base}/enrollments`}
-          className={({ isActive }) => `${sideNavLinkClass} ${isActive ? sideNavActiveClass : ''}`}
-        >
-          <Users className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+        <SideNavLink to={`${base}/enrollments`} icon={<Users className="h-5 w-5" />}>
           Enrollments
-        </NavLink>
+        </SideNavLink>
       )}
       {canManageCourse && (
-        <NavLink
+        <SideNavLink
           to={`${base}/settings/general`}
           className={() => {
             const settingsPrefix = `${base}/settings`
             const onSettings =
               location.pathname === settingsPrefix ||
               location.pathname.startsWith(`${settingsPrefix}/`)
-            return `${sideNavLinkClass} ${onSettings ? sideNavActiveClass : ''}`
+            return onSettings ? sideNavActiveClass : ''
           }}
+          icon={<Settings className="h-5 w-5" />}
         >
-          <Settings className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
           Settings
-        </NavLink>
+        </SideNavLink>
       )}
     </>
   )

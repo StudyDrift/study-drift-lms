@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/repos/course"
 	"github.com/lextures/lextures/server/internal/repos/enrollment"
+	userai "github.com/lextures/lextures/server/internal/repos/user"
+	"github.com/lextures/lextures/server/internal/service/openrouter"
 )
 
 type syllabusResponse struct {
@@ -199,21 +202,41 @@ func (d Deps) handleGenerateSyllabusSection() http.HandlerFunc {
 		}
 		heading := strings.TrimSpace(body.SectionHeading)
 		existing := strings.TrimSpace(body.ExistingMarkdown)
-		var b strings.Builder
+
+		or := d.openRouterClient()
+		if or == nil {
+			apierr.WriteJSON(w, http.StatusServiceUnavailable, apierr.CodeInternal, "AI generation is not configured. Set an OpenRouter API key in Platform Settings.")
+			return
+		}
+
+		model, err := userai.GetCourseSetupModelID(r.Context(), d.Pool, viewer)
+		if err != nil {
+			model = userai.DefaultCourseSetupModelID
+		}
+
+		const sysPrompt = `You are an expert academic writer helping instructors author course syllabi. When given a section heading and instructions, write clear, concise syllabus content in Markdown. Use the heading level provided (## or ###) if one is given. Write in a professional but accessible tone suitable for university students. Output only the Markdown content — no preamble, no code fences, no commentary.`
+
+		var userMsg strings.Builder
 		if heading != "" {
-			b.WriteString("## ")
-			b.WriteString(heading)
-			b.WriteString("\n\n")
+			fmt.Fprintf(&userMsg, "Section heading: %s\n\n", heading)
 		}
-		// Temporary non-AI fallback to keep syllabus authoring flow functional while the
-		// Rust syllabussectionai behavior is still being ported.
-		b.WriteString(instructions)
+		fmt.Fprintf(&userMsg, "Instructions: %s", instructions)
 		if existing != "" {
-			b.WriteString("\n\n")
-			b.WriteString(existing)
+			fmt.Fprintf(&userMsg, "\n\nExisting content to revise or extend:\n%s", existing)
 		}
+
+		generated, err := or.ChatCompletion(model, []openrouter.Message{
+			{Role: "system", Content: sysPrompt},
+			{Role: "user", Content: userMsg.String()},
+		})
+		if err != nil {
+			apierr.WriteJSON(w, http.StatusBadGateway, apierr.CodeInternal, "AI generation failed: "+err.Error())
+			return
+		}
+
+		markdown := strings.TrimSpace(generated)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_ = json.NewEncoder(w).Encode(resp{Markdown: b.String()})
+		_ = json.NewEncoder(w).Encode(resp{Markdown: markdown})
 	}
 }
 
