@@ -1,11 +1,6 @@
 import { ArrowRight, BrainCircuit, RefreshCw, TrendingUp, Zap } from 'lucide-react'
 import { Header } from '../components/Header'
 
-const LINKS = {
-  demo: 'https://demo.lextures.com/',
-  github: 'https://github.com/StudyDrift/lextures',
-} as const
-
 const PROBLEMS = [
   {
     title: 'You don\'t know what you don\'t know',
