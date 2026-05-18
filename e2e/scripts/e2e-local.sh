@@ -142,9 +142,11 @@ echo "==> Initialising ephemeral Postgres in ${PGDATA_DIR}"
   > /dev/null
 
 echo "==> Starting Postgres on port ${E2E_PG_PORT}"
+# Keep Unix sockets inside the ephemeral data dir (CI runners often cannot write /var/run/postgresql).
+PG_CTL_OPTS="-p ${E2E_PG_PORT} -c listen_addresses=localhost -c unix_socket_directories=${PGDATA_DIR}"
 if ! "${PG_CTL}" -D "${PGDATA_DIR}" \
   -l "${PGDATA_DIR}/pg.log" \
-  -o "-p ${E2E_PG_PORT} -c listen_addresses=localhost" \
+  -o "${PG_CTL_OPTS}" \
   start; then
   echo ""
   echo "ERROR: pg_ctl start failed. Recent log (${PGDATA_DIR}/pg.log):"

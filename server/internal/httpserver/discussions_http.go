@@ -637,6 +637,12 @@ func (d Deps) handleDiscussionPostsPost() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Could not create post.")
 			return
 		}
+		threadRow, _ := discussions.GetThread(r.Context(), d.Pool, *cid, tid)
+		threadTitle := "Discussion"
+		if threadRow != nil {
+			threadTitle = threadRow.Title
+		}
+		d.emitDiscussionReplyNotifications(r.Context(), *cid, courseCode, tid, viewer, threadTitle)
 		row2, err := discussions.GetPost(r.Context(), d.Pool, *cid, row.ID, &viewer)
 		if err != nil || row2 == nil {
 			apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Could not load post.")

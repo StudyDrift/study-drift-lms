@@ -12,6 +12,9 @@ const config: StorybookConfig = {
     const { mergeConfig } = await import('vite')
     return mergeConfig(cfg, {
       plugins: [tailwindcss()],
+      define: {
+        'import.meta.env.STORYBOOK': JSON.stringify('true'),
+      },
     })
   },
 }
