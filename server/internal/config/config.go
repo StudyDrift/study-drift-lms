@@ -116,6 +116,15 @@ type Config struct {
 
 	// EmailNotificationsEnabled gates event-driven transactional email (plan 6.2).
 	EmailNotificationsEnabled bool
+
+	// PushNotificationsEnabled gates Web Push (VAPID) notifications (plan 6.3).
+	PushNotificationsEnabled bool
+	// VAPIDPublicKey is the base64url-encoded P-256 public key for VAPID.
+	VAPIDPublicKey string
+	// VAPIDPrivateKey is the base64url-encoded P-256 private key for VAPID signing.
+	VAPIDPrivateKey string
+	// VAPIDSubject is the mailto: or https: URI sent in the VAPID JWT sub claim.
+	VAPIDSubject string
 }
 
 // Load reads configuration from the environment.
@@ -228,6 +237,11 @@ func Load() Config {
 		SessionManagementUIEnabled: boolEnv("SESSION_MANAGEMENT_UI_ENABLED"),
 
 		EmailNotificationsEnabled: boolEnv("EMAIL_NOTIFICATIONS_ENABLED"),
+
+		PushNotificationsEnabled: boolEnv("PUSH_NOTIFICATIONS_ENABLED"),
+		VAPIDPublicKey:           firstNonEmptyTrimmed("VAPID_PUBLIC_KEY"),
+		VAPIDPrivateKey:          firstNonEmptyTrimmed("VAPID_PRIVATE_KEY"),
+		VAPIDSubject:             stringDefault(firstNonEmptyTrimmed("VAPID_SUBJECT"), "mailto:admin@lextures.com"),
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"github.com/lextures/lextures/server/internal/httpserver"
 	"github.com/lextures/lextures/server/internal/lti"
 	"github.com/lextures/lextures/server/internal/migrate"
+	"github.com/lextures/lextures/server/internal/notifevents"
 	"github.com/lextures/lextures/server/internal/platformstate"
 	"github.com/lextures/lextures/server/internal/repos/orgbranding"
 	"github.com/lextures/lextures/server/internal/repos/platformconfig"
@@ -66,14 +67,15 @@ func Run(ctx context.Context, fsys fs.FS) error {
 	ltiRT := lti.NewFromConfig(merged)
 	brandingResolver := orgbranding.NewResolver(pool, merged.BrandingMultitenantHostSuffix, webHostFromOrigin(merged.PublicWebOrigin))
 	deps := httpserver.Deps{
-		Pool:               pool,
-		JWTSigner:          auth.NewJWTSignerWithPool(cfg.JWTSecret, pool),
-		Config:             cfg,
-		Platform:           platformstate.New(merged),
-		OIDC:               oidcauth.NewService(merged),
-		Comm:               commevents.New(),
-		Lti:                ltiRT,
-		BrandingResolver:   brandingResolver,
+		Pool:             pool,
+		JWTSigner:        auth.NewJWTSignerWithPool(cfg.JWTSecret, pool),
+		Config:           cfg,
+		Platform:         platformstate.New(merged),
+		OIDC:             oidcauth.NewService(merged),
+		Comm:             commevents.New(),
+		Lti:              ltiRT,
+		BrandingResolver: brandingResolver,
+		NotifHub:         notifevents.New(),
 	}
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,

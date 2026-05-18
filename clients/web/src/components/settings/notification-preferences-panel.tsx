@@ -3,6 +3,7 @@ import { Save } from 'lucide-react'
 import { authorizedFetch } from '../../lib/api'
 import { readApiErrorMessage } from '../../lib/errors'
 import { toastMutationError, toastSaveOk } from '../../lib/lms-toast'
+import { subscribeToPush, getExistingPushSubscription } from '../../lib/push-notifications'
 
 type PreferenceRow = {
   eventType: string
@@ -39,6 +40,8 @@ export function NotificationPreferencesPanel() {
   const [rows, setRows] = useState<PreferenceRow[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (import.meta.env.STORYBOOK === 'true') {
@@ -64,6 +67,9 @@ export function NotificationPreferencesPanel() {
 
   useEffect(() => {
     void load()
+    if (import.meta.env.STORYBOOK !== 'true') {
+      void getExistingPushSubscription().then((sub) => setPushSubscribed(!!sub))
+    }
   }, [load])
 
   const updateRow = (eventType: string, patch: Partial<PreferenceRow>) => {
@@ -94,6 +100,21 @@ export function NotificationPreferencesPanel() {
     }
   }
 
+  const enablePush = async () => {
+    setPushLoading(true)
+    try {
+      const sub = await subscribeToPush()
+      if (sub) {
+        setPushSubscribed(true)
+        toastSaveOk('Push notifications enabled.')
+      } else {
+        toastMutationError('Could not enable push notifications. Check browser permissions.')
+      }
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
   if (loading) {
     return <p className="mt-4 text-sm text-slate-500">Loading notification preferences…</p>
   }
@@ -101,10 +122,29 @@ export function NotificationPreferencesPanel() {
   return (
     <div>
       <p className="mt-2 text-sm text-slate-600 dark:text-neutral-400">
-        Choose which events send you email. Push notifications will be available in a future update.
+        Choose which events send you notifications.
       </p>
+
+      {/* Push enable banner */}
+      {!pushSubscribed && 'Notification' in window && (
+        <div className="mt-4 flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 dark:border-indigo-800 dark:bg-indigo-950/30">
+          <div>
+            <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200">Enable browser push notifications</p>
+            <p className="text-xs text-indigo-700 dark:text-indigo-400">Get real-time alerts even when the tab is in the background.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void enablePush()}
+            disabled={pushLoading}
+            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+          >
+            {pushLoading ? 'Enabling…' : 'Enable push'}
+          </button>
+        </div>
+      )}
+
       <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 dark:border-neutral-700">
-        <table className="min-w-full text-sm">
+        <table className="min-w-full text-sm" data-testid="notification-preferences-table">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 dark:bg-neutral-800 dark:text-neutral-300">
             <tr>
               <th className="px-4 py-3" scope="col">
@@ -114,6 +154,9 @@ export function NotificationPreferencesPanel() {
                 Email
               </th>
               <th className="px-4 py-3" scope="col">
+                Push
+              </th>
+              <th className="px-4 py-3" scope="col">
                 Delivery
               </th>
             </tr>
@@ -121,6 +164,7 @@ export function NotificationPreferencesPanel() {
           <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
             {rows.map((row) => {
               const emailId = `${baseId}-${row.eventType}-email`
+              const pushId = `${baseId}-${row.eventType}-push`
               const digestId = `${baseId}-${row.eventType}-digest`
               const label = EVENT_LABELS[row.eventType] ?? row.eventType
               return (
@@ -147,6 +191,29 @@ export function NotificationPreferencesPanel() {
                       <span
                         className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
                           row.emailEnabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <label htmlFor={pushId} className="sr-only">
+                      Push for {label}
+                    </label>
+                    <button
+                      id={pushId}
+                      type="button"
+                      role="switch"
+                      aria-checked={row.pushEnabled}
+                      onClick={() =>
+                        updateRow(row.eventType, { pushEnabled: !row.pushEnabled })
+                      }
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                        row.pushEnabled ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-neutral-600'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                          row.pushEnabled ? 'translate-x-5' : 'translate-x-0'
                         }`}
                       />
                     </button>

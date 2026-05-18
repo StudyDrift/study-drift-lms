@@ -7,22 +7,27 @@ vi.mock('../../../lib/api', () => ({
   authorizedFetch: vi.fn(),
 }))
 
+vi.mock('../../../lib/push-notifications', () => ({
+  subscribeToPush: vi.fn(),
+  getExistingPushSubscription: vi.fn().mockResolvedValue(null),
+}))
+
 import { authorizedFetch } from '../../../lib/api'
 
+const mockPrefs = [
+  {
+    eventType: 'grade_posted',
+    emailEnabled: true,
+    pushEnabled: true,
+    digestMode: 'instant',
+  },
+]
+
 describe('NotificationPreferencesPanel', () => {
-  it('loads and displays preference rows', async () => {
+  it('loads and displays preference rows with push column', async () => {
     vi.mocked(authorizedFetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({
-        preferences: [
-          {
-            eventType: 'grade_posted',
-            emailEnabled: true,
-            pushEnabled: true,
-            digestMode: 'instant',
-          },
-        ],
-      }),
+      json: async () => ({ preferences: mockPrefs }),
     } as Response)
 
     render(<NotificationPreferencesPanel />)
@@ -34,43 +39,61 @@ describe('NotificationPreferencesPanel', () => {
       'aria-checked',
       'true',
     )
+    expect(screen.getByRole('switch', { name: /push for grade posted/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    // Push column header should exist
+    expect(screen.getByText('Push')).toBeInTheDocument()
   })
 
-  it('saves updated preferences', async () => {
+  it('toggles push preference', async () => {
     vi.mocked(authorizedFetch)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          preferences: [
-            {
-              eventType: 'grade_posted',
-              emailEnabled: true,
-              pushEnabled: true,
-              digestMode: 'instant',
-            },
-          ],
-        }),
+        json: async () => ({ preferences: mockPrefs }),
       } as Response)
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          preferences: [
-            {
-              eventType: 'grade_posted',
-              emailEnabled: false,
-              pushEnabled: true,
-              digestMode: 'off',
-            },
-          ],
+          preferences: [{ ...mockPrefs[0], pushEnabled: false }],
         }),
       } as Response)
 
     const user = userEvent.setup()
     render(<NotificationPreferencesPanel />)
 
+    await waitFor(() => expect(screen.getByText('Grade posted')).toBeInTheDocument())
+
+    const pushSwitch = screen.getByRole('switch', { name: /push for grade posted/i })
+    await user.click(pushSwitch)
+    await user.click(screen.getByRole('button', { name: /save preferences/i }))
+
     await waitFor(() => {
-      expect(screen.getByText('Grade posted')).toBeInTheDocument()
+      expect(authorizedFetch).toHaveBeenCalledWith(
+        '/api/v1/me/notification-preferences',
+        expect.objectContaining({ method: 'PUT' }),
+      )
     })
+  })
+
+  it('saves updated email preference', async () => {
+    vi.mocked(authorizedFetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ preferences: mockPrefs }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          preferences: [{ ...mockPrefs[0], emailEnabled: false }],
+        }),
+      } as Response)
+
+    const user = userEvent.setup()
+    render(<NotificationPreferencesPanel />)
+
+    await waitFor(() => expect(screen.getByText('Grade posted')).toBeInTheDocument())
 
     await user.click(screen.getByRole('switch', { name: /email for grade posted/i }))
     await user.click(screen.getByRole('button', { name: /save preferences/i }))
