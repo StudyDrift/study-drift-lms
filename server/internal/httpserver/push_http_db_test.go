@@ -68,11 +68,11 @@ func TestPushHTTP_Pg(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("signup: %d %s", rr.Code, rr.Body.String())
 	}
-	var signupResp map[string]string
+	var signupResp map[string]any
 	if err := json.NewDecoder(rr.Body).Decode(&signupResp); err != nil {
 		t.Fatalf("decode signup: %v", err)
 	}
-	token := signupResp["access_token"]
+	token, _ := signupResp["access_token"].(string)
 	if token == "" {
 		t.Fatal("no access_token in signup response")
 	}
