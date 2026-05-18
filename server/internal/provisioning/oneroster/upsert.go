@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/lextures/lextures/server/internal/repos/course"
+	"github.com/lextures/lextures/server/internal/repos/rbac"
 	"github.com/lextures/lextures/server/internal/service/authservice"
 )
 
@@ -19,7 +20,9 @@ func upsertUser(
 	inst, orgID uuid.UUID, sourcedID, email, givenName, familyName, displayName, orRole string,
 	log eventLogger,
 ) (op string, err error) {
-	appRole := mapAppRoleName(orRole)
+	// orRole is the raw OneRoster role string (e.g. "teacher", "student", "aide").
+	// We keep mapAppRoleName as a fallback display name for assignRoleTx but primarily
+	// resolve through provisioning_role_map below.
 
 	mappedUID, err := lookupMappedID(ctx, tx, inst, "user", sourcedID)
 	if err != nil {
@@ -75,7 +78,7 @@ WHERE id = $1
 		} else {
 			log("user", "skip", sourcedID, mappedUID, "")
 		}
-		if err := assignRoleTx(ctx, tx, *mappedUID, appRole); err != nil {
+		if err := assignRoleTx(ctx, tx, *mappedUID, orRole); err != nil {
 			return "", err
 		}
 		if changed {
@@ -108,7 +111,7 @@ WHERE id = $1
 		if err != nil {
 			return "", err
 		}
-		if err := assignRoleTx(ctx, tx, emailRowID, appRole); err != nil {
+		if err := assignRoleTx(ctx, tx, emailRowID, orRole); err != nil {
 			return "", err
 		}
 		if profileSame {
@@ -139,19 +142,16 @@ RETURNING id
 	if err := upsertMapping(ctx, tx, inst, "user", sourcedID, newID); err != nil {
 		return "", err
 	}
-	if err := assignRoleTx(ctx, tx, newID, appRole); err != nil {
+	if err := assignRoleTx(ctx, tx, newID, orRole); err != nil {
 		return "", err
 	}
 	log("user", "create", sourcedID, &newID, "")
 	return "create", nil
 }
 
-func assignRoleTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID, roleName string) error {
-	_, err := tx.Exec(ctx, `
-INSERT INTO "user".user_app_roles (user_id, role_id)
-SELECT $1, r.id FROM "user".app_roles r WHERE r.name = $2
-ON CONFLICT (user_id, role_id) DO NOTHING
-`, userID, roleName)
+func assignRoleTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID, orRole string) error {
+	// Resolve via provisioning_role_map; fall back to the app role implied by mapAppRoleName.
+	_, err := rbac.AssignUserRoleFromProvisioningMapTx(ctx, tx, userID, "oneroster", orRole, mapAppRoleName(orRole))
 	return err
 }
 

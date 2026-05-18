@@ -111,8 +111,10 @@ func (s *Service) completeK12OIDCLogin(
 	default:
 		return authservice.AuthResponse{}, nil, authservice.FieldError{Message: "Unknown K-12 provider."}
 	}
+	// roleName holds the external role string from the provider (e.g. "teacher", "student").
+	// It will be resolved through provisioning_role_map below.
 	if roleName == "" {
-		roleName = "Student"
+		roleName = "student"
 	}
 
 	ident, err := oidcrepo.FindIdentityByProviderAndSub(ctx, pool, pv, subj)
@@ -231,7 +233,7 @@ func (s *Service) completeK12OIDCLogin(
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
-	if err := rbac.AssignUserRoleByName(ctx, pool, uid, roleName); err != nil {
+	if _, err := rbac.AssignUserRoleFromProvisioningMap(ctx, pool, uid, pv, roleName, "Student"); err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
 	if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, pv, subj, &emailIn); err != nil {

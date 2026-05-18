@@ -101,15 +101,16 @@ SELECT s.permission_string FROM (
 	if courseView == nil || !courseView.viewAsStudent {
 		return setToSortedSlice(out), nil
 	}
-	teacher, err := listPermissionStringsForRoleName(ctx, pool, "Teacher")
+	// Use is_staff_app_role / is_student_app_role bits so the filter survives role renames.
+	staffPerms, err := listPermissionStringsForStaffAppRoles(ctx, pool)
 	if err != nil {
 		return nil, err
 	}
-	student, err := listPermissionStringsForRoleName(ctx, pool, "Student")
+	studentPerms, err := listPermissionStringsForStudentAppRoles(ctx, pool)
 	if err != nil {
 		return nil, err
 	}
-	filtered := filterGrantsForStudentCourseView(courseView.courseCode, out, teacher, student)
+	filtered := filterGrantsForStudentCourseView(courseView.courseCode, out, staffPerms, studentPerms)
 	return setToSortedSlice(filtered), nil
 }
 
@@ -125,15 +126,17 @@ func setToSortedSlice(m map[string]struct{}) []string {
 	return s
 }
 
-func listPermissionStringsForRoleName(ctx context.Context, pool *pgxpool.Pool, roleName string) ([]string, error) {
+// listPermissionStringsForStaffAppRoles returns permissions granted to any app role marked
+// as is_staff_app_role = true. This replaces the hard-coded "Teacher" name lookup.
+func listPermissionStringsForStaffAppRoles(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	rows, err := pool.Query(ctx, `
-SELECT p.permission_string
+SELECT DISTINCT p.permission_string
 FROM "user".app_roles r
 INNER JOIN "user".rbac_role_permissions rp ON rp.role_id = r.id
 INNER JOIN "user".permissions p ON p.id = rp.permission_id
-WHERE r.name = $1
+WHERE r.is_staff_app_role = true
 ORDER BY p.permission_string ASC
-`, roleName)
+`)
 	if err != nil {
 		return nil, err
 	}
@@ -146,11 +149,35 @@ ORDER BY p.permission_string ASC
 		}
 		out = append(out, s)
 	}
-	if err := rows.Err(); err != nil {
+	return out, rows.Err()
+}
+
+// listPermissionStringsForStudentAppRoles returns permissions granted to any app role marked
+// as is_student_app_role = true. This replaces the hard-coded "Student" name lookup.
+func listPermissionStringsForStudentAppRoles(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	rows, err := pool.Query(ctx, `
+SELECT DISTINCT p.permission_string
+FROM "user".app_roles r
+INNER JOIN "user".rbac_role_permissions rp ON rp.role_id = r.id
+INNER JOIN "user".permissions p ON p.id = rp.permission_id
+WHERE r.is_student_app_role = true
+ORDER BY p.permission_string ASC
+`)
+	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
 }
+
 
 func courseItemPairMatchesCatalog(catalog []string, p string) bool {
 	if authz.AnyGrantMatch(catalog, p) {

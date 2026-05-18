@@ -247,8 +247,7 @@ func (s *Service) CompleteLogin(ctx context.Context, pool *pgxpool.Pool, jwt *pa
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
-	roleName := rbacRoleForClever(prof.RoleHint)
-	if err := rbac.AssignUserRoleByName(ctx, pool, uid, roleName); err != nil {
+	if _, err := rbac.AssignUserRoleFromProvisioningMap(ctx, pool, uid, "clever", prof.RoleHint, "Student"); err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
 	if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, "clever", subj, &email); err != nil {
@@ -265,18 +264,6 @@ func placeholderCleverEmail(cleverUserID string) string {
 	return fmt.Sprintf("clever+%s@users.noreply.clever.lextures.invalid", strings.ToLower(strings.TrimSpace(cleverUserID)))
 }
 
-func rbacRoleForClever(roleHint string) string {
-	switch strings.ToLower(strings.TrimSpace(roleHint)) {
-	case "district_admin", "districtadmin", "administrator", "admin":
-		return "Global Admin"
-	case "teacher", "staff":
-		return "Teacher"
-	case "student", "":
-		return "Student"
-	default:
-		return "Student"
-	}
-}
 
 type tokenResponse struct {
 	AccessToken string `json:"access_token"`

@@ -208,7 +208,7 @@ func (s *Service) completeClassLinkLogin(
 	if err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
-	if err := rbac.AssignUserRoleByName(ctx, pool, uid, "Student"); err != nil {
+	if _, err := rbac.AssignUserRoleFromProvisioningMap(ctx, pool, uid, "classlink", "student", "Student"); err != nil {
 		return authservice.AuthResponse{}, nil, err
 	}
 	if _, err := oidcrepo.TryInsertIdentity(ctx, pool, uid, "classlink", subj, &emailIn); err != nil {

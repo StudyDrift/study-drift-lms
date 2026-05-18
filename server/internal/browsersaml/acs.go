@@ -235,11 +235,11 @@ func HandleACS(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, signe
 	}
 
 	if created {
-		role := "Student"
+		externalRole := "student"
 		if guessTeacherFromAssertion(assertion, idpRow) {
-			role = "Teacher"
+			externalRole = "teacher"
 		}
-		_ = rbac.AssignUserRoleByName(ctx, pool, uid, role)
+		_, _ = rbac.AssignUserRoleFromProvisioningMap(ctx, pool, uid, "saml", externalRole, "Student")
 	}
 
 		res, err := authservice.AuthResponseForUser(ctx, pool, signer, cfg, urow, authservice.ClientMetaFromRequest(r), "saml")

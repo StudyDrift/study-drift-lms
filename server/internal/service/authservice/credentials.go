@@ -198,16 +198,17 @@ WHERE id <> $1::uuid`, communication.PlatformInboxSenderID.String()).Scan(&human
 		row.AccountType = user.AccountTypeParent
 	}
 	if firstHuman && cfg.BootstrapAdminEmail != "" && email == cfg.BootstrapAdminEmail {
+		// Bootstrap assignment uses the role name directly — this is the only allowed hard-coded name.
 		if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, "Global Admin"); err != nil {
 			return AuthResponse{}, err
 		}
 	}
 	if wantParent {
-		if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, "Student"); err != nil {
+		if _, err := rbac.AssignUserRoleFromProvisioningMapTx(ctx, tx, uid, "saml", "student", "Student"); err != nil {
 			return AuthResponse{}, err
 		}
 	} else {
-		if err := rbac.AssignUserRoleByNameTx(ctx, tx, uid, "Teacher"); err != nil {
+		if _, err := rbac.AssignUserRoleFromProvisioningMapTx(ctx, tx, uid, "saml", "teacher", "Teacher"); err != nil {
 			return AuthResponse{}, err
 		}
 	}
