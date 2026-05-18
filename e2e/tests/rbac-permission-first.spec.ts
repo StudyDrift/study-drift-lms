@@ -9,7 +9,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { apiSignup, apiCreateCourse, apiEnroll } from '../fixtures/api.js'
-import { injectToken } from '../fixtures/test.js'
+import { injectToken, mainNav } from '../fixtures/test.js'
 
 const PASSWORD = 'E2eTestPass1!'
 const apiBase = process.env.E2E_API_URL ?? 'http://localhost:8080'
@@ -123,7 +123,7 @@ test.describe('5.11 permission-first RBAC — catalog-driven permission emission
     const { access_token } = await apiSignup({ email, password: PASSWORD })
 
     await injectToken(page, access_token)
-    await page.waitForLoadState('networkidle')
+    await mainNav(page).waitFor({ state: 'visible' })
 
     // Standard users should NOT see the Family link.
     await expect(page.getByRole('link', { name: 'Family' })).not.toBeVisible()
