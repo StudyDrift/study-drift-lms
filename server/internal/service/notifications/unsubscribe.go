@@ -47,7 +47,7 @@ func ParseUnsubscribeToken(secret, token string) (uuid.UUID, string, error) {
 		return uuid.Nil, "", errors.New("token expired")
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(fmt.Sprintf("%s|%s|%s", parts[0], parts[1], parts[2])))
+	_, _ = fmt.Fprintf(mac, "%s|%s|%s", parts[0], parts[1], parts[2])
 	expected := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	if !hmac.Equal([]byte(expected), []byte(parts[3])) {
 		return uuid.Nil, "", errors.New("invalid token")

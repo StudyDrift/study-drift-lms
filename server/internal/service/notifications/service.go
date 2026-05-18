@@ -13,7 +13,6 @@ import (
 	"github.com/lextures/lextures/server/internal/repos/emaildigest"
 	"github.com/lextures/lextures/server/internal/repos/emailjobs"
 	"github.com/lextures/lextures/server/internal/repos/notificationprefs"
-	"github.com/lextures/lextures/server/internal/repos/orgbranding"
 	"github.com/lextures/lextures/server/internal/repos/user"
 )
 
@@ -41,19 +40,8 @@ func (s *Service) UnsubscribeURL(userID uuid.UUID, eventType string) string {
 	return fmt.Sprintf("%s/unsubscribe?token=%s", s.publicWebOrigin(), tok)
 }
 
-func (s *Service) brandingForOrg(ctx context.Context, orgID *uuid.UUID) *orgbranding.Row {
-	if orgID == nil || s.Pool == nil {
-		return nil
-	}
-	row, err := orgbranding.Get(ctx, s.Pool, *orgID)
-	if err != nil || row == nil {
-		return nil
-	}
-	return row
-}
-
 // EnqueueEmail checks preferences and queues an email or digest item.
-func (s *Service) EnqueueEmail(ctx context.Context, recipientID uuid.UUID, eventType, template string, vars map[string]string, orgID *uuid.UUID) error {
+func (s *Service) EnqueueEmail(ctx context.Context, recipientID uuid.UUID, eventType, template string, vars map[string]string, _ *uuid.UUID) error {
 	if !s.enabled() || s.Pool == nil {
 		return nil
 	}
