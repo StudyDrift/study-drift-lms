@@ -15,6 +15,11 @@ import { Header } from './components/Header'
 import { HeroCanvas } from './HeroCanvas'
 import { BlogIndex } from './pages/BlogIndex'
 import { BlogPost } from './pages/BlogPost'
+import { GetStartedPage } from './pages/GetStartedPage'
+import { HigherEdPage } from './pages/HigherEdPage'
+import { K12Page } from './pages/K12Page'
+import { PricingPage } from './pages/PricingPage'
+import { SelfLearnerPage } from './pages/SelfLearnerPage'
 
 const LINKS = {
   demo: 'https://demo.lextures.com/',
@@ -131,7 +136,7 @@ function HomePage() {
           />
           <div className="relative z-10 mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
             <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-stone-500">
-              Open-source learning management
+              Adaptive learning management
             </p>
             <h1 className="font-display mt-8 text-5xl font-normal leading-[1.05] tracking-[-0.03em] text-stone-900 sm:text-7xl lg:text-[5.5rem]">
               The LMS that{' '}
@@ -142,8 +147,8 @@ function HomePage() {
               running at real scale—not a slide deck with a gradebook attached.
             </p>
             <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <a href={LINKS.demo} className="btn-primary h-12 gap-2 px-8 text-base">
-                Open the live demo
+              <a href="#/get-started" className="btn-primary h-12 gap-2 px-8 text-base">
+                Get Started
                 <ArrowRight className="h-5 w-5" aria-hidden />
               </a>
               <a href={LINKS.github} className="btn-secondary h-12 px-8 text-base">
@@ -245,8 +250,8 @@ function HomePage() {
                 Lextures is under active development. The public demo is the fastest way to see
                 current capabilities and the direction the product is heading.
               </p>
-              <a href={LINKS.demo} className="btn-primary mt-6 inline-flex gap-2">
-                See it live
+              <a href="#/get-started" className="btn-primary mt-6 inline-flex gap-2">
+                Get Started
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </a>
             </div>
@@ -341,8 +346,8 @@ function HomePage() {
                 matches your institution.
               </p>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <a href={LINKS.demo} className="btn-primary gap-2 px-6 py-3">
-                  Open demo.lextures.com
+                <a href="#/get-started" className="btn-primary gap-2 px-6 py-3">
+                  Get Started
                   <ArrowRight className="h-4 w-4" aria-hidden />
                 </a>
                 <a href={LINKS.github} className="btn-secondary px-6 py-3">
@@ -372,9 +377,10 @@ function HomePage() {
             <a href={LINKS.demo} className="no-underline transition-colors hover:text-stone-900">Live demo</a>
             <a href={LINKS.github} className="no-underline transition-colors hover:text-stone-900">GitHub</a>
             <a href="#features" className="no-underline transition-colors hover:text-stone-900">Features</a>
-            <a href="#ai" className="no-underline transition-colors hover:text-stone-900">Adaptive AI</a>
-            <a href="#institutions" className="no-underline transition-colors hover:text-stone-900">Institutions</a>
-            <a href="#integrations" className="no-underline transition-colors hover:text-stone-900">Integrations</a>
+            <a href="#/higher-ed" className="no-underline transition-colors hover:text-stone-900">Higher Education</a>
+            <a href="#/k-12" className="no-underline transition-colors hover:text-stone-900">K–12</a>
+            <a href="#/self-learner" className="no-underline transition-colors hover:text-stone-900">Self-Learner</a>
+            <a href="#/pricing" className="no-underline transition-colors hover:text-stone-900">Pricing</a>
             <a href="#/blog" className="no-underline transition-colors hover:text-stone-900">Blog</a>
           </div>
         </div>
@@ -387,6 +393,11 @@ export default function App() {
   const hash = useHashRoute()
   const route = hash.startsWith('#/') ? hash.slice(1) : '/'
 
+  if (route === '/get-started') return <GetStartedPage />
+  if (route === '/higher-ed') return <HigherEdPage />
+  if (route === '/k-12') return <K12Page />
+  if (route === '/self-learner') return <SelfLearnerPage />
+  if (route === '/pricing') return <PricingPage />
   if (route === '/blog') return <BlogIndex />
   if (route.startsWith('/blog/')) return <BlogPost slug={route.slice('/blog/'.length)} />
   return <HomePage />

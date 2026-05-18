@@ -68,6 +68,7 @@ func NewHandler(d Deps) http.Handler {
 	r.Get("/api/docs", openapi.ServeDocs)
 	r.Get("/health", handleHealth())
 	r.Get("/health/ready", handleReady(ready))
+	r.Post("/api/v1/public/onboarding/track", d.handlePublicOnboardingTrack())
 	r.Get("/api/v1/public/branding/resolve", d.handlePublicBrandingResolve())
 	r.Get("/api/v1/public/org-branding/{orgId}/{asset}", d.handlePublicOrgBrandAsset())
 	d.registerSAMLBrowserRoutes(r)
