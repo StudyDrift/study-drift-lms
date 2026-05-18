@@ -178,32 +178,6 @@ ORDER BY p.permission_string ASC
 	return out, rows.Err()
 }
 
-func listPermissionStringsForRoleName(ctx context.Context, pool *pgxpool.Pool, roleName string) ([]string, error) {
-	rows, err := pool.Query(ctx, `
-SELECT p.permission_string
-FROM "user".app_roles r
-INNER JOIN "user".rbac_role_permissions rp ON rp.role_id = r.id
-INNER JOIN "user".permissions p ON p.id = rp.permission_id
-WHERE r.name = $1
-ORDER BY p.permission_string ASC
-`, roleName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			return nil, err
-		}
-		out = append(out, s)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
 
 func courseItemPairMatchesCatalog(catalog []string, p string) bool {
 	if authz.AnyGrantMatch(catalog, p) {
