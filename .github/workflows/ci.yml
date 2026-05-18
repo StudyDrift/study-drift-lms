@@ -157,7 +157,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run full e2e suite (local Postgres stack + Playwright)
+      - name: Run full e2e suite (Docker stack + Playwright)
         run: make e2e
-        env:
-          E2E_USE_DOCKER: "0"

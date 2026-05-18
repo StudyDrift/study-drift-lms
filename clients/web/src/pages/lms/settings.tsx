@@ -31,6 +31,7 @@ import {
 } from '../../lib/rbac-api'
 import { OidcConnectedAccountsPanel } from '../../components/oidc-connected-accounts-panel'
 import { MfaFactorsPanel } from '../../components/settings/mfa-factors-panel'
+import { NotificationPreferencesPanel } from '../../components/settings/notification-preferences-panel'
 import { LmsPage } from './lms-page'
 import OrgBranding from './admin/OrgBranding'
 import { FALLBACK_IMAGE_MODEL_OPTIONS, FALLBACK_TEXT_MODEL_OPTIONS } from '../../lib/ai-models'
@@ -1376,8 +1377,11 @@ export default function Settings() {
 
         {activeView === 'notifications' && (
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Notifications</h2>
-            <p className="mt-1 text-sm text-slate-500">Notification settings will appear here.</p>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">Notifications</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+              Control which events send you email and whether they arrive instantly or in a daily digest.
+            </p>
+            <NotificationPreferencesPanel />
           </div>
         )}
 
