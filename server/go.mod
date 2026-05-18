@@ -6,6 +6,7 @@ toolchain go1.25.10
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/beevik/etree v1.6.0
 	github.com/coder/websocket v1.8.12
@@ -25,7 +26,6 @@ require (
 
 require (
 	github.com/PuerkitoBio/goquery v1.9.2 // indirect
-	github.com/SherClockHolmes/webpush-go v1.3.0 // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/crewjam/httperr v0.2.0 // indirect
@@ -33,9 +33,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/go-webauthn/x v0.2.3 // indirect
-	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
