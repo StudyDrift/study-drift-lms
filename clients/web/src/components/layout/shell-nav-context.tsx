@@ -5,7 +5,11 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [sideNavCollapsed, setSideNavCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
-    return localStorage.getItem('lextures-sidenav-collapsed') === 'true'
+    try {
+      return localStorage.getItem('lextures-sidenav-collapsed') === 'true'
+    } catch {
+      return false
+    }
   })
 
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), [])
@@ -13,7 +17,11 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
   const toggleSideNav = useCallback(() => {
     setSideNavCollapsed((prev) => {
       const next = !prev
-      localStorage.setItem('lextures-sidenav-collapsed', String(next))
+      try {
+        localStorage.setItem('lextures-sidenav-collapsed', String(next))
+      } catch {
+        // Ignore storage errors (e.g. private mode)
+      }
       return next
     })
   }, [])

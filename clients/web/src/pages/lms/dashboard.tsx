@@ -253,7 +253,11 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    localStorage.setItem('dashboard_collapsed_sections', JSON.stringify(collapsedSections))
+    try {
+      localStorage.setItem('dashboard_collapsed_sections', JSON.stringify(collapsedSections))
+    } catch {
+      // Ignore storage errors
+    }
   }, [collapsedSections])
 
   const toggleSection = (id: string) => {
