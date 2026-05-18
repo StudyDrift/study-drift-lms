@@ -157,6 +157,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install PostgreSQL (local e2e stack)
+        run: sudo apt-get update && sudo apt-get install -y postgresql postgresql-client
+
       - name: Run full e2e suite (local Postgres stack + Playwright)
         run: make e2e
         env:
