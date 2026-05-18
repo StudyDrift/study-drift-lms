@@ -13,6 +13,7 @@ import (
 	"github.com/lextures/lextures/server/internal/commevents"
 	"github.com/lextures/lextures/server/internal/config"
 	"github.com/lextures/lextures/server/internal/lti"
+	"github.com/lextures/lextures/server/internal/notifevents"
 	"github.com/lextures/lextures/server/internal/openapi"
 	"github.com/lextures/lextures/server/internal/platformstate"
 	"github.com/lextures/lextures/server/internal/repos/orgbranding"
@@ -37,6 +38,8 @@ type Deps struct {
 	BrandingResolver *orgbranding.Resolver
 	// PasswordChecker overrides HIBP / password breach checks (tests). When nil, a production checker is built from Pool.
 	PasswordChecker hibp.Checker
+	// NotifHub broadcasts SSE signals for real-time in-app notification bell updates (plan 6.3). Optional.
+	NotifHub *notifevents.Hub
 }
 
 func (d Deps) effectiveConfig() config.Config {
@@ -111,6 +114,14 @@ func NewHandler(d Deps) http.Handler {
 	r.Get("/api/v1/me/notification-preferences", d.handleGetMyNotificationPreferences())
 	r.Put("/api/v1/me/notification-preferences", d.handlePutMyNotificationPreferences())
 	r.Get("/api/unsubscribe", d.handleUnsubscribe())
+	// Push notifications (plan 6.3)
+	r.Get("/api/v1/push/vapid-public-key", d.handleGetVAPIDPublicKey())
+	r.Post("/api/v1/me/push-subscriptions", d.handlePostMyPushSubscription())
+	r.Delete("/api/v1/me/push-subscriptions/{id}", d.handleDeleteMyPushSubscription())
+	r.Get("/api/v1/me/notifications", d.handleGetMyNotifications())
+	r.Post("/api/v1/me/notifications/{id}/read", d.handleMarkNotificationRead())
+	r.Post("/api/v1/me/notifications/read-all", d.handleMarkAllNotificationsRead())
+	r.Get("/api/v1/me/notifications/sse", d.handleNotificationsSSE())
 	r.Get("/api/v1/me/sessions", d.handleListMySessions())
 	r.Delete("/api/v1/me/sessions", d.handleDeleteMyOtherSessions())
 	r.Delete("/api/v1/me/sessions/{id}", d.handleDeleteMySession())

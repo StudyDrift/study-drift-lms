@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, ClipboardCheck, Inbox, Megaphone, MessageCircle, X } from 'lucide-react'
+import { Bell, BellRing, ClipboardCheck, Inbox, Megaphone, MessageCircle, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   fetchUnifiedNotifications,
@@ -10,6 +10,7 @@ import {
 import { formatTimeAgoFromIso } from '../../lib/format-time-ago'
 import { useCourseFeedUnread } from '../../context/use-course-feed-unread'
 import { useInboxUnreadCount, useMailboxRevision } from '../../context/use-inbox-unread'
+import { useInboxNotifications } from '../../context/use-push-notifications'
 
 /** Easing: strong deceleration (not linear) for panel + backdrop. */
 const NOTIF_DRAWER_EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
@@ -29,8 +30,9 @@ function usePrefersReducedMotion(): boolean {
   return reduced
 }
 
-const FILTER_TABS: { id: 'all' | UnifiedNotificationKind; label: string }[] = [
+const FILTER_TABS: { id: 'all' | UnifiedNotificationKind | 'alerts'; label: string }[] = [
   { id: 'all', label: 'All' },
+  { id: 'alerts', label: 'Alerts' },
   { id: 'inbox', label: 'Inbox' },
   { id: 'feed_mention', label: 'Feed' },
   { id: 'graded', label: 'Grades' },
@@ -59,12 +61,13 @@ export function NotificationsDrawerTrigger({
 }) {
   const inboxUnread = useInboxUnreadCount()
   const { totalFeedUnread } = useCourseFeedUnread()
-  const badge = Math.min(99, inboxUnread + totalFeedUnread)
+  const { unreadCount: alertsUnread } = useInboxNotifications()
+  const badge = Math.min(99, inboxUnread + totalFeedUnread + alertsUnread)
   return (
     <button
       type="button"
       className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:text-neutral-300 dark:hover:bg-neutral-800"
-      aria-label="Notifications"
+      aria-label={badge > 0 ? `Notifications (${badge} unread)` : 'Notifications'}
       aria-expanded={open}
       aria-haspopup="dialog"
       onClick={onOpen}
@@ -87,11 +90,12 @@ export function NotificationsDrawer({ open, onClose }: { open: boolean; onClose:
   const reducedMotion = usePrefersReducedMotion()
   const [portalVisible, setPortalVisible] = useState(open)
   const [entered, setEntered] = useState(false)
-  const [filter, setFilter] = useState<'all' | UnifiedNotificationKind>('all')
+  const [filter, setFilter] = useState<'all' | UnifiedNotificationKind | 'alerts'>('all')
   const [items, setItems] = useState<UnifiedNotification[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const mailboxRevision = useMailboxRevision()
+  const { notifications: alertItems, unreadCount: alertsUnread, markAllRead, refresh: refreshAlerts } = useInboxNotifications()
 
   useEffect(() => {
     if (open) return
@@ -115,7 +119,8 @@ export function NotificationsDrawer({ open, onClose }: { open: boolean; onClose:
   useEffect(() => {
     if (!open) return
     void load()
-  }, [open, load, mailboxRevision])
+    void refreshAlerts()
+  }, [open, load, mailboxRevision, refreshAlerts])
 
   useEffect(() => {
     if (!open) return
@@ -174,7 +179,7 @@ export function NotificationsDrawer({ open, onClose }: { open: boolean; onClose:
   }, [entered])
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return items
+    if (filter === 'all' || filter === 'alerts') return items
     return items.filter((i) => i.kind === filter)
   }, [items, filter])
 
@@ -217,7 +222,7 @@ export function NotificationsDrawer({ open, onClose }: { open: boolean; onClose:
               Notifications
             </h2>
             <p id={descId} className="mt-0.5 text-xs text-slate-500 dark:text-neutral-400">
-              Inbox, feed, grades, and announcements in one place.
+              Inbox, alerts, feed, grades, and announcements.
             </p>
           </div>
           <button
@@ -257,6 +262,55 @@ export function NotificationsDrawer({ open, onClose }: { open: boolean; onClose:
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+          {/* Alerts tab — system/push notifications from the notifications inbox */}
+          {filter === 'alerts' ? (
+            <div>
+              {alertsUnread > 0 ? (
+                <div className="mb-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void markAllRead()}
+                    className="rounded-lg px-3 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-neutral-800"
+                  >
+                    Mark all read
+                  </button>
+                </div>
+              ) : null}
+              {alertItems.length === 0 ? (
+                <p className="px-2 py-8 text-center text-sm text-slate-500 dark:text-neutral-400">No alerts.</p>
+              ) : null}
+              <ul className="flex flex-col gap-1 pb-[env(safe-area-inset-bottom)]">
+                {alertItems.map((n) => (
+                  <li key={n.id}>
+                    <Link
+                      to={n.actionUrl || '/'}
+                      onClick={onClose}
+                      className={`flex gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-neutral-800 ${n.isRead ? 'opacity-60' : ''}`}
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-300">
+                        <BellRing className="h-5 w-5" aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className={`line-clamp-2 text-sm font-medium ${n.isRead ? 'text-slate-500 dark:text-neutral-400' : 'text-slate-900 dark:text-neutral-100'}`}>
+                          {n.title}
+                        </span>
+                        <span className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-neutral-400">
+                          {n.body}
+                        </span>
+                        <span className="mt-1 text-[11px] text-slate-400 dark:text-neutral-500">
+                          {formatTimeAgoFromIso(n.createdAt)}
+                        </span>
+                      </span>
+                      {!n.isRead ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-indigo-500" aria-hidden /> : null}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {filter !== 'alerts' ? (
+            <>
           {loading && !items.length ? (
             <p className="px-2 py-6 text-center text-sm text-slate-500 dark:text-neutral-400">Loading…</p>
           ) : null}
@@ -299,6 +353,8 @@ export function NotificationsDrawer({ open, onClose }: { open: boolean; onClose:
               )
             })}
           </ul>
+            </>
+          ) : null}
         </div>
 
         {loading && items.length > 0 ? (
