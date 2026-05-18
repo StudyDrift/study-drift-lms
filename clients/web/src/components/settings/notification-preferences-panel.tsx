@@ -28,6 +28,12 @@ const DIGEST_OPTIONS: { value: PreferenceRow['digestMode']; label: string }[] = 
   { value: 'off', label: 'Off' },
 ]
 
+const STORYBOOK_MOCK_ROWS: PreferenceRow[] = [
+  { eventType: 'grade_posted', emailEnabled: true, pushEnabled: true, digestMode: 'instant' },
+  { eventType: 'assignment_created', emailEnabled: true, pushEnabled: true, digestMode: 'daily' },
+  { eventType: 'discussion_reply', emailEnabled: false, pushEnabled: true, digestMode: 'off' },
+]
+
 export function NotificationPreferencesPanel() {
   const baseId = useId()
   const [rows, setRows] = useState<PreferenceRow[]>([])
@@ -35,6 +41,11 @@ export function NotificationPreferencesPanel() {
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
+    if (import.meta.env.STORYBOOK === 'true') {
+      setRows(STORYBOOK_MOCK_ROWS)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const res = await authorizedFetch('/api/v1/me/notification-preferences')
