@@ -125,6 +125,21 @@ type Config struct {
 	VAPIDPrivateKey string
 	// VAPIDSubject is the mailto: or https: URI sent in the VAPID JWT sub claim.
 	VAPIDSubject string
+
+	// VirtualClassroomEnabled gates the virtual meeting / live classroom feature (plan 6.4).
+	VirtualClassroomEnabled bool
+
+	// JitsiBaseURL is the Jitsi Meet server base URL (e.g. "https://meet.jit.si"). Defaults to meet.jit.si.
+	JitsiBaseURL string
+	// JitsiAppID is the Jitsi app_id for JWT signing. Empty disables JWT room tokens.
+	JitsiAppID string
+	// JitsiAppSecret is the HMAC-SHA256 secret for Jitsi JWT signing. Empty uses unsigned public rooms.
+	JitsiAppSecret string
+
+	// BBBBaseURL is the BigBlueButton API base URL (e.g. "https://bbb.example.com/bigbluebutton").
+	BBBBaseURL string
+	// BBBSecret is the BigBlueButton shared secret for request signing.
+	BBBSecret string
 }
 
 // Load reads configuration from the environment.
@@ -242,6 +257,13 @@ func Load() Config {
 		VAPIDPublicKey:           firstNonEmptyTrimmed("VAPID_PUBLIC_KEY"),
 		VAPIDPrivateKey:          firstNonEmptyTrimmed("VAPID_PRIVATE_KEY"),
 		VAPIDSubject:             stringDefault(firstNonEmptyTrimmed("VAPID_SUBJECT"), "mailto:admin@lextures.com"),
+
+		VirtualClassroomEnabled: boolEnvDefaultTrue("VIRTUAL_CLASSROOM_ENABLED"),
+		JitsiBaseURL:            stringDefault(firstNonEmptyTrimmed("JITSI_BASE_URL"), "https://meet.jit.si"),
+		JitsiAppID:              firstNonEmptyTrimmed("JITSI_APP_ID"),
+		JitsiAppSecret:          firstNonEmptyTrimmed("JITSI_APP_SECRET"),
+		BBBBaseURL:              firstNonEmptyTrimmed("BBB_BASE_URL"),
+		BBBSecret:               firstNonEmptyTrimmed("BBB_SECRET"),
 	}
 }
 

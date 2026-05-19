@@ -118,6 +118,23 @@ SELECT EXISTS (
 	return ok, nil
 }
 
+// UserIsCourseStaffByID is like UserIsCourseStaff but accepts a course UUID primary key.
+func UserIsCourseStaffByID(ctx context.Context, pool *pgxpool.Pool, courseID, userID uuid.UUID) (bool, error) {
+	var ok bool
+	err := pool.QueryRow(ctx, `
+SELECT EXISTS (
+	SELECT 1
+	FROM course.course_enrollments ce
+	INNER JOIN course.enrollment_roles er ON er.role_key = ce.role AND er.is_staff = true
+	WHERE ce.course_id = $1 AND ce.user_id = $2 AND ce.active = true
+)
+`, courseID, userID).Scan(&ok)
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
+}
+
 // UserHasEnrollmentRole checks a single role string (e.g. "teacher").
 // For student-equivalent checks prefer UserHasStudentEquivalentEnrollment.
 func UserHasEnrollmentRole(ctx context.Context, pool *pgxpool.Pool, courseCode string, userID uuid.UUID, role string) (bool, error) {

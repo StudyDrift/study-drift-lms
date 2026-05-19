@@ -83,6 +83,18 @@ func (s *PushService) EnqueueAssignmentCreated(ctx context.Context, studentIDs [
 	}
 }
 
+// EnqueueMeetingReminder sends an in-app + push notification reminding students about an upcoming meeting.
+func (s *PushService) EnqueueMeetingReminder(ctx context.Context, studentIDs []uuid.UUID, courseName, meetingTitle, courseCode string) {
+	link := fmt.Sprintf("%s/courses/%s/live", s.publicWebOrigin(), courseCode)
+	title := fmt.Sprintf("%s: Live session starting soon", courseName)
+	body := fmt.Sprintf("Your live session \"%s\" starts in 10 minutes.", meetingTitle)
+	for _, sid := range studentIDs {
+		if err := s.Enqueue(ctx, sid, EventMeetingReminder, title, body, link); err != nil {
+			slog.Warn("push.meeting_reminder", "err", err, "user_id", sid)
+		}
+	}
+}
+
 // EnqueueDiscussionReply creates an in-app + push notification for a discussion reply.
 func (s *PushService) EnqueueDiscussionReply(ctx context.Context, recipientIDs []uuid.UUID, courseName, threadTitle, courseCode, threadID string) {
 	link := fmt.Sprintf("%s/courses/%s/discussions/threads/%s", s.publicWebOrigin(), courseCode, threadID)

@@ -10,6 +10,7 @@ const (
 	AssignmentDueReminder  = "assignment_due_reminder"
 	PasswordReset          = "password_reset"
 	WelcomeInvite          = "welcome_invite"
+	MeetingReminder        = "meeting_reminder"
 )
 
 // All is the canonical list for defaults and UI.
@@ -22,4 +23,5 @@ var All = []string{
 	AssignmentDueReminder,
 	PasswordReset,
 	WelcomeInvite,
+	MeetingReminder,
 }
