@@ -466,7 +466,9 @@ test.describe('Office Hours UI', () => {
     await expect(page.getByRole('heading', { name: /office hours/i })).toBeVisible({ timeout: 10000 })
 
     // Find and click the Book button.
-    const bookBtn = page.getByRole('button', { name: /^book$/i }).first()
+    // Use filter({ hasText }) to match text content rather than accessible name, because the
+    // button carries aria-label="Book appointment slot: …" which overrides the accessible name.
+    const bookBtn = page.getByRole('button').filter({ hasText: /^Book$/ }).first()
     await expect(bookBtn).toBeVisible({ timeout: 8000 })
     await bookBtn.click()
 
