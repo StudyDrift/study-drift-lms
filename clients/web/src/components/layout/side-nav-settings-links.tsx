@@ -171,17 +171,19 @@ export function SideNavSettingsLinks() {
                   aria-expanded={aiOpen}
                   title={sideNavCollapsed ? 'Intelligence' : undefined}
                 >
-                  <Bot className="h-5 w-5 shrink-0 text-current opacity-90" aria-hidden />
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center text-current opacity-90">
+                    <Bot className="h-5 w-5" aria-hidden />
+                  </span>
                   {!sideNavCollapsed && (
-                    <>
-                      <span className="min-w-0 flex-1">Intelligence</span>
+                    <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                      <span className="truncate">Intelligence</span>
                       <ChevronDown
                         className={`h-4 w-4 shrink-0 text-current opacity-70 transition-transform duration-200 ease-out ${
                           aiOpen ? 'rotate-180' : 'rotate-0'
                         }`}
                         aria-hidden
                       />
-                    </>
+                    </span>
                   )}
                 </button>
                 {!sideNavCollapsed && (

@@ -44,6 +44,9 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    include: ['turndown'],
+  },
   test: {
     globals: true,
     environment: 'jsdom',
