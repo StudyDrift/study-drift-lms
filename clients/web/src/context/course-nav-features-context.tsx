@@ -18,6 +18,8 @@ export type CourseNavFeatures = {
   questionBankEnabled: boolean
   standardsAlignmentEnabled: boolean
   discussionsEnabled: boolean
+  /** Plan 6.5 — real-time collaborative documents. */
+  collabDocsEnabled: boolean
   /** Plan 3.7 — standards-based grading enabled for the course. */
   sbgEnabled: boolean
   /** True while loading or re-fetching flags for the active course. */
@@ -33,6 +35,7 @@ const defaultFeatures: CourseNavFeatures = {
   questionBankEnabled: false,
   standardsAlignmentEnabled: false,
   discussionsEnabled: false,
+  collabDocsEnabled: false,
   sbgEnabled: false,
   loading: false,
   refresh: async () => {},
@@ -52,6 +55,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
   const [questionBankEnabled, setQuestionBankEnabled] = useState(false)
   const [standardsAlignmentEnabled, setStandardsAlignmentEnabled] = useState(false)
   const [discussionsEnabled, setDiscussionsEnabled] = useState(false)
+  const [collabDocsEnabled, setCollabDocsEnabled] = useState(false)
   const [sbgEnabled, setSbgEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -63,6 +67,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setQuestionBankEnabled(false)
       setStandardsAlignmentEnabled(false)
       setDiscussionsEnabled(false)
+      setCollabDocsEnabled(false)
       setSbgEnabled(false)
       return
     }
@@ -75,6 +80,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setQuestionBankEnabled(c.questionBankEnabled === true)
       setStandardsAlignmentEnabled(c.standardsAlignmentEnabled === true)
       setDiscussionsEnabled(c.discussionsEnabled === true)
+      setCollabDocsEnabled(c.collabDocsEnabled === true)
       setSbgEnabled(c.sbgEnabled === true)
     } catch {
       setNotebookEnabled(true)
@@ -83,6 +89,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setQuestionBankEnabled(false)
       setStandardsAlignmentEnabled(false)
       setDiscussionsEnabled(false)
+      setCollabDocsEnabled(false)
       setSbgEnabled(false)
     } finally {
       setLoading(false)
@@ -101,6 +108,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       questionBankEnabled,
       standardsAlignmentEnabled,
       discussionsEnabled,
+      collabDocsEnabled,
       sbgEnabled,
       loading,
       refresh,
@@ -112,6 +120,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       questionBankEnabled,
       standardsAlignmentEnabled,
       discussionsEnabled,
+      collabDocsEnabled,
       sbgEnabled,
       loading,
       refresh,

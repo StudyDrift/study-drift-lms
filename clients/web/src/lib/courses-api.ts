@@ -131,6 +131,8 @@ export type CoursePublic = {
   sectionsEnabled?: boolean
   /** Plan 6.1 — threaded discussion forums (default off when omitted). */
   discussionsEnabled?: boolean
+  /** Plan 6.5 — real-time collaborative documents (default off when omitted). */
+  collabDocsEnabled?: boolean
   /** `traditional` or `competency_based` (server default when omitted: traditional). */
   courseType?: string
   createdAt: string
@@ -721,6 +723,7 @@ export async function patchCourseFeatures(
     misconceptionDetectionEnabled?: boolean
     sectionsEnabled?: boolean
     discussionsEnabled?: boolean
+    collabDocsEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -741,6 +744,7 @@ export async function patchCourseFeatures(
         hintScaffoldingEnabled: body.hintScaffoldingEnabled,
         misconceptionDetectionEnabled: body.misconceptionDetectionEnabled,
         discussionsEnabled: body.discussionsEnabled ?? false,
+        ...(body.collabDocsEnabled !== undefined ? { collabDocsEnabled: body.collabDocsEnabled } : {}),
         ...(body.sectionsEnabled !== undefined ? { sectionsEnabled: body.sectionsEnabled } : {}),
       }),
     },

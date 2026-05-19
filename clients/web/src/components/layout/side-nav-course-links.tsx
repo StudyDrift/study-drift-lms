@@ -13,6 +13,7 @@ import {
   MessageSquare,
   MessagesSquare,
   NotebookPen,
+  PenLine,
   Settings,
   Users,
   Video,
@@ -48,6 +49,7 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
     questionBankEnabled,
     standardsAlignmentEnabled,
     discussionsEnabled,
+    collabDocsEnabled,
     sbgEnabled,
   } = useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
@@ -87,6 +89,11 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
       {discussionsEnabled && (
         <SideNavLink to={`${base}/discussions`} icon={<MessagesSquare className="h-5 w-5" />}>
           Discussions
+        </SideNavLink>
+      )}
+      {collabDocsEnabled && (
+        <SideNavLink to={`${base}/collab-docs`} icon={<PenLine className="h-5 w-5" />}>
+          Collab docs
         </SideNavLink>
       )}
       <SideNavLink to={`${base}/syllabus`} icon={<FileText className="h-5 w-5" />}>
