@@ -135,11 +135,6 @@ func encodeEmptySyncStep2() []byte {
 	return []byte{0, 1, 0}
 }
 
-// isSyncMsg returns true if the binary message is a Y.js sync message (first byte = 0).
-func isSyncMsg(msg []byte) bool {
-	return len(msg) > 0 && msg[0] == 0
-}
-
 // extractUpdateFromMsg extracts the raw update bytes from a sync step 2 or update message.
 // msg format: [0, subType, varintLen, ...updateBytes]
 func extractUpdateFromMsg(msg []byte) []byte {
