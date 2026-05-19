@@ -5,6 +5,7 @@ import {
   BookMarked,
   Calendar,
   ClipboardList,
+  Clock,
   FileText,
   Layers,
   LayoutDashboard,
@@ -54,6 +55,7 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
     sbgEnabled,
     liveSessionsEnabled,
     groupSpacesEnabled,
+    officeHoursEnabled,
   } = useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
   const courseViewPreview = useCourseViewAs(courseCode)
@@ -113,6 +115,11 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
       {liveSessionsEnabled && (
         <SideNavLink to={`${base}/live`} icon={<Video className="h-5 w-5" />}>
           Live Sessions
+        </SideNavLink>
+      )}
+      {officeHoursEnabled && (
+        <SideNavLink to={`${base}/office-hours`} icon={<Clock className="h-5 w-5" />}>
+          Office Hours
         </SideNavLink>
       )}
       {canManageQuestionBank && questionBankEnabled && (

@@ -26,6 +26,8 @@ export type CourseNavFeatures = {
   liveSessionsEnabled: boolean
   /** Plan 6.6 — private group spaces (feed per enrollment group). */
   groupSpacesEnabled: boolean
+  /** Plan 6.7 — office hours appointment scheduling. */
+  officeHoursEnabled: boolean
   /** True while loading or re-fetching flags for the active course. */
   loading: boolean
   /** Re-load feature flags from the server (e.g. after saving settings). */
@@ -43,6 +45,7 @@ const defaultFeatures: CourseNavFeatures = {
   sbgEnabled: false,
   liveSessionsEnabled: true,
   groupSpacesEnabled: false,
+  officeHoursEnabled: false,
   loading: false,
   refresh: async () => {},
 }
@@ -65,6 +68,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
   const [sbgEnabled, setSbgEnabled] = useState(false)
   const [liveSessionsEnabled, setLiveSessionsEnabled] = useState(true)
   const [groupSpacesEnabled, setGroupSpacesEnabled] = useState(false)
+  const [officeHoursEnabled, setOfficeHoursEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -79,6 +83,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setSbgEnabled(false)
       setLiveSessionsEnabled(true)
       setGroupSpacesEnabled(false)
+      setOfficeHoursEnabled(false)
       return
     }
     setLoading(true)
@@ -94,6 +99,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setSbgEnabled(c.sbgEnabled === true)
       setLiveSessionsEnabled(c.liveSessionsEnabled !== false)
       setGroupSpacesEnabled(c.groupSpacesEnabled === true)
+      setOfficeHoursEnabled(c.officeHoursEnabled === true)
     } catch {
       setNotebookEnabled(true)
       setFeedEnabled(true)
@@ -105,6 +111,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setSbgEnabled(false)
       setLiveSessionsEnabled(true)
       setGroupSpacesEnabled(false)
+      setOfficeHoursEnabled(false)
     } finally {
       setLoading(false)
     }
@@ -126,6 +133,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       sbgEnabled,
       liveSessionsEnabled,
       groupSpacesEnabled,
+      officeHoursEnabled,
       loading,
       refresh,
     }),
@@ -140,6 +148,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       sbgEnabled,
       liveSessionsEnabled,
       groupSpacesEnabled,
+      officeHoursEnabled,
       loading,
       refresh,
     ],

@@ -70,6 +70,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const discussionsEnabled = course.discussionsEnabled === true
   const collabDocsEnabled = course.collabDocsEnabled === true
   const liveSessionsEnabled = course.liveSessionsEnabled !== false
+  const officeHoursEnabled = course.officeHoursEnabled === true
 
   const persist = useCallback(
     async (patch: {
@@ -88,6 +89,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       discussionsEnabled?: boolean
       collabDocsEnabled?: boolean
       liveSessionsEnabled?: boolean
+      officeHoursEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -111,6 +113,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           discussionsEnabled: patch.discussionsEnabled ?? discussionsEnabled,
           collabDocsEnabled: patch.collabDocsEnabled ?? collabDocsEnabled,
           liveSessionsEnabled: patch.liveSessionsEnabled ?? liveSessionsEnabled,
+          officeHoursEnabled: patch.officeHoursEnabled ?? officeHoursEnabled,
         }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
@@ -135,6 +138,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       discussionsEnabled,
       collabDocsEnabled,
       liveSessionsEnabled,
+      officeHoursEnabled,
       calendarEnabled,
       courseCode,
       feedEnabled,
@@ -264,6 +268,13 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           enabled={liveSessionsEnabled}
           disabled={saving}
           onToggle={() => void persist({ liveSessionsEnabled: !liveSessionsEnabled })}
+        />
+        <FeatureToggleRow
+          label="Office Hours"
+          description="Let instructors define availability windows and students book 1-on-1 appointment slots — shows the Office Hours menu item (plan 6.7)."
+          enabled={officeHoursEnabled}
+          disabled={saving}
+          onToggle={() => void persist({ officeHoursEnabled: !officeHoursEnabled })}
         />
       </div>
 
