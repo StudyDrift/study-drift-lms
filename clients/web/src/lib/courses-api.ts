@@ -139,6 +139,8 @@ export type CoursePublic = {
   groupSpacesEnabled?: boolean
   /** Plan 6.7 — office hours appointment scheduling (default off when omitted). */
   officeHoursEnabled?: boolean
+  /** Plan 6.9 — conversational AI tutor side-panel (default off when omitted). */
+  aiTutorEnabled?: boolean
   /** `traditional` or `competency_based` (server default when omitted: traditional). */
   courseType?: string
   createdAt: string
@@ -732,6 +734,7 @@ export async function patchCourseFeatures(
     collabDocsEnabled?: boolean
     liveSessionsEnabled?: boolean
     officeHoursEnabled?: boolean
+    aiTutorEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -755,6 +758,7 @@ export async function patchCourseFeatures(
         ...(body.collabDocsEnabled !== undefined ? { collabDocsEnabled: body.collabDocsEnabled } : {}),
         ...(body.liveSessionsEnabled !== undefined ? { liveSessionsEnabled: body.liveSessionsEnabled } : {}),
         ...(body.officeHoursEnabled !== undefined ? { officeHoursEnabled: body.officeHoursEnabled } : {}),
+        ...(body.aiTutorEnabled !== undefined ? { aiTutorEnabled: body.aiTutorEnabled } : {}),
         ...(body.sectionsEnabled !== undefined ? { sectionsEnabled: body.sectionsEnabled } : {}),
       }),
     },

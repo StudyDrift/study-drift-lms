@@ -71,6 +71,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const collabDocsEnabled = course.collabDocsEnabled === true
   const liveSessionsEnabled = course.liveSessionsEnabled !== false
   const officeHoursEnabled = course.officeHoursEnabled === true
+  const aiTutorEnabled = course.aiTutorEnabled === true
 
   const persist = useCallback(
     async (patch: {
@@ -90,6 +91,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       collabDocsEnabled?: boolean
       liveSessionsEnabled?: boolean
       officeHoursEnabled?: boolean
+      aiTutorEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -114,6 +116,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           collabDocsEnabled: patch.collabDocsEnabled ?? collabDocsEnabled,
           liveSessionsEnabled: patch.liveSessionsEnabled ?? liveSessionsEnabled,
           officeHoursEnabled: patch.officeHoursEnabled ?? officeHoursEnabled,
+          aiTutorEnabled: patch.aiTutorEnabled ?? aiTutorEnabled,
         }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
@@ -139,6 +142,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       collabDocsEnabled,
       liveSessionsEnabled,
       officeHoursEnabled,
+      aiTutorEnabled,
       calendarEnabled,
       courseCode,
       feedEnabled,
@@ -275,6 +279,13 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           enabled={officeHoursEnabled}
           disabled={saving}
           onToggle={() => void persist({ officeHoursEnabled: !officeHoursEnabled })}
+        />
+        <FeatureToggleRow
+          label="AI Tutor"
+          description="Conversational AI tutor side-panel available on all course pages — students can ask questions grounded in course context with a per-student monthly token budget (plan 6.9)."
+          enabled={aiTutorEnabled}
+          disabled={saving}
+          onToggle={() => void persist({ aiTutorEnabled: !aiTutorEnabled })}
         />
       </div>
 

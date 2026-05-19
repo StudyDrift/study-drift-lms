@@ -28,6 +28,8 @@ export type CourseNavFeatures = {
   groupSpacesEnabled: boolean
   /** Plan 6.7 — office hours appointment scheduling. */
   officeHoursEnabled: boolean
+  /** Plan 6.9 — conversational AI tutor side-panel. */
+  aiTutorEnabled: boolean
   /** True while loading or re-fetching flags for the active course. */
   loading: boolean
   /** Re-load feature flags from the server (e.g. after saving settings). */
@@ -46,6 +48,7 @@ const defaultFeatures: CourseNavFeatures = {
   liveSessionsEnabled: true,
   groupSpacesEnabled: false,
   officeHoursEnabled: false,
+  aiTutorEnabled: false,
   loading: false,
   refresh: async () => {},
 }
@@ -69,6 +72,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
   const [liveSessionsEnabled, setLiveSessionsEnabled] = useState(true)
   const [groupSpacesEnabled, setGroupSpacesEnabled] = useState(false)
   const [officeHoursEnabled, setOfficeHoursEnabled] = useState(false)
+  const [aiTutorEnabled, setAiTutorEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -84,6 +88,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setLiveSessionsEnabled(true)
       setGroupSpacesEnabled(false)
       setOfficeHoursEnabled(false)
+      setAiTutorEnabled(false)
       return
     }
     setLoading(true)
@@ -100,6 +105,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setLiveSessionsEnabled(c.liveSessionsEnabled !== false)
       setGroupSpacesEnabled(c.groupSpacesEnabled === true)
       setOfficeHoursEnabled(c.officeHoursEnabled === true)
+      setAiTutorEnabled(c.aiTutorEnabled === true)
     } catch {
       setNotebookEnabled(true)
       setFeedEnabled(true)
@@ -112,6 +118,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setLiveSessionsEnabled(true)
       setGroupSpacesEnabled(false)
       setOfficeHoursEnabled(false)
+      setAiTutorEnabled(false)
     } finally {
       setLoading(false)
     }
@@ -134,6 +141,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       liveSessionsEnabled,
       groupSpacesEnabled,
       officeHoursEnabled,
+      aiTutorEnabled,
       loading,
       refresh,
     }),
@@ -149,6 +157,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       liveSessionsEnabled,
       groupSpacesEnabled,
       officeHoursEnabled,
+      aiTutorEnabled,
       loading,
       refresh,
     ],

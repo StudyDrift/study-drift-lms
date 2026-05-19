@@ -89,6 +89,7 @@ func NewHandler(d Deps) http.Handler {
 	d.registerCourseRoutes(r)
 	d.registerMeetingRoutes(r)
 	d.registerOfficeHoursRoutes(r)
+	d.registerTutorRoutes(r)
 	d.registerSurveyRoutes(r)
 	d.registerLearnerRoutes(r)
 	d.registerConceptRoutes(r)
