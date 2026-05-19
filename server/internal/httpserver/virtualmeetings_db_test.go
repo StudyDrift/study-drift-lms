@@ -168,20 +168,24 @@ func TestVirtualMeetings_CreateAndList_Pg(t *testing.T) {
 }
 
 func TestVirtualMeetings_Patch_Pg(t *testing.T) {
-	h, teacherTok, studentTok, cc, courseID, cleanup := setupVirtualMeetingTest(t)
+	h, teacherTok, studentTok, cc, _, cleanup := setupVirtualMeetingTest(t)
 	defer cleanup()
 	ctx := context.Background()
 
-	// Create a meeting directly via repo.
-	pool, err := db.NewPool(ctx, os.Getenv("DATABASE_URL"))
-	if err != nil {
-		t.Skip("pool")
+	// Create a meeting via the HTTP handler using the teacher token.
+	createBody, _ := json.Marshal(map[string]any{"title": "Old Title", "provider": "jitsi"})
+	rrC := httptest.NewRecorder()
+	reqC := httptest.NewRequest(http.MethodPost, "/api/v1/courses/"+cc+"/meetings", bytes.NewReader(createBody))
+	reqC = reqC.WithContext(ctx)
+	reqC.Header.Set("Authorization", "Bearer "+teacherTok)
+	reqC.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(rrC, reqC)
+	if rrC.Code != http.StatusCreated {
+		t.Fatalf("setup create: want 201, got %d %s", rrC.Code, rrC.Body.String())
 	}
-	defer pool.Close()
-
-	m, err := virtualmeetings.Create(ctx, pool, courseID, courseID /* reuse as createdBy */, "jitsi", "Old Title", nil, nil, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("create: %v", err)
+	var m virtualmeetings.Meeting
+	if err := json.NewDecoder(rrC.Body).Decode(&m); err != nil {
+		t.Fatalf("decode create: %v", err)
 	}
 
 	// Student cannot patch.
@@ -249,25 +253,31 @@ func TestVirtualMeetings_Patch_Pg(t *testing.T) {
 }
 
 func TestVirtualMeetings_Ical_Pg(t *testing.T) {
-	h, teacherTok, _, cc, courseID, cleanup := setupVirtualMeetingTest(t)
+	h, teacherTok, _, cc, _, cleanup := setupVirtualMeetingTest(t)
 	defer cleanup()
 	ctx := context.Background()
 
-	pool, err := db.NewPool(ctx, os.Getenv("DATABASE_URL"))
-	if err != nil {
-		t.Skip("pool")
-	}
-	defer pool.Close()
-
 	start := time.Now().Add(10 * time.Minute).UTC()
 	end := start.Add(time.Hour)
-	m, err := virtualmeetings.Create(ctx, pool, courseID, courseID, "jitsi", "Lecture 1", &start, &end, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("create: %v", err)
+	createBody, _ := json.Marshal(map[string]any{
+		"title":          "Lecture 1",
+		"provider":       "jitsi",
+		"scheduledStart": start.Format(time.RFC3339),
+		"scheduledEnd":   end.Format(time.RFC3339),
+	})
+	rrC := httptest.NewRecorder()
+	reqC := httptest.NewRequest(http.MethodPost, "/api/v1/courses/"+cc+"/meetings", bytes.NewReader(createBody))
+	reqC = reqC.WithContext(ctx)
+	reqC.Header.Set("Authorization", "Bearer "+teacherTok)
+	reqC.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(rrC, reqC)
+	if rrC.Code != http.StatusCreated {
+		t.Fatalf("setup create: want 201, got %d %s", rrC.Code, rrC.Body.String())
 	}
-
-	// Skip the list test for this course since the meeting is in a separate pool
-	_ = cc
+	var m virtualmeetings.Meeting
+	if err := json.NewDecoder(rrC.Body).Decode(&m); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/meetings/"+m.ID+"/ical", nil)
