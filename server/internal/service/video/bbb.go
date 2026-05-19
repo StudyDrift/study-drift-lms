@@ -46,7 +46,7 @@ func (b *BBBProvider) CreateMeeting(ctx context.Context, p MeetingParams) (*Meet
 	if err != nil {
 		return nil, fmt.Errorf("bbb: create room: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("bbb: create room status %d: %s", resp.StatusCode, body)

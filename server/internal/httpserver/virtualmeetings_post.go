@@ -112,31 +112,24 @@ func (d Deps) handleCreateMeeting() http.HandlerFunc {
 		var joinURL, hostURL *string
 
 		// Generate join URLs for providers that don't need an external API call.
-		if provider == "jitsi" {
-			prov := d.jitsiProvider()
-			params := video.MeetingParams{
-				MeetingID:      meetingUUID,
-				CourseCode:     courseCode,
-				Title:          title,
-				ScheduledStart: scheduledStart,
-			}
-			urls, err := prov.CreateMeeting(ctx, params)
+		meetingParams := video.MeetingParams{
+			MeetingID:      meetingUUID,
+			CourseCode:     courseCode,
+			Title:          title,
+			ScheduledStart: scheduledStart,
+		}
+		switch provider {
+		case "jitsi":
+			urls, err := d.jitsiProvider().CreateMeeting(ctx, meetingParams)
 			if err != nil {
 				apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, "Failed to create Jitsi room.")
 				return
 			}
 			joinURL = &urls.JoinURL
 			hostURL = &urls.HostURL
-		} else if provider == "bbb" {
-			prov := d.bbbProvider()
-			if prov != nil {
-				params := video.MeetingParams{
-					MeetingID:      meetingUUID,
-					CourseCode:     courseCode,
-					Title:          title,
-					ScheduledStart: scheduledStart,
-				}
-				urls, err := prov.CreateMeeting(ctx, params)
+		case "bbb":
+			if prov := d.bbbProvider(); prov != nil {
+				urls, err := prov.CreateMeeting(ctx, meetingParams)
 				if err != nil {
 					apierr.WriteJSON(w, http.StatusInternalServerError, apierr.CodeInternal, fmt.Sprintf("Failed to create BBB room: %v", err))
 					return
