@@ -107,6 +107,12 @@ func (d Deps) registerCourseRoutes(r chi.Router) {
 	r.Delete("/api/v1/courses/{course_code}/collab-docs/{doc_id}", d.handleDeleteCollabDoc())
 	r.Get("/api/v1/courses/{course_code}/collab-docs/{doc_id}/snapshots", d.handleGetCollabDocSnapshots())
 	r.Get("/api/v1/courses/{course_code}/collab-docs/{doc_id}/ws", d.handleCollabDocWS())
+	r.Get("/api/v1/courses/{course_code}/groups", d.handleListGroups())
+	r.Get("/api/v1/courses/{course_code}/my-groups", d.handleListMyGroups())
+	r.Get("/api/v1/courses/{course_code}/groups/{group_id}/feed/channels", d.handleListGroupChannels())
+	r.Post("/api/v1/courses/{course_code}/groups/{group_id}/feed/channels", d.handleCreateGroupChannel())
+	r.Get("/api/v1/courses/{course_code}/groups/{group_id}/feed/channels/{channel_id}/messages", d.handleListGroupMessages())
+	r.Post("/api/v1/courses/{course_code}/groups/{group_id}/feed/channels/{channel_id}/messages", d.handlePostGroupMessage())
 	r.Get("/api/v1/courses/{course_code}/feed/ws", d.handleFeedWS())
 	r.Get("/api/v1/courses/{course_code}/import/canvas/ws", d.handleCourseImportCanvasWS())
 }
