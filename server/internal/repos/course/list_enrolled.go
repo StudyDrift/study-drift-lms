@@ -48,6 +48,7 @@ type CoursePublic struct {
 	MisconceptionDetectionEnabled bool             `json:"misconceptionDetectionEnabled"`
 	SectionsEnabled               bool             `json:"sectionsEnabled"`
 	DiscussionsEnabled            bool             `json:"discussionsEnabled"`
+	CollabDocsEnabled             bool             `json:"collabDocsEnabled"`
 	CourseType                    string           `json:"courseType"`
 	CreatedAt                     time.Time        `json:"createdAt"`
 	UpdatedAt                     time.Time        `json:"updatedAt"`
@@ -101,6 +102,7 @@ const coursePublicSelect = `
     c.misconception_detection_enabled,
     c.sections_enabled,
     c.discussions_enabled,
+    c.collab_docs_enabled,
     c.course_type,
     c.created_at,
     c.updated_at,
@@ -179,6 +181,7 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 		&p.MisconceptionDetectionEnabled,
 		&p.SectionsEnabled,
 		&p.DiscussionsEnabled,
+		&p.CollabDocsEnabled,
 		&p.CourseType,
 		&p.CreatedAt,
 		&p.UpdatedAt,

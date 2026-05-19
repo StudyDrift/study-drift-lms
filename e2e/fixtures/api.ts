@@ -597,3 +597,93 @@ export async function apiGetCourseOutcomes(
   }
   return res.json() as Promise<{ enrolledLearners: number; outcomes: ApiCourseOutcome[] }>
 }
+
+// ---------------------------------------------------------------------------
+// Collaborative documents
+// ---------------------------------------------------------------------------
+
+export interface CollabDocApi {
+  id: string
+  title: string
+  docType: 'rich_text' | 'whiteboard'
+  updatedAt: string
+}
+
+export async function apiListCollabDocs(
+  token: string,
+  courseCode: string,
+): Promise<CollabDocApi[]> {
+  const res = await fetch(
+    `${apiBase}/api/v1/courses/${encodeURIComponent(courseCode)}/collab-docs`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`List collab docs failed (${res.status}): ${body}`)
+  }
+  const raw = (await res.json()) as { docs: CollabDocApi[] }
+  return raw.docs
+}
+
+export async function apiCreateCollabDoc(
+  token: string,
+  courseCode: string,
+  title: string,
+  docType: 'rich_text' | 'whiteboard' = 'rich_text',
+): Promise<CollabDocApi> {
+  const res = await fetch(
+    `${apiBase}/api/v1/courses/${encodeURIComponent(courseCode)}/collab-docs`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ title, docType }),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Create collab doc failed (${res.status}): ${body}`)
+  }
+  return res.json() as Promise<CollabDocApi>
+}
+
+export async function apiDeleteCollabDoc(
+  token: string,
+  courseCode: string,
+  docId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${apiBase}/api/v1/courses/${encodeURIComponent(courseCode)}/collab-docs/${encodeURIComponent(docId)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Delete collab doc failed (${res.status}): ${body}`)
+  }
+}
+
+export async function apiEnableCollabDocs(
+  token: string,
+  courseCode: string,
+): Promise<void> {
+  const res = await fetch(
+    `${apiBase}/api/v1/courses/${encodeURIComponent(courseCode)}/features`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ collabDocsEnabled: true }),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Enable collab docs failed (${res.status}): ${body}`)
+  }
+}

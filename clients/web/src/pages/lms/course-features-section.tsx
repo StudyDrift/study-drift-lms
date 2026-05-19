@@ -68,6 +68,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const misconceptionDetectionEnabled = course.misconceptionDetectionEnabled === true
   const sectionsEnabled = course.sectionsEnabled === true
   const discussionsEnabled = course.discussionsEnabled === true
+  const collabDocsEnabled = course.collabDocsEnabled === true
 
   const persist = useCallback(
     async (patch: {
@@ -84,6 +85,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       misconceptionDetectionEnabled?: boolean
       sectionsEnabled?: boolean
       discussionsEnabled?: boolean
+      collabDocsEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -105,6 +107,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
             patch.misconceptionDetectionEnabled ?? misconceptionDetectionEnabled,
           sectionsEnabled: patch.sectionsEnabled ?? sectionsEnabled,
           discussionsEnabled: patch.discussionsEnabled ?? discussionsEnabled,
+          collabDocsEnabled: patch.collabDocsEnabled ?? collabDocsEnabled,
         }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
@@ -127,6 +130,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       misconceptionDetectionEnabled,
       sectionsEnabled,
       discussionsEnabled,
+      collabDocsEnabled,
       calendarEnabled,
       courseCode,
       feedEnabled,
@@ -242,6 +246,13 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           enabled={sectionsEnabled}
           disabled={saving}
           onToggle={() => void persist({ sectionsEnabled: !sectionsEnabled })}
+        />
+        <FeatureToggleRow
+          label="Collaborative documents"
+          description="Real-time co-editing with Y.js CRDT — shared rich-text docs and whiteboards for group work and classroom brainstorming (plan 6.5)."
+          enabled={collabDocsEnabled}
+          disabled={saving}
+          onToggle={() => void persist({ collabDocsEnabled: !collabDocsEnabled })}
         />
       </div>
 
