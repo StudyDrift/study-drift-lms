@@ -150,7 +150,7 @@ func generateSlots(ctx context.Context, tx pgx.Tx, windowID uuid.UUID, w *Availa
 		endOfDay := time.Date(day.Year(), day.Month(), day.Day(),
 			end.Hour(), end.Minute(), 0, 0, time.UTC)
 
-		for !cursor.Before(endOfDay) || cursor.Add(duration).After(endOfDay) {
+		for {
 			slotEnd := cursor.Add(duration)
 			if slotEnd.After(endOfDay) {
 				break
