@@ -63,3 +63,5 @@ iac/demo/override.tf
 
 # Go Air (dev container)
 server/tmp/
+
+.claude/worktrees
