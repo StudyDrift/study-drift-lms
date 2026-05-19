@@ -45,7 +45,7 @@ func TestCollabDocs_FullCRUD_Pg(t *testing.T) {
 		t.Fatalf("user: %v", err)
 	}
 	uid, _ := uuid.Parse(row.ID)
-	cc := fmt.Sprintf("CLAB%05d", time.Now().UnixNano()%100000)
+	cc := fmt.Sprintf("C-L%05d", time.Now().UnixNano()%100000)
 
 	var courseID uuid.UUID
 	if err := pool.QueryRow(ctx,
@@ -239,7 +239,7 @@ func TestCollabDocs_FeatureGate_Pg(t *testing.T) {
 		t.Fatalf("user: %v", err)
 	}
 	uid, _ := uuid.Parse(row.ID)
-	cc := fmt.Sprintf("CLBG%05d", time.Now().UnixNano()%100000)
+	cc := fmt.Sprintf("C-G%05d", time.Now().UnixNano()%100000)
 
 	var courseID uuid.UUID
 	if err := pool.QueryRow(ctx,
@@ -339,7 +339,7 @@ func TestCollabDocs_InvalidDocType_Pg(t *testing.T) {
 		t.Fatalf("user: %v", err)
 	}
 	uid, _ := uuid.Parse(row.ID)
-	cc := fmt.Sprintf("CLBT%05d", time.Now().UnixNano()%100000)
+	cc := fmt.Sprintf("C-T%05d", time.Now().UnixNano()%100000)
 
 	var courseID uuid.UUID
 	if err := pool.QueryRow(ctx,
