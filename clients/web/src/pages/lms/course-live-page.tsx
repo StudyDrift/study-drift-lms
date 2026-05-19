@@ -202,10 +202,14 @@ function CreateMeetingModal({ onClose, onCreated, courseCode }: CreateMeetingMod
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+            <label
+              htmlFor="meeting-title"
+              className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300"
+            >
               Title
             </label>
             <input
+              id="meeting-title"
               ref={titleRef}
               type="text"
               value={title}
@@ -366,10 +370,7 @@ export default function CourseLivePage() {
       )}
 
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
-          Live Sessions
-        </h2>
+      <div className="mb-4 flex items-center justify-end">
         {!rolesLoading && isStaff && (
           <button
             type="button"
