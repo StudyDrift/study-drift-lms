@@ -24,4 +24,6 @@ func (d Deps) registerOrgRoutes(r chi.Router) {
 	r.Post("/api/v1/orgs/{orgId}/branding/logo", d.handleOrgBrandingUpload("logo"))
 	r.Post("/api/v1/orgs/{orgId}/branding/favicon", d.handleOrgBrandingUpload("favicon"))
 	r.Get("/api/v1/orgs/{orgId}/users", d.handleOrgUsersSearch())
+	r.Get("/api/v1/orgs/{orgId}/settings/support-widget", d.handleOrgSupportWidgetItem())
+	r.Put("/api/v1/orgs/{orgId}/settings/support-widget", d.handleOrgSupportWidgetItem())
 }

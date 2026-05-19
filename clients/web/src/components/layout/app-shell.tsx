@@ -15,6 +15,7 @@ import { SideNav } from './side-nav'
 import { TopBar } from './top-bar'
 import { UiThemeSync } from './ui-theme-sync'
 import { LmsExperienceRoot } from './lms-experience-root'
+import { HelpWidget } from './HelpWidget'
 
 function AppShellLayout() {
   const location = useLocation()
@@ -49,6 +50,7 @@ function AppShellLayout() {
           </main>
         </div>
       </div>
+      <HelpWidget />
       </LmsExperienceRoot>
     </CourseNavFeaturesProvider>
   )

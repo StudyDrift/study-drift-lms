@@ -819,3 +819,75 @@ export async function apiPostGroupMessage(
   }
   return res.json() as Promise<{ id: string }>
 }
+
+// ---------------------------------------------------------------------------
+// Help widget helpers (plan 6.8)
+// ---------------------------------------------------------------------------
+
+export interface HelpArticle {
+  title: string
+  url: string
+  slug: string
+}
+
+export async function apiGetContextualArticles(
+  token: string,
+  route: string,
+): Promise<HelpArticle[]> {
+  const res = await fetch(
+    `${apiBase}/api/v1/help/contextual-articles?route=${encodeURIComponent(route)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Get contextual articles failed (${res.status}): ${body}`)
+  }
+  const data = (await res.json()) as { articles: HelpArticle[] }
+  return data.articles ?? []
+}
+
+export interface SupportWidgetConfig {
+  orgId: string
+  enabled: boolean
+  provider: string
+  websiteId: string | null
+  dpaConfirmedAt: string | null
+}
+
+export async function apiGetSupportWidgetConfig(
+  token: string,
+  orgId: string,
+): Promise<SupportWidgetConfig> {
+  const res = await fetch(
+    `${apiBase}/api/v1/orgs/${encodeURIComponent(orgId)}/settings/support-widget`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Get support widget config failed (${res.status}): ${body}`)
+  }
+  return res.json() as Promise<SupportWidgetConfig>
+}
+
+export async function apiPutSupportWidgetConfig(
+  token: string,
+  orgId: string,
+  config: { enabled?: boolean; provider?: string; websiteId?: string; dpaConfirm?: boolean },
+): Promise<SupportWidgetConfig> {
+  const res = await fetch(
+    `${apiBase}/api/v1/orgs/${encodeURIComponent(orgId)}/settings/support-widget`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(config),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Put support widget config failed (${res.status}): ${body}`)
+  }
+  return res.json() as Promise<SupportWidgetConfig>
+}
