@@ -137,6 +137,8 @@ export type CoursePublic = {
   liveSessionsEnabled?: boolean
   /** Plan 6.6 — private group spaces (feed + files + assignments per enrollment group). */
   groupSpacesEnabled?: boolean
+  /** Plan 6.7 — office hours appointment scheduling (default off when omitted). */
+  officeHoursEnabled?: boolean
   /** `traditional` or `competency_based` (server default when omitted: traditional). */
   courseType?: string
   createdAt: string
@@ -729,6 +731,7 @@ export async function patchCourseFeatures(
     discussionsEnabled?: boolean
     collabDocsEnabled?: boolean
     liveSessionsEnabled?: boolean
+    officeHoursEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -751,6 +754,7 @@ export async function patchCourseFeatures(
         discussionsEnabled: body.discussionsEnabled ?? false,
         ...(body.collabDocsEnabled !== undefined ? { collabDocsEnabled: body.collabDocsEnabled } : {}),
         ...(body.liveSessionsEnabled !== undefined ? { liveSessionsEnabled: body.liveSessionsEnabled } : {}),
+        ...(body.officeHoursEnabled !== undefined ? { officeHoursEnabled: body.officeHoursEnabled } : {}),
         ...(body.sectionsEnabled !== undefined ? { sectionsEnabled: body.sectionsEnabled } : {}),
       }),
     },

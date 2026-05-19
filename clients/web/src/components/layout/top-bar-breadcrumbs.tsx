@@ -167,6 +167,9 @@ function staticCrumbsFromPathname(pathname: string, courseCode: string | null): 
   if (pathname === `${base}/live`) {
     return [courseCrumb(courseCode, true), { key: 'live', label: 'Live Sessions' }]
   }
+  if (pathname === `${base}/office-hours`) {
+    return [courseCrumb(courseCode, true), { key: 'office-hours', label: 'Office Hours' }]
+  }
   if (pathname === `${base}/my-grades`) {
     return [courseCrumb(courseCode, true), { key: 'mg', label: 'My grades' }]
   }
