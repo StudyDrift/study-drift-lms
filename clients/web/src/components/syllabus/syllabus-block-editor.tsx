@@ -125,7 +125,7 @@ function SyllabusDocumentPanel({
         onChange(nextSections)
         setPastedFlash((n) => n + 1)
       }
-    } catch (err) {
+    } catch {
       // Fallback to readText if read() is not supported or fails
       try {
         const text = await navigator.clipboard.readText()

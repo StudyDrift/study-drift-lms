@@ -20,9 +20,7 @@ import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { formatRelativeCompact } from '../../lib/format-datetime'
 import { LmsPage } from './lms-page'
 
-function isCourseStaff(roles: string[] | undefined): boolean {
-  return Boolean(roles?.some((r) => r === 'teacher' || r === 'instructor'))
-}
+
 
 
 function authorLabel(m: GroupMessage): string {
