@@ -16,6 +16,7 @@ import {
   PenLine,
   Settings,
   Users,
+  UsersRound,
   Video,
 } from 'lucide-react'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
@@ -52,6 +53,7 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
     collabDocsEnabled,
     sbgEnabled,
     liveSessionsEnabled,
+    groupSpacesEnabled,
   } = useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
   const courseViewPreview = useCourseViewAs(courseCode)
@@ -95,6 +97,11 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
       {collabDocsEnabled && (
         <SideNavLink to={`${base}/collab-docs`} icon={<PenLine className="h-5 w-5" />}>
           Collab docs
+        </SideNavLink>
+      )}
+      {groupSpacesEnabled && (
+        <SideNavLink to={`${base}/groups`} icon={<UsersRound className="h-5 w-5" />}>
+          Groups
         </SideNavLink>
       )}
       <SideNavLink to={`${base}/syllabus`} icon={<FileText className="h-5 w-5" />}>

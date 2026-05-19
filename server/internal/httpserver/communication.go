@@ -318,3 +318,12 @@ func (d Deps) handleCommWS() http.HandlerFunc {
 		}
 	}
 }
+
+func (d Deps) registerCommunicationRoutes(r chi.Router) {
+	r.Get("/api/v1/communication/messages", d.handleCommMessagesList())
+	r.Post("/api/v1/communication/messages", d.handleCommMessagesPost())
+	r.Get("/api/v1/communication/messages/{id}", d.handleCommMessageGet())
+	r.Patch("/api/v1/communication/messages/{id}", d.handleCommMessagePatch())
+	r.Get("/api/v1/communication/unread-count", d.handleCommUnread())
+	r.Get("/api/v1/communication/ws", d.handleCommWS())
+}

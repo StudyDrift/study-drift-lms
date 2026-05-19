@@ -135,6 +135,8 @@ export type CoursePublic = {
   collabDocsEnabled?: boolean
   /** Plan 6.4 — virtual classroom / live sessions menu (default true when omitted). */
   liveSessionsEnabled?: boolean
+  /** Plan 6.6 — private group spaces (feed + files + assignments per enrollment group). */
+  groupSpacesEnabled?: boolean
   /** `traditional` or `competency_based` (server default when omitted: traditional). */
   courseType?: string
   createdAt: string

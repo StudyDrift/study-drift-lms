@@ -232,3 +232,9 @@ func max64(a, b int64) int64 {
 	}
 	return b
 }
+
+func (d Deps) registerStandardsRoutes(r chi.Router) {
+	r.Get("/api/v1/standards/search", d.handleSearchStandards())
+	r.Get("/api/v1/standards/{id}", d.handleGetStandard())
+	r.Get("/api/v1/standards", d.handleListStandards())
+}

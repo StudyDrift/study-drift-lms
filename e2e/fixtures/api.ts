@@ -687,3 +687,135 @@ export async function apiEnableCollabDocs(
     throw new Error(`Enable collab docs failed (${res.status}): ${body}`)
   }
 }
+
+// ---------------------------------------------------------------------------
+// Group Spaces helpers (plan 6.6)
+// ---------------------------------------------------------------------------
+
+export async function apiEnableGroupSpaces(
+  token: string,
+  courseCode: string,
+): Promise<void> {
+  const res = await fetch(
+    `${apiBase}/api/v1/courses/${encodeURIComponent(courseCode)}/features`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ groupSpacesEnabled: true }),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Enable group spaces failed (${res.status}): ${body}`)
+  }
+}
+
+export interface GroupApi {
+  id: string
+  groupSetId: string
+  name: string
+  sortOrder: number
+  createdAt: string
+  memberCount: number
+}
+
+export async function apiGetMyGroups(
+  token: string,
+  courseCode: string,
+): Promise<GroupApi[]> {
+  const res = await fetch(
+    `${apiBase}/api/v1/courses/${encodeURIComponent(courseCode)}/my-groups`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Get my groups failed (${res.status}): ${body}`)
+  }
+  const raw = (await res.json()) as { groups: GroupApi[] }
+  return raw.groups ?? []
+}
+
+export async function apiGetAllGroups(
+  token: string,
+  courseCode: string,
+): Promise<GroupApi[]> {
+  const res = await fetch(
+    `${apiBase}/api/v1/courses/${encodeURIComponent(courseCode)}/groups`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Get all groups failed (${res.status}): ${body}`)
+  }
+  const raw = (await res.json()) as { groups: GroupApi[] }
+  return raw.groups ?? []
+}
+
+export async function apiGetGroupChannels(
+  token: string,
+  courseCode: string,
+  groupId: string,
+): Promise<Array<{ id: string; name: string }>> {
+  const res = await fetch(
+    `${apiBase}/api/v1/courses/${encodeURIComponent(courseCode)}/groups/${encodeURIComponent(groupId)}/feed/channels`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Get group channels failed (${res.status}): ${body}`)
+  }
+  const raw = (await res.json()) as { channels: Array<{ id: string; name: string }> }
+  return raw.channels ?? []
+}
+
+export async function apiCreateGroupChannel(
+  token: string,
+  courseCode: string,
+  groupId: string,
+  name: string,
+): Promise<{ id: string; name: string }> {
+  const res = await fetch(
+    `${apiBase}/api/v1/courses/${encodeURIComponent(courseCode)}/groups/${encodeURIComponent(groupId)}/feed/channels`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name }),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Create group channel failed (${res.status}): ${body}`)
+  }
+  return res.json() as Promise<{ id: string; name: string }>
+}
+
+export async function apiPostGroupMessage(
+  token: string,
+  courseCode: string,
+  groupId: string,
+  channelId: string,
+  body: string,
+): Promise<{ id: string }> {
+  const res = await fetch(
+    `${apiBase}/api/v1/courses/${encodeURIComponent(courseCode)}/groups/${encodeURIComponent(groupId)}/feed/channels/${encodeURIComponent(channelId)}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ body, mentionUserIds: [], mentionsEveryone: false }),
+    },
+  )
+  if (!res.ok) {
+    const body2 = await res.text()
+    throw new Error(`Post group message failed (${res.status}): ${body2}`)
+  }
+  return res.json() as Promise<{ id: string }>
+}

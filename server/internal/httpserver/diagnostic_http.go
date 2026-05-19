@@ -577,3 +577,13 @@ func writeDiagnosticErr(w http.ResponseWriter, err error) {
 		apierr.WriteJSON(w, http.StatusBadRequest, apierr.CodeInvalidInput, err.Error())
 	}
 }
+
+func (d Deps) registerDiagnosticRoutes(r chi.Router) {
+	r.Get("/api/v1/enrollments/{enrollmentID}/diagnostic", d.handleEnrollmentDiagnosticGet())
+	r.Post("/api/v1/enrollments/{enrollmentID}/diagnostic/start", d.handleEnrollmentDiagnosticStart())
+	r.Post("/api/v1/enrollments/{enrollmentID}/diagnostic/bypass", d.handleEnrollmentDiagnosticBypass())
+	r.Post("/api/v1/diagnostic-attempts/{attemptID}/respond", d.handleDiagnosticAttemptRespond())
+	r.Get("/api/v1/courses/{course_code}/diagnostic-results", d.handleCourseDiagnosticResults())
+	r.Get("/api/v1/courses/{course_code}/diagnostic-config", d.handleCourseDiagnosticConfigGet())
+	r.Put("/api/v1/courses/{course_code}/diagnostic-config", d.handleCourseDiagnosticConfigPut())
+}

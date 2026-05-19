@@ -157,3 +157,26 @@ func (d Deps) handleDeleteMyOIDCIdentity() http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	}
 }
+
+func (d Deps) registerMeRoutes(r chi.Router) {
+	r.Get("/api/v1/me/mfa", d.handleListMyMFA())
+	r.Delete("/api/v1/me/mfa/{id}", d.handleDeleteMyMFA())
+	r.Get("/api/v1/me/permissions", d.handleMyPermissions())
+	r.Get("/api/v1/me/org-role-capabilities", d.handleMeOrgRoleCapabilities())
+	r.Get("/api/v1/me/notification-preferences", d.handleGetMyNotificationPreferences())
+	r.Put("/api/v1/me/notification-preferences", d.handlePutMyNotificationPreferences())
+	r.Get("/api/unsubscribe", d.handleUnsubscribe())
+	r.Get("/api/v1/push/vapid-public-key", d.handleGetVAPIDPublicKey())
+	r.Post("/api/v1/me/push-subscriptions", d.handlePostMyPushSubscription())
+	r.Delete("/api/v1/me/push-subscriptions/{id}", d.handleDeleteMyPushSubscription())
+	r.Get("/api/v1/me/notifications", d.handleGetMyNotifications())
+	r.Post("/api/v1/me/notifications/{id}/read", d.handleMarkNotificationRead())
+	r.Post("/api/v1/me/notifications/read-all", d.handleMarkAllNotificationsRead())
+	r.Get("/api/v1/me/notifications/sse", d.handleNotificationsSSE())
+	r.Get("/api/v1/me/sessions", d.handleListMySessions())
+	r.Delete("/api/v1/me/sessions", d.handleDeleteMyOtherSessions())
+	r.Delete("/api/v1/me/sessions/{id}", d.handleDeleteMySession())
+	r.Get("/api/v1/me/oidc-identities", d.handleMyOIDCIdentities())
+	r.Delete("/api/v1/me/oidc-identities/{id}", d.handleDeleteMyOIDCIdentity())
+	r.Post("/api/v1/me/notebooks/query", d.handleNotebookQuery())
+}

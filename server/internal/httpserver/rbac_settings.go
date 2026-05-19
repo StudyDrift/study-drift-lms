@@ -540,3 +540,16 @@ func allowGet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Allow", http.MethodGet)
 	http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 }
+
+func (d Deps) registerSettingsRoutes(r chi.Router) {
+	r.Get("/api/v1/settings/account", d.handleGetSettingsAccount())
+	r.Patch("/api/v1/settings/account", d.handlePatchSettingsAccount())
+	r.Get("/api/v1/settings/ai/models", d.handleListAIModels())
+	r.Get("/api/v1/settings/ai", d.handleGetSettingsAI())
+	r.Put("/api/v1/settings/ai", d.handlePutSettingsAI())
+	r.Get("/api/v1/settings/platform", d.handleGetPlatformSettings())
+	r.Put("/api/v1/settings/platform", d.handlePutPlatformSettings())
+	r.Get("/api/v1/settings/system-prompts", d.handleListSystemPrompts())
+	r.Put("/api/v1/settings/system-prompts/{key}", d.handlePutSystemPrompt())
+	r.Route("/api/v1/settings", func(s chi.Router) { d.registerSettingsRBAC(s) })
+}

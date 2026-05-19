@@ -262,3 +262,12 @@ func (d Deps) handleGetMeetingIcal() http.HandlerFunc {
 		_, _ = w.Write([]byte(strings.Join(lines, "\r\n") + "\r\n"))
 	}
 }
+
+func (d Deps) registerMeetingRoutes(r chi.Router) {
+	r.Post("/api/v1/courses/{course_code}/meetings", d.handleCreateMeeting())
+	r.Get("/api/v1/courses/{course_code}/meetings", d.handleListMeetings())
+	r.Get("/api/v1/meetings/{meeting_id}/join", d.handleGetMeetingJoin())
+	r.Patch("/api/v1/meetings/{meeting_id}", d.handlePatchMeeting())
+	r.Get("/api/v1/meetings/{meeting_id}/attendance", d.handleGetMeetingAttendance())
+	r.Get("/api/v1/meetings/{meeting_id}/ical", d.handleGetMeetingIcal())
+}

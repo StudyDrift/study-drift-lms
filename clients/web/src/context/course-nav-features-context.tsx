@@ -24,6 +24,8 @@ export type CourseNavFeatures = {
   sbgEnabled: boolean
   /** Plan 6.4 — virtual classroom / live sessions (default true). */
   liveSessionsEnabled: boolean
+  /** Plan 6.6 — private group spaces (feed per enrollment group). */
+  groupSpacesEnabled: boolean
   /** True while loading or re-fetching flags for the active course. */
   loading: boolean
   /** Re-load feature flags from the server (e.g. after saving settings). */
@@ -40,6 +42,7 @@ const defaultFeatures: CourseNavFeatures = {
   collabDocsEnabled: false,
   sbgEnabled: false,
   liveSessionsEnabled: true,
+  groupSpacesEnabled: false,
   loading: false,
   refresh: async () => {},
 }
@@ -61,6 +64,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
   const [collabDocsEnabled, setCollabDocsEnabled] = useState(false)
   const [sbgEnabled, setSbgEnabled] = useState(false)
   const [liveSessionsEnabled, setLiveSessionsEnabled] = useState(true)
+  const [groupSpacesEnabled, setGroupSpacesEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -74,6 +78,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setCollabDocsEnabled(false)
       setSbgEnabled(false)
       setLiveSessionsEnabled(true)
+      setGroupSpacesEnabled(false)
       return
     }
     setLoading(true)
@@ -88,6 +93,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setCollabDocsEnabled(c.collabDocsEnabled === true)
       setSbgEnabled(c.sbgEnabled === true)
       setLiveSessionsEnabled(c.liveSessionsEnabled !== false)
+      setGroupSpacesEnabled(c.groupSpacesEnabled === true)
     } catch {
       setNotebookEnabled(true)
       setFeedEnabled(true)
@@ -98,6 +104,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setCollabDocsEnabled(false)
       setSbgEnabled(false)
       setLiveSessionsEnabled(true)
+      setGroupSpacesEnabled(false)
     } finally {
       setLoading(false)
     }
@@ -118,6 +125,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       collabDocsEnabled,
       sbgEnabled,
       liveSessionsEnabled,
+      groupSpacesEnabled,
       loading,
       refresh,
     }),
@@ -131,6 +139,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       collabDocsEnabled,
       sbgEnabled,
       liveSessionsEnabled,
+      groupSpacesEnabled,
       loading,
       refresh,
     ],

@@ -50,6 +50,7 @@ type CoursePublic struct {
 	DiscussionsEnabled            bool             `json:"discussionsEnabled"`
 	CollabDocsEnabled             bool             `json:"collabDocsEnabled"`
 	LiveSessionsEnabled           bool             `json:"liveSessionsEnabled"`
+	GroupSpacesEnabled            bool             `json:"groupSpacesEnabled"`
 	CourseType                    string           `json:"courseType"`
 	CreatedAt                     time.Time        `json:"createdAt"`
 	UpdatedAt                     time.Time        `json:"updatedAt"`
@@ -105,6 +106,7 @@ const coursePublicSelect = `
     c.discussions_enabled,
     c.collab_docs_enabled,
     c.live_sessions_enabled,
+    c.group_spaces_enabled,
     c.course_type,
     c.created_at,
     c.updated_at,
@@ -185,6 +187,7 @@ func scanCoursePublicFromRow(row pgx.Row) (CoursePublic, error) {
 		&p.DiscussionsEnabled,
 		&p.CollabDocsEnabled,
 		&p.LiveSessionsEnabled,
+		&p.GroupSpacesEnabled,
 		&p.CourseType,
 		&p.CreatedAt,
 		&p.UpdatedAt,
