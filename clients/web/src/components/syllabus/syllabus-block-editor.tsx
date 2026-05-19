@@ -7,7 +7,8 @@ import {
   uploadCourseFile,
   type SyllabusSection,
 } from '../../lib/courses-api'
-import { sectionsToMarkdown } from './syllabus-section-markdown'
+import { sectionsToMarkdown, markdownToSectionsForEditor } from './syllabus-section-markdown'
+import TurndownService from 'turndown'
 import {
   BlockCanvas,
   BlockEditorProvider,
@@ -55,11 +56,13 @@ type ActiveField = { blockId: string; field: 'heading' | 'markdown' }
 
 function SyllabusDocumentPanel({
   sections,
+  onChange,
   documentVariant,
   requireSyllabusAcceptance,
   onRequireSyllabusAcceptanceChange,
 }: {
   sections: SyllabusSection[]
+  onChange: (next: SyllabusSection[]) => void
   documentVariant: 'syllabus' | 'page'
   requireSyllabusAcceptance?: boolean
   onRequireSyllabusAcceptanceChange?: (next: boolean) => void
@@ -70,6 +73,7 @@ function SyllabusDocumentPanel({
 
   const [markdownCopiedFlash, setMarkdownCopiedFlash] = useState(0)
   const [htmlCopiedFlash, setHtmlCopiedFlash] = useState(0)
+  const [pastedFlash, setPastedFlash] = useState(0)
 
   const copyMarkdown = useCallback(async () => {
     const text = sectionsToMarkdown(sections)
@@ -91,6 +95,50 @@ function SyllabusDocumentPanel({
       /* ignore */
     }
   }, [sections, setHtmlCopiedFlash])
+
+  const pasteFromClipboard = useCallback(async () => {
+    try {
+      const items = await navigator.clipboard.read()
+      let markdown = ''
+
+      for (const item of items) {
+        if (item.types.includes('text/html')) {
+          const blob = await item.getType('text/html')
+          const html = await blob.text()
+          const turndownService = new TurndownService({
+            headingStyle: 'atx',
+            hr: '---',
+            bulletListMarker: '-',
+            codeBlockStyle: 'fenced',
+          })
+          markdown = turndownService.turndown(html)
+          break
+        } else if (item.types.includes('text/plain')) {
+          const blob = await item.getType('text/plain')
+          markdown = await blob.text()
+          break
+        }
+      }
+
+      if (markdown) {
+        const nextSections = markdownToSectionsForEditor(markdown, newLocalId)
+        onChange(nextSections)
+        setPastedFlash((n) => n + 1)
+      }
+    } catch (err) {
+      // Fallback to readText if read() is not supported or fails
+      try {
+        const text = await navigator.clipboard.readText()
+        if (text) {
+          const nextSections = markdownToSectionsForEditor(text, newLocalId)
+          onChange(nextSections)
+          setPastedFlash((n) => n + 1)
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [onChange, setPastedFlash])
 
   return (
     <div className="space-y-4">
@@ -168,6 +216,29 @@ function SyllabusDocumentPanel({
               ) : null}
             </span>
           </div>
+          <div className="mt-1 border-t border-slate-100 pt-1 dark:border-neutral-700/50">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={pasteFromClipboard}
+                disabled={disabled}
+                className="min-w-0 flex-1 text-left text-[13px] text-slate-600 underline-offset-2 transition hover:text-indigo-600 hover:underline disabled:no-underline disabled:opacity-40 dark:text-neutral-300 dark:hover:text-indigo-400"
+              >
+                Paste from Clipboard
+              </button>
+              <span className="pointer-events-none flex h-5 min-w-[3.25rem] shrink-0 items-center justify-end text-[13px]">
+                {pastedFlash > 0 ? (
+                  <span
+                    key={pastedFlash}
+                    className="copy-action-copied-fade font-medium text-emerald-600 dark:text-emerald-400"
+                    onAnimationEnd={() => setPastedFlash(0)}
+                  >
+                    Pasted
+                  </span>
+                ) : null}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -231,6 +302,7 @@ function SyllabusBlockPanel({
 
 function SyllabusSidebar({
   sections,
+  onChange,
   updateAt,
   documentVariant,
   pageDocumentPanel,
@@ -238,6 +310,7 @@ function SyllabusSidebar({
   onRequireSyllabusAcceptanceChange,
 }: {
   sections: SyllabusSection[]
+  onChange: (next: SyllabusSection[]) => void
   updateAt: (index: number, patch: Partial<SyllabusSection>) => void
   documentVariant: 'syllabus' | 'page'
   pageDocumentPanel?: ReactNode
@@ -260,6 +333,7 @@ function SyllabusSidebar({
         ) : (
           <SyllabusDocumentPanel
             sections={sections}
+            onChange={onChange}
             documentVariant={documentVariant}
             requireSyllabusAcceptance={requireSyllabusAcceptance}
             onRequireSyllabusAcceptanceChange={onRequireSyllabusAcceptanceChange}
@@ -572,6 +646,7 @@ function SyllabusBlockEditorInner({
       sidebar={
         <SyllabusSidebar
           sections={sections}
+          onChange={onChange}
           updateAt={updateAt}
           documentVariant={documentVariant}
           pageDocumentPanel={pageDocumentPanel}
