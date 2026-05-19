@@ -45,7 +45,7 @@ func setupVirtualMeetingTest(t *testing.T) (
 		t.Fatalf("pool: %v", err)
 	}
 
-	suffix := fmt.Sprintf("%d", time.Now().UnixNano()%1000000)
+	suffix := fmt.Sprintf("%05d", time.Now().UnixNano()%100000)
 	teacherEmail := "vm-teacher-" + suffix + "@e.com"
 	studentEmail := "vm-student-" + suffix + "@e.com"
 	ph, _ := auth.HashPassword("longpassword0longpassword0")
@@ -64,7 +64,7 @@ func setupVirtualMeetingTest(t *testing.T) (
 	teacherUID, _ := uuid.Parse(teacherRow.ID)
 	studentUID, _ := uuid.Parse(studentRow.ID)
 
-	cc := fmt.Sprintf("C-VM%s", suffix[:5])
+	cc := fmt.Sprintf("C-V%s", suffix)
 	if err := pool.QueryRow(ctx,
 		`INSERT INTO course.courses (course_code, title, created_by_user_id) VALUES ($1, 'VM Test', $2) RETURNING id`,
 		cc, teacherUID,
