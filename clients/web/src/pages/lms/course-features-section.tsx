@@ -69,6 +69,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const sectionsEnabled = course.sectionsEnabled === true
   const discussionsEnabled = course.discussionsEnabled === true
   const collabDocsEnabled = course.collabDocsEnabled === true
+  const liveSessionsEnabled = course.liveSessionsEnabled !== false
 
   const persist = useCallback(
     async (patch: {
@@ -86,6 +87,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       sectionsEnabled?: boolean
       discussionsEnabled?: boolean
       collabDocsEnabled?: boolean
+      liveSessionsEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -108,6 +110,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           sectionsEnabled: patch.sectionsEnabled ?? sectionsEnabled,
           discussionsEnabled: patch.discussionsEnabled ?? discussionsEnabled,
           collabDocsEnabled: patch.collabDocsEnabled ?? collabDocsEnabled,
+          liveSessionsEnabled: patch.liveSessionsEnabled ?? liveSessionsEnabled,
         }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
@@ -131,6 +134,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       sectionsEnabled,
       discussionsEnabled,
       collabDocsEnabled,
+      liveSessionsEnabled,
       calendarEnabled,
       courseCode,
       feedEnabled,
@@ -253,6 +257,13 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           enabled={collabDocsEnabled}
           disabled={saving}
           onToggle={() => void persist({ collabDocsEnabled: !collabDocsEnabled })}
+        />
+        <FeatureToggleRow
+          label="Live Sessions"
+          description="Virtual classroom meetings via Jitsi, BigBlueButton, Zoom, or other providers — shows the Live Sessions menu item and scheduling page (plan 6.4)."
+          enabled={liveSessionsEnabled}
+          disabled={saving}
+          onToggle={() => void persist({ liveSessionsEnabled: !liveSessionsEnabled })}
         />
       </div>
 

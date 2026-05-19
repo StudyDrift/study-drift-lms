@@ -22,6 +22,8 @@ export type CourseNavFeatures = {
   collabDocsEnabled: boolean
   /** Plan 3.7 — standards-based grading enabled for the course. */
   sbgEnabled: boolean
+  /** Plan 6.4 — virtual classroom / live sessions (default true). */
+  liveSessionsEnabled: boolean
   /** True while loading or re-fetching flags for the active course. */
   loading: boolean
   /** Re-load feature flags from the server (e.g. after saving settings). */
@@ -37,6 +39,7 @@ const defaultFeatures: CourseNavFeatures = {
   discussionsEnabled: false,
   collabDocsEnabled: false,
   sbgEnabled: false,
+  liveSessionsEnabled: true,
   loading: false,
   refresh: async () => {},
 }
@@ -57,6 +60,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
   const [discussionsEnabled, setDiscussionsEnabled] = useState(false)
   const [collabDocsEnabled, setCollabDocsEnabled] = useState(false)
   const [sbgEnabled, setSbgEnabled] = useState(false)
+  const [liveSessionsEnabled, setLiveSessionsEnabled] = useState(true)
   const [loading, setLoading] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -69,6 +73,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setDiscussionsEnabled(false)
       setCollabDocsEnabled(false)
       setSbgEnabled(false)
+      setLiveSessionsEnabled(true)
       return
     }
     setLoading(true)
@@ -82,6 +87,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setDiscussionsEnabled(c.discussionsEnabled === true)
       setCollabDocsEnabled(c.collabDocsEnabled === true)
       setSbgEnabled(c.sbgEnabled === true)
+      setLiveSessionsEnabled(c.liveSessionsEnabled !== false)
     } catch {
       setNotebookEnabled(true)
       setFeedEnabled(true)
@@ -91,6 +97,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       setDiscussionsEnabled(false)
       setCollabDocsEnabled(false)
       setSbgEnabled(false)
+      setLiveSessionsEnabled(true)
     } finally {
       setLoading(false)
     }
@@ -110,6 +117,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       discussionsEnabled,
       collabDocsEnabled,
       sbgEnabled,
+      liveSessionsEnabled,
       loading,
       refresh,
     }),
@@ -122,6 +130,7 @@ export function CourseNavFeaturesProvider({ children }: { children: ReactNode })
       discussionsEnabled,
       collabDocsEnabled,
       sbgEnabled,
+      liveSessionsEnabled,
       loading,
       refresh,
     ],

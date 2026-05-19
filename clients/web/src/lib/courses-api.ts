@@ -133,6 +133,8 @@ export type CoursePublic = {
   discussionsEnabled?: boolean
   /** Plan 6.5 — real-time collaborative documents (default off when omitted). */
   collabDocsEnabled?: boolean
+  /** Plan 6.4 — virtual classroom / live sessions menu (default true when omitted). */
+  liveSessionsEnabled?: boolean
   /** `traditional` or `competency_based` (server default when omitted: traditional). */
   courseType?: string
   createdAt: string
@@ -724,6 +726,7 @@ export async function patchCourseFeatures(
     sectionsEnabled?: boolean
     discussionsEnabled?: boolean
     collabDocsEnabled?: boolean
+    liveSessionsEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -745,6 +748,7 @@ export async function patchCourseFeatures(
         misconceptionDetectionEnabled: body.misconceptionDetectionEnabled,
         discussionsEnabled: body.discussionsEnabled ?? false,
         ...(body.collabDocsEnabled !== undefined ? { collabDocsEnabled: body.collabDocsEnabled } : {}),
+        ...(body.liveSessionsEnabled !== undefined ? { liveSessionsEnabled: body.liveSessionsEnabled } : {}),
         ...(body.sectionsEnabled !== undefined ? { sectionsEnabled: body.sectionsEnabled } : {}),
       }),
     },
