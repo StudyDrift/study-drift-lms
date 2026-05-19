@@ -499,3 +499,18 @@ func (d Deps) handleConceptQuestionTagDelete() http.HandlerFunc {
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
+
+func (d Deps) registerConceptRoutes(r chi.Router) {
+	r.Get("/api/v1/concepts/search", d.handleConceptsSearch())
+	r.Get("/api/v1/concepts", d.handleConceptsList())
+	r.Post("/api/v1/concepts", d.handleConceptCreate())
+	r.Get("/api/v1/concepts/{id}/ancestors", d.handleConceptAncestors())
+	r.Get("/api/v1/concepts/{id}/descendants", d.handleConceptDescendants())
+	r.Post("/api/v1/concepts/{id}/prerequisites", d.handleConceptAddPrerequisite())
+	r.Delete("/api/v1/concepts/{id}/prerequisites/{prerequisite_id}", d.handleConceptRemovePrerequisite())
+	r.Post("/api/v1/concepts/question-tags", d.handleConceptQuestionTagPost())
+	r.Delete("/api/v1/concepts/question-tags", d.handleConceptQuestionTagDelete())
+	r.Get("/api/v1/concepts/{id}", d.handleConceptGet())
+	r.Put("/api/v1/concepts/{id}", d.handleConceptUpdate())
+	r.Delete("/api/v1/concepts/{id}", d.handleConceptDelete())
+}

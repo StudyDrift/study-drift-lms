@@ -465,3 +465,12 @@ func (d Deps) handleSurveyResults() http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(out)
 	}
 }
+
+func (d Deps) registerSurveyRoutes(r chi.Router) {
+	r.Get("/api/v1/surveys/{id}", d.handleGetSurvey())
+	r.Put("/api/v1/surveys/{id}", d.handlePutSurvey())
+	r.Post("/api/v1/surveys/{id}/respond", d.handleSurveyRespond())
+	r.Get("/api/v1/surveys/{id}/results", d.handleSurveyResults())
+	r.Get("/api/v1/courses/{course_code}/surveys", d.handleListCourseSurveys())
+	r.Post("/api/v1/courses/{course_code}/surveys", d.handleCreateCourseSurvey())
+}

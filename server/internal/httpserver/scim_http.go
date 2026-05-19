@@ -302,3 +302,20 @@ func (d Deps) handleSCIMGroupPatch() http.HandlerFunc {
 		writeSCIMError(w, http.StatusNotImplemented, "invalidSyntax", "Group PATCH not implemented")
 	}
 }
+
+func (d Deps) registerSCIMRoutes(r chi.Router) {
+	r.Route("/scim/v2", func(sr chi.Router) {
+		sr.Use(d.scimBearerMiddleware)
+		sr.Get("/ServiceProviderConfig", d.handleSCIMServiceProviderConfig())
+		sr.Get("/Schemas", d.handleSCIMSchemas())
+		sr.Get("/Users", d.handleSCIMUsersCollection())
+		sr.Post("/Users", d.handleSCIMUsersCollection())
+		sr.Get("/Users/{id}", d.handleSCIMUserOne())
+		sr.Put("/Users/{id}", d.handleSCIMUserOne())
+		sr.Patch("/Users/{id}", d.handleSCIMUserOne())
+		sr.Delete("/Users/{id}", d.handleSCIMUserOne())
+		sr.Get("/Groups", d.handleSCIMGroupsCollection())
+		sr.Post("/Groups", d.handleSCIMGroupsCollection())
+		sr.Patch("/Groups/{id}", d.handleSCIMGroupPatch())
+	})
+}

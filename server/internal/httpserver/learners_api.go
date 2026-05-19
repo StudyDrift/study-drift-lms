@@ -432,3 +432,15 @@ func (d Deps) handleLearnerReviewSubmit() http.HandlerFunc {
 		})
 	}
 }
+
+func (d Deps) registerLearnerRoutes(r chi.Router) {
+	r.Post("/api/v1/learners/concepts/batch", d.handleLearnersConceptsBatch())
+	r.Get("/api/v1/learners/{user_id}/concepts", d.handleLearnerConceptsList())
+	r.Get("/api/v1/learners/{user_id}/concepts/{concept_id}/theta", d.handleLearnerConceptTheta())
+	r.Get("/api/v1/learners/{user_id}/concepts/{concept_id}", d.handleLearnerConceptOne())
+	r.Get("/api/v1/learners/{user_id}/misconception-summary", d.handleLearnerMisconceptionSummary())
+	r.Post("/api/v1/learners/{user_id}/review", d.handleLearnerReviewSubmit())
+	r.Get("/api/v1/learners/{user_id}/review-stats", d.handleLearnerReviewStats())
+	r.Get("/api/v1/learners/{user_id}/review-queue", d.handleLearnerReviewQueue())
+	r.Get("/api/v1/learners/{user_id}/recommendations", d.handleLearnerRecommendations())
+}

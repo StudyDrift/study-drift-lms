@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/auth"
@@ -623,4 +624,38 @@ func (d Deps) handleChangePassword() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(res)
 	}
+}
+
+func (d Deps) registerAuthRoutes(r chi.Router) {
+	r.Get("/auth/oidc/{provider}/login", d.handleOIDCLogin())
+	r.Get("/auth/oidc/{provider}/callback", d.handleOIDCCallback())
+	r.Get("/auth/clever/login", d.handleCleverLogin())
+	r.Get("/auth/clever/callback", d.handleCleverCallback())
+	r.Post("/api/v1/auth/login", d.handleLogin())
+	r.Post("/api/v1/auth/mfa/totp/enrol", d.handleMFATOTPEnrol())
+	r.Post("/api/v1/auth/mfa/totp/verify-enrol", d.handleMFATOTPVerifyEnrol())
+	r.Post("/api/v1/auth/mfa/totp/challenge", d.handleMFATOTPChallenge())
+	r.Post("/api/v1/auth/mfa/backup/challenge", d.handleMFABackupChallenge())
+	r.Post("/api/v1/auth/mfa/webauthn/register/begin", d.handleMFAWebAuthnRegisterBegin())
+	r.Post("/api/v1/auth/mfa/webauthn/register/complete", d.handleMFAWebAuthnRegisterComplete())
+	r.Post("/api/v1/auth/mfa/webauthn/authenticate/begin", d.handleMFAWebAuthnAuthBegin())
+	r.Post("/api/v1/auth/mfa/webauthn/authenticate/complete", d.handleMFAWebAuthnAuthComplete())
+	r.Post("/api/v1/auth/mfa/setup/complete", d.handleMFASetupComplete())
+	r.Get("/api/v1/auth/password-policy", d.handleGetPublicPasswordPolicy())
+	r.Post("/api/v1/auth/signup", d.handleSignup())
+	r.Post("/api/v1/auth/forgot-password", d.handleForgotPassword())
+	r.Post("/api/v1/auth/magic-link/request", d.handleMagicLinkRequest())
+	r.Get("/api/v1/auth/magic-link/consume", d.handleMagicLinkConsume())
+	r.Post("/api/v1/auth/magic-link/consume", d.handleMagicLinkConsume())
+	r.Post("/api/v1/auth/cli/request", d.handleCLIAuthRequest())
+	r.Get("/api/v1/auth/cli/poll", d.handleCLIAuthPoll())
+	r.Post("/api/v1/auth/cli/approve", d.handleCLIAuthApprove())
+	r.Post("/api/v1/auth/reset-password", d.handleResetPassword())
+	r.Post("/api/v1/auth/refresh", d.handleAuthRefresh())
+	r.Post("/api/v1/auth/logout", d.handleAuthLogout())
+	r.Post("/api/v1/auth/logout-all", d.handleAuthLogoutAll())
+	r.Post("/api/v1/auth/change-password", d.handleChangePassword())
+	r.Get("/api/v1/auth/saml/status", d.handleSAMLStatus())
+	r.Get("/api/v1/auth/oidc/status", d.handleOIDCStatus())
+	r.Post("/api/v1/auth/oidc/link", d.handleOIDCLink())
 }

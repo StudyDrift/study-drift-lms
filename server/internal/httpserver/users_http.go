@@ -272,3 +272,9 @@ RETURNING id::text, created_at
 		})
 	}
 }
+
+func (d Deps) registerUserRoutes(r chi.Router) {
+	r.Get("/api/v1/users", d.handleUsersList())
+	r.Get("/api/v1/users/{user_id}", d.handleUsersGet())
+	r.Post("/api/v1/users", d.handleUsersCreate())
+}

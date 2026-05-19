@@ -529,3 +529,10 @@ func (d Deps) handleOrgParentLinkDelete() http.HandlerFunc {
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
+
+func (d Deps) registerParentRoutes(r chi.Router) {
+	r.Get("/api/v1/parent/children", d.handleParentChildren())
+	r.Get("/api/v1/parent/students/{sid}/courses", d.handleParentStudentCourses())
+	r.Get("/api/v1/parent/students/{sid}/grades", d.handleParentStudentGrades())
+	r.Get("/api/v1/parent/students/{sid}/assignments", d.handleParentStudentAssignments())
+}

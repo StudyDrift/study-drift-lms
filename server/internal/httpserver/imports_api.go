@@ -224,3 +224,9 @@ func (d Deps) handleListImports() http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(map[string]any{"imports": imports})
 	}
 }
+
+func (d Deps) registerImportRoutes(r chi.Router) {
+	r.Post("/api/v1/imports/qti", d.handleQTIImportStart())
+	r.Get("/api/v1/imports/{job_id}/status", d.handleImportStatus())
+	r.Get("/api/v1/imports", d.handleListImports())
+}
