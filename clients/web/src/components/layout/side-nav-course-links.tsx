@@ -51,6 +51,7 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
     discussionsEnabled,
     collabDocsEnabled,
     sbgEnabled,
+    liveSessionsEnabled,
   } = useCourseNavFeatures()
   const { allows, loading: permLoading } = usePermissions()
   const courseViewPreview = useCourseViewAs(courseCode)
@@ -102,9 +103,11 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
       <SideNavLink to={`${base}/modules`} icon={<Layers className="h-5 w-5" />}>
         Modules
       </SideNavLink>
-      <SideNavLink to={`${base}/live`} icon={<Video className="h-5 w-5" />}>
-        Live Sessions
-      </SideNavLink>
+      {liveSessionsEnabled && (
+        <SideNavLink to={`${base}/live`} icon={<Video className="h-5 w-5" />}>
+          Live Sessions
+        </SideNavLink>
+      )}
       {canManageQuestionBank && questionBankEnabled && (
         <SideNavLink to={`${base}/questions`} icon={<ListChecks className="h-5 w-5" />}>
           Question bank
