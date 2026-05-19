@@ -472,14 +472,14 @@ test.describe('Office Hours UI', () => {
     await expect(bookBtn).toBeVisible({ timeout: 8000 })
     await bookBtn.click()
 
-    // Booking dialog opens.
-    await expect(page.getByRole('dialog', { name: /book appointment/i })).toBeVisible()
+    // Booking dialog opens — check by heading text since aria-label contains extra words.
+    await expect(page.getByRole('heading', { name: /book appointment/i })).toBeVisible({ timeout: 5000 })
 
     // Submit.
-    await page.getByRole('dialog').getByRole('button', { name: /confirm booking/i }).click()
+    await page.getByRole('button', { name: /confirm booking/i }).click()
 
     // Dialog closes.
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 })
+    await expect(page.getByRole('heading', { name: /book appointment/i })).not.toBeVisible({ timeout: 8000 })
   })
 
   test('office hours nav link appears when feature enabled', async ({ page }) => {
