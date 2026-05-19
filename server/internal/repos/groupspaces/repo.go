@@ -57,7 +57,7 @@ func IsInstructor(ctx context.Context, pool *pgxpool.Pool, courseCode string, us
 			WHERE c.course_code = $1
 			  AND e.user_id = $2
 			  AND e.active = true
-			  AND e.course_role IN ('teacher', 'instructor')
+			  AND e.role IN ('teacher', 'instructor')
 		)
 	`, courseCode, userID).Scan(&ok)
 	if err != nil {
@@ -76,7 +76,7 @@ func ListGroupsForCourse(ctx context.Context, pool *pgxpool.Pool, courseCode str
 		JOIN course.courses c ON c.id = s.course_id
 		LEFT JOIN course.enrollment_group_memberships m ON m.group_id = g.id
 		WHERE c.course_code = $1
-		GROUP BY g.id, g.group_set_id, g.name, g.sort_order, g.created_at
+		GROUP BY g.id, g.group_set_id, g.name, g.sort_order, g.created_at, s.sort_order
 		ORDER BY s.sort_order ASC, g.sort_order ASC, g.name ASC
 	`, courseCode)
 	if err != nil {
@@ -100,7 +100,7 @@ func ListGroupsForUser(ctx context.Context, pool *pgxpool.Pool, courseCode strin
 		WHERE c.course_code = $1
 		  AND e.user_id = $2
 		  AND e.active = true
-		GROUP BY g.id, g.group_set_id, g.name, g.sort_order, g.created_at
+		GROUP BY g.id, g.group_set_id, g.name, g.sort_order, g.created_at, s.sort_order
 		ORDER BY s.sort_order ASC, g.sort_order ASC, g.name ASC
 	`, courseCode, userID)
 	if err != nil {
