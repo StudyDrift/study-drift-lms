@@ -344,6 +344,13 @@ func NewHandler(d Deps) http.Handler {
 	r.Post("/api/v1/imports/qti", d.handleQTIImportStart())
 	r.Get("/api/v1/imports/{job_id}/status", d.handleImportStatus())
 	r.Get("/api/v1/imports", d.handleListImports())
+	// Virtual classroom meetings (plan 6.4).
+	r.Post("/api/v1/courses/{course_code}/meetings", d.handleCreateMeeting())
+	r.Get("/api/v1/courses/{course_code}/meetings", d.handleListMeetings())
+	r.Get("/api/v1/meetings/{meeting_id}/join", d.handleGetMeetingJoin())
+	r.Patch("/api/v1/meetings/{meeting_id}", d.handlePatchMeeting())
+	r.Get("/api/v1/meetings/{meeting_id}/attendance", d.handleGetMeetingAttendance())
+	r.Get("/api/v1/meetings/{meeting_id}/ical", d.handleGetMeetingIcal())
 	r.Post("/api/v1/recommendations/event", d.handleRecommendationEvent())
 	r.Post("/api/v1/webhooks/originality/{provider}", d.handleOriginalityWebhook())
 	r.Get("/api/v1/surveys/{id}", d.handleGetSurvey())

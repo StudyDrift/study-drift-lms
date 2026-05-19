@@ -10,7 +10,8 @@ const (
 	EventSubmissionReceived    = notificationevents.SubmissionReceived
 	EventAssignmentDueReminder = notificationevents.AssignmentDueReminder
 	EventPasswordReset         = notificationevents.PasswordReset
-	EventWelcomeInvite           = notificationevents.WelcomeInvite
+	EventWelcomeInvite         = notificationevents.WelcomeInvite
+	EventMeetingReminder       = notificationevents.MeetingReminder
 )
 
 // AllEventTypes re-exports the canonical event list for callers outside this package.

@@ -24,6 +24,7 @@ import CourseDiagnosticPage from './pages/lms/course-diagnostic-page'
 import { CourseQuestionBankPage } from './pages/lms/course-question-bank-page'
 import CourseMisconceptionReportPage from './pages/lms/course-misconception-report-page'
 import CourseModules from './pages/lms/course-modules'
+import CourseLivePage from './pages/lms/course-live-page'
 import CourseNotebookPage from './pages/lms/course-notebook-page'
 import CourseSettings from './pages/lms/course-settings'
 import CourseStandardsCoveragePage from './pages/lms/course-standards-coverage-page'
@@ -123,6 +124,7 @@ export default function App() {
             <Route path="questions" element={<CourseQuestionBankPage />} />
             <Route path="misconception-report" element={<CourseMisconceptionReportPage />} />
             <Route path="modules" element={<CourseModules />} />
+            <Route path="live" element={<CourseLivePage />} />
             <Route path="notebook" element={<CourseNotebookPage />} />
             <Route path="calendar" element={<CourseCalendarPage />} />
             <Route path="my-grades" element={<CourseMyGrades />} />

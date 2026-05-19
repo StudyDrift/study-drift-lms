@@ -83,8 +83,29 @@ func defaultSubject(eventType string) string {
 		return "New discussion reply"
 	case EventPasswordReset:
 		return "Reset your password"
+	case EventMeetingReminder:
+		return "Live session starting soon"
 	default:
 		return "Notification from StudyDrift"
+	}
+}
+
+// NotifyMeetingReminder emails enrolled students about an upcoming live session.
+func (s *Service) NotifyMeetingReminder(ctx context.Context, studentIDs []uuid.UUID, courseName, meetingTitle, courseCode string, orgID *uuid.UUID) {
+	if !s.enabled() {
+		return
+	}
+	link := fmt.Sprintf("%s/courses/%s/live", s.publicWebOrigin(), courseCode)
+	vars := map[string]string{
+		"courseName":   courseName,
+		"meetingTitle": meetingTitle,
+		"link":         link,
+		"digestLine":   fmt.Sprintf("Live session \"%s\" starting soon in %s", meetingTitle, courseName),
+	}
+	for _, sid := range studentIDs {
+		if err := s.EnqueueEmail(ctx, sid, EventMeetingReminder, "meeting_reminder", vars, orgID); err != nil {
+			slog.Warn("notifications.meeting_reminder", "err", err, "user_id", sid)
+		}
 	}
 }
 

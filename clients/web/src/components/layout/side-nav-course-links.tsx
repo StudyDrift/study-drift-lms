@@ -15,6 +15,7 @@ import {
   NotebookPen,
   Settings,
   Users,
+  Video,
 } from 'lucide-react'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { usePermissions } from '../../context/use-permissions'
@@ -93,6 +94,9 @@ export function SideNavCourseLinks({ courseCode }: SideNavCourseLinksProps) {
       </SideNavLink>
       <SideNavLink to={`${base}/modules`} icon={<Layers className="h-5 w-5" />}>
         Modules
+      </SideNavLink>
+      <SideNavLink to={`${base}/live`} icon={<Video className="h-5 w-5" />}>
+        Live Sessions
       </SideNavLink>
       {canManageQuestionBank && questionBankEnabled && (
         <SideNavLink to={`${base}/questions`} icon={<ListChecks className="h-5 w-5" />}>
