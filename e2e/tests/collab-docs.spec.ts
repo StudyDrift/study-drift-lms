@@ -21,17 +21,17 @@ test.describe('Collaborative documents', () => {
   // -----------------------------------------------------------------------
   // Feature gate
   // -----------------------------------------------------------------------
-  test('collab docs page is not accessible when feature is disabled', async ({
+  test('collab docs page shows feature-disabled message when feature is off', async ({
     coursePage: page,
     seededCourse,
   }) => {
-    // Feature is off by default — expect a 404-style or redirect away from the page.
+    // Feature is off by default — the page renders but shows a "not enabled" error.
     await page.goto(`/courses/${seededCourse.courseCode}/collab-docs`)
-    // The page may redirect to the course home or show an "feature not enabled" message.
-    // Either way the collab-docs heading should NOT be present.
     await expect(
-      page.getByRole('heading', { name: /collaborative documents/i }),
-    ).not.toBeVisible({ timeout: 5000 })
+      page.getByText(/not enabled/i),
+    ).toBeVisible({ timeout: 8000 })
+    // The create button must not be present when the feature is disabled.
+    await expect(page.getByRole('button', { name: /new document/i })).not.toBeVisible()
   })
 
   // -----------------------------------------------------------------------
