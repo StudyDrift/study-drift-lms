@@ -100,6 +100,7 @@ func NewHandler(d Deps) http.Handler {
 	d.registerAdminRoutes(r)
 	d.registerSCIMRoutes(r)
 	r.Route("/api/v1", func(s chi.Router) { d.registerAccommodationRoutes(s) })
+	r.Get("/api/v1/help/contextual-articles", d.handleHelpContextualArticles())
 	d.registerUnimplementedV1(r)
 	d.mountRouterErrorHandlers(r)
 	return r
