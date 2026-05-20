@@ -213,6 +213,11 @@ var defaultArticles = []helpArticle{
 		Slug:  "navigating-the-course-interface",
 		URL:   "https://lextures.com/docs/navigating-the-course-interface",
 	},
+	{
+		Title: "Creating a New Course",
+		Slug:  "creating-a-new-course",
+		URL:   "https://lextures.com/docs/creating-a-new-course",
+	},
 }
 
 var articleMapping = []struct {
@@ -231,6 +236,11 @@ var articleMapping = []struct {
 				Title: "Navigating the Course Interface",
 				Slug:  "navigating-the-course-interface",
 				URL:   "https://lextures.com/docs/navigating-the-course-interface",
+			},
+			{
+				Title: "Creating a New Course",
+				Slug:  "creating-a-new-course",
+				URL:   "https://lextures.com/docs/creating-a-new-course",
 			},
 		},
 	},

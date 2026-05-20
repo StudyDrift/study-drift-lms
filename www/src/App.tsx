@@ -366,7 +366,7 @@ function HomePage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-10 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
           <div>
             <div className="flex items-center gap-2.5">
-              <img src="./logo.svg" className="h-8 w-8" alt="" aria-hidden />
+              <img src="/logo.svg" className="h-8 w-8" alt="" aria-hidden />
               <span className="text-base font-semibold text-stone-900">Lextures</span>
             </div>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-stone-500">

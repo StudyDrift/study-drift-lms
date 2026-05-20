@@ -13,7 +13,7 @@ const INDUSTRIES = [
 ]
 
 function LogoMark({ className = '' }: { className?: string }) {
-  return <img src="./logo.svg" className={className} alt="" aria-hidden />
+  return <img src="/logo.svg" className={className} alt="" aria-hidden />
 }
 
 function IndustriesDropdown({ onNavigate }: { onNavigate?: () => void }) {
