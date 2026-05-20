@@ -9,7 +9,7 @@ CREATE TABLE storage.objects (
   bucket        TEXT NOT NULL,
   mime_type     TEXT NOT NULL,
   size_bytes    BIGINT NOT NULL DEFAULT 0,
-  uploaded_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+  uploaded_by   UUID REFERENCES "user".users(id) ON DELETE SET NULL,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at    TIMESTAMPTZ
 );
