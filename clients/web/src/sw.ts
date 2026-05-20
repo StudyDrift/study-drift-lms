@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching'
 import { registerRoute, NavigationRoute } from 'workbox-routing'
-import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies'
+import { CacheFirst, NetworkFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { BackgroundSyncPlugin, Queue } from 'workbox-background-sync'
 
@@ -36,33 +36,16 @@ registerRoute(
   }),
 )
 
-// Network-first for critical API data (grades, submissions)
+// Network-first for all API calls — always serve fresh data when online,
+// fall back to cache only when offline (offline-first UX via IndexedDB handles the rest).
 registerRoute(
   ({ url }) =>
     url.pathname.startsWith('/api/') &&
-    (url.pathname.includes('/grade') ||
-      url.pathname.includes('/gradebook') ||
-      url.pathname.includes('/submission')),
-  new NetworkFirst({
-    cacheName: 'critical-api-v1',
-    networkTimeoutSeconds: 5,
-    plugins: [
-      new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 5 * 60 }),
-    ],
-  }),
-)
-
-// StaleWhileRevalidate for course content API responses
-registerRoute(
-  ({ url }) =>
-    url.pathname.startsWith('/api/') &&
-    !url.pathname.includes('/grade') &&
-    !url.pathname.includes('/gradebook') &&
-    !url.pathname.includes('/submission') &&
     !url.pathname.includes('/push') &&
     !url.pathname.includes('/vapid'),
-  new StaleWhileRevalidate({
+  new NetworkFirst({
     cacheName: 'api-cache-v1',
+    networkTimeoutSeconds: 10,
     plugins: [
       new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 10 * 60 }),
     ],
