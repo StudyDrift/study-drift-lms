@@ -59,6 +59,13 @@ test.describe('Course Settings - General - Course Home', () => {
   test('change the course home landing to data dashboard', async ({ coursePage: page, seededCourse }) => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
     const courseHomeRadios = page.locator('input[type="radio"][name="courseHomeLanding"]')
+    
+    // Set to calendar first and save to ensure we have a non-default initial value.
+    await courseHomeRadios.nth(1).click()
+    await page.getByRole('button', { name: /^save changes$/i }).first().click()
+    await expect(page.getByText('Course settings saved')).toBeVisible({ timeout: 8000 })
+
+    // Now change it back to data dashboard (index 0) and verify it stages, saves, and updates the landing.
     await courseHomeRadios.nth(0).click()
     await page.getByRole('button', { name: /^save changes$/i }).first().click()
     await expect(page.getByText('Course settings saved')).toBeVisible({
