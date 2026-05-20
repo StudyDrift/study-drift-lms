@@ -1,6 +1,6 @@
-import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
-import { Check, ImageIcon, Move, Save, X } from 'lucide-react'
+import { Check, ImageIcon, Loader2, Move, Save, X } from 'lucide-react'
 import { LmsPage } from './lms-page'
 import { usePermissions } from '../../context/use-permissions'
 import { authorizedFetch } from '../../lib/api'
@@ -189,9 +189,8 @@ export default function CourseSettings() {
   const [positionSaveStatus, setPositionSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle')
   const [positionMessage, setPositionMessage] = useState<string | null>(null)
 
-  const [mdThemeStatus, setMdThemeStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [mdThemeMessage, setMdThemeMessage] = useState<string | null>(null)
   const [customDraft, setCustomDraft] = useState<MarkdownThemeCustom>(markdownThemeCustomSeed)
+  const [markdownThemePreset, setMarkdownThemePreset] = useState<string>('default')
 
   const applyScheduleStateFromCourse = useCallback((c: CoursePublic) => {
     setStartsAt(isoToDatetimeLocal(c.startsAt))
@@ -226,6 +225,7 @@ export default function CourseSettings() {
       applyScheduleStateFromCourse(c)
       setCourseHomeLanding(normalizeCourseHomeLanding(c.courseHomeLanding))
       setCourseHomeContentItemId((c.courseHomeContentItemId ?? '').trim())
+      setMarkdownThemePreset(c.markdownThemePreset ?? 'default')
       try {
         const items = await fetchCourseStructure(courseCode)
         setStructureForHomePicker(items)
@@ -251,40 +251,98 @@ export default function CourseSettings() {
     })
   }, [course])
 
-  async function selectMarkdownPreset(preset: MarkdownThemePresetId) {
-    if (!courseCode) return
-    setMdThemeStatus('saving')
-    setMdThemeMessage(null)
-    try {
-      const updated = await patchCourseMarkdownTheme(courseCode, { preset })
-      setCourse(updated)
-      setMdThemeStatus('saved')
-      setMdThemeMessage('Reading theme saved.')
-    } catch (e) {
-      setMdThemeStatus('error')
-      setMdThemeMessage(e instanceof Error ? e.message : 'Could not save theme.')
-      void loadCourse()
-    }
+  const discardChanges = useCallback(() => {
+    if (!course) return
+    setTitle(course.title)
+    setDescription(course.description)
+    setPublished(course.published)
+    applyScheduleStateFromCourse(course)
+    setCourseHomeLanding(normalizeCourseHomeLanding(course.courseHomeLanding))
+    setCourseHomeContentItemId((course.courseHomeContentItemId ?? '').trim())
+    setMarkdownThemePreset(course.markdownThemePreset ?? 'default')
+    setCustomDraft({
+      ...markdownThemeCustomSeed,
+      ...(course.markdownThemeCustom ?? {}),
+    })
+    setSaveStatus('idle')
+    setSaveMessage(null)
+  }, [course, applyScheduleStateFromCourse])
+
+  function selectMarkdownPreset(preset: MarkdownThemePresetId) {
+    setMarkdownThemePreset(preset)
   }
 
-  async function saveCustomMarkdownTheme() {
-    if (!courseCode) return
-    setMdThemeStatus('saving')
-    setMdThemeMessage(null)
-    try {
-      const updated = await patchCourseMarkdownTheme(courseCode, {
-        preset: 'custom',
-        custom: customDraft,
-      })
-      setCourse(updated)
-      setMdThemeStatus('saved')
-      setMdThemeMessage('Custom reading theme saved.')
-    } catch (e) {
-      setMdThemeStatus('error')
-      setMdThemeMessage(e instanceof Error ? e.message : 'Could not save theme.')
-      void loadCourse()
-    }
+  const updateCustomDraft = (updater: (prev: MarkdownThemeCustom) => MarkdownThemeCustom) => {
+    setCustomDraft(updater)
+    setMarkdownThemePreset('custom')
   }
+
+  const normalizeIso = (iso: string | null) => datetimeLocalToIso(isoToDatetimeLocal(iso))
+
+  const isDirty = useMemo(() => {
+    if (!course) return false
+
+    // Check basic info
+    if (title.trim() !== course.title) return true
+    if (description.trim() !== course.description) return true
+    if (published !== course.published) return true
+
+    // Check course home landing
+    const normHome = normalizeCourseHomeLanding(course.courseHomeLanding)
+    if (courseHomeLanding !== normHome) return true
+    const origHomeContentId = (course.courseHomeContentItemId ?? '').trim()
+    if (courseHomeLanding === 'content_page' && courseHomeContentItemId.trim() !== origHomeContentId) return true
+
+    // Check schedule
+    if ((course.scheduleMode || 'fixed') !== scheduleMode) return true
+    if (scheduleMode === 'fixed') {
+      if (datetimeLocalToIso(startsAt) !== normalizeIso(course.startsAt)) return true
+      if (datetimeLocalToIso(endsAt) !== normalizeIso(course.endsAt)) return true
+      if (datetimeLocalToIso(visibleFrom) !== normalizeIso(course.visibleFrom)) return true
+      if (datetimeLocalToIso(hiddenAt) !== normalizeIso(course.hiddenAt)) return true
+    } else {
+      const currentEndAfter = partsToIsoDuration(relEndAmount, relEndUnit)
+      const origEndAfter = course.relativeEndAfter ?? null
+      if (currentEndAfter !== origEndAfter) return true
+
+      const currentHiddenAfter = partsToIsoDuration(relHiddenAmount, relHiddenUnit)
+      const origHiddenAfter = course.relativeHiddenAfter ?? null
+      if (currentHiddenAfter !== origHiddenAfter) return true
+    }
+
+    // Check theme
+    if ((course.markdownThemePreset ?? 'default') !== markdownThemePreset) return true
+    if (markdownThemePreset === 'custom') {
+      const origCustom = course.markdownThemeCustom ?? markdownThemeCustomSeed
+      if ((customDraft.headingColor ?? markdownThemeCustomSeed.headingColor) !== (origCustom.headingColor ?? markdownThemeCustomSeed.headingColor)) return true
+      if ((customDraft.bodyColor ?? markdownThemeCustomSeed.bodyColor) !== (origCustom.bodyColor ?? markdownThemeCustomSeed.bodyColor)) return true
+      if ((customDraft.linkColor ?? markdownThemeCustomSeed.linkColor) !== (origCustom.linkColor ?? markdownThemeCustomSeed.linkColor)) return true
+      if ((customDraft.codeBackground ?? markdownThemeCustomSeed.codeBackground) !== (origCustom.codeBackground ?? markdownThemeCustomSeed.codeBackground)) return true
+      if ((customDraft.blockquoteBorder ?? markdownThemeCustomSeed.blockquoteBorder) !== (origCustom.blockquoteBorder ?? markdownThemeCustomSeed.blockquoteBorder)) return true
+      if ((customDraft.articleWidth ?? markdownThemeCustomSeed.articleWidth) !== (origCustom.articleWidth ?? markdownThemeCustomSeed.articleWidth)) return true
+      if ((customDraft.fontFamily ?? markdownThemeCustomSeed.fontFamily) !== (origCustom.fontFamily ?? markdownThemeCustomSeed.fontFamily)) return true
+    }
+
+    return false
+  }, [
+    course,
+    title,
+    description,
+    published,
+    courseHomeLanding,
+    courseHomeContentItemId,
+    scheduleMode,
+    startsAt,
+    endsAt,
+    visibleFrom,
+    hiddenAt,
+    relEndAmount,
+    relEndUnit,
+    relHiddenAmount,
+    relHiddenUnit,
+    markdownThemePreset,
+    customDraft,
+  ])
 
   function buildPayload(overrides?: Partial<{ published: boolean }>): SavePayload {
     const mode = scheduleMode
@@ -309,75 +367,133 @@ export default function CourseSettings() {
     }
   }
 
-  async function persistCourse(payload: SavePayload) {
-    if (!courseCode) return
-    setSaveStatus('saving')
-    setSaveMessage(null)
-    try {
-      const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: payload.title,
-          description: payload.description,
-          published: payload.published,
-          startsAt: payload.startsAt,
-          endsAt: payload.endsAt,
-          visibleFrom: payload.visibleFrom,
-          hiddenAt: payload.hiddenAt,
-          scheduleMode: payload.scheduleMode,
-          relativeEndAfter: payload.relativeEndAfter,
-          relativeHiddenAfter: payload.relativeHiddenAfter,
-          courseHomeLanding: payload.courseHomeLanding,
-          courseHomeContentItemId: payload.courseHomeContentItemId,
-        }),
-      })
-      const raw: unknown = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setSaveStatus('error')
-        const msg = readApiErrorMessage(raw)
-        setSaveMessage(msg)
-        toastMutationError(msg)
-        void loadCourse()
-        return
-      }
-      const updated = raw as CoursePublic
-      setCourse(updated)
-      setPublished(updated.published)
-      applyScheduleStateFromCourse(updated)
-      setCourseHomeLanding(normalizeCourseHomeLanding(updated.courseHomeLanding))
-      setCourseHomeContentItemId((updated.courseHomeContentItemId ?? '').trim())
-      setSaveStatus('saved')
-      setSaveMessage('Saved.')
-      toastSaveOk('Course settings saved')
-    } catch {
-      setSaveStatus('error')
-      setSaveMessage('Could not save.')
-      toastMutationError('Could not save course settings.')
-      void loadCourse()
-    }
-  }
-
-  async function onSaveForm(e: FormEvent) {
-    e.preventDefault()
+  async function onSingleSaveChanges() {
+    if (!courseCode || !course) return
+    
     const payload = buildPayload()
     if (!payload.title) {
       setSaveStatus('error')
       setSaveMessage('Title is required.')
+      toastMutationError('Title is required.')
       return
     }
     if (payload.courseHomeLanding === 'content_page' && !payload.courseHomeContentItemId) {
       setSaveStatus('error')
       setSaveMessage('Choose a content page for the course home, or switch to another layout.')
+      toastMutationError('Choose a content page for the course home.')
       return
     }
-    await persistCourse(payload)
+
+    setSaveStatus('saving')
+    setSaveMessage(null)
+
+    const courseSettingsDirty = (
+      title.trim() !== course.title ||
+      description.trim() !== course.description ||
+      published !== course.published ||
+      courseHomeLanding !== normalizeCourseHomeLanding(course.courseHomeLanding) ||
+      (courseHomeLanding === 'content_page' && courseHomeContentItemId.trim() !== (course.courseHomeContentItemId ?? '').trim()) ||
+      (course.scheduleMode || 'fixed') !== scheduleMode ||
+      (scheduleMode === 'fixed' && (
+        datetimeLocalToIso(startsAt) !== normalizeIso(course.startsAt) ||
+        datetimeLocalToIso(endsAt) !== normalizeIso(course.endsAt) ||
+        datetimeLocalToIso(visibleFrom) !== normalizeIso(course.visibleFrom) ||
+        datetimeLocalToIso(hiddenAt) !== normalizeIso(course.hiddenAt)
+      )) ||
+      (scheduleMode === 'relative' && (
+        partsToIsoDuration(relEndAmount, relEndUnit) !== (course.relativeEndAfter ?? null) ||
+        partsToIsoDuration(relHiddenAmount, relHiddenUnit) !== (course.relativeHiddenAfter ?? null)
+      ))
+    )
+
+    const origPreset = course.markdownThemePreset ?? 'default'
+    const themePresetDirty = origPreset !== markdownThemePreset
+    
+    let themeCustomDirty = false
+    if (markdownThemePreset === 'custom') {
+      const origCustom = course.markdownThemeCustom ?? markdownThemeCustomSeed
+      themeCustomDirty = (
+        (customDraft.headingColor ?? markdownThemeCustomSeed.headingColor) !== (origCustom.headingColor ?? markdownThemeCustomSeed.headingColor) ||
+        (customDraft.bodyColor ?? markdownThemeCustomSeed.bodyColor) !== (origCustom.bodyColor ?? markdownThemeCustomSeed.bodyColor) ||
+        (customDraft.linkColor ?? markdownThemeCustomSeed.linkColor) !== (origCustom.linkColor ?? markdownThemeCustomSeed.linkColor) ||
+        (customDraft.codeBackground ?? markdownThemeCustomSeed.codeBackground) !== (origCustom.codeBackground ?? markdownThemeCustomSeed.codeBackground) ||
+        (customDraft.blockquoteBorder ?? markdownThemeCustomSeed.blockquoteBorder) !== (origCustom.blockquoteBorder ?? markdownThemeCustomSeed.blockquoteBorder) ||
+        (customDraft.articleWidth ?? markdownThemeCustomSeed.articleWidth) !== (origCustom.articleWidth ?? markdownThemeCustomSeed.articleWidth) ||
+        (customDraft.fontFamily ?? markdownThemeCustomSeed.fontFamily) !== (origCustom.fontFamily ?? markdownThemeCustomSeed.fontFamily)
+      )
+    }
+
+    const themeDirty = themePresetDirty || themeCustomDirty
+
+    try {
+      let updatedCourse = course
+
+      if (courseSettingsDirty) {
+        const res = await authorizedFetch(`/api/v1/courses/${encodeURIComponent(courseCode)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: payload.title,
+            description: payload.description,
+            published: payload.published,
+            startsAt: payload.startsAt,
+            endsAt: payload.endsAt,
+            visibleFrom: payload.visibleFrom,
+            hiddenAt: payload.hiddenAt,
+            scheduleMode: payload.scheduleMode,
+            relativeEndAfter: payload.relativeEndAfter,
+            relativeHiddenAfter: payload.relativeHiddenAfter,
+            courseHomeLanding: payload.courseHomeLanding,
+            courseHomeContentItemId: payload.courseHomeContentItemId,
+          }),
+        })
+        const raw: unknown = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          const msg = readApiErrorMessage(raw)
+          setSaveStatus('error')
+          setSaveMessage(msg)
+          toastMutationError(msg)
+          return
+        }
+        updatedCourse = raw as CoursePublic
+      }
+
+      if (themeDirty) {
+        const themeBody = {
+          preset: markdownThemePreset,
+          custom: markdownThemePreset === 'custom' ? customDraft : null,
+        }
+        const updated = await patchCourseMarkdownTheme(courseCode, themeBody)
+        updatedCourse = {
+          ...updatedCourse,
+          markdownThemePreset: updated.markdownThemePreset,
+          markdownThemeCustom: updated.markdownThemeCustom,
+        }
+      }
+
+      setCourse(updatedCourse)
+      setPublished(updatedCourse.published)
+      applyScheduleStateFromCourse(updatedCourse)
+      setCourseHomeLanding(normalizeCourseHomeLanding(updatedCourse.courseHomeLanding))
+      setCourseHomeContentItemId((updatedCourse.courseHomeContentItemId ?? '').trim())
+      setMarkdownThemePreset(updatedCourse.markdownThemePreset ?? 'default')
+      setCustomDraft({
+        ...markdownThemeCustomSeed,
+        ...(updatedCourse.markdownThemeCustom ?? {}),
+      })
+
+      setSaveStatus('saved')
+      setSaveMessage('Saved successfully.')
+      toastSaveOk('Course settings saved')
+    } catch {
+      setSaveStatus('error')
+      setSaveMessage('Could not save settings.')
+      toastMutationError('Could not save course settings.')
+    }
   }
 
-  async function onPublishedToggle() {
-    const next = !published
-    setPublished(next)
-    await persistCourse(buildPayload({ published: next }))
+  function onPublishedToggle() {
+    setPublished((p) => !p)
   }
 
   const closeImageModal = useCallback(() => {
@@ -648,313 +764,272 @@ export default function CourseSettings() {
           className="mt-8 max-w-4xl space-y-6"
         >
           {section === 'general' && (
-            <>
-              <form onSubmit={onSaveForm} className="space-y-6">
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
-                  <h2 className="text-sm font-semibold text-slate-900">Basic information</h2>
-                  <div className="mt-4 space-y-4">
-                    <label className="block">
-                      <span className="mb-1.5 block text-sm font-medium text-slate-700">Title</span>
-                      <input
-                        type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        required
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-sm font-medium text-slate-700">
-                        Description
-                      </span>
-                      <textarea
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        rows={5}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2"
-                        placeholder="What is this course about?"
-                      />
-                    </label>
-                  </div>
-                </section>
-
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
-                  <h2 className="text-sm font-semibold text-slate-900">Publishing</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Published courses appear in the catalog. Drafts are only reachable by direct link.
-                  </p>
-                  <div className="mt-4 flex items-center gap-3">
-                    <button
-                      type="button"
-                      role="switch"
-                      name="publishCourse"
-                      aria-checked={published}
-                      aria-label={
-                        published
-                          ? 'Published to catalog'
-                          : 'Draft — not published to catalog'
-                      }
-                      onClick={() => void onPublishedToggle()}
-                      disabled={saveStatus === 'saving'}
-                      className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${published ? 'bg-indigo-600' : 'bg-slate-200'
-                        }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition ${published ? 'translate-x-5' : 'translate-x-0.5'
-                          }`}
-                      />
-                    </button>
-                    <span className="text-sm font-medium text-slate-800">
-                      {published ? 'Published' : 'Draft'}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void onSingleSaveChanges()
+              }}
+              className="space-y-6 pb-24"
+            >
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Basic information</h2>
+                <div className="mt-4 space-y-4">
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-neutral-300">Title</span>
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      required
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-50"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-neutral-300">
+                      Description
                     </span>
-                  </div>
-                </section>
-
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-700 dark:bg-neutral-900">
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Course home</h2>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
-                    What learners and staff see first when they open this course (the course dashboard).
-                  </p>
-                  <fieldset className="mt-4 space-y-3">
-                    <legend className="sr-only">Course home layout</legend>
-                    <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-100 p-3 hover:border-indigo-200 dark:border-neutral-800 dark:hover:border-indigo-800">
-                      <input
-                        type="radio"
-                        name="courseHomeLanding"
-                        checked={courseHomeLanding === 'data'}
-                        onChange={() => {
-                          setCourseHomeLanding('data')
-                          setCourseHomeContentItemId('')
-                        }}
-                        className="mt-1"
-                      />
-                      <span>
-                        <span className="block text-sm font-medium text-slate-900 dark:text-neutral-50">
-                          Data dashboard
-                        </span>
-                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-400">
-                          Deadlines, announcements, grades, and course details at a glance.
-                        </span>
-                      </span>
-                    </label>
-                    <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-100 p-3 hover:border-indigo-200 dark:border-neutral-800 dark:hover:border-indigo-800">
-                      <input
-                        type="radio"
-                        name="courseHomeLanding"
-                        checked={courseHomeLanding === 'calendar'}
-                        onChange={() => {
-                          setCourseHomeLanding('calendar')
-                          setCourseHomeContentItemId('')
-                        }}
-                        className="mt-1"
-                      />
-                      <span>
-                        <span className="block text-sm font-medium text-slate-900 dark:text-neutral-50">
-                          Course calendar
-                        </span>
-                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-400">
-                          Due dates and the month / week views as the landing experience.
-                        </span>
-                      </span>
-                    </label>
-                    <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-100 p-3 hover:border-indigo-200 dark:border-neutral-800 dark:hover:border-indigo-800">
-                      <input
-                        type="radio"
-                        name="courseHomeLanding"
-                        checked={courseHomeLanding === 'content_page'}
-                        onChange={() => setCourseHomeLanding('content_page')}
-                        className="mt-1"
-                      />
-                      <span>
-                        <span className="block text-sm font-medium text-slate-900 dark:text-neutral-50">
-                          A specific content page
-                        </span>
-                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-400">
-                          Open the course directly on a page from the module outline (for example, a welcome page).
-                        </span>
-                      </span>
-                    </label>
-                  </fieldset>
-                  {courseHomeLanding === 'content_page' ? (
-                    <label className="mt-4 block">
-                      <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-neutral-300">
-                        Content page
-                      </span>
-                      <select
-                        value={courseHomeContentItemId}
-                        onChange={(e) => setCourseHomeContentItemId(e.target.value)}
-                        className="w-full max-w-lg rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-50"
-                      >
-                        <option value="">Select a page…</option>
-                        {structureForHomePicker
-                          .filter((i) => i.kind === 'content_page')
-                          .map((i) => (
-                            <option key={i.id} value={i.id}>
-                              {i.title}
-                            </option>
-                          ))}
-                      </select>
-                      {structureForHomePicker.filter((i) => i.kind === 'content_page').length === 0 ? (
-                        <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">
-                          Add a content page in Modules first, then pick it here.
-                        </p>
-                      ) : null}
-                    </label>
-                  ) : null}
-                </section>
-
-                {saveMessage && (
-                  <p
-                    className={
-                      saveStatus === 'error' ? 'text-sm text-rose-700' : 'text-sm text-emerald-700'
-                    }
-                    role="status"
-                  >
-                    {saveMessage}
-                  </p>
-                )}
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="submit"
-                    name="saveGeneral"
-                    disabled={saveStatus === 'saving'}
-                    className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {saveStatus === 'saving' ? 'Saving…' : 'Save changes'}
-                  </button>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={5}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-50"
+                      placeholder="What is this course about?"
+                    />
+                  </label>
                 </div>
-              </form>
+              </section>
 
-              <form onSubmit={onSaveForm} className="space-y-6">
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
-                  <h2 className="text-sm font-semibold text-slate-900">Fixed Schedule & Visibility</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Control whether the course uses fixed calendar dates or a timeline from each
-                    student’s enrollment. Module release and due dates follow the same mode: relative
-                    courses shift those dates by the same offset.
-                  </p>
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={scheduleMode === 'relative'}
-                      aria-label={
-                        scheduleMode === 'relative'
-                          ? 'Relative schedule from each enrollment'
-                          : 'Fixed calendar schedule (not relative to enrollment)'
-                      }
-                      onClick={() =>
-                        setScheduleMode((m) => (m === 'fixed' ? 'relative' : 'fixed'))
-                      }
-                      disabled={saveStatus === 'saving'}
-                      className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${scheduleMode === 'relative' ? 'bg-indigo-600' : 'bg-slate-200'
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Publishing</h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+                  Published courses appear in the catalog. Drafts are only reachable by direct link.
+                </p>
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    type="button"
+                    role="switch"
+                    name="publishCourse"
+                    aria-checked={published}
+                    aria-label={
+                      published
+                        ? 'Published to catalog'
+                        : 'Draft — not published to catalog'
+                    }
+                    onClick={() => onPublishedToggle()}
+                    disabled={saveStatus === 'saving'}
+                    className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${published ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-neutral-800'
+                      }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition ${published ? 'translate-x-5' : 'translate-x-0.5'
                         }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition ${scheduleMode === 'relative' ? 'translate-x-5' : 'translate-x-0.5'
-                          }`}
-                      />
-                    </button>
-                    <span className="text-sm font-medium text-slate-800">
-                      {scheduleMode === 'fixed'
-                        ? 'Fixed (calendar dates)'
-                        : 'Relative (from enrollment)'}
-                    </span>
-                  </div>
-                  {scheduleMode === 'fixed' ? (
-                    <>
-                      <p className="mt-3 text-sm text-slate-500">
-                        Clear a field to remove that date. Times use your local timezone.
-                      </p>
-                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                        <DateField
-                          label="Start"
-                          value={startsAt}
-                          onChange={setStartsAt}
-                          onClear={() => setStartsAt('')}
-                        />
-                        <DateField
-                          label="End"
-                          value={endsAt}
-                          onChange={setEndsAt}
-                          onClear={() => setEndsAt('')}
-                        />
-                        <DateField
-                          label="Visible from"
-                          value={visibleFrom}
-                          onChange={setVisibleFrom}
-                          onClear={() => setVisibleFrom('')}
-                        />
-                        <DateField
-                          label="Hidden after"
-                          value={hiddenAt}
-                          onChange={setHiddenAt}
-                          onClear={() => setHiddenAt('')}
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mt-3 text-sm text-slate-500">
-                        Start and catalog visibility begin when the student is enrolled. Set how long
-                        the course runs and when it drops from the catalog (optional). Durations use
-                        ISO-style lengths (days, weeks, months, or years).
-                      </p>
-                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                        <RelativeDurationField
-                          label="End after"
-                          amount={relEndAmount}
-                          unit={relEndUnit}
-                          onAmountChange={setRelEndAmount}
-                          onUnitChange={setRelEndUnit}
-                          onClear={() => setRelEndAmount('')}
-                        />
-                        <RelativeDurationField
-                          label="Hidden from catalog after"
-                          amount={relHiddenAmount}
-                          unit={relHiddenUnit}
-                          onAmountChange={setRelHiddenAmount}
-                          onUnitChange={setRelHiddenUnit}
-                          onClear={() => setRelHiddenAmount('')}
-                        />
-                      </div>
-                    </>
-                  )}
-                </section>
-
-                {saveMessage && (
-                  <p
-                    className={
-                      saveStatus === 'error' ? 'text-sm text-rose-700' : 'text-sm text-emerald-700'
-                    }
-                    role="status"
-                  >
-                    {saveMessage}
-                  </p>
-                )}
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="submit"
-                    disabled={saveStatus === 'saving'}
-                    className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {saveStatus === 'saving' ? 'Saving…' : 'Save changes'}
+                    />
                   </button>
+                  <span className="text-sm font-medium text-slate-800 dark:text-neutral-300">
+                    {published ? 'Published' : 'Draft'}
+                  </span>
                 </div>
-              </form>
+              </section>
 
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
-                <h2 className="text-sm font-semibold text-slate-900">Hero image</h2>
-                <p className="mt-1 text-sm text-slate-500">
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Course home</h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+                  What learners and staff see first when they open this course (the course dashboard).
+                </p>
+                <fieldset className="mt-4 space-y-3">
+                  <legend className="sr-only">Course home layout</legend>
+                  <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-100 p-3 hover:border-indigo-200 dark:border-neutral-800/50 dark:hover:border-indigo-800">
+                    <input
+                      type="radio"
+                      name="courseHomeLanding"
+                      checked={courseHomeLanding === 'data'}
+                      onChange={() => {
+                        setCourseHomeLanding('data')
+                        setCourseHomeContentItemId('')
+                      }}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-900 dark:text-neutral-50">
+                        Data dashboard
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-400">
+                        Deadlines, announcements, grades, and course details at a glance.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-100 p-3 hover:border-indigo-200 dark:border-neutral-800/50 dark:hover:border-indigo-800">
+                    <input
+                      type="radio"
+                      name="courseHomeLanding"
+                      checked={courseHomeLanding === 'calendar'}
+                      onChange={() => {
+                        setCourseHomeLanding('calendar')
+                        setCourseHomeContentItemId('')
+                      }}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-900 dark:text-neutral-50">
+                        Course calendar
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-400">
+                        Due dates and the month / week views as the landing experience.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-100 p-3 hover:border-indigo-200 dark:border-neutral-800/50 dark:hover:border-indigo-800">
+                    <input
+                      type="radio"
+                      name="courseHomeLanding"
+                      checked={courseHomeLanding === 'content_page'}
+                      onChange={() => setCourseHomeLanding('content_page')}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-900 dark:text-neutral-50">
+                        A specific content page
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-500 dark:text-neutral-400">
+                        Open the course directly on a page from the module outline (for example, a welcome page).
+                      </span>
+                    </span>
+                  </label>
+                </fieldset>
+                {courseHomeLanding === 'content_page' ? (
+                  <label className="mt-4 block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-neutral-300">
+                      Content page
+                    </span>
+                    <select
+                      value={courseHomeContentItemId}
+                      onChange={(e) => setCourseHomeContentItemId(e.target.value)}
+                      className="w-full max-w-lg rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-indigo-500/20 focus:border-indigo-400 focus:ring-2 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-50"
+                    >
+                      <option value="">Select a page…</option>
+                      {structureForHomePicker
+                        .filter((i) => i.kind === 'content_page')
+                        .map((i) => (
+                          <option key={i.id} value={i.id}>
+                            {i.title}
+                          </option>
+                        ))}
+                    </select>
+                    {structureForHomePicker.filter((i) => i.kind === 'content_page').length === 0 ? (
+                      <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">
+                        Add a content page in Modules first, then pick it here.
+                      </p>
+                    ) : null}
+                  </label>
+                ) : null}
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Fixed Schedule & Visibility</h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+                  Control whether the course uses fixed calendar dates or a timeline from each
+                  student’s enrollment. Module release and due dates follow the same mode: relative
+                  courses shift those dates by the same offset.
+                </p>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={scheduleMode === 'relative'}
+                    aria-label={
+                      scheduleMode === 'relative'
+                        ? 'Relative schedule from each enrollment'
+                        : 'Fixed calendar schedule (not relative to enrollment)'
+                    }
+                    onClick={() =>
+                      setScheduleMode((m) => (m === 'fixed' ? 'relative' : 'fixed'))
+                    }
+                    disabled={saveStatus === 'saving'}
+                    className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${scheduleMode === 'relative' ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-neutral-800'
+                      }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition ${scheduleMode === 'relative' ? 'translate-x-5' : 'translate-x-0.5'
+                        }`}
+                    />
+                  </button>
+                  <span className="text-sm font-medium text-slate-800 dark:text-neutral-300">
+                    {scheduleMode === 'fixed'
+                      ? 'Fixed (calendar dates)'
+                      : 'Relative (from enrollment)'}
+                  </span>
+                </div>
+                {scheduleMode === 'fixed' ? (
+                  <>
+                    <p className="mt-3 text-sm text-slate-500 dark:text-neutral-400">
+                      Clear a field to remove that date. Times use your local timezone.
+                    </p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <DateField
+                        label="Start"
+                        value={startsAt}
+                        onChange={setStartsAt}
+                        onClear={() => setStartsAt('')}
+                      />
+                      <DateField
+                        label="End"
+                        value={endsAt}
+                        onChange={setEndsAt}
+                        onClear={() => setEndsAt('')}
+                      />
+                      <DateField
+                        label="Visible from"
+                        value={visibleFrom}
+                        onChange={setVisibleFrom}
+                        onClear={() => setVisibleFrom('')}
+                      />
+                      <DateField
+                        label="Hidden after"
+                        value={hiddenAt}
+                        onChange={setHiddenAt}
+                        onClear={() => setHiddenAt('')}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-3 text-sm text-slate-500 dark:text-neutral-400">
+                      Start and catalog visibility begin when the student is enrolled. Set how long
+                      the course runs and when it drops from the catalog (optional). Durations use
+                      ISO-style lengths (days, weeks, months, or years).
+                    </p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <RelativeDurationField
+                        label="End after"
+                        amount={relEndAmount}
+                        unit={relEndUnit}
+                        onAmountChange={setRelEndAmount}
+                        onUnitChange={setRelEndUnit}
+                        onClear={() => setRelEndAmount('')}
+                      />
+                      <RelativeDurationField
+                        label="Hidden from catalog after"
+                        amount={relHiddenAmount}
+                        unit={relHiddenUnit}
+                        onAmountChange={setRelHiddenAmount}
+                        onUnitChange={setRelHiddenUnit}
+                        onClear={() => setRelHiddenAmount('')}
+                      />
+                    </div>
+                  </>
+                )}
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Hero image</h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
                   Generate a cover image with AI (model is configured under Settings → AI).
                 </p>
                 {course.heroImageUrl && (
                   <img
                     src={course.heroImageUrl}
                     alt=""
-                    className="mt-4 max-h-48 w-full max-w-md rounded-xl border border-slate-200 object-cover"
+                    className="mt-4 max-h-48 w-full max-w-md rounded-xl border border-slate-200 object-cover dark:border-neutral-805"
                     style={heroImageObjectStyle(course.heroImageObjectPosition)}
                   />
                 )}
@@ -962,7 +1037,7 @@ export default function CourseSettings() {
                   <button
                     type="button"
                     onClick={openImageModal}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900"
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-350 dark:hover:border-indigo-900 dark:hover:bg-indigo-950 dark:hover:text-indigo-100"
                   >
                     <ImageIcon className="h-4 w-4" aria-hidden />
                     Generate image
@@ -972,7 +1047,7 @@ export default function CourseSettings() {
                     onClick={openPositionModal}
                     disabled={!course.heroImageUrl}
                     title={!course.heroImageUrl ? 'Add a hero image first' : undefined}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-350 dark:hover:border-indigo-900 dark:hover:bg-indigo-950 dark:hover:text-indigo-100"
                   >
                     <Move className="h-4 w-4" aria-hidden />
                     Position image
@@ -980,38 +1055,28 @@ export default function CourseSettings() {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-slate-900">Reading theme</h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Applies to the syllabus, content pages, and assignments. Choosing a preset saves immediately.
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Reading theme</h2>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+                      Applies to the syllabus, content pages, and assignments. Choosing a preset is staged and saved via the main save bar.
                     </p>
                   </div>
-                  {(mdThemeStatus !== 'idle' || mdThemeMessage) && (
-                    <p
-                      className={
-                        mdThemeStatus === 'error' ? 'text-sm text-rose-700' : 'text-sm text-emerald-700'
-                      }
-                      role="status"
-                    >
-                      {mdThemeStatus === 'saving' ? 'Saving…' : mdThemeMessage}
-                    </p>
-                  )}
                 </div>
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {MARKDOWN_THEME_PRESET_META.map((meta) => {
-                    const selected = course.markdownThemePreset === meta.id
+                    const selected = markdownThemePreset === meta.id
                     return (
                       <button
                         key={meta.id}
                         type="button"
-                        onClick={() => void selectMarkdownPreset(meta.id)}
-                        disabled={mdThemeStatus === 'saving'}
+                        onClick={() => selectMarkdownPreset(meta.id)}
+                        disabled={saveStatus === 'saving'}
                         className={`relative flex flex-col rounded-xl border p-4 text-left transition ${selected
-                          ? 'border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-500/30'
-                          : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50/80'
+                          ? 'border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-500/30 dark:border-indigo-500 dark:bg-indigo-950/30'
+                          : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50/80 dark:border-neutral-800 dark:bg-neutral-950 dark:hover:border-indigo-850 dark:hover:bg-neutral-900/50'
                           } disabled:opacity-60`}
                       >
                         {selected && (
@@ -1019,20 +1084,20 @@ export default function CourseSettings() {
                             <Check className="h-3.5 w-3.5" aria-hidden />
                           </span>
                         )}
-                        <span className="text-sm font-semibold text-slate-900">{meta.title}</span>
-                        <span className="mt-1 text-xs leading-snug text-slate-600">{meta.description}</span>
+                        <span className="text-sm font-semibold text-slate-900 dark:text-neutral-50">{meta.title}</span>
+                        <span className="mt-1 text-xs leading-snug text-slate-600 dark:text-neutral-400">{meta.description}</span>
                         <span
                           className={`mt-3 block h-8 rounded-md ${meta.id === 'night'
                             ? 'bg-slate-900'
                             : meta.id === 'reader'
-                              ? 'bg-stone-100 ring-1 ring-stone-200'
+                              ? 'bg-stone-100 ring-1 ring-stone-200 dark:ring-stone-850'
                               : meta.id === 'contrast'
-                                ? 'border-2 border-black bg-white'
+                                ? 'border-2 border-black bg-white dark:border-neutral-50 dark:bg-neutral-950'
                                 : meta.id === 'serif'
-                                  ? 'bg-amber-50/80'
+                                  ? 'bg-amber-50/80 dark:bg-amber-950/25'
                                   : meta.id === 'accent'
-                                    ? 'bg-violet-100/80'
-                                    : 'bg-slate-100'
+                                    ? 'bg-violet-100/80 dark:bg-violet-950/25'
+                                    : 'bg-slate-100 dark:bg-neutral-800'
                             }`}
                           aria-hidden
                         />
@@ -1041,76 +1106,79 @@ export default function CourseSettings() {
                   })}
                 </div>
 
-                <div className="mt-8 border-t border-slate-200 pt-6">
-                  <h3 className="text-sm font-semibold text-slate-900">Custom theme</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Set colors and layout, then save. Active when{' '}
-                    <span className="font-medium text-slate-700">Custom</span> is stored — use Save after editing,
-                    or pick a preset above to reset to a built-in look.
+                <div className="mt-8 border-t border-slate-200 pt-6 dark:border-neutral-800">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Custom theme</h3>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
+                    Set colors and layout. Active when{' '}
+                    <span className="font-medium text-slate-700 dark:text-neutral-300">Custom</span> preset is active — edit values below, then save with the main save bar.
                   </p>
                   <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <label className="block text-xs font-medium text-slate-600">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400">
                       Heading color
                       <input
                         type="color"
                         value={customDraft.headingColor ?? markdownThemeCustomSeed.headingColor}
                         onChange={(e) =>
-                          setCustomDraft((d) => ({ ...d, headingColor: e.target.value }))
+                          updateCustomDraft((d) => ({ ...d, headingColor: e.target.value }))
                         }
-                        className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-200 bg-white"
+                        className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
                       />
                     </label>
-                    <label className="block text-xs font-medium text-slate-600">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400">
                       Body text
                       <input
                         type="color"
                         value={customDraft.bodyColor ?? markdownThemeCustomSeed.bodyColor}
-                        onChange={(e) => setCustomDraft((d) => ({ ...d, bodyColor: e.target.value }))}
-                        className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-200 bg-white"
+                        onChange={(e) =>
+                          updateCustomDraft((d) => ({ ...d, bodyColor: e.target.value }))
+                        }
+                        className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
                       />
                     </label>
-                    <label className="block text-xs font-medium text-slate-600">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400">
                       Links
                       <input
                         type="color"
                         value={customDraft.linkColor ?? markdownThemeCustomSeed.linkColor}
-                        onChange={(e) => setCustomDraft((d) => ({ ...d, linkColor: e.target.value }))}
-                        className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-200 bg-white"
+                        onChange={(e) =>
+                          updateCustomDraft((d) => ({ ...d, linkColor: e.target.value }))
+                        }
+                        className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
                       />
                     </label>
-                    <label className="block text-xs font-medium text-slate-600">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400">
                       Code &amp; blocks background
                       <input
                         type="color"
                         value={customDraft.codeBackground ?? markdownThemeCustomSeed.codeBackground}
                         onChange={(e) =>
-                          setCustomDraft((d) => ({ ...d, codeBackground: e.target.value }))
+                          updateCustomDraft((d) => ({ ...d, codeBackground: e.target.value }))
                         }
-                        className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-200 bg-white"
+                        className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
                       />
                     </label>
-                    <label className="block text-xs font-medium text-slate-600">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400">
                       Borders &amp; quotes
                       <input
                         type="color"
                         value={customDraft.blockquoteBorder ?? markdownThemeCustomSeed.blockquoteBorder}
                         onChange={(e) =>
-                          setCustomDraft((d) => ({ ...d, blockquoteBorder: e.target.value }))
+                          updateCustomDraft((d) => ({ ...d, blockquoteBorder: e.target.value }))
                         }
-                        className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-200 bg-white"
+                        className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
                       />
                     </label>
-                    <label className="block text-xs font-medium text-slate-600">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400">
                       Article width
                       <select
                         value={customDraft.articleWidth ?? markdownThemeCustomSeed.articleWidth}
                         onChange={(e) =>
-                          setCustomDraft((d) => ({
+                          updateCustomDraft((d) => ({
                             ...d,
                             articleWidth: e.target.value as MarkdownThemeCustom['articleWidth'],
                           }))
                         }
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-50"
                       >
                         <option value="narrow">Narrow</option>
                         <option value="comfortable">Comfortable</option>
@@ -1118,39 +1186,33 @@ export default function CourseSettings() {
                         <option value="full">Full width</option>
                       </select>
                     </label>
-                    <label className="block text-xs font-medium text-slate-600">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400">
                       Font
                       <select
                         value={customDraft.fontFamily ?? markdownThemeCustomSeed.fontFamily}
                         onChange={(e) =>
-                          setCustomDraft((d) => ({
+                          updateCustomDraft((d) => ({
                             ...d,
                             fontFamily: e.target.value as MarkdownThemeCustom['fontFamily'],
                           }))
                         }
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-50"
                       >
                         <option value="sans">Sans-serif</option>
                         <option value="serif">Serif</option>
                       </select>
                     </label>
                   </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => void saveCustomMarkdownTheme()}
-                      disabled={mdThemeStatus === 'saving'}
-                      className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {mdThemeStatus === 'saving' ? 'Saving…' : 'Save custom theme'}
-                    </button>
-                    {course.markdownThemePreset === 'custom' && (
-                      <span className="text-xs text-slate-500">Custom theme is active for this course.</span>
-                    )}
+                  <div className="mt-4">
+                    {course.markdownThemePreset === 'custom' && !isDirty ? (
+                      <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Custom theme is active for this course.</span>
+                    ) : markdownThemePreset === 'custom' ? (
+                      <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">Custom theme will be saved when you apply changes.</span>
+                    ) : null}
                   </div>
                 </div>
               </section>
-            </>
+            </form>
           )}
 
           {section === 'grading' && <CourseGradingSettingsSection courseCode={courseCode} />}
@@ -1183,6 +1245,51 @@ export default function CourseSettings() {
             <CourseBlueprintSection courseCode={courseCode} course={course} onCourseUpdated={setCourse} />
           )}
           {section === 'archive' && <CourseArchivedContentSection courseCode={courseCode} />}
+        </div>
+      )}
+
+      {section === 'general' && isDirty && (
+        <div className="fixed bottom-6 left-1/2 z-50 w-full max-w-2xl -translate-x-1/2 px-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white/90 px-6 py-4 shadow-xl backdrop-blur-md dark:border-neutral-850 dark:bg-neutral-900/90">
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Unsaved changes</span>
+              <span className="text-xs text-slate-500 dark:text-neutral-400">
+                {saveStatus === 'error' && saveMessage ? (
+                  <span className="text-rose-600 dark:text-rose-400 font-medium">{saveMessage}</span>
+                ) : (
+                  "You have modified this course's settings."
+                )}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={discardChanges}
+                disabled={saveStatus === 'saving'}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-850 dark:hover:text-neutral-200 transition"
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                onClick={() => void onSingleSaveChanges()}
+                disabled={saveStatus === 'saving'}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60 transition active:scale-95"
+              >
+                {saveStatus === 'saving' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save changes
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Save, Trash2 } from 'lucide-react'
 import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { usePermissions } from '../../context/use-permissions'
+import { toastSaveOk } from '../../lib/lms-toast'
 import {
   courseItemCreatePermission,
   DEFAULT_LETTER_GRADE_SCALE_JSON,
@@ -69,13 +70,26 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
   const [itemPatchingId, setItemPatchingId] = useState<string | null>(null)
   const [schemeType, setSchemeType] = useState('points')
   const [schemeJsonText, setSchemeJsonText] = useState('')
-  const [schemeStatus, setSchemeStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [schemeMessage, setSchemeMessage] = useState<string | null>(null)
   const [passMinPct, setPassMinPct] = useState('60')
   const [completeMinPct, setCompleteMinPct] = useState('50')
   const [sbgEnabled, setSbgEnabled] = useState(false)
   const [sbgRule, setSbgRule] = useState('most_recent')
   const [sbgScaleText, setSbgScaleText] = useState(() => JSON.stringify(DEFAULT_SBG_PROFICIENCY_JSON, null, 2))
+
+  const [initialSettings, setInitialSettings] = useState<{
+    gradingScale: string
+    assignmentGroups: EditableGroup[]
+    sbgEnabled: boolean
+    sbgRule: string
+    sbgScaleText: string
+  } | null>(null)
+
+  const [initialScheme, setInitialScheme] = useState<{
+    type: string
+    passMinPct: string
+    completeMinPct: string
+    scaleJsonText: string
+  } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -86,61 +100,82 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
         fetchCourseStructure(courseCode),
         fetchCourseGradingScheme(courseCode),
       ])
-      setGradingScale(g.gradingScale)
-      setGroups(
-        g.assignmentGroups.length > 0
-          ? groupsToEditable(g.assignmentGroups)
-          : [
-              {
-                clientKey: newClientKey(),
-                name: 'Assignments',
-                sortOrder: 0,
-                weightPercent: '100',
-                dropLowest: '0',
-                dropHighest: '0',
-                replaceLowestWithFinal: false,
-              },
-            ],
-      )
+
+      const defaultGroups = [
+        {
+          clientKey: newClientKey(),
+          name: 'Assignments',
+          sortOrder: 0,
+          weightPercent: '100',
+          dropLowest: '0',
+          dropHighest: '0',
+          replaceLowestWithFinal: false,
+        },
+      ]
+      const loadedGroups = g.assignmentGroups.length > 0
+        ? groupsToEditable(g.assignmentGroups)
+        : defaultGroups
+
+      const loadedSbgScale = g.sbgProficiencyScaleJson != null
+        ? JSON.stringify(g.sbgProficiencyScaleJson, null, 2)
+        : JSON.stringify(DEFAULT_SBG_PROFICIENCY_JSON, null, 2)
+
+      const initialS = {
+        gradingScale: g.gradingScale,
+        assignmentGroups: loadedGroups,
+        sbgEnabled: g.sbgEnabled === true,
+        sbgRule: g.sbgAggregationRule?.trim() || 'most_recent',
+        sbgScaleText: loadedSbgScale,
+      }
+
+      setInitialSettings(initialS)
+      setGradingScale(initialS.gradingScale)
+      setGroups(JSON.parse(JSON.stringify(initialS.assignmentGroups)))
+      setSbgEnabled(initialS.sbgEnabled)
+      setSbgRule(initialS.sbgRule)
+      setSbgScaleText(initialS.sbgScaleText)
+
       setStructure(items)
+
+      let initialSch: typeof initialScheme
       const sch = schemeEnvelope.scheme
       if (sch) {
-        setSchemeType(sch.type)
+        let text = ''
         try {
-          setSchemeJsonText(JSON.stringify(sch.scaleJson ?? {}, null, 2))
+          text = JSON.stringify(sch.scaleJson ?? {}, null, 2)
         } catch {
-          setSchemeJsonText('{}')
+          text = '{}'
         }
+        let pass = '60'
+        let complete = '50'
         const sj = sch.scaleJson as Record<string, unknown> | null
         if (sch.type === 'pass_fail' && sj && typeof sj.pass_min_pct === 'number') {
-          setPassMinPct(String(sj.pass_min_pct))
-        } else {
-          setPassMinPct('60')
+          pass = String(sj.pass_min_pct)
         }
         if (sch.type === 'complete_incomplete' && sj && typeof sj.complete_min_pct === 'number') {
-          setCompleteMinPct(String(sj.complete_min_pct))
-        } else {
-          setCompleteMinPct('50')
+          complete = String(sj.complete_min_pct)
+        }
+
+        initialSch = {
+          type: sch.type,
+          passMinPct: pass,
+          completeMinPct: complete,
+          scaleJsonText: text,
         }
       } else {
-        setSchemeType('points')
-        setSchemeJsonText(JSON.stringify(DEFAULT_LETTER_GRADE_SCALE_JSON, null, 2))
-        setPassMinPct('60')
-        setCompleteMinPct('50')
+        initialSch = {
+          type: 'points',
+          passMinPct: '60',
+          completeMinPct: '50',
+          scaleJsonText: JSON.stringify(DEFAULT_LETTER_GRADE_SCALE_JSON, null, 2),
+        }
       }
-      setSchemeStatus('idle')
-      setSchemeMessage(null)
-      setSbgEnabled(g.sbgEnabled === true)
-      setSbgRule(g.sbgAggregationRule?.trim() || 'most_recent')
-      try {
-        setSbgScaleText(
-          g.sbgProficiencyScaleJson != null
-            ? JSON.stringify(g.sbgProficiencyScaleJson, null, 2)
-            : JSON.stringify(DEFAULT_SBG_PROFICIENCY_JSON, null, 2),
-        )
-      } catch {
-        setSbgScaleText(JSON.stringify(DEFAULT_SBG_PROFICIENCY_JSON, null, 2))
-      }
+
+      setInitialScheme(initialSch)
+      setSchemeType(initialSch.type)
+      setSchemeJsonText(initialSch.scaleJsonText)
+      setPassMinPct(initialSch.passMinPct)
+      setCompleteMinPct(initialSch.completeMinPct)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load grading settings.')
     } finally {
@@ -151,6 +186,180 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
   useEffect(() => {
     void load()
   }, [load])
+
+  const isSettingsDirty = useMemo(() => {
+    if (!initialSettings) return false
+    if (initialSettings.gradingScale !== gradingScale) return true
+    if (initialSettings.sbgEnabled !== sbgEnabled) return true
+    if (sbgEnabled) {
+      if (initialSettings.sbgRule !== sbgRule) return true
+      if (initialSettings.sbgScaleText !== sbgScaleText) return true
+    }
+    const cleanInitial = initialSettings.assignmentGroups.map((g) => ({
+      name: g.name.trim(),
+      weightPercent: String(Number(g.weightPercent) || 0),
+      dropLowest: String(Number(g.dropLowest) || 0),
+      dropHighest: String(Number(g.dropHighest) || 0),
+      replaceLowestWithFinal: g.replaceLowestWithFinal,
+    }))
+    const cleanCurrent = groups.map((g) => ({
+      name: g.name.trim(),
+      weightPercent: String(Number(g.weightPercent) || 0),
+      dropLowest: String(Number(g.dropLowest) || 0),
+      dropHighest: String(Number(g.dropHighest) || 0),
+      replaceLowestWithFinal: g.replaceLowestWithFinal,
+    }))
+    return JSON.stringify(cleanInitial) !== JSON.stringify(cleanCurrent)
+  }, [initialSettings, gradingScale, groups, sbgEnabled, sbgRule, sbgScaleText])
+
+  const isSchemeDirty = useMemo(() => {
+    if (!initialScheme) return false
+    if (initialScheme.type !== schemeType) return true
+    if (schemeType === 'letter' || schemeType === 'gpa') {
+      let normalInitial = initialScheme.scaleJsonText
+      let normalCurrent = schemeJsonText
+      try {
+        normalInitial = JSON.stringify(JSON.parse(initialScheme.scaleJsonText))
+      } catch {
+        // Fallback to original text if invalid JSON
+      }
+      try {
+        normalCurrent = JSON.stringify(JSON.parse(schemeJsonText))
+      } catch {
+        // Fallback to original text if invalid JSON
+      }
+      if (normalInitial !== normalCurrent) return true
+    } else if (schemeType === 'pass_fail') {
+      if (initialScheme.passMinPct !== passMinPct) return true
+    } else if (schemeType === 'complete_incomplete') {
+      if (initialScheme.completeMinPct !== completeMinPct) return true
+    }
+    return false
+  }, [initialScheme, schemeType, schemeJsonText, passMinPct, completeMinPct])
+
+  const isDirty = isSettingsDirty || isSchemeDirty
+
+  const discardChanges = useCallback(() => {
+    if (initialSettings) {
+      setGradingScale(initialSettings.gradingScale)
+      setGroups(JSON.parse(JSON.stringify(initialSettings.assignmentGroups)))
+      setSbgEnabled(initialSettings.sbgEnabled)
+      setSbgRule(initialSettings.sbgRule)
+      setSbgScaleText(initialSettings.sbgScaleText)
+    }
+    if (initialScheme) {
+      setSchemeType(initialScheme.type)
+      setSchemeJsonText(initialScheme.scaleJsonText)
+      setPassMinPct(initialScheme.passMinPct)
+      setCompleteMinPct(initialScheme.completeMinPct)
+    }
+    setSaveStatus('idle')
+    setSaveMessage(null)
+  }, [initialSettings, initialScheme])
+
+  async function onSingleSaveChanges() {
+    if (!canEdit) return
+    setSaveStatus('saving')
+    setSaveMessage(null)
+
+    try {
+      const promises: Promise<unknown>[] = []
+
+      let sbgProficiencyScaleJson: unknown = undefined
+      if (sbgEnabled && isSettingsDirty) {
+        try {
+          sbgProficiencyScaleJson = JSON.parse(sbgScaleText || '{}')
+        } catch {
+          setSaveStatus('error')
+          setSaveMessage('SBG proficiency scale must be valid JSON.')
+          return
+        }
+      }
+
+      if (isSettingsDirty) {
+        const named = groups.filter((g) => g.name.trim())
+        if (named.length === 0) {
+          setSaveStatus('error')
+          setSaveMessage('Add at least one assignment group with a name, or remove extra rows.')
+          return
+        }
+        if (named.length !== groups.length) {
+          setSaveStatus('error')
+          setSaveMessage('Each assignment group needs a name.')
+          return
+        }
+      }
+
+      let scaleJson: unknown = {}
+      if (isSchemeDirty) {
+        if (schemeType === 'letter' || schemeType === 'gpa') {
+          try {
+            scaleJson = JSON.parse(schemeJsonText || '[]')
+          } catch {
+            setSaveStatus('error')
+            setSaveMessage('Letter bands must be valid JSON.')
+            return
+          }
+        } else if (schemeType === 'pass_fail') {
+          const n = Number.parseFloat(passMinPct)
+          scaleJson = { pass_min_pct: Number.isFinite(n) ? n : 60 }
+        } else if (schemeType === 'complete_incomplete') {
+          const n = Number.parseFloat(completeMinPct)
+          scaleJson = { complete_min_pct: Number.isFinite(n) ? n : 50 }
+        }
+      }
+
+      let savedSettings = false
+      let savedScheme = false
+
+      if (isSettingsDirty) {
+        savedSettings = true
+        promises.push(
+          putCourseGradingSettings(courseCode, {
+            gradingScale,
+            assignmentGroups: groups.map((g, i) => {
+              const w = Number.parseFloat(g.weightPercent)
+              const dL = Number.parseInt(g.dropLowest, 10)
+              const dH = Number.parseInt(g.dropHighest, 10)
+              return {
+                id: g.id,
+                name: g.name.trim(),
+                sortOrder: i,
+                weightPercent: Number.isFinite(w) ? w : 0,
+                dropLowest: Number.isFinite(dL) ? Math.max(0, dL) : 0,
+                dropHighest: Number.isFinite(dH) ? Math.max(0, dH) : 0,
+                replaceLowestWithFinal: g.replaceLowestWithFinal,
+              }
+            }),
+            sbgEnabled,
+            sbgAggregationRule: sbgRule,
+            sbgProficiencyScaleJson: sbgEnabled ? sbgProficiencyScaleJson : null,
+          })
+        )
+      }
+
+      if (isSchemeDirty) {
+        savedScheme = true
+        promises.push(
+          putCourseGradingScheme(courseCode, { type: schemeType, scaleJson })
+        )
+      }
+
+      await Promise.all(promises)
+      await load()
+      void refreshCourseNav()
+      setSaveStatus('saved')
+      if (savedScheme) {
+        toastSaveOk('Grading scheme saved.')
+      }
+      if (savedSettings) {
+        toastSaveOk('Grading settings saved.')
+      }
+    } catch (e) {
+      setSaveStatus('error')
+      setSaveMessage(e instanceof Error ? e.message : 'Could not save configurations.')
+    }
+  }
 
   const weightTotal = useMemo(() => {
     let t = 0
@@ -172,92 +381,6 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
     }
     return out
   }, [structure])
-
-  async function onSaveGrading(e: React.FormEvent) {
-    e.preventDefault()
-    if (!canEdit) return
-    const named = groups.filter((g) => g.name.trim())
-    if (named.length === 0) {
-      setSaveStatus('error')
-      setSaveMessage('Add at least one assignment group with a name, or remove extra rows.')
-      return
-    }
-    if (named.length !== groups.length) {
-      setSaveStatus('error')
-      setSaveMessage('Each assignment group needs a name.')
-      return
-    }
-    setSaveStatus('saving')
-    setSaveMessage(null)
-    try {
-      let sbgProficiencyScaleJson: unknown = undefined
-      if (sbgEnabled) {
-        try {
-          sbgProficiencyScaleJson = JSON.parse(sbgScaleText || '{}')
-        } catch {
-          setSaveStatus('error')
-          setSaveMessage('SBG proficiency scale must be valid JSON.')
-          return
-        }
-      }
-      const payload = await putCourseGradingSettings(courseCode, {
-        gradingScale,
-        assignmentGroups: groups.map((g, i) => {
-          const w = Number.parseFloat(g.weightPercent)
-          const dL = Number.parseInt(g.dropLowest, 10)
-          const dH = Number.parseInt(g.dropHighest, 10)
-          return {
-            id: g.id,
-            name: g.name.trim(),
-            sortOrder: i,
-            weightPercent: Number.isFinite(w) ? w : 0,
-            dropLowest: Number.isFinite(dL) ? Math.max(0, dL) : 0,
-            dropHighest: Number.isFinite(dH) ? Math.max(0, dH) : 0,
-            replaceLowestWithFinal: g.replaceLowestWithFinal,
-          }
-        }),
-        sbgEnabled,
-        sbgAggregationRule: sbgRule,
-        sbgProficiencyScaleJson: sbgEnabled ? sbgProficiencyScaleJson : null,
-      })
-      setGradingScale(payload.gradingScale)
-      setGroups(groupsToEditable(payload.assignmentGroups))
-      if (payload.sbgEnabled != null) setSbgEnabled(payload.sbgEnabled)
-      if (payload.sbgAggregationRule) setSbgRule(payload.sbgAggregationRule)
-      const items = await fetchCourseStructure(courseCode)
-      setStructure(items)
-      void refreshCourseNav()
-      setSaveStatus('saved')
-      setSaveMessage('Grading settings saved.')
-    } catch (e) {
-      setSaveStatus('error')
-      setSaveMessage(e instanceof Error ? e.message : 'Could not save.')
-    }
-  }
-
-  async function onSaveGradingScheme() {
-    if (!canEdit) return
-    setSchemeStatus('saving')
-    setSchemeMessage(null)
-    try {
-      let scaleJson: unknown = {}
-      if (schemeType === 'letter' || schemeType === 'gpa') {
-        scaleJson = JSON.parse(schemeJsonText || '[]')
-      } else if (schemeType === 'pass_fail') {
-        const n = Number.parseFloat(passMinPct)
-        scaleJson = { pass_min_pct: Number.isFinite(n) ? n : 60 }
-      } else if (schemeType === 'complete_incomplete') {
-        const n = Number.parseFloat(completeMinPct)
-        scaleJson = { complete_min_pct: Number.isFinite(n) ? n : 50 }
-      }
-      await putCourseGradingScheme(courseCode, { type: schemeType, scaleJson })
-      setSchemeStatus('saved')
-      setSchemeMessage('Grading scheme saved.')
-    } catch (err) {
-      setSchemeStatus('error')
-      setSchemeMessage(err instanceof Error ? err.message : 'Could not save grading scheme.')
-    }
-  }
 
   async function onItemGroupChange(itemId: string, value: string) {
     if (!canEdit) return
@@ -306,7 +429,7 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
 
   return (
     <div className="space-y-8">
-      <form onSubmit={onSaveGrading} className="space-y-6">
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 dark:border-neutral-600 dark:bg-neutral-900 dark:shadow-none">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Grading scale</h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-neutral-400">
@@ -429,28 +552,6 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                   className="mt-1 w-32 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-400"
                 />
               </div>
-            )}
-            {schemeMessage && (
-              <p
-                className={
-                  schemeStatus === 'error'
-                    ? 'text-sm text-rose-700 dark:text-rose-400'
-                    : 'text-sm text-emerald-700 dark:text-emerald-400'
-                }
-                role="status"
-              >
-                {schemeMessage}
-              </p>
-            )}
-            {canEdit && (
-              <button
-                type="button"
-                disabled={schemeStatus === 'saving'}
-                onClick={() => void onSaveGradingScheme()}
-                className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-200 dark:text-neutral-900 dark:hover:bg-white"
-              >
-                {schemeStatus === 'saving' ? 'Saving…' : 'Save grade display scheme'}
-              </button>
             )}
           </div>
         </section>
@@ -604,19 +705,19 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
                     <td className="py-2 pr-2">
                       <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
                         <input
-                          type="checkbox"
-                          checked={g.replaceLowestWithFinal}
-                          disabled={!canEdit}
-                          onChange={(e) =>
-                            setGroups((prev) =>
-                              prev.map((x) =>
-                                x.clientKey === g.clientKey
-                                  ? { ...x, replaceLowestWithFinal: e.target.checked }
-                                  : x,
-                              ),
-                            )
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-500"
+                           type="checkbox"
+                           checked={g.replaceLowestWithFinal}
+                           disabled={!canEdit}
+                           onChange={(e) =>
+                             setGroups((prev) =>
+                               prev.map((x) =>
+                                 x.clientKey === g.clientKey
+                                   ? { ...x, replaceLowestWithFinal: e.target.checked }
+                                   : x,
+                               ),
+                             )
+                           }
+                           className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-500"
                         />
                         <span>Final can replace a low score</span>
                       </label>
@@ -664,29 +765,6 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
             )}
           </p>
         </section>
-
-        {saveMessage && (
-          <p
-            className={
-              saveStatus === 'error'
-                ? 'text-sm text-rose-700 dark:text-rose-400'
-                : 'text-sm text-emerald-700 dark:text-emerald-400'
-            }
-            role="status"
-          >
-            {saveMessage}
-          </p>
-        )}
-
-        {canEdit && (
-          <button
-            type="submit"
-            disabled={saveStatus === 'saving'}
-            className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saveStatus === 'saving' ? 'Saving…' : 'Save grading settings'}
-          </button>
-        )}
 
         {!canEdit && (
           <p className="text-sm text-slate-500 dark:text-neutral-400">
@@ -751,6 +829,51 @@ export function CourseGradingSettingsSection({ courseCode }: { courseCode: strin
           </div>
         )}
       </section>
+
+      {isDirty && (
+        <div className="fixed bottom-6 left-1/2 z-50 w-full max-w-2xl -translate-x-1/2 px-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white/90 px-6 py-4 shadow-xl backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-900/90">
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Unsaved changes</span>
+              <span className="text-xs text-slate-500 dark:text-neutral-400">
+                {saveStatus === 'error' && saveMessage ? (
+                  <span className="text-rose-600 dark:text-rose-400 font-medium">{saveMessage}</span>
+                ) : (
+                  "You have modified this course's grading settings."
+                )}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={discardChanges}
+                disabled={saveStatus === 'saving'}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-850 dark:hover:text-neutral-200 transition"
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                onClick={() => void onSingleSaveChanges()}
+                disabled={saveStatus === 'saving'}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60 transition active:scale-95"
+              >
+                {saveStatus === 'saving' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save changes
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

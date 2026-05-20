@@ -59,9 +59,16 @@ test.describe('Course Settings - General - Course Home', () => {
   test('change the course home landing to data dashboard', async ({ coursePage: page, seededCourse }) => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
     const courseHomeRadios = page.locator('input[type="radio"][name="courseHomeLanding"]')
+    
+    // Set to calendar first and save to ensure we have a non-default initial value.
+    await courseHomeRadios.nth(1).click()
+    await page.getByRole('button', { name: /^save changes$/i }).first().click()
+    await expect(page.getByText('Course settings saved')).toBeVisible({ timeout: 8000 })
+
+    // Now change it back to data dashboard (index 0) and verify it stages, saves, and updates the landing.
     await courseHomeRadios.nth(0).click()
     await page.getByRole('button', { name: /^save changes$/i }).first().click()
-    await expect(page.getByRole('status').filter({ hasText: /saved/i }).first()).toBeVisible({
+    await expect(page.getByText('Course settings saved')).toBeVisible({
       timeout: 8000,
     })
     await page.goto(`/courses/${seededCourse.courseCode}`)
@@ -73,7 +80,7 @@ test.describe('Course Settings - General - Course Home', () => {
     const courseHomeRadios = page.locator('input[type="radio"][name="courseHomeLanding"]')
     await courseHomeRadios.nth(1).click()
     await page.getByRole('button', { name: /^save changes$/i }).first().click()
-    await expect(page.getByRole('status').filter({ hasText: /saved/i }).first()).toBeVisible({
+    await expect(page.getByText('Course settings saved')).toBeVisible({
       timeout: 8000,
     })
     await page.goto(`/courses/${seededCourse.courseCode}`)
@@ -93,7 +100,7 @@ test.describe('Course Settings - General - Course Home', () => {
     await courseHomeRadios.nth(2).click()
     await page.getByRole('combobox', { name: /^content page$/i }).selectOption(welcomePage.id)
     await page.getByRole('button', { name: /^save changes$/i }).first().click()
-    await expect(page.getByRole('status').filter({ hasText: /saved/i }).first()).toBeVisible({
+    await expect(page.getByText('Course settings saved')).toBeVisible({
       timeout: 8000,
     })
     await page.goto(`/courses/${seededCourse.courseCode}`)
@@ -117,9 +124,10 @@ test.describe('Course Settings - General - Fixed Schedule & Visibility', () => {
     await visibleFromInput.fill('2026-01-01T00:00')
     const hiddenAfterInput = page.getByRole('textbox', { name: /^hidden after$/i })
     await hiddenAfterInput.fill('2026-12-31T23:59')
-    // Schedule fields live in the second general-settings form (after course home).
-    await page.getByRole('button', { name: /^save changes$/i }).nth(1).click()
-    await expect(page.getByRole('status').filter({ hasText: /saved/i }).first()).toBeVisible({
+    
+    // Save changes via global single save bar.
+    await page.getByRole('button', { name: /^save changes$/i }).click()
+    await expect(page.getByText('Course settings saved')).toBeVisible({
       timeout: 8000,
     })
   })
@@ -182,11 +190,14 @@ test.describe('Course Settings - General - Hero Image', () => {
 })
 
 test.describe('Course Settings - General - Reading Theme', () => {
-  test('select a reading theme preset saves immediately', async ({ coursePage: page, seededCourse }) => {
+  test('select a reading theme preset stages changes and saves with global bar', async ({ coursePage: page, seededCourse }) => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/general`)
     await expect(page.getByRole('heading', { name: /^reading theme$/i })).toBeVisible()
     await page.getByRole('button', { name: /night dark canvas/i }).click()
-    await expect(page.getByRole('status').filter({ hasText: /reading theme saved/i })).toBeVisible({
+    
+    // Save changes via global single save bar.
+    await page.getByRole('button', { name: /^save changes$/i }).click()
+    await expect(page.getByText('Course settings saved')).toBeVisible({
       timeout: 8000,
     })
   })
@@ -210,8 +221,9 @@ test.describe('Course Settings - General - Custom Theme', () => {
     await page.getByRole('combobox', { name: /^article width$/i }).selectOption('wide')
     await page.getByRole('combobox', { name: /^font$/i }).selectOption('serif')
 
-    await page.getByRole('button', { name: /^save custom theme$/i }).click()
-    await expect(page.getByRole('status').filter({ hasText: /custom reading theme saved/i })).toBeVisible({
+    // Preset selection is staged; save via global single save bar.
+    await page.getByRole('button', { name: /^save changes$/i }).click()
+    await expect(page.getByText('Course settings saved')).toBeVisible({
       timeout: 8000,
     })
     await expect(page.getByText(/custom theme is active for this course/i)).toBeVisible({ timeout: 8000 })

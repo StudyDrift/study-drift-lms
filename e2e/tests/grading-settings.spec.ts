@@ -45,7 +45,7 @@ test.describe('Course Settings - Grading', () => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/grading`)
     await page.getByRole('combobox', { name: /display as/i }).selectOption('letter')
     await expect(page.locator('#grading-scheme-json')).toContainText('"A"', { timeout: 8000 })
-    await page.getByRole('button', { name: /save grade display scheme/i }).click()
+    await page.getByRole('button', { name: /^save changes$/i }).click()
     await expect(page.getByText('Grading scheme saved.', { exact: true })).toBeVisible({
       timeout: 8000,
     })
@@ -70,7 +70,7 @@ test.describe('Course Settings - Grading', () => {
 
     await instructorPage.goto(`/courses/${seededCourse.courseCode}/settings/grading`)
     await instructorPage.getByRole('combobox', { name: /display as/i }).selectOption('letter')
-    await instructorPage.getByRole('button', { name: /save grade display scheme/i }).click()
+    await instructorPage.getByRole('button', { name: /^save changes$/i }).click()
     await expect(
       instructorPage.getByText('Grading scheme saved.', { exact: true }),
     ).toBeVisible({ timeout: 8000 })
@@ -90,7 +90,7 @@ test.describe('Course Settings - Grading', () => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/grading`)
     await page.getByRole('combobox', { name: /display as/i }).selectOption('pass_fail')
     await page.locator('#pass-min-pct').fill('70')
-    await page.getByRole('button', { name: /save grade display scheme/i }).click()
+    await page.getByRole('button', { name: /^save changes$/i }).click()
     await expect(page.getByText('Grading scheme saved.', { exact: true })).toBeVisible({
       timeout: 8000,
     })
@@ -114,7 +114,7 @@ test.describe('Course Settings - Grading', () => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/grading`)
     await page.getByRole('combobox', { name: /display as/i }).selectOption('complete_incomplete')
     await page.locator('#complete-min-pct').fill('80')
-    await page.getByRole('button', { name: /save grade display scheme/i }).click()
+    await page.getByRole('button', { name: /^save changes$/i }).click()
     await expect(page.getByText('Grading scheme saved.', { exact: true })).toBeVisible({
       timeout: 8000,
     })
@@ -132,7 +132,7 @@ test.describe('Course Settings - Grading', () => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/grading`)
 
     await page.getByRole('radio', { name: /pass \/ fail/i }).click()
-    await page.getByRole('button', { name: /^save grading settings$/i }).click()
+    await page.getByRole('button', { name: /^save changes$/i }).click()
     await expect(page.getByText(/grading settings saved/i)).toBeVisible({ timeout: 8000 })
 
     const g = await apiGetCourseGrading(seededCourse.instructorToken, seededCourse.courseCode)
@@ -146,7 +146,7 @@ test.describe('Course Settings - Grading', () => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/grading`)
     const nameInput = page.locator('input[placeholder="e.g. Homework"]').first()
     await nameInput.fill('E2E Category Alpha')
-    await page.getByRole('button', { name: /^save grading settings$/i }).click()
+    await page.getByRole('button', { name: /^save changes$/i }).click()
     await expect(page.getByText(/grading settings saved/i)).toBeVisible({ timeout: 8000 })
 
     await page.reload()
@@ -159,7 +159,7 @@ test.describe('Course Settings - Grading', () => {
     await page.goto(`/courses/${seededCourse.courseCode}/settings/grading`)
 
     await page.getByRole('checkbox', { name: /enable standards-based grading/i }).click()
-    await page.getByRole('button', { name: /^save grading settings$/i }).click()
+    await page.getByRole('button', { name: /^save changes$/i }).click()
     await expect(page.getByText(/grading settings saved/i)).toBeVisible({ timeout: 8000 })
 
     const g = await apiGetCourseGrading(seededCourse.instructorToken, seededCourse.courseCode)

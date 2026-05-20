@@ -37,7 +37,13 @@ declare -a PLAYWRIGHT_TEST_ARGS=()
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PIDS=()
 PGDATA_DIR=""
-E2E_PG_PORT="${E2E_PG_PORT:-5454}"
+if [[ -z "${E2E_PG_PORT:-}" ]]; then
+  if command -v python3 &>/dev/null; then
+    E2E_PG_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')"
+  else
+    E2E_PG_PORT="5454"
+  fi
+fi
 
 # `go run` and `npm run dev` are parents of the real long-lived processes. A plain
 # `kill $pid` often stops only the wrapper, leaving the API or Vite child alive.

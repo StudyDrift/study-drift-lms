@@ -22,9 +22,6 @@ import { LmsPage } from './lms-page'
 
 
 
-
-
-
 function authorLabel(m: GroupMessage): string {
   return m.authorDisplayName?.trim() || m.authorEmail
 }

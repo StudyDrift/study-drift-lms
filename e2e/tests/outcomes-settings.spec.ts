@@ -92,7 +92,7 @@ test.describe('Course Settings - Outcomes', () => {
     const card = await outcomeCard(page, 'E2E Meta Outcome')
     await card.locator('input').first().fill('E2E Meta Outcome Updated')
     await card.locator('textarea').first().fill('Rewritten outcome description.')
-    await card.getByRole('button', { name: /^Save changes$/i }).click()
+    await page.getByRole('button', { name: /^Save changes$/i }).click()
 
     await expect.poll(async () => {
       const d = await apiGetCourseOutcomes(seededCourse.instructorToken, seededCourse.courseCode)
