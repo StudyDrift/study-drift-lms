@@ -395,7 +395,7 @@ function HomePage() {
 export default function App() {
   const hash = useHashRoute()
   const path = window.location.pathname
-  const route = path.startsWith('/docs')
+  const route = path !== '/'
     ? path
     : (hash.startsWith('#/') ? hash.slice(1) : '/')
 
