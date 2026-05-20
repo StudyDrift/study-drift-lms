@@ -21,6 +21,21 @@ html.dark {
   }
 }
 
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+.tooltip-in {
+  animation: tooltip-in 0.15s ease-out forwards;
+}
+
 @keyframes canvas-import-status-in {
   from {
     opacity: 0;
