@@ -195,7 +195,9 @@ func writeLocalFile(path string, r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = io.Copy(f, r)
-	return err
+	if _, err = io.Copy(f, r); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }

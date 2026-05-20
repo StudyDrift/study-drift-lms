@@ -25,11 +25,11 @@ func (d *LocalDriver) PutObject(ctx context.Context, key string, r io.Reader, _ 
 	if err != nil {
 		return fmt.Errorf("filestorage/local: create: %w", err)
 	}
-	defer f.Close()
 	if _, err := io.Copy(f, r); err != nil {
+		_ = f.Close()
 		return fmt.Errorf("filestorage/local: write: %w", err)
 	}
-	return nil
+	return f.Close()
 }
 
 func (d *LocalDriver) GetPresignedURL(_ context.Context, _ string, _ time.Duration) (string, error) {
