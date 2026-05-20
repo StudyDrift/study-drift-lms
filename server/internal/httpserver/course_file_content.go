@@ -1,18 +1,21 @@
 package httpserver
 
 import (
+	"errors"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lextures/lextures/server/internal/apierr"
 	"github.com/lextures/lextures/server/internal/repos/coursefiles"
+	"github.com/lextures/lextures/server/internal/service/filestorage"
 )
 
 // handleGetCourseFileContent is GET /api/v1/courses/{course_code}/course-files/{file_id}/content
-// (Rust `download_course_file_handler`) — private cache, same bytes as on-disk under COURSE_FILES_ROOT.
 func (d Deps) handleGetCourseFileContent() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
@@ -42,7 +45,30 @@ func (d Deps) handleGetCourseFileContent() http.HandlerFunc {
 			apierr.WriteJSON(w, http.StatusNotFound, apierr.CodeNotFound, "Not found.")
 			return
 		}
-		root := strings.TrimSpace(d.effectiveConfig().CourseFilesRoot)
+
+		cfg := d.effectiveConfig()
+
+		// S3-backed: generate presigned URL and redirect
+		if d.Storage != nil {
+			ttl := time.Duration(cfg.StoragePresignTTL) * time.Second
+			if ttl <= 0 {
+				ttl = time.Hour
+			}
+			presignURL, presignErr := d.Storage.GetPresignedURL(r.Context(), row.StorageKey, ttl)
+			if presignErr != nil && !errors.Is(presignErr, filestorage.ErrNoPresignedURL) {
+				log.Printf("course-file-content: presign key=%q err=%v", row.StorageKey, presignErr)
+				apierr.WriteJSON(w, http.StatusBadGateway, apierr.CodeInternal, "File temporarily unavailable — try again in a moment.")
+				return
+			}
+			if presignURL != "" {
+				http.Redirect(w, r, presignURL, http.StatusFound)
+				return
+			}
+			// local driver falls through to disk read below
+		}
+
+		// Local driver: serve bytes directly from disk
+		root := strings.TrimSpace(cfg.CourseFilesRoot)
 		if root == "" {
 			root = "data/course-files"
 		}
