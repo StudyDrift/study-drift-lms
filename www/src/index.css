@@ -113,6 +113,10 @@
     @apply rounded bg-stone-100 px-1.5 py-0.5 text-[0.85em] text-stone-800;
   }
 
+  img {
+    @apply my-8 w-full rounded-xl border border-stone-200 shadow-sm transition-shadow duration-300 hover:shadow-md;
+  }
+
   hr {
     @apply my-10 border-stone-200;
   }

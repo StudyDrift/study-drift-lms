@@ -15,6 +15,8 @@ import { Header } from './components/Header'
 import { HeroCanvas } from './HeroCanvas'
 import { BlogIndex } from './pages/BlogIndex'
 import { BlogPost } from './pages/BlogPost'
+import { DocsIndex } from './pages/DocsIndex'
+import { DocsPost } from './pages/DocsPost'
 import { GetStartedPage } from './pages/GetStartedPage'
 import { HigherEdPage } from './pages/HigherEdPage'
 import { K12Page } from './pages/K12Page'
@@ -382,6 +384,7 @@ function HomePage() {
             <a href="#/self-learner" className="no-underline transition-colors hover:text-stone-900">Self-Learner</a>
             <a href="#/pricing" className="no-underline transition-colors hover:text-stone-900">Pricing</a>
             <a href="#/blog" className="no-underline transition-colors hover:text-stone-900">Blog</a>
+            <a href="#/docs" className="no-underline transition-colors hover:text-stone-900">Documentation</a>
           </div>
         </div>
       </footer>
@@ -400,5 +403,7 @@ export default function App() {
   if (route === '/pricing') return <PricingPage />
   if (route === '/blog') return <BlogIndex />
   if (route.startsWith('/blog/')) return <BlogPost slug={route.slice('/blog/'.length)} />
+  if (route === '/docs') return <DocsIndex />
+  if (route.startsWith('/docs/')) return <DocsPost slug={route.slice('/docs/'.length)} />
   return <HomePage />
 }
