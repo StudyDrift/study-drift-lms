@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { RELEASE_VERSION } from '../../lib/release-version'
 import { useShellNav } from './use-shell-nav'
+import { SideNavTooltip } from './side-nav-tooltip'
 
 const linkClass =
   'text-slate-600 underline decoration-slate-300 underline-offset-2 transition hover:text-slate-900 hover:decoration-slate-500 dark:text-neutral-400 dark:decoration-neutral-600 dark:hover:text-neutral-100 dark:hover:decoration-neutral-400'
@@ -22,23 +23,25 @@ export function SideNavFooter() {
         sideNavCollapsed ? 'flex justify-center' : ''
       }`}
     >
-      <button
-        type="button"
-        onClick={toggleSideNav}
-        className={`mb-2 flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-800/90 dark:hover:text-neutral-50 ${
-          sideNavCollapsed ? 'justify-center' : ''
-        }`}
-        title={sideNavCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      >
-        {sideNavCollapsed ? (
-          <PanelLeftOpen className="h-5 w-5 shrink-0" />
-        ) : (
-          <>
-            <PanelLeftClose className="h-5 w-5 shrink-0" />
-            <span>Collapse</span>
-          </>
-        )}
-      </button>
+      <SideNavTooltip content={sideNavCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+        <button
+          type="button"
+          onClick={toggleSideNav}
+          className={`mb-2 flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-800/90 dark:hover:text-neutral-50 ${
+            sideNavCollapsed ? 'justify-center' : ''
+          }`}
+          title={!sideNavCollapsed ? 'Collapse sidebar' : undefined}
+        >
+          {sideNavCollapsed ? (
+            <PanelLeftOpen className="h-5 w-5 shrink-0" />
+          ) : (
+            <>
+              <PanelLeftClose className="h-5 w-5 shrink-0" />
+              <span>Collapse</span>
+            </>
+          )}
+        </button>
+      </SideNavTooltip>
 
       {!sideNavCollapsed && (
         <>

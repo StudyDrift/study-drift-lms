@@ -8,6 +8,7 @@ import { SideNavMainLinks } from './side-nav-main-links'
 import { SideNavFooter } from './side-nav-footer'
 import { SideNavSettingsLinks } from './side-nav-settings-links'
 import { SideNavCommandPaletteTrigger } from './side-nav-command-palette'
+import { SideNavTooltip } from './side-nav-tooltip'
 
 export function SideNav() {
   const { mobileNavOpen, closeMobileNav, sideNavCollapsed } = useShellNav()
@@ -82,22 +83,24 @@ export function SideNav() {
         } max-md:fixed max-md:left-0 max-md:top-0 max-md:z-40 max-md:shadow-2xl max-md:transition-transform max-md:duration-200 max-md:ease-out max-md:pt-[env(safe-area-inset-top)] max-md:pb-[env(safe-area-inset-bottom)]`}
       >
         <div className="flex shrink-0 items-center px-3 pb-1 pt-3 md:px-3 md:pb-2 md:pt-4">
-          <NavLink
-            to="/"
-            className={`flex min-h-0 min-w-0 flex-1 items-center gap-3 rounded-2xl p-1 outline-none ring-slate-400/30 transition hover:bg-white/50 focus-visible:ring-2 dark:ring-neutral-500/40 dark:hover:bg-white/5 ${
-              sideNavCollapsed ? 'justify-center pr-1' : 'pr-2'
-            }`}
-            end
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-900/[0.06] dark:bg-neutral-800 dark:ring-white/10">
-              <BrandLogo className="mx-0 h-7 w-auto shrink-0 object-contain object-left" />
-            </span>
-            {!sideNavCollapsed && (
-              <span className="truncate text-[1.05rem] font-semibold tracking-tight text-slate-950 dark:text-neutral-100">
-                Lextures
+          <SideNavTooltip content="Lextures">
+            <NavLink
+              to="/"
+              className={`flex min-h-0 min-w-0 flex-1 items-center gap-3 rounded-2xl p-1 outline-none ring-slate-400/30 transition hover:bg-white/50 focus-visible:ring-2 dark:ring-neutral-500/40 dark:hover:bg-white/5 ${
+                sideNavCollapsed ? 'justify-center pr-1' : 'pr-2'
+              }`}
+              end
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-900/[0.06] dark:bg-neutral-800 dark:ring-white/10">
+                <BrandLogo className="mx-0 h-7 w-auto shrink-0 object-contain object-left" />
               </span>
-            )}
-          </NavLink>
+              {!sideNavCollapsed && (
+                <span className="truncate text-[1.05rem] font-semibold tracking-tight text-slate-950 dark:text-neutral-100">
+                  Lextures
+                </span>
+              )}
+            </NavLink>
+          </SideNavTooltip>
         </div>
         <SideNavCommandPaletteTrigger />
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
