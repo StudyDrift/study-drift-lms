@@ -1,4 +1,6 @@
 import { Outlet, useParams } from 'react-router-dom'
+import { TutorPanel } from '../../components/TutorPanel'
+import { useCourseNavFeatures } from '../../context/course-nav-features-context'
 import { CourseSyllabusAcceptanceOverlay } from './course-syllabus-acceptance-overlay'
 
 /**
@@ -7,11 +9,13 @@ import { CourseSyllabusAcceptanceOverlay } from './course-syllabus-acceptance-ov
  */
 export default function CourseLayout() {
   const { courseCode } = useParams<{ courseCode: string }>()
+  const { aiTutorEnabled } = useCourseNavFeatures()
 
   return (
     <>
       {courseCode ? <CourseSyllabusAcceptanceOverlay courseCode={courseCode} /> : null}
       <Outlet />
+      {courseCode && aiTutorEnabled ? <TutorPanel courseCode={courseCode} /> : null}
     </>
   )
 }

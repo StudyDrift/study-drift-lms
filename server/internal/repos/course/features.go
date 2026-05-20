@@ -27,6 +27,7 @@ func PatchFeatures(
 	liveSessionsEnabled bool,
 	groupSpacesEnabled bool,
 	officeHoursEnabled bool,
+	aiTutorEnabled bool,
 ) (*CoursePublic, error) {
 	const q = `
 		UPDATE course.courses
@@ -47,8 +48,9 @@ func PatchFeatures(
 			live_sessions_enabled = $14,
 			group_spaces_enabled = $15,
 			office_hours_enabled = $16,
+			ai_tutor_enabled = $17,
 			updated_at = NOW()
-		WHERE course_code = $17
+		WHERE course_code = $18
 	`
 
 	tag, err := pool.Exec(ctx, q,
@@ -56,7 +58,7 @@ func PatchFeatures(
 		lockdownModeEnabled, standardsAlignmentEnabled, adaptivePathsEnabled, srsEnabled,
 		diagnosticAssessmentsEnabled, hintScaffoldingEnabled, misconceptionDetectionEnabled,
 		discussionsEnabled, collabDocsEnabled, liveSessionsEnabled, groupSpacesEnabled,
-		officeHoursEnabled,
+		officeHoursEnabled, aiTutorEnabled,
 		courseCode,
 	)
 	if err != nil {
