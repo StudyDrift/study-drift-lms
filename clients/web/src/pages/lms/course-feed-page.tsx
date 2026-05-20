@@ -15,6 +15,7 @@ import { Navigate, useParams } from 'react-router-dom'
 import { EmptyState } from '../../components/ui/empty-state'
 import { CourseFileMarkdownImage } from '../../components/syllabus/course-file-markdown-image'
 import { FeedComposer } from '../../components/feed/feed-composer'
+import { TranslateButton } from '../../components/feed/translate-button'
 import { wsUrl } from '../../lib/api'
 import {
   bodyHasEveryoneTag,
@@ -920,6 +921,7 @@ export default function CourseFeedPage() {
                       }}
                       onToggleLike={() => void toggleLike(m.id, m.viewerHasLiked)}
                       onTogglePin={() => void togglePin(m.id, !m.pinnedAt)}
+                      showTranslate={course?.multilingualMessagingEnabled === true}
                     />
                     {m.replies.length > 0 && (
                       <>
@@ -962,6 +964,7 @@ export default function CourseFeedPage() {
                                 }}
                                 onToggleLike={() => void toggleLike(r.id, r.viewerHasLiked)}
                                 onTogglePin={() => {}}
+                                showTranslate={course?.multilingualMessagingEnabled === true}
                               />
                               </div>
                             ))}
@@ -1033,6 +1036,7 @@ type MessageBlockProps = {
   onReply: () => void
   onToggleLike: () => void
   onTogglePin: () => void
+  showTranslate?: boolean
 }
 
 function MessageBlock({
@@ -1051,6 +1055,7 @@ function MessageBlock({
   onReply,
   onToggleLike,
   onTogglePin,
+  showTranslate,
 }: MessageBlockProps) {
   const mine =
     viewerId !== null && m.authorUserId.toLowerCase() === viewerId.toLowerCase()
@@ -1188,6 +1193,13 @@ function MessageBlock({
           ) : (
             <div className="mt-1.5">
               <FeedMessageBody body={m.body} peopleById={peopleById} roster={roster} />
+              {showTranslate && (
+                <TranslateButton
+                  contentType="feed_post"
+                  contentId={m.id}
+                  text={m.body}
+                />
+              )}
             </div>
           )}
           {!editing && (

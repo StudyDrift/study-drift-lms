@@ -72,6 +72,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
   const liveSessionsEnabled = course.liveSessionsEnabled !== false
   const officeHoursEnabled = course.officeHoursEnabled === true
   const aiTutorEnabled = course.aiTutorEnabled === true
+  const multilingualMessagingEnabled = course.multilingualMessagingEnabled === true
 
   const persist = useCallback(
     async (patch: {
@@ -92,6 +93,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       liveSessionsEnabled?: boolean
       officeHoursEnabled?: boolean
       aiTutorEnabled?: boolean
+      multilingualMessagingEnabled?: boolean
     }) => {
       setSaving(true)
       setMessage(null)
@@ -117,6 +119,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           liveSessionsEnabled: patch.liveSessionsEnabled ?? liveSessionsEnabled,
           officeHoursEnabled: patch.officeHoursEnabled ?? officeHoursEnabled,
           aiTutorEnabled: patch.aiTutorEnabled ?? aiTutorEnabled,
+          multilingualMessagingEnabled: patch.multilingualMessagingEnabled ?? multilingualMessagingEnabled,
         }
         const updated = await patchCourseFeatures(courseCode, body)
         onCourseUpdated(updated)
@@ -143,6 +146,7 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
       liveSessionsEnabled,
       officeHoursEnabled,
       aiTutorEnabled,
+      multilingualMessagingEnabled,
       calendarEnabled,
       courseCode,
       feedEnabled,
@@ -286,6 +290,13 @@ export function CourseFeaturesSection({ courseCode, course, onCourseUpdated }: P
           enabled={aiTutorEnabled}
           disabled={saving}
           onToggle={() => void persist({ aiTutorEnabled: !aiTutorEnabled })}
+        />
+        <FeatureToggleRow
+          label="Multilingual Messaging"
+          description="Show a Translate button on feed posts, discussion posts, and inbox messages so users can read content in their preferred language (plan 6.10)."
+          enabled={multilingualMessagingEnabled}
+          disabled={saving}
+          onToggle={() => void persist({ multilingualMessagingEnabled: !multilingualMessagingEnabled })}
         />
       </div>
 
