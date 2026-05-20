@@ -7,9 +7,9 @@ const LINKS = {
 } as const
 
 const INDUSTRIES = [
-  { label: 'Higher Education', href: '#/higher-ed' },
-  { label: 'K–12', href: '#/k-12' },
-  { label: 'Self-Learner', href: '#/self-learner' },
+  { label: 'Higher Education', href: '/higher-ed' },
+  { label: 'K–12', href: '/k-12' },
+  { label: 'Self-Learner', href: '/self-learner' },
 ]
 
 function LogoMark({ className = '' }: { className?: string }) {
@@ -82,27 +82,27 @@ export function Header() {
     <>
       <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-stone-50/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <a href="#/" className="flex items-center gap-2.5 no-underline">
+          <a href="/" className="flex items-center gap-2.5 no-underline">
             <LogoMark className="h-8 w-8 shrink-0" />
             <span className="text-base font-semibold tracking-tight text-stone-900">Lextures</span>
           </a>
 
           <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
             <a
-              href="#features"
+              href="/features"
               className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 no-underline transition-colors hover:bg-stone-200/60 hover:text-stone-900"
             >
               Features
             </a>
             <IndustriesDropdown />
             <a
-              href="#/pricing"
+              href="/pricing"
               className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 no-underline transition-colors hover:bg-stone-200/60 hover:text-stone-900"
             >
               Pricing
             </a>
             <a
-              href="#/blog"
+              href="/blog"
               className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 no-underline transition-colors hover:bg-stone-200/60 hover:text-stone-900"
             >
               Blog
@@ -125,7 +125,7 @@ export function Header() {
             >
               <Github className="h-5 w-5" />
             </a>
-            <a href="#/get-started" className="btn-primary">Get Started</a>
+            <a href="/get-started" className="btn-primary">Get Started</a>
           </div>
 
           <button
@@ -166,7 +166,7 @@ export function Header() {
 
           <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-4" aria-label="Mobile primary">
             <a
-              href="#features"
+              href="/features"
               onClick={closeMenu}
               className="rounded-lg px-4 py-3.5 text-base font-medium text-stone-800 no-underline transition hover:bg-stone-200/50"
             >
@@ -204,14 +204,14 @@ export function Header() {
             </div>
 
             <a
-              href="#/pricing"
+              href="/pricing"
               onClick={closeMenu}
               className="rounded-lg px-4 py-3.5 text-base font-medium text-stone-800 no-underline transition hover:bg-stone-200/50"
             >
               Pricing
             </a>
             <a
-              href="#/blog"
+              href="/blog"
               onClick={closeMenu}
               className="rounded-lg px-4 py-3.5 text-base font-medium text-stone-800 no-underline transition hover:bg-stone-200/50"
             >
@@ -227,7 +227,7 @@ export function Header() {
           </nav>
 
           <div className="flex flex-col gap-3 border-t border-stone-200 p-4 pb-8">
-            <a href="#/get-started" onClick={closeMenu} className="btn-primary w-full justify-center">
+            <a href="/get-started" onClick={closeMenu} className="btn-primary w-full justify-center">
               Get Started
             </a>
             <a

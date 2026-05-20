@@ -149,7 +149,7 @@ function HomePage() {
               running at real scale—not a slide deck with a gradebook attached.
             </p>
             <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <a href="#/get-started" className="btn-primary h-12 gap-2 px-8 text-base">
+              <a href="/get-started" className="btn-primary h-12 gap-2 px-8 text-base">
                 Get Started
                 <ArrowRight className="h-5 w-5" aria-hidden />
               </a>
@@ -252,7 +252,7 @@ function HomePage() {
                 Lextures is under active development. The public demo is the fastest way to see
                 current capabilities and the direction the product is heading.
               </p>
-              <a href="#/get-started" className="btn-primary mt-6 inline-flex gap-2">
+              <a href="/get-started" className="btn-primary mt-6 inline-flex gap-2">
                 Get Started
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </a>
@@ -348,7 +348,7 @@ function HomePage() {
                 matches your institution.
               </p>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <a href="#/get-started" className="btn-primary gap-2 px-6 py-3">
+                <a href="/get-started" className="btn-primary gap-2 px-6 py-3">
                   Get Started
                   <ArrowRight className="h-4 w-4" aria-hidden />
                 </a>
@@ -378,12 +378,12 @@ function HomePage() {
           <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm font-medium text-stone-500">
             <a href={LINKS.demo} className="no-underline transition-colors hover:text-stone-900">Live demo</a>
             <a href={LINKS.github} className="no-underline transition-colors hover:text-stone-900">GitHub</a>
-            <a href="#features" className="no-underline transition-colors hover:text-stone-900">Features</a>
-            <a href="#/higher-ed" className="no-underline transition-colors hover:text-stone-900">Higher Education</a>
-            <a href="#/k-12" className="no-underline transition-colors hover:text-stone-900">K–12</a>
-            <a href="#/self-learner" className="no-underline transition-colors hover:text-stone-900">Self-Learner</a>
-            <a href="#/pricing" className="no-underline transition-colors hover:text-stone-900">Pricing</a>
-            <a href="#/blog" className="no-underline transition-colors hover:text-stone-900">Blog</a>
+            <a href="/features" className="no-underline transition-colors hover:text-stone-900">Features</a>
+            <a href="/higher-ed" className="no-underline transition-colors hover:text-stone-900">Higher Education</a>
+            <a href="/k-12" className="no-underline transition-colors hover:text-stone-900">K–12</a>
+            <a href="/self-learner" className="no-underline transition-colors hover:text-stone-900">Self-Learner</a>
+            <a href="/pricing" className="no-underline transition-colors hover:text-stone-900">Pricing</a>
+            <a href="/blog" className="no-underline transition-colors hover:text-stone-900">Blog</a>
             <a href="/docs" className="no-underline transition-colors hover:text-stone-900">Documentation</a>
           </div>
         </div>
