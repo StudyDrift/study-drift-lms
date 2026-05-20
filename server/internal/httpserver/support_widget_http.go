@@ -203,9 +203,16 @@ func contextualArticlesForRoute(route string) []helpArticle {
 }
 
 var defaultArticles = []helpArticle{
-	{Title: "Getting started with Lextures", Slug: "getting-started", URL: "/help/getting-started"},
-	{Title: "Account & profile settings", Slug: "account-settings", URL: "/help/account-settings"},
-	{Title: "Contact support", Slug: "contact-support", URL: "/help/contact-support"},
+	{
+		Title: "Finding Your Course for the First Time",
+		Slug:  "finding-your-course",
+		URL:   "https://lextures.com/#/docs/finding-your-course",
+	},
+	{
+		Title: "Navigating the Course Interface",
+		Slug:  "navigating-the-course-interface",
+		URL:   "https://lextures.com/#/docs/navigating-the-course-interface",
+	},
 }
 
 var articleMapping = []struct {
@@ -215,40 +222,56 @@ var articleMapping = []struct {
 	{
 		prefix: "/courses",
 		articles: []helpArticle{
-			{Title: "Course overview", Slug: "course-overview", URL: "/help/course-overview"},
-			{Title: "Navigating your course", Slug: "navigating-courses", URL: "/help/navigating-courses"},
-			{Title: "Assignments & submissions", Slug: "assignments", URL: "/help/assignments"},
+			{
+				Title: "Finding Your Course for the First Time",
+				Slug:  "finding-your-course",
+				URL:   "https://lextures.com/#/docs/finding-your-course",
+			},
+			{
+				Title: "Navigating the Course Interface",
+				Slug:  "navigating-the-course-interface",
+				URL:   "https://lextures.com/#/docs/navigating-the-course-interface",
+			},
 		},
 	},
 	{
 		prefix: "/quiz",
 		articles: []helpArticle{
-			{Title: "Taking a quiz", Slug: "taking-quizzes", URL: "/help/taking-quizzes"},
-			{Title: "Quiz attempts & time limits", Slug: "quiz-attempts", URL: "/help/quiz-attempts"},
-			{Title: "Quiz results & feedback", Slug: "quiz-results", URL: "/help/quiz-results"},
+			{
+				Title: "Navigating the Course Interface",
+				Slug:  "navigating-the-course-interface",
+				URL:   "https://lextures.com/#/docs/navigating-the-course-interface",
+			},
 		},
 	},
 	{
 		prefix: "/gradebook",
 		articles: []helpArticle{
-			{Title: "Understanding your grades", Slug: "grades", URL: "/help/grades"},
-			{Title: "Grade disputes", Slug: "grade-disputes", URL: "/help/grade-disputes"},
-			{Title: "Grading scales explained", Slug: "grading-scales", URL: "/help/grading-scales"},
+			{
+				Title: "Navigating the Course Interface",
+				Slug:  "navigating-the-course-interface",
+				URL:   "https://lextures.com/#/docs/navigating-the-course-interface",
+			},
 		},
 	},
 	{
 		prefix: "/settings",
 		articles: []helpArticle{
-			{Title: "Account & profile settings", Slug: "account-settings", URL: "/help/account-settings"},
-			{Title: "Notification preferences", Slug: "notifications", URL: "/help/notifications"},
-			{Title: "Privacy & data", Slug: "privacy", URL: "/help/privacy"},
+			{
+				Title: "Finding Your Course for the First Time",
+				Slug:  "finding-your-course",
+				URL:   "https://lextures.com/#/docs/finding-your-course",
+			},
 		},
 	},
 	{
 		prefix: "/inbox",
 		articles: []helpArticle{
-			{Title: "Using the inbox", Slug: "inbox", URL: "/help/inbox"},
-			{Title: "Messaging classmates", Slug: "messaging", URL: "/help/messaging"},
+			{
+				Title: "Navigating the Course Interface",
+				Slug:  "navigating-the-course-interface",
+				URL:   "https://lextures.com/#/docs/navigating-the-course-interface",
+			},
 		},
 	},
 }
