@@ -64,6 +64,7 @@ export const courseSchema = z
     groupSpacesEnabled: z.boolean().optional(),
     officeHoursEnabled: z.boolean().optional(),
     aiTutorEnabled: z.boolean().optional(),
+    multilingualMessagingEnabled: z.boolean().optional(),
     courseType: z.string().optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
