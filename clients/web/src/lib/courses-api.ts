@@ -141,6 +141,8 @@ export type CoursePublic = {
   officeHoursEnabled?: boolean
   /** Plan 6.9 — conversational AI tutor side-panel (default off when omitted). */
   aiTutorEnabled?: boolean
+  /** Plan 6.10 — Translate button on feed/discussion/inbox messages (default off when omitted). */
+  multilingualMessagingEnabled?: boolean
   /** `traditional` or `competency_based` (server default when omitted: traditional). */
   courseType?: string
   createdAt: string
@@ -735,6 +737,7 @@ export async function patchCourseFeatures(
     liveSessionsEnabled?: boolean
     officeHoursEnabled?: boolean
     aiTutorEnabled?: boolean
+    multilingualMessagingEnabled?: boolean
   },
 ): Promise<CoursePublic> {
   const res = await authorizedFetch(
@@ -759,6 +762,7 @@ export async function patchCourseFeatures(
         ...(body.liveSessionsEnabled !== undefined ? { liveSessionsEnabled: body.liveSessionsEnabled } : {}),
         ...(body.officeHoursEnabled !== undefined ? { officeHoursEnabled: body.officeHoursEnabled } : {}),
         ...(body.aiTutorEnabled !== undefined ? { aiTutorEnabled: body.aiTutorEnabled } : {}),
+        ...(body.multilingualMessagingEnabled !== undefined ? { multilingualMessagingEnabled: body.multilingualMessagingEnabled } : {}),
         ...(body.sectionsEnabled !== undefined ? { sectionsEnabled: body.sectionsEnabled } : {}),
       }),
     },
