@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test'
 
+test.skip(!!process.env.CI, 'docs screenshot generation — run locally only')
+
 test('take course creation screenshots', async ({ page }) => {
   // Set standard viewport size
   await page.setViewportSize({ width: 1280, height: 800 })
