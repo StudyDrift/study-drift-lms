@@ -159,6 +159,9 @@ type Config struct {
 	StoragePresignTTL int
 	// StorageMigrateLocal, when true, copies existing local files to the object store on startup.
 	StorageMigrateLocal bool
+
+	// TusUploadTTLHours is how long stalled (incomplete) tus uploads are retained before cleanup (default 48).
+	TusUploadTTLHours int
 }
 
 // Load reads configuration from the environment.
@@ -293,6 +296,8 @@ func Load() Config {
 		StorageUseSSL:          storageUseSSL(),
 		StoragePresignTTL:      storagePresignTTL(),
 		StorageMigrateLocal:    boolEnv("STORAGE_MIGRATE_LOCAL"),
+
+		TusUploadTTLHours: tusUploadTTLHours(),
 	}
 }
 
@@ -480,6 +485,18 @@ func httpAddr() string {
 	}
 	// e.g. "127.0.0.1:8080"
 	return p
+}
+
+func tusUploadTTLHours() int {
+	raw := strings.TrimSpace(os.Getenv("TUS_UPLOAD_TTL_HOURS"))
+	if raw == "" {
+		return 48
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 48
+	}
+	return n
 }
 
 func storagePresignTTL() int {
