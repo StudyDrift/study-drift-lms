@@ -267,9 +267,7 @@ export function TopBar() {
   const { mobileNavOpen, setMobileNavOpen } = useShellNav()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
 
-  const [showShortcutTip, setShowShortcutTip] = useState(
-    () => isPostLoginShortcutTipPending() && !isSearchShortcutTipDismissedPermanently(),
-  )
+  const [showShortcutTip, setShowShortcutTip] = useState(false)
   const [shortcutTipTop, setShortcutTipTop] = useState<number | null>(null)
 
   useLayoutEffect(() => {
