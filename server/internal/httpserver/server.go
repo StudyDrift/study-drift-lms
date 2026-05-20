@@ -18,6 +18,7 @@ import (
 	"github.com/lextures/lextures/server/internal/platformstate"
 	"github.com/lextures/lextures/server/internal/repos/orgbranding"
 	"github.com/lextures/lextures/server/internal/service/cleverauth"
+	"github.com/lextures/lextures/server/internal/service/filestorage"
 	"github.com/lextures/lextures/server/internal/service/oidcauth"
 	"github.com/lextures/lextures/server/internal/service/openrouter"
 )
@@ -40,6 +41,8 @@ type Deps struct {
 	PasswordChecker hibp.Checker
 	// NotifHub broadcasts SSE signals for real-time in-app notification bell updates (plan 6.3). Optional.
 	NotifHub *notifevents.Hub
+	// Storage is the object-storage driver (plan 8.1). When nil, falls back to local disk reads.
+	Storage filestorage.Driver
 }
 
 func (d Deps) effectiveConfig() config.Config {

@@ -27,6 +27,7 @@ import (
 	"github.com/lextures/lextures/server/internal/platformstate"
 	"github.com/lextures/lextures/server/internal/repos/orgbranding"
 	"github.com/lextures/lextures/server/internal/repos/platformconfig"
+	"github.com/lextures/lextures/server/internal/service/filestorage"
 	"github.com/lextures/lextures/server/internal/service/oidcauth"
 )
 
@@ -64,6 +65,20 @@ func Run(ctx context.Context, fsys fs.FS) error {
 
 	background.Start(ctx, pool, merged)
 
+	storage, storageErr := filestorage.New(filestorage.BackendConfig{
+		Backend:         cfg.StorageBackend,
+		LocalRoot:       cfg.CourseFilesRoot,
+		Endpoint:        cfg.StorageEndpoint,
+		AccessKeyID:     cfg.StorageAccessKeyID,
+		SecretAccessKey: cfg.StorageSecretAccessKey,
+		Bucket:          cfg.StorageBucket,
+		UseSSL:          cfg.StorageUseSSL,
+		Region:          cfg.StorageRegion,
+	})
+	if storageErr != nil {
+		return fmt.Errorf("app: storage: %w", storageErr)
+	}
+
 	ltiRT := lti.NewFromConfig(merged)
 	brandingResolver := orgbranding.NewResolver(pool, merged.BrandingMultitenantHostSuffix, webHostFromOrigin(merged.PublicWebOrigin))
 	deps := httpserver.Deps{
@@ -76,6 +91,7 @@ func Run(ctx context.Context, fsys fs.FS) error {
 		Lti:              ltiRT,
 		BrandingResolver: brandingResolver,
 		NotifHub:         notifevents.New(),
+		Storage:          storage,
 	}
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,

@@ -140,6 +140,25 @@ type Config struct {
 	BBBBaseURL string
 	// BBBSecret is the BigBlueButton shared secret for request signing.
 	BBBSecret string
+
+	// StorageBackend selects the file storage driver: "local" (default), "s3", "r2", "minio".
+	StorageBackend string
+	// StorageBucket is the S3-compatible bucket name.
+	StorageBucket string
+	// StorageEndpoint is the S3-compatible endpoint host (e.g. "play.min.io:9000"). Empty defaults per backend.
+	StorageEndpoint string
+	// StorageAccessKeyID is the S3 access key ID.
+	StorageAccessKeyID string
+	// StorageSecretAccessKey is the S3 secret access key.
+	StorageSecretAccessKey string
+	// StorageRegion is the AWS/R2 region (e.g. "us-east-1"). Optional for MinIO.
+	StorageRegion string
+	// StorageUseSSL controls TLS for S3 connections (default true for s3/r2, false for minio in dev).
+	StorageUseSSL bool
+	// StoragePresignTTL is the presigned URL TTL in seconds (default 3600).
+	StoragePresignTTL int
+	// StorageMigrateLocal, when true, copies existing local files to the object store on startup.
+	StorageMigrateLocal bool
 }
 
 // Load reads configuration from the environment.
@@ -264,6 +283,16 @@ func Load() Config {
 		JitsiAppSecret:          firstNonEmptyTrimmed("JITSI_APP_SECRET"),
 		BBBBaseURL:              firstNonEmptyTrimmed("BBB_BASE_URL"),
 		BBBSecret:               firstNonEmptyTrimmed("BBB_SECRET"),
+
+		StorageBackend:         firstNonEmptyTrimmed("STORAGE_BACKEND"),
+		StorageBucket:          firstNonEmptyTrimmed("STORAGE_BUCKET", "AWS_BUCKET"),
+		StorageEndpoint:        firstNonEmptyTrimmed("STORAGE_ENDPOINT"),
+		StorageAccessKeyID:     firstNonEmptyTrimmed("STORAGE_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"),
+		StorageSecretAccessKey: firstNonEmptyTrimmed("STORAGE_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"),
+		StorageRegion:          firstNonEmptyTrimmed("STORAGE_REGION", "AWS_REGION"),
+		StorageUseSSL:          storageUseSSL(),
+		StoragePresignTTL:      storagePresignTTL(),
+		StorageMigrateLocal:    boolEnv("STORAGE_MIGRATE_LOCAL"),
 	}
 }
 
@@ -451,4 +480,30 @@ func httpAddr() string {
 	}
 	// e.g. "127.0.0.1:8080"
 	return p
+}
+
+func storagePresignTTL() int {
+	raw := strings.TrimSpace(os.Getenv("STORAGE_PRESIGN_TTL_SECS"))
+	if raw == "" {
+		return 3600
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 3600
+	}
+	return n
+}
+
+func storageUseSSL() bool {
+	v, ok := os.LookupEnv("STORAGE_USE_SSL")
+	if !ok {
+		// Default to true for security
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
 }
