@@ -14,10 +14,6 @@ export function SideNavTooltip({ children, content }: SideNavTooltipProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
-    if (!open || !sideNavCollapsed) {
-      setPos(null)
-      return
-    }
     const measure = () => {
       if (ref.current) {
         const r = ref.current.getBoundingClientRect()
@@ -49,7 +45,10 @@ export function SideNavTooltip({ children, content }: SideNavTooltipProps) {
     <div
       ref={ref}
       onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseLeave={() => {
+        setOpen(false)
+        setPos(null)
+      }}
       className="flex w-full min-w-0"
     >
       {children}
