@@ -60,7 +60,7 @@ export function DocsIndex() {
               Guides, tutorials, and documentation to help you get the most out of Lextures.
             </p>
 
-            <div className="mt-10 max-w-2xl">
+            <div className="mt-10 w-full">
               <div className="relative group">
                 <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center">
                   <Search className="h-5 w-5 text-stone-400 group-focus-within:text-accent transition-colors" aria-hidden />
