@@ -1,22 +1,17 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+
 import { ChevronDown, LogOut, Menu, User } from 'lucide-react'
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { setCourseViewAs, useCourseViewAs } from '../../lib/course-view-as'
 import { apiUrl, authorizedFetch } from '../../lib/api'
 import { useViewerEnrollmentRoles } from '../../lib/use-viewer-enrollment-roles'
-import { useKeyboardShortcutsSheet } from '../keyboard-shortcuts/keyboard-shortcuts-context'
-import {
-  dismissSearchShortcutTip,
-  isPostLoginShortcutTipPending,
-  isSearchShortcutTipDismissedPermanently,
-} from '../../lib/post-login-shortcut-tip'
+
+
 import { clearSessionTokens, getRefreshToken } from '../../lib/session-tokens'
 import { applyUiTheme } from '../../lib/ui-theme'
 import {
   initialsFromName,
   profileName,
-  shortcutHint,
   type TopBarAccountProfile,
 } from './top-bar-utils'
 import { useShellNav } from './use-shell-nav'
@@ -263,92 +258,8 @@ function CourseEnrollmentViewDropdown() {
 }
 
 export function TopBar() {
-  const { openSheet } = useKeyboardShortcutsSheet()
   const { mobileNavOpen, setMobileNavOpen } = useShellNav()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-
-  const [showShortcutTip, setShowShortcutTip] = useState(
-    () => isPostLoginShortcutTipPending() && !isSearchShortcutTipDismissedPermanently(),
-  )
-  const [shortcutTipTop, setShortcutTipTop] = useState<number | null>(null)
-
-  useLayoutEffect(() => {
-    if (!showShortcutTip) {
-      const cancelId = requestAnimationFrame(() => setShortcutTipTop(null))
-      return () => cancelAnimationFrame(cancelId)
-    }
-    const measure = () => {
-      const wide = window.matchMedia('(min-width: 768px)').matches
-      const el = document.querySelector<HTMLElement>(
-        wide ? '[data-command-palette-anchor="sidebar"]' : '[data-command-palette-anchor="topbar"]',
-      )
-      if (!el) {
-        setShortcutTipTop(null)
-        return
-      }
-      const r = el.getBoundingClientRect()
-      setShortcutTipTop(r.bottom + 10)
-    }
-    const frameId = requestAnimationFrame(measure)
-    const scheduleMeasure = () => requestAnimationFrame(measure)
-    window.addEventListener('resize', scheduleMeasure)
-    const mq = window.matchMedia('(min-width: 768px)')
-    mq.addEventListener('change', scheduleMeasure)
-    const ro = new ResizeObserver(scheduleMeasure)
-    const sidebar = document.querySelector<HTMLElement>('[data-command-palette-anchor="sidebar"]')
-    const topbar = document.querySelector<HTMLElement>('[data-command-palette-anchor="topbar"]')
-    if (sidebar) ro.observe(sidebar)
-    if (topbar) ro.observe(topbar)
-    return () => {
-      cancelAnimationFrame(frameId)
-      window.removeEventListener('resize', scheduleMeasure)
-      mq.removeEventListener('change', scheduleMeasure)
-      ro.disconnect()
-    }
-  }, [showShortcutTip])
-
-  function dismissShortcutTip() {
-    dismissSearchShortcutTip()
-    setShowShortcutTip(false)
-    setShortcutTipTop(null)
-  }
-
-  const shortcutTipPortal =
-    showShortcutTip && shortcutTipTop != null
-      ? createPortal(
-          <div
-            className="fixed left-4 right-4 z-[95] mx-auto max-w-sm rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-lg shadow-slate-900/15 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:shadow-black/40"
-            style={{ top: shortcutTipTop }}
-            role="status"
-          >
-            <p className="font-medium text-slate-900 dark:text-neutral-100">Search from anywhere</p>
-            <p className="mt-2 leading-relaxed text-slate-600 dark:text-neutral-300">
-              Press <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-xs text-slate-700 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200">{shortcutHint()}</kbd>{' '}
-              or use the search field. Press <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-xs text-slate-700 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200">?</kbd> for
-              all shortcuts.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  openSheet()
-                }}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
-              >
-                View shortcuts
-              </button>
-              <button
-                type="button"
-                onClick={dismissShortcutTip}
-                className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-              >
-                Got it
-              </button>
-            </div>
-          </div>,
-          document.body,
-        )
-      : null
 
   return (
     <header className="lms-chrome flex h-14 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-2 shadow-sm shadow-slate-900/5 print:hidden sm:gap-3 sm:px-4 md:gap-4 md:px-6 dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-black/20">
@@ -372,7 +283,6 @@ export function TopBar() {
         <UserMenu />
       </div>
       <NotificationsDrawer open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
-      {shortcutTipPortal}
     </header>
   )
 }

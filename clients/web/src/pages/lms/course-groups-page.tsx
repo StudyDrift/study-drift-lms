@@ -26,6 +26,7 @@ function isCourseStaff(roles: string[] | undefined): boolean {
 }
 
 
+
 function authorLabel(m: GroupMessage): string {
   return m.authorDisplayName?.trim() || m.authorEmail
 }

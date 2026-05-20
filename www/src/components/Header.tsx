@@ -107,6 +107,12 @@ export function Header() {
             >
               Blog
             </a>
+            <a
+              href="#/docs"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 no-underline transition-colors hover:bg-stone-200/60 hover:text-stone-900"
+            >
+              Documentation
+            </a>
           </nav>
 
           <div className="hidden items-center gap-3 md:flex">
@@ -210,6 +216,13 @@ export function Header() {
               className="rounded-lg px-4 py-3.5 text-base font-medium text-stone-800 no-underline transition hover:bg-stone-200/50"
             >
               Blog
+            </a>
+            <a
+              href="#/docs"
+              onClick={closeMenu}
+              className="rounded-lg px-4 py-3.5 text-base font-medium text-stone-800 no-underline transition hover:bg-stone-200/50"
+            >
+              Documentation
             </a>
           </nav>
 

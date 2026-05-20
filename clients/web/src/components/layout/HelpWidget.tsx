@@ -9,7 +9,7 @@ interface HelpArticle {
   slug: string
 }
 
-const HELP_CENTER_URL = '/help'
+const HELP_CENTER_URL = '/#/docs'
 
 export function HelpWidget() {
   const [open, setOpen] = useState(false)
