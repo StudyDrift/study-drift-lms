@@ -16,6 +16,7 @@ import { TopBar } from './top-bar'
 import { UiThemeSync } from './ui-theme-sync'
 import { LmsExperienceRoot } from './lms-experience-root'
 import { HelpWidget } from './HelpWidget'
+import { OfflineBanner } from '../offline-banner'
 
 function AppShellLayout() {
   const location = useLocation()
@@ -45,6 +46,7 @@ function AppShellLayout() {
           ) : (
             <TopBar />
           )}
+          <OfflineBanner />
           <main className="lms-scope lms-print-root flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto dark:bg-neutral-900">
             <Outlet />
           </main>

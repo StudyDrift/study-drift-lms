@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, ChevronDown, Eye, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, CheckCircle, ChevronDown, Download, Eye, Loader2, Pencil, Plus, Sparkles, Trash2, WifiOff, X } from 'lucide-react'
+import { useOnlineStatus } from '../../hooks/use-online-status'
+import { useOfflineContent } from '../../hooks/use-offline-content'
 import { ContentPageReader } from '../../components/content-page/content-page-reader'
 import { SyllabusBlockEditor } from '../../components/syllabus/syllabus-block-editor'
 import { markdownToSectionsForEditor, sectionsToMarkdown } from '../../components/syllabus/syllabus-section-markdown'
@@ -315,6 +317,9 @@ export default function CourseModuleQuizPage() {
   const [mdTheme, setMdTheme] = useState<ResolvedMarkdownTheme>(() =>
     resolveMarkdownTheme('classic', null),
   )
+
+  const isOnline = useOnlineStatus()
+  const { status: offlineStatus, saveForOffline } = useOfflineContent(itemId)
 
   const quizMarkupTarget = useMemo(() => ({ variant: 'quiz' as const, itemId: itemId! }), [itemId])
 
@@ -952,6 +957,18 @@ export default function CourseModuleQuizPage() {
     setStudentTakeOpen(true)
   }
 
+  async function handleSaveQuizForOffline() {
+    if (!courseCode || !itemId || !title || !markdown) return
+    await saveForOffline({
+      id: itemId,
+      course_id: courseCode,
+      type: 'quiz',
+      title,
+      content: markdown,
+      updated_at: updatedAt ?? new Date().toISOString(),
+    })
+  }
+
   if (!courseCode || !itemId) {
     return (
       <LmsPage title="Quiz" description="">
@@ -1042,14 +1059,37 @@ export default function CourseModuleQuizPage() {
                 </>
               ) : null
             ) : (
-              <button
-                type="button"
-                onClick={() => handleStudentStartQuiz()}
-                disabled={loading}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Start Quiz
-              </button>
+              <div className="flex items-center gap-2">
+                {isOnline && (
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveQuizForOffline()}
+                    disabled={offlineStatus === 'saving'}
+                    aria-label={offlineStatus === 'cached' ? 'Quiz saved for offline' : 'Save quiz for offline'}
+                    title={offlineStatus === 'cached' ? 'Quiz saved for offline access' : 'Save quiz intro for offline access'}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {offlineStatus === 'saving' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    ) : offlineStatus === 'cached' ? (
+                      <CheckCircle className="h-4 w-4 text-emerald-600" aria-hidden />
+                    ) : (
+                      <Download className="h-4 w-4" aria-hidden />
+                    )}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleStudentStartQuiz()}
+                  disabled={loading || !isOnline}
+                  aria-disabled={!isOnline}
+                  title={!isOnline ? 'Available when online' : undefined}
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {!isOnline && <WifiOff className="h-4 w-4" aria-hidden />}
+                  Start Quiz
+                </button>
+              </div>
             )}
           </div>
         )
