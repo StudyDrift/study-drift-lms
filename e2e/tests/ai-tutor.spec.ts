@@ -269,7 +269,7 @@ test.describe('AI Tutor UI', () => {
     await expect(page.getByRole('heading', { name: /^Course tools$/i })).toBeVisible({
       timeout: 12000,
     })
-    await expect(page.getByText(/AI Tutor/i)).toBeVisible()
+    await expect(page.getByText('AI Tutor', { exact: true })).toBeVisible()
   })
 
   test('enabling AI Tutor shows the floating button on course pages', async ({ page }) => {
