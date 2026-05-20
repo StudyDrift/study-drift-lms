@@ -21,9 +21,7 @@ import { formatRelativeCompact } from '../../lib/format-datetime'
 import { LmsPage } from './lms-page'
 
 
-function isCourseStaff(roles: string[] | undefined): boolean {
-  return Boolean(roles?.some((r) => r === 'teacher' || r === 'instructor'))
-}
+
 
 
 
@@ -105,7 +103,6 @@ export default function CourseGroupsPage() {
         ])
         if (cancelled) return
         // Instructors see all groups; determine by whether all-groups list is accessible.
-        const isStaff = allGroups.length > 0 || (myGroups.length === 0 && allGroups.length === 0)
         // More reliable: try all-groups (403 for non-instructors means we got an empty list
         // from the catch above). Use myGroups otherwise.
         const displayGroups = allGroups.length > 0 ? allGroups : myGroups
@@ -115,7 +112,7 @@ export default function CourseGroupsPage() {
         if (displayGroups.length > 0 && !cancelled) {
           setActiveGroupId(displayGroups[0].id)
         }
-        void isStaff // suppress lint
+
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load groups.')
       } finally {
