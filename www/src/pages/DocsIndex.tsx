@@ -60,15 +60,15 @@ export function DocsIndex() {
               Guides, tutorials, and documentation to help you get the most out of Lextures.
             </p>
 
-            <div className="mt-10 max-w-md">
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                  <Search className="h-4 w-4 text-stone-400" aria-hidden />
+            <div className="mt-10 w-full">
+              <div className="relative group">
+                <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center">
+                  <Search className="h-5 w-5 text-stone-400 group-focus-within:text-accent transition-colors" aria-hidden />
                 </div>
                 <input
                   type="text"
                   placeholder="Search documentation..."
-                  className="block w-full rounded-lg border border-stone-200 bg-stone-50 py-2.5 pl-10 pr-3 text-sm placeholder-stone-400 outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent"
+                  className="block w-full rounded-full border border-stone-200 bg-white py-3.5 pl-12 pr-6 text-base placeholder-stone-400 shadow-sm outline-none transition-all hover:border-stone-300 hover:shadow-md focus:border-accent focus:ring-2 focus:ring-accent-muted/30 focus:shadow-md"
                   value={searchQuery}
                   onChange={handleSearchChange}
                 />
@@ -104,7 +104,7 @@ export function DocsIndex() {
                           </time>
                           <h2 className="mt-2 text-xl font-semibold leading-snug text-stone-900 sm:text-2xl">
                             <a
-                              href={`#/docs/${article.slug}`}
+                              href={`/docs/${article.slug}`}
                               className="no-underline transition-colors hover:text-accent"
                             >
                               {article.title}
@@ -116,7 +116,7 @@ export function DocsIndex() {
                           <p className="mt-2 text-sm text-stone-400">By {article.author}</p>
                         </div>
                         <a
-                          href={`#/docs/${article.slug}`}
+                          href={`/docs/${article.slug}`}
                           className="btn-primary shrink-0 gap-2 self-start"
                           aria-label={`Read ${article.title}`}
                         >

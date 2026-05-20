@@ -13,7 +13,7 @@ export function DocsPost({ slug }: { slug: string }) {
         <Header />
         <main className="mx-auto max-w-3xl px-4 py-24 sm:px-6 lg:px-8">
           <p className="text-stone-500">Article not found.</p>
-          <a href="#/docs" className="btn-secondary mt-6 inline-flex gap-2">
+          <a href="/docs" className="btn-secondary mt-6 inline-flex gap-2">
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Back to documentation
           </a>
@@ -31,7 +31,7 @@ export function DocsPost({ slug }: { slug: string }) {
         <div className="border-b border-stone-200/90 bg-white py-12 sm:py-16">
           <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
             <a
-              href="#/docs"
+              href="/docs"
               className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-500 no-underline transition-colors hover:text-stone-800"
             >
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
@@ -61,7 +61,7 @@ export function DocsPost({ slug }: { slug: string }) {
             </div>
 
             <div className="mt-16 border-t border-stone-200/80 pt-10">
-              <a href="#/docs" className="btn-secondary inline-flex gap-2">
+              <a href="/docs" className="btn-secondary inline-flex gap-2">
                 <ArrowLeft className="h-4 w-4" aria-hidden />
                 Back to documentation
               </a>
