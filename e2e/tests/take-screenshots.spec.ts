@@ -13,8 +13,9 @@ test('take course creation screenshots', async ({ page }) => {
   // Click sign in
   await page.getByRole('button', { name: /sign in/i }).click()
 
-  // 2. Dashboard with New Course Button
+  // 2. Dashboard
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 12000 })
+  await page.screenshot({ path: '../www/public/docs-dashboard.png' })
   await page.screenshot({ path: '../www/public/docs-create-course-dashboard.png' })
 
   // Navigate to course creation page
