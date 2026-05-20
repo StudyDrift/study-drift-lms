@@ -1,4 +1,4 @@
-import { ReactNode, useState, useRef, useLayoutEffect } from 'react'
+import { type ReactNode, useState, useRef, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useShellNav } from './use-shell-nav'
 
