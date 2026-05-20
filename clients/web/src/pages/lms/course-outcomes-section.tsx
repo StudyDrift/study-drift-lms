@@ -5,6 +5,7 @@ import {
   Link2,
   Loader2,
   Plus,
+  Save,
   Target,
   Trash2,
   TrendingUp,
@@ -192,13 +193,64 @@ export function CourseOutcomesSection({ courseCode }: { courseCode: string }) {
     }
   }
 
-  async function onSaveOutcomeMeta(o: CourseOutcome, title: string, description: string) {
-    setLoadError(null)
+  const [drafts, setDrafts] = useState<Record<string, { title: string; description: string }>>({})
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+
+  const isDirty = useMemo(() => {
+    return Object.entries(drafts).some(([id, draft]) => {
+      const original = outcomes.find((o) => o.id === id)
+      if (!original) return false
+      return draft.title.trim() !== original.title || draft.description.trim() !== original.description
+    })
+  }, [drafts, outcomes])
+
+  const discardChanges = useCallback(() => {
+    setDrafts({})
+    setSaveStatus('idle')
+    setSaveMessage(null)
+  }, [])
+
+  async function onSingleSaveChanges() {
+    if (!canEdit) return
+    setSaveStatus('saving')
+    setSaveMessage(null)
+
+    const dirtyEntries = Object.entries(drafts).filter(([id, draft]) => {
+      const original = outcomes.find((o) => o.id === id)
+      if (!original) return false
+      return draft.title.trim() !== original.title || draft.description.trim() !== original.description
+    })
+
+    if (dirtyEntries.length === 0) {
+      setSaveStatus('saved')
+      return
+    }
+
+    for (const [, draft] of dirtyEntries) {
+      if (!draft.title.trim()) {
+        setSaveStatus('error')
+        setSaveMessage('Outcome title cannot be empty.')
+        return
+      }
+    }
+
     try {
-      const updated = await patchCourseOutcome(courseCode, o.id, { title, description })
-      setOutcomes((prev) => prev.map((x) => (x.id === o.id ? updated : x)))
+      await Promise.all(
+        dirtyEntries.map(([id, draft]) =>
+          patchCourseOutcome(courseCode, id, {
+            title: draft.title.trim(),
+            description: draft.description.trim(),
+          })
+        )
+      )
+
+      await load()
+      setDrafts({})
+      setSaveStatus('saved')
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Could not save outcome.')
+      setSaveStatus('error')
+      setSaveMessage(e instanceof Error ? e.message : 'Could not save learning outcomes.')
     }
   }
 
@@ -308,8 +360,27 @@ export function CourseOutcomesSection({ courseCode }: { courseCode: string }) {
                 enrolledLearners={enrolledLearners}
                 gradableOptions={gradableOptions}
                 onDelete={() => requestDeleteOutcome(o.id)}
-                onSaveMeta={(title, description) => void onSaveOutcomeMeta(o, title, description)}
                 onLinksChanged={() => void load()}
+                draftTitle={drafts[o.id]?.title ?? o.title}
+                draftDescription={drafts[o.id]?.description ?? o.description}
+                onTitleChange={(val) =>
+                  setDrafts((prev) => ({
+                    ...prev,
+                    [o.id]: {
+                      title: val,
+                      description: prev[o.id]?.description ?? o.description,
+                    },
+                  }))
+                }
+                onDescriptionChange={(val) =>
+                  setDrafts((prev) => ({
+                    ...prev,
+                    [o.id]: {
+                      title: prev[o.id]?.title ?? o.title,
+                      description: val,
+                    },
+                  }))
+                }
               />
             ))}
           </div>
@@ -434,6 +505,51 @@ export function CourseOutcomesSection({ courseCode }: { courseCode: string }) {
         }}
         onConfirm={() => void confirmDeleteOutcome()}
       />
+
+      {isDirty && (
+        <div className="fixed bottom-6 left-1/2 z-50 w-full max-w-2xl -translate-x-1/2 px-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white/90 px-6 py-4 shadow-xl backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-900/90">
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Unsaved changes</span>
+              <span className="text-xs text-slate-500 dark:text-neutral-400">
+                {saveStatus === 'error' && saveMessage ? (
+                  <span className="text-rose-600 dark:text-rose-400 font-medium">{saveMessage}</span>
+                ) : (
+                  "You have modified this course's learning outcomes."
+                )}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={discardChanges}
+                disabled={saveStatus === 'saving'}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-850 dark:hover:text-neutral-200 transition"
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                onClick={() => void onSingleSaveChanges()}
+                disabled={saveStatus === 'saving'}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60 transition active:scale-95"
+              >
+                {saveStatus === 'saving' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save changes
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -444,21 +560,23 @@ function OutcomeCard({
   enrolledLearners,
   gradableOptions,
   onDelete,
-  onSaveMeta,
   onLinksChanged,
+  draftTitle,
+  draftDescription,
+  onTitleChange,
+  onDescriptionChange,
 }: {
   courseCode: string
   outcome: CourseOutcome
   enrolledLearners: number
   gradableOptions: GradableOption[]
   onDelete: () => void
-  onSaveMeta: (title: string, description: string) => void
   onLinksChanged: () => void
+  draftTitle: string
+  draftDescription: string
+  onTitleChange: (val: string) => void
+  onDescriptionChange: (val: string) => void
 }) {
-  const [titleDraft, setTitleDraft] = useState(outcome.title)
-  const [descDraft, setDescDraft] = useState(outcome.description)
-  const [savingMeta, setSavingMeta] = useState(false)
-
   const [itemId, setItemId] = useState('')
   const [quizScope, setQuizScope] = useState<'whole' | 'question'>('whole')
   const [questionId, setQuestionId] = useState('')
@@ -468,11 +586,6 @@ function OutcomeCard({
   const [localError, setLocalError] = useState<string | null>(null)
   const [measurementLevel, setMeasurementLevel] = useState<string>('formative')
   const [intensityLevel, setIntensityLevel] = useState<string>('medium')
-
-  useEffect(() => {
-    setTitleDraft(outcome.title)
-    setDescDraft(outcome.description)
-  }, [outcome.title, outcome.description])
 
   const selectedGradable = gradableOptions.find((g) => g.id === itemId)
 
@@ -554,15 +667,7 @@ function OutcomeCard({
     }
   }
 
-  async function saveMeta() {
-    setSavingMeta(true)
-    setLocalError(null)
-    try {
-      onSaveMeta(titleDraft.trim(), descDraft)
-    } finally {
-      setSavingMeta(false)
-    }
-  }
+
 
   const rollup = outcome.rollupAvgScorePercent
 
@@ -581,8 +686,8 @@ function OutcomeCard({
                   Outcome title
                 </span>
                 <input
-                  value={titleDraft}
-                  onChange={(e) => setTitleDraft(e.target.value)}
+                  value={draftTitle}
+                  onChange={(e) => onTitleChange(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                 />
               </label>
@@ -591,22 +696,12 @@ function OutcomeCard({
                   Description
                 </span>
                 <textarea
-                  value={descDraft}
-                  onChange={(e) => setDescDraft(e.target.value)}
+                  value={draftDescription}
+                  onChange={(e) => onDescriptionChange(e.target.value)}
                   rows={2}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                 />
               </label>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void saveMeta()}
-                  disabled={savingMeta || !titleDraft.trim()}
-                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {savingMeta ? 'Saving…' : 'Save changes'}
-                </button>
-              </div>
             </div>
           </div>
           <button

@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import { Loader2, Save } from 'lucide-react'
 import {
   deleteBlueprintChildLink,
   fetchBlueprintChildren,
@@ -39,6 +40,14 @@ export function CourseBlueprintSection({ courseCode, course, onCourseUpdated }: 
   const [childPick, setChildPick] = useState('')
   const [pushResult, setPushResult] = useState<BlueprintPushResult | null>(null)
 
+  const [isBlueprintDraft, setIsBlueprintDraft] = useState(course.isBlueprint ?? false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    setIsBlueprintDraft(course.isBlueprint ?? false)
+  }, [course.isBlueprint])
+
   const reload = useCallback(async () => {
     if (!canOrgBlueprint || !course.isBlueprint) {
       setChildren([])
@@ -64,22 +73,31 @@ export function CourseBlueprintSection({ courseCode, course, onCourseUpdated }: 
     void reload()
   }, [reload])
 
-  async function onToggleBlueprint(e: FormEvent) {
-    e.preventDefault()
+  const isDirty = isBlueprintDraft !== course.isBlueprint
+
+  const discardChanges = useCallback(() => {
+    setIsBlueprintDraft(course.isBlueprint ?? false)
+    setSaveStatus('idle')
+    setSaveMessage(null)
+  }, [course.isBlueprint])
+
+  const onSingleSaveChanges = useCallback(async () => {
     if (!course.orgId) return
-    setBusy(true)
+    setSaveStatus('saving')
+    setSaveMessage(null)
     try {
-      const next = !course.isBlueprint
-      const updated = await patchCourseBlueprint(courseCode, next)
+      const updated = await patchCourseBlueprint(courseCode, isBlueprintDraft)
       onCourseUpdated(updated)
-      toastSaveOk(next ? 'Course marked as blueprint' : 'Blueprint designation removed')
+      toastSaveOk(isBlueprintDraft ? 'Course marked as blueprint' : 'Blueprint designation removed')
+      setSaveStatus('saved')
       await reload()
     } catch (err) {
-      toastMutationError(err instanceof Error ? err.message : 'Could not update blueprint flag.')
-    } finally {
-      setBusy(false)
+      const msg = err instanceof Error ? err.message : 'Could not update blueprint flag.'
+      setSaveStatus('error')
+      setSaveMessage(msg)
+      toastMutationError(msg)
     }
-  }
+  }, [course.orgId, courseCode, isBlueprintDraft, onCourseUpdated, reload])
 
   async function onLinkChild(e: FormEvent) {
     e.preventDefault()
@@ -153,24 +171,34 @@ export function CourseBlueprintSection({ courseCode, course, onCourseUpdated }: 
             Last sync: {formatSyncAt(course.blueprintLastSyncAt ?? null)}.
           </p>
         ) : null}
-        <form className="mt-4 flex flex-wrap items-center gap-3" onSubmit={onToggleBlueprint}>
-          <button
-            type="submit"
-            disabled={busy || Boolean(course.blueprintParentCourseCode)}
-            className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {course.isBlueprint ? 'Remove blueprint designation' : 'Mark as blueprint course'}
-          </button>
-          {course.blueprintParentCourseCode ? (
+        <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 p-4 dark:border-neutral-850 dark:bg-neutral-900/40">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
+              Enable Blueprint Designation
+            </span>
             <span className="text-xs text-slate-500 dark:text-neutral-400">
-              Child courses cannot be toggled as blueprints until unlinked.
+              {course.blueprintParentCourseCode
+                ? 'Child courses cannot be toggled as blueprints until unlinked.'
+                : 'Turn this course into a master blueprint course.'}
             </span>
-          ) : (
-            <span className="text-xs text-slate-500 dark:text-neutral-400" aria-live="polite">
-              {course.isBlueprint ? 'Blueprint mode on — link empty child courses below.' : 'Off'}
-            </span>
-          )}
-        </form>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isBlueprintDraft}
+            disabled={busy || Boolean(course.blueprintParentCourseCode)}
+            onClick={() => setIsBlueprintDraft(!isBlueprintDraft)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50 ${
+              isBlueprintDraft ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-neutral-800'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                isBlueprintDraft ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       {course.isBlueprint ? (
@@ -280,6 +308,51 @@ export function CourseBlueprintSection({ courseCode, course, onCourseUpdated }: 
           </div>
         </>
       ) : null}
+
+      {isDirty && (
+        <div className="fixed bottom-6 left-1/2 z-50 w-full max-w-2xl -translate-x-1/2 px-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white/90 px-6 py-4 shadow-xl backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-900/90">
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-slate-900 dark:text-neutral-50">Unsaved changes</span>
+              <span className="text-xs text-slate-500 dark:text-neutral-400">
+                {saveStatus === 'error' && saveMessage ? (
+                  <span className="text-rose-600 dark:text-rose-400 font-medium">{saveMessage}</span>
+                ) : (
+                  "You have changed this course's blueprint designation."
+                )}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={discardChanges}
+                disabled={saveStatus === 'saving'}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-850 dark:hover:text-neutral-200 transition"
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                onClick={() => void onSingleSaveChanges()}
+                disabled={saveStatus === 'saving'}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60 transition active:scale-95"
+              >
+                {saveStatus === 'saving' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save changes
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
