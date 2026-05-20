@@ -9,7 +9,7 @@ interface HelpArticle {
   slug: string
 }
 
-const HELP_CENTER_URL = 'https://lextures.com/#/docs'
+const HELP_CENTER_URL = 'https://lextures.com/docs'
 
 export function HelpWidget() {
   const [open, setOpen] = useState(false)

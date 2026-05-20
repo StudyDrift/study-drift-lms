@@ -384,7 +384,7 @@ function HomePage() {
             <a href="#/self-learner" className="no-underline transition-colors hover:text-stone-900">Self-Learner</a>
             <a href="#/pricing" className="no-underline transition-colors hover:text-stone-900">Pricing</a>
             <a href="#/blog" className="no-underline transition-colors hover:text-stone-900">Blog</a>
-            <a href="#/docs" className="no-underline transition-colors hover:text-stone-900">Documentation</a>
+            <a href="/docs" className="no-underline transition-colors hover:text-stone-900">Documentation</a>
           </div>
         </div>
       </footer>
@@ -394,7 +394,10 @@ function HomePage() {
 
 export default function App() {
   const hash = useHashRoute()
-  const route = hash.startsWith('#/') ? hash.slice(1) : '/'
+  const path = window.location.pathname
+  const route = path.startsWith('/docs')
+    ? path
+    : (hash.startsWith('#/') ? hash.slice(1) : '/')
 
   if (route === '/get-started') return <GetStartedPage />
   if (route === '/higher-ed') return <HigherEdPage />

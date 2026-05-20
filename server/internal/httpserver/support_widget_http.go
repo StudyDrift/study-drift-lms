@@ -206,12 +206,12 @@ var defaultArticles = []helpArticle{
 	{
 		Title: "Finding Your Course for the First Time",
 		Slug:  "finding-your-course",
-		URL:   "https://lextures.com/#/docs/finding-your-course",
+		URL:   "https://lextures.com/docs/finding-your-course",
 	},
 	{
 		Title: "Navigating the Course Interface",
 		Slug:  "navigating-the-course-interface",
-		URL:   "https://lextures.com/#/docs/navigating-the-course-interface",
+		URL:   "https://lextures.com/docs/navigating-the-course-interface",
 	},
 }
 
@@ -225,12 +225,12 @@ var articleMapping = []struct {
 			{
 				Title: "Finding Your Course for the First Time",
 				Slug:  "finding-your-course",
-				URL:   "https://lextures.com/#/docs/finding-your-course",
+				URL:   "https://lextures.com/docs/finding-your-course",
 			},
 			{
 				Title: "Navigating the Course Interface",
 				Slug:  "navigating-the-course-interface",
-				URL:   "https://lextures.com/#/docs/navigating-the-course-interface",
+				URL:   "https://lextures.com/docs/navigating-the-course-interface",
 			},
 		},
 	},
@@ -240,7 +240,7 @@ var articleMapping = []struct {
 			{
 				Title: "Navigating the Course Interface",
 				Slug:  "navigating-the-course-interface",
-				URL:   "https://lextures.com/#/docs/navigating-the-course-interface",
+				URL:   "https://lextures.com/docs/navigating-the-course-interface",
 			},
 		},
 	},
@@ -250,7 +250,7 @@ var articleMapping = []struct {
 			{
 				Title: "Navigating the Course Interface",
 				Slug:  "navigating-the-course-interface",
-				URL:   "https://lextures.com/#/docs/navigating-the-course-interface",
+				URL:   "https://lextures.com/docs/navigating-the-course-interface",
 			},
 		},
 	},
@@ -260,7 +260,7 @@ var articleMapping = []struct {
 			{
 				Title: "Finding Your Course for the First Time",
 				Slug:  "finding-your-course",
-				URL:   "https://lextures.com/#/docs/finding-your-course",
+				URL:   "https://lextures.com/docs/finding-your-course",
 			},
 		},
 	},
@@ -270,7 +270,7 @@ var articleMapping = []struct {
 			{
 				Title: "Navigating the Course Interface",
 				Slug:  "navigating-the-course-interface",
-				URL:   "https://lextures.com/#/docs/navigating-the-course-interface",
+				URL:   "https://lextures.com/docs/navigating-the-course-interface",
 			},
 		},
 	},
