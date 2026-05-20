@@ -163,7 +163,10 @@ test.describe('Course settings', () => {
 
     // Toggle it.
     await publishSwitch.click()
-    await expect(page.getByText(/saved|published|draft/i).first()).toBeVisible()
+
+    // Save changes via the global single save bar.
+    await page.getByRole('button', { name: /^save changes$/i }).click()
+    await expect(page.getByText('Course settings saved')).toBeVisible({ timeout: 8000 })
 
     const isNowPublished = await publishSwitch.getAttribute('aria-checked') === 'true'
     expect(isNowPublished).not.toBe(isInitiallyPublished)
@@ -187,8 +190,9 @@ test.describe('Course settings', () => {
     await expect(nightTheme).toBeVisible()
     await nightTheme.click()
 
-    // Theme selection usually saves immediately as per UI note.
-    await expect(page.getByText(/reading theme saved/i)).toBeVisible()
+    // Preset selection is staged; save via the global single save bar.
+    await page.getByRole('button', { name: /^save changes$/i }).click()
+    await expect(page.getByText('Course settings saved')).toBeVisible({ timeout: 8000 })
   })
 
   test('toggle schedule mode between fixed and relative', async ({ coursePage: page, seededCourse }) => {

@@ -1204,9 +1204,11 @@ export default function CourseSettings() {
                     </label>
                   </div>
                   <div className="mt-4">
-                    {markdownThemePreset === 'custom' && (
+                    {course.markdownThemePreset === 'custom' && !isDirty ? (
+                      <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Custom theme is active for this course.</span>
+                    ) : markdownThemePreset === 'custom' ? (
                       <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">Custom theme will be saved when you apply changes.</span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </section>
