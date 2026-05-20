@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { Pencil, FastForward } from 'lucide-react'
+import { Pencil, FastForward, Download, CheckCircle, Loader2 } from 'lucide-react'
+import { useOfflineContent } from '../../hooks/use-offline-content'
+import { useOnlineStatus } from '../../hooks/use-online-status'
 import { SyllabusBlockEditor } from '../../components/syllabus/syllabus-block-editor'
 import { ContentPageReader } from '../../components/content-page/content-page-reader'
 import {
@@ -75,6 +77,8 @@ export default function CourseModuleContentPage() {
   const [countdown, setCountdown] = useState<number | null>(null)
   const nextNavRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
+  const isOnline = useOnlineStatus()
+  const { status: offlineStatus, saveForOffline } = useOfflineContent(itemId)
 
   useEffect(() => {
     localStorage.setItem('lms_auto_advance', String(autoAdvance))
@@ -235,6 +239,18 @@ export default function CourseModuleContentPage() {
     }
   }, [courseCode, itemId])
 
+  async function handleSaveForOffline() {
+    if (!courseCode || !itemId || !title || !markdown) return
+    await saveForOffline({
+      id: itemId,
+      course_id: courseCode,
+      type: 'content_page',
+      title,
+      content: markdown,
+      updated_at: updatedAt ?? new Date().toISOString(),
+    })
+  }
+
   function beginEdit() {
     setSaveError(null)
     setDraft(markdownToSectionsForEditor(markdown, newLocalId))
@@ -326,7 +342,34 @@ export default function CourseModuleContentPage() {
             </button>
           </div>
         ) : (
-          <ReadingFocusToggle />
+          <div className="flex items-center gap-2">
+            {!loading && !loadError && isOnline && (
+              <button
+                type="button"
+                onClick={() => void handleSaveForOffline()}
+                disabled={offlineStatus === 'saving'}
+                aria-label={
+                  offlineStatus === 'cached' ? 'Saved for offline' : 'Save for offline'
+                }
+                title={
+                  offlineStatus === 'cached'
+                    ? 'Content saved for offline access'
+                    : 'Save this page for offline access'
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+              >
+                {offlineStatus === 'saving' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : offlineStatus === 'cached' ? (
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                ) : (
+                  <Download className="h-3.5 w-3.5" aria-hidden />
+                )}
+                {offlineStatus === 'cached' ? 'Cached' : 'Save offline'}
+              </button>
+            )}
+            <ReadingFocusToggle />
+          </div>
         )
       }
     >
@@ -354,6 +397,12 @@ export default function CourseModuleContentPage() {
           </p>
         )}
         {loading && <p className="mt-8 text-sm text-slate-500">Loading…</p>}
+        {!isOnline && offlineStatus === 'cached' && !loading && (
+          <p className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/50 dark:text-emerald-300">
+            <CheckCircle className="h-3.5 w-3.5" aria-hidden />
+            Cached — viewing offline content
+          </p>
+        )}
 
         {!loading && !loadError && !editing && (
           <div className="mt-8 space-y-6 text-[1.0625rem] leading-relaxed">

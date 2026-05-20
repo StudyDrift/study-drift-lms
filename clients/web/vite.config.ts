@@ -5,6 +5,7 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { visualizer } from 'rollup-plugin-visualizer'
+import { VitePWA } from 'vite-plugin-pwa'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const packageVersion = (
@@ -19,6 +20,36 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectRegister: null,
+      registerType: 'autoUpdate',
+      devOptions: {
+        enabled: true,
+        type: 'module',
+      },
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        globIgnores: ['**/stats.html'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+      },
+      manifest: {
+        name: 'Lextures',
+        short_name: 'Lextures',
+        description: 'A learning workspace for courses: deadlines, modules, feedback, and grading together in one place.',
+        theme_color: '#6366f1',
+        background_color: '#ffffff',
+        display: 'standalone',
+        start_url: '/',
+        icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+    }),
     ...(process.env.ANALYZE === 'true' || process.env.ANALYZE === '1'
       ? [
           visualizer({
