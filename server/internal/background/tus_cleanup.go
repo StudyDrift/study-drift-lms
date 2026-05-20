@@ -22,7 +22,6 @@ func SweepStalledTusUploads(ctx context.Context, pool *pgxpool.Pool, now time.Ti
 	}
 	defer rows.Close()
 
-	type idRow struct{ id string }
 	var ids []string
 	for rows.Next() {
 		var id string
