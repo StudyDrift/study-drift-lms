@@ -58,6 +58,16 @@ func Start(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) {
 	go runEvery(ctx, 15*time.Second, func() {
 		sweepPushJobs(context.Background(), pool, cfg, time.Now().UTC())
 	})
+	go runEvery(ctx, time.Hour, func() {
+		n, err := SweepStalledTusUploads(context.Background(), pool, time.Now().UTC())
+		if err != nil {
+			slog.Warn("tus upload cleanup failed", "err", err)
+			return
+		}
+		if n > 0 {
+			slog.Info("tus upload cleanup deleted stalled uploads", "count", n)
+		}
+	})
 }
 
 func runEvery(ctx context.Context, d time.Duration, fn func()) {
